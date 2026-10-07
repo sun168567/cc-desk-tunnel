@@ -1,0 +1,49 @@
+{
+  "name": "cc-desk-tunnel-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "远端原生 agent 与 Windows 本机执行的开发工作区",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "apps/desktop",
+    "apps/server",
+    "packages/protocol"
+  ],
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "check": "node scripts/check.mjs",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test apps/server/test/*.test.ts packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs",
+    "pretest:ui": "npm run build",
+    "test:ui": "playwright test",
+    "dev": "node scripts/dev.mjs",
+    "dev:ui": "npm run dev --workspace @cc-desk-tunnel/desktop",
+    "server": "npm run start --workspace @cc-desk-tunnel/server",
+    "build": "npm run build --workspace @cc-desk-tunnel/desktop",
+    "setup:desktop": "npm run setup --workspace @cc-desk-tunnel/desktop",
+    "deploy:linux": "node scripts/deploy-linux.mjs",
+    "package:server": "node scripts/package-server.mjs",
+    "prepare:windows": "pwsh.exe -NoLogo -NoProfile -File scripts/prepare-windows.ps1",
+    "prepare:windows:package": "pwsh.exe -NoLogo -NoProfile -File scripts/prepare-windows.ps1 -IncludePowerShell",
+    "package:windows": "node scripts/package-windows.mjs",
+    "release": "node scripts/release.mjs",
+    "desktop": "npm run start --workspace @cc-desk-tunnel/desktop"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.10.1",
+    "electron-builder": "26.15.3",
+    "prettier": "3.9.9",
+    "ssh2": "1.17.0",
+    "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}

@@ -1,0 +1,22 @@
+name: ${PROJECT_NAME:-cc-desk-tunnel}
+services:
+  proxy:
+    image: ${PROXY_IMAGE:?Specify an imported image tag in .env}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "${CONTROL_BIND:-0.0.0.0}:${CONTROL_PORT:-8787}:8787"
+      - "0.0.0.0:${FRPS_PORT:-7000}:${FRPS_PORT:-7000}"
+    volumes:
+      - "${DATA_DIR:?Specify the initialized data directory in .env}:/data"
+    environment:
+      FRPS_PORT: "${FRPS_PORT:-7000}"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

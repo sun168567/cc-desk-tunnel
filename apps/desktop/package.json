@@ -1,0 +1,32 @@
+{
+  "name": "@cc-desk-tunnel/desktop",
+  "version": "0.2.4",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "setup": "install-electron",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@cc-desk-tunnel/protocol": "0.0.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "lucide-react": "1.49.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.5.1",
+    "vite": "8.3.2"
+  }
+}

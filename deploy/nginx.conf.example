@@ -1,0 +1,38 @@
+# Put this map in nginx's http context (normally /etc/nginx/conf.d/).
+map $http_upgrade $cc_desk_tunnel_connection {
+    default upgrade;
+    '' close;
+}
+
+server {
+    listen 443 ssl;
+    server_name proxy.example.com;
+    ssl_certificate /etc/letsencrypt/live/proxy.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/proxy.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location = /ws {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $cc_desk_tunnel_connection;
+        proxy_set_header Host $host;
+        # The service counts failed sign-ins per client address.
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+    # Installer download for client self-upgrade; the service checks the token.
+    location = /client/installer {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off;
+    }
+    location = /health {
+        proxy_pass http://127.0.0.1:8787;
+    }
+    location / {
+        return 404;
+    }
+}

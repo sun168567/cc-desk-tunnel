@@ -1,0 +1,11 @@
+node_modules
+dist
+artifacts
+.local
+.tools
+apps/desktop/vendor
+package-lock.json
+*.md
+*.yml
+*.html
+*.yaml

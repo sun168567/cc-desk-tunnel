@@ -1,0 +1,41 @@
+# 本地凭据、运行配置和会话数据
+.local/
+.env
+.env.*
+!.env.example
+*.local.json
+**/credentials.json
+.claude/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+known_hosts
+
+# 只供本机使用的工作约定与需求手稿
+AGENTS.md
+CLAUDE.md
+原始总需求（人工编写）.txt
+下一阶段待办事项.txt
+
+# 依赖、构建与调试产物
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+.tools/
+artifacts/
+apps/desktop/vendor/
+test-results/
+playwright-report/
+*.log
+
+# 操作系统临时文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
