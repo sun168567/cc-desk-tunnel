@@ -47,4 +47,4 @@ Claude Code 与代理服务在容器里是同一个 Linux 用户，Claude 读得
 
 ## 报告漏洞
 
-请不要在公开的 issue 里描述可被利用的细节。仓库公开后请使用 GitHub 的“Report a vulnerability”（私下安全公告）提交；在此之前请直接联系维护者。这是个人项目，会尽力处理，但不承诺响应时限。
+请不要在公开的 issue 里描述可被利用的细节。请在仓库的 Security 页使用“Report a vulnerability”（私下安全公告）提交。这是个人项目，会尽力处理，但不承诺响应时限。

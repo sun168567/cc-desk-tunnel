@@ -21,7 +21,7 @@ sudo tar -xzf cc-desk-tunnel-server-X.Y.Z.tar.gz -C /opt/cc-desk-tunnel
 cd /opt/cc-desk-tunnel
 ```
 
-仓库未公开时一条命令的方式不可用，发布页也需要登录：在浏览器下载后经可信 SSH 上传，或在 VPS 上用只读令牌执行 `gh release download vX.Y.Z -R <所有者>/<仓库>`。程序包不含秘密、Windows UI、开发测试和依赖。也可以自己打包：本机运行 `npm run package:server`，或直接使用完整仓库。
+程序包不含秘密、Windows UI、开发测试和依赖。也可以自己打包：本机运行 `npm run package:server`，或直接使用完整仓库。
 
 交互安装：不带参数运行，脚本依次询问公网地址（默认自动探测）、入口方式、端口、数据目录和服务凭据（留空自动生成），随后自动构建、启动，并在结尾汇总客户端要填的地址 / 指纹 / 凭据、需放行的端口和下一步。已有部署配置时跳过问答，只重新构建启动。
 
@@ -53,7 +53,7 @@ nginx 模式需按示例配置反代 `/client/installer`，客户端自升级才
 
 升级后的程序放在数据目录的 `program/` 下，镜像不变。容器启动时比较两处的版本，运行较新的一个：重建或替换容器不会回到旧版本，用更新的程序包重建镜像后则以镜像为准。升级后的程序连续三次启动失败时退回镜像里的版本，日志里有一行说明。失败的升级不改动正在运行的程序，原因显示在客户端。
 
-仓库未公开时，服务端需要一个只读令牌才能读取发布页：在 GitHub 创建只授权该仓库、Contents 只读的细粒度令牌，存成 VPS 上的一个文件后执行下面的命令，随后删除该文件。令牌只保存在数据目录的 `config/service.env`（0600），不会传给客户端或 Claude Code。
+改为跟踪自己的私有仓库（例如私有的 fork）时，服务端需要一个只读令牌才能读取发布页：在 GitHub 创建只授权该仓库、Contents 只读的细粒度令牌，存成 VPS 上的一个文件后执行下面的命令，随后删除该文件。令牌只保存在数据目录的 `config/service.env`（0600），不会传给客户端或 Claude Code。
 
 ```sh
 sudo bash deploy/manage.sh release-token /path/token.txt   # 不带参数则移除

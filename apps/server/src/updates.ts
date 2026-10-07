@@ -98,7 +98,7 @@ export class ServiceUpdates {
       await response.body?.cancel();
       throw new Error(
         response.status === 404 || response.status === 401 || response.status === 403
-          ? `发布页无法访问（${response.status}）；仓库未公开时需要在服务端配置只读令牌。`
+          ? `发布页无法访问（${response.status}）；跟踪私有仓库时需要在服务端配置只读令牌。`
           : `发布页请求失败（${response.status}）。`,
       );
     }
