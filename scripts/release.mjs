@@ -23,13 +23,32 @@ const protocol = Number(
 // Raised whenever the image must be rebuilt for a release to run; see deploy/docker/runtime-level.
 const runtime = Number(readFileSync(join(root, 'deploy/docker/runtime-level'), 'utf8'));
 const tag = `v${version}`;
-const notes = new RegExp(
+const section = new RegExp(
   `^## ${version.replaceAll('.', '\\.')}\\s*\\n([\\s\\S]*?)(?=^## |$(?![\\s\\S]))`,
   'm',
 )
   .exec(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))?.[1]
   .trim();
-if (!notes) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
+if (!section) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
+const repository = 'https://github.com/sun168567/cc-desk-tunnel';
+// Every release reads the same way: what the project is, this version's section of the change log with its
+// headings one level up, then how to get and upgrade to it.
+const notes = [
+  '> 用桌面客户端驱动云端的 Claude Code，经反向隧道在你的 Windows 本机执行。',
+  '',
+  section.replace(/^### /gm, '## '),
+  '',
+  '---',
+  '',
+  '## 下载与升级',
+  '',
+  `- **已在使用**：在客户端的“设置 → 关于与更新”里先升级服务端，再按提示升级客户端；两端需要同一版本。`,
+  `- **Windows 客户端**：下载 \`CC-Desk-Tunnel-Setup-${version}-x64.exe\` 并安装。安装包没有代码签名，SmartScreen 与杀毒软件的提示见[说明](${repository}#杀毒软件与-smartscreen)。`,
+  `- **服务端**：新部署按[快速开始](${repository}#快速开始)用一条命令安装；\`cc-desk-tunnel-server-${version}.tar.gz\` 是它下载的程序包。`,
+  '- **校验**：各文件的 SHA256 在 `SHA256SUMS` 与 `release.json` 中。',
+  '',
+  `文档：[部署手册](${repository}/blob/main/deploy/README.md) · [变更记录](${repository}/blob/main/CHANGELOG.md) · [安全须知](${repository}#安全须知)`,
+].join('\n');
 
 // A release is cut from exactly what the main branch on GitHub holds, so the tag matches the files.
 const commit = git('rev-parse', 'HEAD');

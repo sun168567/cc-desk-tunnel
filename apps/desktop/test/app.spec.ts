@@ -56,8 +56,11 @@ test('desktop login, chat, allow/deny, stop, errors and delete', async ({ page }
   await expect(page.getByRole('button', { name: '拒绝', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '拒绝', exact: true }).click();
   await settled(page);
-  await expandActivity(page);
-  await expect(page.locator('.tool-output').last()).toContainText('用户拒绝');
+  // The refused tool's row may arrive after the run has settled; expand again until it shows.
+  await expect(async () => {
+    await expandActivity(page);
+    await expect(page.locator('.tool-output').last()).toContainText('用户拒绝', { timeout: 1000 });
+  }).toPass();
   await send(page, '停止测试');
   await page.getByRole('button', { name: '停止运行', exact: true }).click();
   await expect(page.getByText('用户停止', { exact: true })).toBeVisible();
