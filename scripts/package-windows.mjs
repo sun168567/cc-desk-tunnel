@@ -1,5 +1,5 @@
 import { builtinModules } from 'node:module';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import files from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
@@ -45,8 +45,12 @@ await viteBuild({
     },
   },
 });
-// The bridge and its tunnel module are already in the bundle above; the rest of the main process ships as written.
-for (const file of ['main.cjs', 'preload.cjs', 'icon.png', 'prepare-ssh.ps1', 'component-host.ps1'])
+// All CommonJS modules ship as written, including helpers required by main/preload.
+// The ESM bridge and its dependencies are already in the bundle above.
+const commonjs = readdirSync(join(root, 'apps/desktop/electron')).filter((file) =>
+  file.endsWith('.cjs'),
+);
+for (const file of [...commonjs, 'icon.png', 'prepare-ssh.ps1', 'component-host.ps1'])
   cpSync(join(root, 'apps/desktop/electron', file), join(app, 'electron', file));
 // The staging manifest has no dependencies: the Node bridge and protocol are bundled.
 writeFileSync(
@@ -122,6 +126,22 @@ const results = await electronBuild({
     },
   },
 });
+// Exercise the actual packaged main process and preload before a release can upload this installer.
+// Always use an isolated profile and stay offline, even if the caller configured native testing.
+execFileSync(
+  process.execPath,
+  [join(root, 'node_modules/@playwright/test/cli.js'), 'test', 'package.spec.ts'],
+  {
+    cwd: root,
+    windowsHide: true,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      WINDOWS_PACKAGE_EXE: join(output, 'win-unpacked/CC Desk Tunnel.exe'),
+      NATIVE_TEST_CONFIG: '',
+    },
+  },
+);
 execFileSync(
   'pwsh.exe',
   [
