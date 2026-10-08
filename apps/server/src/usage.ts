@@ -21,8 +21,8 @@ export type UsageQuery = {
 const windowLength: Record<string, number> = { five_hour: 5 * 3600_000 };
 const lengthOf = (name: string) =>
   windowLength[name] ?? (name.startsWith('seven_day') ? 7 * 24 * 3600_000 : undefined);
-// A lower reading alone does not prove a reset. With an unchanged deadline, only a substantial fall to zero
-// is treated as an early reset; small zero readings are indistinguishable from rounding.
+// Two readings taken at the same moment can differ by a point, and the later one may be the lower; a reset
+// takes away far more than that.
 const resetDrop = 5;
 const totals = `COUNT(*) AS requests, COALESCE(SUM(input_tokens), 0) AS inputTokens, COALESCE(SUM(output_tokens), 0) AS outputTokens,
   COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens, COALESCE(SUM(cache_creation_tokens), 0) AS cacheCreationTokens,
@@ -69,73 +69,86 @@ export class UsageLog {
   private restoreStarts(now = Date.now()) {
     if (this.database.prepare("SELECT 1 FROM migrations WHERE name = 'usage-window-start'").get())
       return;
-    const windows = this.database
-      .prepare('SELECT name, started_at, resets_at FROM usage_windows')
-      .all() as { name: string; started_at: number; resets_at: number | null }[];
+    const windows = (
+      this.database.prepare('SELECT name, started_at, resets_at FROM usage_windows').all() as {
+        name: string;
+        started_at: number;
+        resets_at: number | null;
+      }[]
+    ).flatMap((window) => {
+      const length = lengthOf(window.name);
+      if (!length || !window.resets_at || window.resets_at <= now) return [];
+      const expected = window.resets_at - length;
+      return window.started_at > expected
+        ? [{ ...window, resets_at: window.resets_at, expected }]
+        : [];
+    });
     this.database.exec('BEGIN');
     try {
-      for (const window of windows) {
-        const length = lengthOf(window.name);
-        if (!length || !window.resets_at || window.resets_at <= now) continue;
-        let start = window.resets_at - length;
-        // Preserve early resets visible in the original quota events. The old start alone cannot distinguish
-        // a jitter-induced cutoff from a real reset card; neither the events nor request records are rewritten.
-        if (
-          this.database
-            .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events'")
-            .get()
-        ) {
-          const readings = this.database
-            .prepare(
-              `
-            SELECT COALESCE(json_extract(data, '$.payload.rateLimits.measuredAt'), json_extract(data, '$.createdAt')) AS at,
-              json_extract(reading.value, '$.utilization') AS utilization,
-              json_extract(reading.value, '$.resetsAt') AS resetsAt
-            FROM events, json_each(data, '$.payload.rateLimits.windows') AS reading
-            WHERE json_extract(data, '$.payload.type') = 'native.metrics'
-              AND json_extract(data, '$.payload.rateLimits.available') = 1
-              AND json_extract(reading.value, '$.name') = ?
-            ORDER BY at
-          `,
-            )
-            .all(window.name) as {
-            at: string;
-            utilization: number | null;
-            resetsAt: string | null;
-          }[];
-          let previous: { at: number; utilization: number | null } | undefined;
-          for (const reading of readings) {
-            const at = Date.parse(reading.at);
-            const end = reading.resetsAt && Date.parse(reading.resetsAt);
-            if (
-              !end ||
-              Math.abs(end - window.resets_at) > 5 * 60_000 ||
-              at < window.resets_at - length ||
-              at > now ||
-              !Number.isFinite(at)
-            )
-              continue;
-            if (previous && at <= previous.at) continue;
-            if (
-              reading.utilization === 0 &&
-              previous?.utilization != null &&
-              previous.utilization >= resetDrop
-            )
-              start = Math.max(start, previous.at);
-            previous = { at, utilization: reading.utilization };
-          }
-        }
-        if (window.started_at > start)
-          this.database
-            .prepare('UPDATE usage_windows SET started_at = ? WHERE name = ?')
-            .run(start, window.name);
-      }
+      // The stored start alone cannot tell a cut-short period from one a reset card began, so the quota readings
+      // kept with the sessions are read once, and only when some period needs it.
+      const resets = windows.length ? this.earlyResets(windows, now) : new Map<string, number>();
+      for (const window of windows)
+        this.database
+          .prepare('UPDATE usage_windows SET started_at = ? WHERE name = ?')
+          .run(
+            Math.min(window.started_at, Math.max(window.expected, resets.get(window.name) ?? 0)),
+            window.name,
+          );
       this.database.prepare("INSERT INTO migrations VALUES ('usage-window-start')").run();
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+  // The last time each period's utilization fell as a reset makes it fall while its reset time stayed the same.
+  private earlyResets(
+    windows: { name: string; resets_at: number; expected: number }[],
+    now: number,
+  ) {
+    const resets = new Map<string, number>();
+    if (
+      !this.database
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events'")
+        .get()
+    )
+      return resets;
+    // The text test spares parsing every event of every session; few of them are quota readings.
+    const readings = (
+      this.database
+        .prepare(
+          `SELECT COALESCE(json_extract(data, '$.payload.rateLimits.measuredAt'), json_extract(data, '$.createdAt')) AS at,
+            json_extract(data, '$.payload.rateLimits.windows') AS windows
+          FROM events
+          WHERE instr(data, '"native.metrics"') > 0 AND json_extract(data, '$.payload.type') = 'native.metrics'
+            AND json_extract(data, '$.payload.rateLimits.available') = 1`,
+        )
+        .all() as { at: string; windows: string }[]
+    )
+      .map((row) => ({
+        at: Date.parse(row.at),
+        windows: (JSON.parse(row.windows) ?? []) as RateLimits['windows'],
+      }))
+      .filter((reading) => reading.at <= now)
+      .sort((a, b) => a.at - b.at);
+    for (const window of windows) {
+      let previous: { at: number; utilization: number | null } | undefined;
+      for (const { at, windows } of readings) {
+        const reading = windows.find((item) => item.name === window.name);
+        const end = reading?.resetsAt && Date.parse(reading.resetsAt);
+        if (!reading || !end || Math.abs(end - window.resets_at) > 5 * 60_000) continue;
+        if (at < window.expected || (previous && at <= previous.at)) continue;
+        if (
+          reading.utilization !== null &&
+          previous?.utilization != null &&
+          previous.utilization - reading.utilization >= resetDrop
+        )
+          resets.set(window.name, previous.at);
+        previous = { at, utilization: reading.utilization };
+      }
+    }
+    return resets;
   }
   // Accepts one OTLP/HTTP JSON log export and keeps only the model request records.
   ingest(body: unknown) {
@@ -188,7 +201,7 @@ export class UsageLog {
     return stored;
   }
   // Statistics follow the official quota periods. A period ends when the reported reset time moves or the utilization
-  // falls substantially to zero, which can indicate a reset granted outside the normal schedule.
+  // falls by more than the jitter between readings, which also covers resets granted outside the normal schedule.
   observe(rateLimits: RateLimits, now = Date.now()) {
     const measuredAt = (rateLimits.measuredAt && Date.parse(rateLimits.measuredAt)) || now;
     for (const window of rateLimits.windows) {
@@ -216,7 +229,7 @@ export class UsageLog {
         ((resetsAt !== null &&
           previous.resets_at !== null &&
           Math.abs(resetsAt - previous.resets_at) > 5 * 60_000) ||
-          (window.utilization === 0 &&
+          (window.utilization !== null &&
             previous.utilization !== null &&
             previous.utilization - window.utilization >= resetDrop))
       )

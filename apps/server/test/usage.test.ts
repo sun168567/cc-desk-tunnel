@@ -204,11 +204,10 @@ test('a period survives jitter and repeated readings, and a cut-short one is res
   assert.equal(started(), weekStart);
   assert.equal(log.summary(base + 3 * hour).windows[0].utilization, 47);
   assert.equal(log.summary(base + 3 * hour).windows[0].requests, 1);
-  // Even a larger positive correction is not evidence that the quota has reset.
-  log.observe(reading(38, base + 2 * hour + 100));
-  assert.equal(started(), weekStart);
-  log.observe(reading(0, base + 2 * hour + 100));
-  assert.equal(log.summary(base + 3 * hour).windows[0].utilization, 38);
+  // A reset granted early leaves the reset time alone, and something has been used again by the next reading.
+  log.observe(reading(3, base + 2 * hour + 100));
+  assert.equal(started(), new Date(base + 2 * hour).toISOString());
+  assert.equal(log.summary(base + 3 * hour).windows[0].requests, 0);
 
   // An expired window is reported empty and without a reset time; its next period is told by the new one.
   const five = (utilization: number, at: number, resetsAt: number | null) => ({
@@ -269,7 +268,7 @@ test('period recovery preserves an early reset recorded in the original quota ev
   const insert = db.prepare('INSERT INTO events VALUES (?)');
   for (const [at, utilization] of [
     [now - 3 * hour, 60],
-    [now - 2 * hour, 0],
+    [now - 2 * hour, 2],
     [now - hour, 20],
   ]) {
     insert.run(
