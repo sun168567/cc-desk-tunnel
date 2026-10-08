@@ -31,6 +31,7 @@ export default function LoginPage({
 }) {
   return (
     <main className="login-page">
+      <div className="window-drag" />
       <div className="login-content">
         <div className="brand">
           <SquareTerminal />

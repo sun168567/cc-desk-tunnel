@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, CircleGauge, Check, RotateCcw } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { ArrowLeft, ChevronDown, ChevronRight, CircleGauge, Check, RotateCcw } from 'lucide-react';
 import type {
   Effort,
   NativeCapabilities,
@@ -55,6 +56,8 @@ export default function ComposerControls({
       document.removeEventListener('keydown', escape);
     };
   }, []);
+  // The menu opens on the effort slider; the list of models is one step further in.
+  const [choosing, setChoosing] = useState(false);
   const [preview, setPreview] = useState<Effort | null>(null);
   const dragging = useRef(false);
   const commitPending = useRef(false);
@@ -130,7 +133,10 @@ export default function ComposerControls({
           disabled={disabled}
           aria-label="模型与推理强度"
           aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            setOpen((value) => !value);
+            setChoosing(false);
+          }}
         >
           <span>{label}</span>
           <small>{effort ? effortNames[effort] : actual ? effortNames[actual] : '默认'}</small>
@@ -138,101 +144,119 @@ export default function ComposerControls({
         </button>
         {open && (
           <div className="model-menu" role="dialog" aria-label="模型与推理强度">
-            <div className="effort-heading">
-              <strong>{shownEffort ? effortNames[shownEffort] : '原生默认'}</strong>
-              <IconButton
-                title="恢复默认推理强度"
-                disabled={disabled}
-                onClick={() => {
-                  setPreview(null);
-                  void configure({ effort: null });
-                }}
-              >
-                <RotateCcw />
-              </IconButton>
-            </div>
-            <p className="model-menu-subtitle">{label}</p>
-            {levels.length > 0 && (
-              <input
-                aria-label="推理强度"
-                disabled={disabled}
-                type="range"
-                min={0}
-                max={levels.length - 1}
-                aria-valuetext={shownEffort ? effortNames[shownEffort] : '原生默认'}
-                value={Math.max(0, levels.indexOf(shownEffort ?? 'high'))}
-                onPointerDown={(event) => {
-                  dragging.current = true;
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                }}
-                onChange={(event) => {
-                  setPreview(levels[Number(event.target.value)]);
-                  commitPending.current = true;
-                }}
-                onPointerUp={() => {
-                  void saveEffort();
-                }}
-                onPointerCancel={() => {
-                  dragging.current = false;
-                  commitPending.current = false;
-                  setPreview(null);
-                }}
-                onKeyUp={(event) => {
-                  if (
-                    [
-                      'ArrowLeft',
-                      'ArrowRight',
-                      'ArrowUp',
-                      'ArrowDown',
-                      'Home',
-                      'End',
-                      'PageUp',
-                      'PageDown',
-                    ].includes(event.key)
-                  )
-                    void saveEffort();
-                }}
-                onBlur={() => {
-                  if (!dragging.current) void saveEffort();
-                }}
-              />
-            )}
-            <div className="model-options" role="listbox" aria-label="模型">
-              <button
-                type="button"
-                role="option"
-                disabled={disabled}
-                aria-selected={model === null}
-                onClick={() => {
-                  void configure({ model: null, effort: null });
-                  setOpen(false);
-                }}
-              >
-                <span>默认模型</span>
-                {model === null && <Check />}
+            <div className="effort-view" hidden={choosing}>
+              <div className="effort-heading">
+                <strong>{shownEffort ? effortNames[shownEffort] : '原生默认'}</strong>
+                <IconButton
+                  title="恢复默认推理强度"
+                  disabled={disabled}
+                  onClick={() => {
+                    setPreview(null);
+                    void configure({ effort: null });
+                  }}
+                >
+                  <RotateCcw />
+                </IconButton>
+              </div>
+              <button type="button" className="model-current" onClick={() => setChoosing(true)}>
+                {label}
+                <ChevronRight />
               </button>
-              {capabilities?.models
-                .filter((row) => row.value !== 'default')
-                .map((row) => (
+              {levels.length > 0 && (
+                <input
+                  style={
+                    {
+                      '--fill': `${(Math.max(0, levels.indexOf(shownEffort ?? 'high')) / Math.max(1, levels.length - 1)) * 100}%`,
+                    } as CSSProperties
+                  }
+                  aria-label="推理强度"
+                  disabled={disabled}
+                  type="range"
+                  min={0}
+                  max={levels.length - 1}
+                  aria-valuetext={shownEffort ? effortNames[shownEffort] : '原生默认'}
+                  value={Math.max(0, levels.indexOf(shownEffort ?? 'high'))}
+                  onPointerDown={(event) => {
+                    dragging.current = true;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  }}
+                  onChange={(event) => {
+                    setPreview(levels[Number(event.target.value)]);
+                    commitPending.current = true;
+                  }}
+                  onPointerUp={() => {
+                    void saveEffort();
+                  }}
+                  onPointerCancel={() => {
+                    dragging.current = false;
+                    commitPending.current = false;
+                    setPreview(null);
+                  }}
+                  onKeyUp={(event) => {
+                    if (
+                      [
+                        'ArrowLeft',
+                        'ArrowRight',
+                        'ArrowUp',
+                        'ArrowDown',
+                        'Home',
+                        'End',
+                        'PageUp',
+                        'PageDown',
+                      ].includes(event.key)
+                    )
+                      void saveEffort();
+                  }}
+                  onBlur={() => {
+                    if (!dragging.current) void saveEffort();
+                  }}
+                />
+              )}
+            </div>
+            {choosing && (
+              <>
+                <button type="button" className="model-back" onClick={() => setChoosing(false)}>
+                  <ArrowLeft />
+                  选择模型
+                </button>
+                <div className="model-options" role="listbox" aria-label="模型">
                   <button
                     type="button"
                     role="option"
                     disabled={disabled}
-                    aria-selected={model !== null && chosen?.value === row.value}
-                    key={row.value}
+                    aria-selected={model === null}
                     onClick={() => {
-                      void configure({ model: row.value, effort: null });
+                      void configure({ model: null, effort: null });
                       setOpen(false);
                     }}
                   >
-                    <span>
-                      {row.displayName}
-                      <small>{row.description}</small>
-                    </span>
-                    {model !== null && chosen?.value === row.value && <Check />}
+                    <span>默认模型</span>
+                    {model === null && <Check />}
                   </button>
-                ))}
-            </div>
+                  {capabilities?.models
+                    .filter((row) => row.value !== 'default')
+                    .map((row) => (
+                      <button
+                        type="button"
+                        role="option"
+                        disabled={disabled}
+                        aria-selected={model !== null && chosen?.value === row.value}
+                        key={row.value}
+                        onClick={() => {
+                          void configure({ model: row.value, effort: null });
+                          setOpen(false);
+                        }}
+                      >
+                        <span>
+                          {row.displayName}
+                          <small>{row.description}</small>
+                        </span>
+                        {model !== null && chosen?.value === row.value && <Check />}
+                      </button>
+                    ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

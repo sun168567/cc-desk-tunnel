@@ -1,64 +1,21 @@
 import { test, expect, _electron } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import {
+  connection,
+  createSession,
+  expandActivity,
+  login,
+  screenshots,
+  search,
+  send,
+  sessionAction,
+  settled,
+} from './helpers.ts';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-function connection() {
-  return JSON.parse(readFileSync(resolve('.local/ui-test/dev-connection.json'), 'utf8')) as {
-    serverUrl: string;
-    token: string;
-  };
-}
-const screenshots = resolve('.local/screenshots');
-mkdirSync(screenshots, { recursive: true });
-async function login(page: Page) {
-  const config = connection();
-  const localMode = page.getByRole('button', { name: '本地模拟', exact: true });
-  if (await localMode.isVisible()) await localMode.click();
-  await page.getByLabel('服务地址').fill(config.serverUrl);
-  await page.getByLabel('服务凭据').fill(config.token);
-  await page.getByRole('button', { name: '连接', exact: true }).click();
-  await expect(page.locator('.sidebar-footer')).toContainText('已连接');
-}
-// Finished turns, runs of tool calls and each call are folded; open them all to inspect the details.
-async function expandActivity(page: Page) {
-  for (const selector of ['.turn-process', '.work', '.tool'])
-    while (await page.locator(`${selector}:not([open]) > summary`).count())
-      await page.locator(`${selector}:not([open]) > summary`).first().click();
-}
-async function sessionAction(page: Page, action: string) {
-  const sidebar = page.getByRole('button', { name: '展开会话列表' });
-  if (await sidebar.isVisible()) await sidebar.click();
-  const row = page.locator('.session-row.selected');
-  await row.hover();
-  await row.getByRole('button', { name: '会话操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: action, exact: true }).click();
-}
-async function createSession(page: Page, prefix: string) {
-  const title = `${prefix} ${Date.now()}`;
-  await page.getByRole('button', { name: '添加项目', exact: true }).click();
-  await page.getByLabel('Windows 项目目录').fill('D:\\工作\\中文项目');
-  await page.getByRole('button', { name: '添加', exact: true }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible();
-  await page.getByRole('button', { name: '新建会话 · D:\\工作\\中文项目', exact: true }).click();
-  await expect(page.locator('.session-row.selected strong')).toHaveText('新会话');
-  await sessionAction(page, '重命名');
-  await page.getByRole('dialog').getByLabel('名称', { exact: true }).fill(title);
-  await page.getByRole('button', { name: '保存', exact: true }).click();
-  await expect(page.locator('.session-row.selected strong')).toHaveText(title);
-  return title;
-}
-async function send(page: Page, text: string, scenario = 'chat') {
-  await page.getByLabel('模拟场景').selectOption(scenario);
-  await page.getByRole('textbox', { name: '消息' }).fill(text);
-  await page.getByRole('button', { name: '发送消息', exact: true }).click();
-}
-async function settled(page: Page) {
-  await expect(page.getByRole('textbox', { name: '消息' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: '停止运行', exact: true })).not.toBeVisible();
-}
 async function noOverflowX(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -181,6 +138,8 @@ test('reconnect replays history without repeating a request or keeping stale app
 
 test('Electron loads the built UI with sandbox and closes its execution connection', async () => {
   test.skip(process.platform !== 'win32', 'Windows desktop smoke test');
+  // An unseen window settles each action slowly.
+  test.slow();
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env))
     if (value !== undefined && name !== 'ELECTRON_RUN_AS_NODE') env[name] = value;
@@ -281,7 +240,7 @@ test('login loads the directory only; project search and session rename do not f
   await expect(page.getByRole('textbox', { name: '消息' })).toHaveCount(0);
   expect(requests).toEqual([]);
   const title = await createSession(page, '会话索引');
-  await page.getByLabel('搜索会话').fill(title);
+  await search(page, title);
   await expect(page.locator('.session-row')).toHaveCount(1);
   await expect(page.locator('.project-group > h2')).toContainText('中文项目');
   await sessionAction(page, '重命名');
@@ -290,12 +249,12 @@ test('login loads the directory only; project search and session rename do not f
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await expect(page.locator('.session-row.selected strong')).toHaveText(renamed);
-  await page.getByLabel('搜索会话').fill('no-matching-session');
+  await search(page, 'no-matching-session');
   await expect(page.locator('.session-row')).toHaveCount(0);
   await page.reload();
   await login(page);
   await expect(page.getByRole('textbox', { name: '消息' })).toHaveCount(0);
-  await page.getByLabel('搜索会话').fill(renamed);
+  await search(page, renamed);
   await page.locator('.session-select').click();
   await expect(page.locator('.session-row.selected strong')).toHaveText(renamed);
 });
@@ -357,11 +316,10 @@ test('a scheduled task is edited, sent to its session when due, and can open a s
   const title = await createSession(page, '定时');
   const name = `巡检 ${Date.now()}`;
   const openTasks = async () => {
-    await page.locator('.sidebar-footer').click();
-    await page.getByRole('menuitem', { name: '定时任务', exact: true }).click();
+    await page.getByRole('button', { name: '定时任务', exact: true }).click();
   };
   await openTasks();
-  await page.getByRole('button', { name: '新建任务', exact: true }).click();
+  await page.getByRole('button', { name: '新建任务', exact: true }).first().click();
   await page.getByRole('button', { name: '保存任务', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('name');
   await page.getByLabel('任务名称').fill(name);
@@ -385,7 +343,7 @@ test('a scheduled task is edited, sent to its session when due, and can open a s
   await expect(row).toContainText('已发送');
   await expect(row).toContainText('不会再运行');
   await page.screenshot({ path: resolve(screenshots, 'schedule-list.png') });
-  await page.getByRole('button', { name: '关闭定时任务', exact: true }).click();
+  await page.getByRole('button', { name: '会话', exact: true }).click();
   await settled(page);
   await expect(page.locator('.message.user .message-content')).toHaveText(
     new RegExp(`^\\[定时任务「${name}」· 计划时间 .+\\]\\s+检查项目状态$`),
@@ -398,11 +356,11 @@ test('a scheduled task is edited, sent to its session when due, and can open a s
   await expect(row).toContainText('新会话 · 中文项目');
   await page.getByRole('button', { name: `立即运行 ${name}`, exact: true }).click();
   await expect(row).toContainText('已发送');
+  // The session being read keeps its place.
+  await page.getByRole('button', { name: '会话', exact: true }).click();
   await expect(
     page.locator('.session-select').filter({ has: page.getByText(name, { exact: true }) }),
   ).toHaveCount(1);
-  // The session being read keeps its place.
-  await page.getByRole('button', { name: '关闭定时任务', exact: true }).click();
   await expect(page.locator('.session-row.selected strong')).toHaveText(title);
   await openTasks();
   await page.getByRole('button', { name: `删除 ${name}`, exact: true }).click();
@@ -460,7 +418,8 @@ test('usage log: period-independent totals, chart hover, model filter and table'
   }
   await page.goto('/');
   await login(page);
-  await page.locator('.account-entry').click();
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^账号/ }).click();
   await page.getByRole('button', { name: '调用日志', exact: true }).click();
   await page.getByRole('button', { name: '24 小时', exact: true }).click();
   const tiles = page.locator('.usage-tiles');
@@ -505,7 +464,7 @@ test('Electron remembers the sign-in, connects on the next launch and stays in t
   application = await launch();
   try {
     const page = await application.firstWindow();
-    await expect(page.locator('.sidebar-footer')).toContainText('已连接');
+    await expect(page.locator('.connection-status')).toContainText('已连接');
     // Closing the window keeps the application and its connection alive.
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     expect(
@@ -514,8 +473,8 @@ test('Electron remembers the sign-in, connects on the next launch and stays in t
         return !!window && !window.isVisible();
       }),
     ).toBe(true);
-    await expect(page.locator('.sidebar-footer')).toContainText('已连接');
-    await page.locator('.sidebar-footer').click();
+    await expect(page.locator('.connection-status')).toContainText('已连接');
+    await page.getByRole('button', { name: '设置与账号', exact: true }).click();
     await page.getByRole('menuitem', { name: '断开连接', exact: true }).click();
     await expect(page.getByLabel('服务凭据')).toHaveValue(connection().token);
   } finally {

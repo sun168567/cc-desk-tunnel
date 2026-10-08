@@ -194,13 +194,17 @@ export type Schedules = {
 // Keeps the tasks in step with the file and sends each one when it is due. `send` delivers a task's message:
 // it answers false while that is not possible yet (not connected, the session is busy) and rejects when it
 // went wrong.
-export function useSchedules(send: (task: Task, due: number) => Promise<boolean>) {
+// `report` hears of every run that did not go out.
+export function useSchedules(
+  send: (task: Task, due: number) => Promise<boolean>,
+  report?: (task: Task, outcome: Outcome) => void,
+) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [problems, setProblems] = useState<string[]>([]);
   const [path, setPath] = useState('');
   const [progress, setProgress] = useState<Progress>(readProgress);
-  const current = useRef({ tasks, progress, send });
-  current.current = { tasks, progress, send };
+  const current = useRef({ tasks, progress, send, report });
+  current.current = { tasks, progress, send, report };
   const busy = useRef(false);
 
   const record = useCallback((update: (progress: Progress) => Progress) => {
@@ -238,7 +242,8 @@ export function useSchedules(send: (task: Task, due: number) => Promise<boolean>
   }, [accept]);
 
   const settle = useCallback(
-    (task: Task, status: Outcome['status'], text: string) =>
+    (task: Task, status: Outcome['status'], text: string) => {
+      if (status !== 'sent') current.current.report?.(task, { at: Date.now(), status, text });
       record((progress) => ({
         ...progress,
         [task.id]: {
@@ -246,7 +251,8 @@ export function useSchedules(send: (task: Task, due: number) => Promise<boolean>
           base: Date.now(),
           last: { at: Date.now(), status, text },
         },
-      })),
+      }));
+    },
     [record],
   );
   const attempt = useCallback(

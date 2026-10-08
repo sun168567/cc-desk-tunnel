@@ -50,8 +50,8 @@ test('Claude Code settings load from the service and save each change at once', 
     .getByLabel('服务凭据', { exact: true })
     .fill('test-only-settings-token-with-enough-length');
   await page.getByRole('button', { name: '连接', exact: true }).click();
-  await page.locator('.sidebar-footer').click();
-  await page.getByRole('menuitem', { name: 'Claude Code 设置', exact: true }).click();
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Claude Code 设置' });
   await expect(panel.getByLabel('自动压缩窗口', { exact: true })).toHaveValue('250000');
   await expect(panel.getByLabel('快速模式', { exact: true })).toHaveValue('false');

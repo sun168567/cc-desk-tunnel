@@ -81,7 +81,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
       await page.getByLabel('服务证书指纹', { exact: true }).fill(connection.fingerprint ?? '');
       await page.getByLabel('服务凭据', { exact: true }).fill(connection.token);
       await page.getByRole('button', { name: '连接', exact: true }).click();
-      await expect(page.locator('.sidebar-footer')).toContainText('已连接', { timeout: 45000 });
+      await expect(page.locator('.connection-status')).toContainText('已连接', { timeout: 45000 });
       const components = await componentProcesses(resources);
       expect(components.some((row) => row.Name === 'frpc.exe')).toBe(true);
       expect(components.some((row) => row.Name === 'sshd.exe')).toBe(true);
@@ -97,7 +97,8 @@ test('packaged exe runs without development dependencies and reclaims bundled re
         /-Runtime\s+"?([^"]*?cc-desk-tunnel-ssh-[^\s"]+)/,
       )?.[1];
       expect(runtime && existsSync(runtime)).toBeTruthy();
-      await page.locator('.account-entry').click();
+      await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+      await page.getByRole('menuitem', { name: /^账号/ }).click();
       await expect(
         page.getByRole('region', { name: '账号信息' }).locator('.account-identity'),
       ).toContainText(/pro/i, { timeout: 25000 });
