@@ -164,6 +164,7 @@ test('legacy UTF-8 JSON is imported exactly once, kept intact and not resurrecte
 });
 
 test('reading the native state of a session leaves its time of last use alone', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T12:00:00Z') });
   const { store, directory, session } = fixture(t);
   const runId = randomUUID();
   store.append(session.id, runId, {
@@ -173,6 +174,7 @@ test('reading the native state of a session leaves its time of last use alone', 
     scenario: 'chat',
   });
   const used = store.get(session.id).session.updatedAt;
+  t.mock.timers.tick(1000);
   const reading: EventPayload = {
     type: 'native.metrics',
     context: null,
@@ -192,8 +194,27 @@ test('reading the native state of a session leaves its time of last use alone', 
     .prepare('UPDATE sessions SET metadata = ? WHERE id = ?')
     .run(JSON.stringify(moved), session.id);
   store.database.exec("DELETE FROM migrations WHERE name = 'updated-at-activity'");
+  const events = store.database.prepare('SELECT data FROM events ORDER BY sequence').all();
   const reopened = new SessionStore(directory);
   const restored = reopened.get(session.id).session.updatedAt;
+  assert.deepEqual(
+    reopened.database.prepare('SELECT data FROM events ORDER BY sequence').all(),
+    events,
+  );
+  reopened.append(session.id, randomUUID(), {
+    type: 'native.capabilities',
+    models: [],
+    commands: [],
+    account: {},
+  });
+  assert.equal(reopened.get(session.id).session.updatedAt, used);
+  reopened.append(session.id, randomUUID(), {
+    type: 'message.user',
+    messageId: randomUUID(),
+    text: 'new activity',
+    scenario: 'chat',
+  });
+  assert.notEqual(reopened.get(session.id).session.updatedAt, used);
   reopened.close();
   assert.equal(restored, used);
 });

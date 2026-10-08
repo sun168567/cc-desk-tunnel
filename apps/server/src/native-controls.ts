@@ -130,6 +130,8 @@ export async function nativeMetrics(
   result?: SDKResultMessage,
   timeoutMs = 5000,
 ): Promise<EventPayload> {
+  // Order readings by when they were requested, not when concurrent status calls happened to finish.
+  const measuredAt = new Date().toISOString();
   const [contextStatus, usageStatus] = await Promise.all([
     optionalStatus(() => query.getContextUsage({ detail: 'summary' }), timeoutMs),
     optionalStatus(
@@ -167,9 +169,7 @@ export async function nativeMetrics(
     type: 'native.metrics',
     context: contextSummary(context),
     usage: totals ? resultUsage(totals) : null,
-    rateLimits: usage
-      ? { available: usage.rate_limits_available, windows, measuredAt: new Date().toISOString() }
-      : null,
+    rateLimits: usage ? { available: usage.rate_limits_available, windows, measuredAt } : null,
     ...(contextStatus.error || usageStatus.error
       ? {
           errors: { context: contextStatus.error, usage: usageStatus.error },

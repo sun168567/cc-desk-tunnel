@@ -215,6 +215,56 @@ test('a resolved native model remains native instead of appearing as provider co
   assert.equal(event.models[0].resolvedModel, 'claude-opus-5-5');
 });
 
+test('new models and their effort levels pass through the native catalog without a host allowlist', () => {
+  const models = [
+    {
+      value: 'haiku',
+      resolvedModel: 'claude-haiku-5-5',
+      displayName: 'Haiku',
+      description: 'native',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] as const,
+    },
+    { value: 'future-native-model', displayName: 'New model', description: 'native' },
+  ];
+  const result = nativeCapabilities(models as never, {}, [], 'claude-haiku-5-5');
+  assert.ok(result.type === 'native.capabilities');
+  assert.deepEqual(
+    result.models.map(({ value }) => value),
+    ['haiku', 'future-native-model'],
+  );
+  assert.equal(result.models[0].resolvedModel, 'claude-haiku-5-5');
+  assert.deepEqual(result.models[0].supportedEffortLevels, [
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ]);
+});
+
+test('concurrent quota readings keep request order even when the older one finishes last', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T12:00:00Z') });
+  let release!: () => void;
+  const wait = new Promise<null>((resolve) => {
+    release = () => resolve(null);
+  });
+  const query = (context: Promise<null>) =>
+    ({
+      getContextUsage: () => context,
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => ({
+        rate_limits_available: false,
+        rate_limits: null,
+      }),
+    }) as unknown as Query;
+  const first = nativeMetrics(query(wait));
+  t.mock.timers.tick(100);
+  const second = await nativeMetrics(query(Promise.resolve(null)));
+  release();
+  const older = await first;
+  assert.ok(older.type === 'native.metrics' && second.type === 'native.metrics');
+  assert.ok(older.rateLimits!.measuredAt! < second.rateLimits!.measuredAt!);
+});
+
 test('native quota windows retain reset times and per-model rows without exposing spend credentials', async () => {
   const query = {
     async getContextUsage() {
