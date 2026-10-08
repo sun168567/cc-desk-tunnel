@@ -29,7 +29,7 @@ Windows 上的 shell 命令与脚本使用 `pwsh.exe`（PowerShell 7）。终端
 
 ## 发布
 
-版本号以 `apps/desktop/package.json` 为准，两端共用；[变更记录](../CHANGELOG.md)里要有同名的一节，它会成为发布说明。
+版本号以 `apps/desktop/package.json` 为准，两端共用；[变更记录](../CHANGELOG.md)里要有同名的一节，按该文件开头说明的结构书写（一句概括，然后是新增功能、优化改进、问题修复、升级说明）。发布脚本把这一节放进固定的发布说明模板：项目简介、本版变化、下载与升级，因此每一版的发布页读起来是同一个样子。
 
 1. 在合并请求里改好版本号与变更记录，合入 `main`。
 2. 在 Windows x64 上检出最新的 `main`，准备好打包组件（`npm run prepare:windows:package`）、`gh` 和环境变量 `GH_TOKEN`。
