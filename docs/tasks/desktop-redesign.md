@@ -63,7 +63,7 @@
 
 - ☑ 提问卡片：Claude 的提问（`AskUserQuestion`）不再显示允许 / 拒绝，而是列出问题与选项（单选、多选、自己写），把选择按官方结构经 `canUseTool` 的 `updatedInput.answers` 返回；“不回答”按拒绝返回。运行状态带上在等审批还是等回答，侧栏与通知据此区分，不再依赖会话内容是否已缓存。
 - ☑ 更换会话的项目（输入框上方的项目标签）、更改项目指向的文件夹（项目菜单，把该项目下的会话逐个移过去）：见下节。
-- ☐ 设置页接入更多官方设置项：逐项加入白名单，候选另列，待确认后做。
+- ☑ 设置页接入更多官方设置项，并按“上下文与记忆 / 模型与额度 / 行为 / Git”分组：提前准备压缩摘要（`precomputeCompactionEnabled`）、后台整理记忆（`autoDreamEnabled`）、子任务的提示缓存时长（`subagentPromptCacheTtl`）、备用模型（`fallbackModel`）、提问无人回答时（`askUserQuestionTimeout`）、命令输出上限（`bashOutputMaxChars`）、提交与 PR 的署名（`attribution`，只提供“不加署名”）、内置的提交与 PR 流程说明（`includeGitInstructions`）。键名与取值取自官方 SDK 的设置类型；各项在经 SDK 的无界面运行中是否生效尚未逐项验证。全局默认模型 / 推理强度及其上限与每个会话自己的选择重叠，没有加入。
 - **不做** 恢复自动标题。官方接口给出的会话标题是“自定义标题、自动摘要、首条提示词”三者按此顺序取其一（`SDKSessionInfo.summary`）；手动改名经 `renameSession` 写入自定义标题之后，接口只会返回它，自动摘要不再单独给出，也没有清除自定义标题的接口。要恢复只能解析原生记录或另外调用模型，两者都不做。
 
 验证：`apps/server/test/move.test.ts` 覆盖更换项目的各种情形；`layout.spec.ts` 在模拟服务上走通提问卡片、移动会话与更改项目文件夹。尚未在真实 Claude Code 上验证：

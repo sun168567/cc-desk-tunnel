@@ -48,6 +48,16 @@ export const nativeSettingsSchema = z.object({
   fileCheckpointingEnabled: toggle,
   promptCacheTtl: z.enum(['5m', '1h']).nullable(),
   language: z.string().trim().min(1).max(60).nullable(),
+  precomputeCompactionEnabled: toggle,
+  autoDreamEnabled: toggle,
+  subagentPromptCacheTtl: z.enum(['5m', '1h']).nullable(),
+  fallbackModel: z.array(z.string().trim().min(1).max(200)).min(1).max(5).nullable(),
+  askUserQuestionTimeout: z.enum(['60s', '5m', '10m', 'never']).nullable(),
+  bashOutputMaxChars: z.number().int().min(4000).max(128_000).nullable(),
+  // The CLI also takes an object of custom texts here; the GUI only offers hiding the attribution, and shows
+  // anything else as unset.
+  attribution: z.literal(false).nullable(),
+  includeGitInstructions: toggle,
 });
 export type NativeSettings = z.infer<typeof nativeSettingsSchema>;
 export const contextUsageSchema = z.object({

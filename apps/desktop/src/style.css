@@ -1031,9 +1031,6 @@ button.chip:hover:not(:disabled) {
   justify-content: flex-end;
   gap: 8px;
 }
-.settings-list {
-  margin-top: 16px;
-}
 .settings-list select,
 .settings-list input {
   flex: none;
