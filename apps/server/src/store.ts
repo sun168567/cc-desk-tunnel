@@ -455,32 +455,43 @@ export class SessionStore {
     this.save(session);
     return session;
   }
-  // The text that tells Claude of a move it has not heard of, to go in front of the user's next message; it is
-  // given out once.
-  moveNotice(sessionId: string) {
+  // The text that tells Claude what its system prompt no longer has right, to go in front of the user's next
+  // message: a move it has not heard of, and a PowerShell path on the connection in use that is not the one
+  // it knows. Each is given out once.
+  notice(sessionId: string, powershellPath?: string) {
     const { session } = this.get(sessionId);
-    if (!session.movedFrom) return '';
-    const from = session.movedFrom;
-    session.movedFrom = undefined;
-    this.save(session);
-    return `[CC Desk Tunnel: the user moved this session to another Windows project. The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(from)}). From now on use the new directory as the project cwd, in place of the one given earlier.]\n\n`;
+    let text = '';
+    if (session.movedFrom) {
+      text += `[CC Desk Tunnel: the user moved this session to another Windows project. The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(session.movedFrom)}). From now on use the new directory as the project cwd, in place of the one given earlier.]\n\n`;
+      session.movedFrom = undefined;
+    }
+    const said = session.prompt;
+    const known = said && !said.compacted && (said.toldPowershellPath ?? said.powershellPath);
+    if (said && known && powershellPath && known !== powershellPath) {
+      text += `[CC Desk Tunnel: the PowerShell executable on the connected Windows computer is now ${JSON.stringify(powershellPath)} (it was ${JSON.stringify(known)}). From now on use the new path, in place of the one given earlier.]\n\n`;
+      said.toldPowershellPath = powershellPath;
+    }
+    if (text) this.save(session);
+    return text;
   }
-  // The project path for the system prompt of a run on `connectionId`, which is recorded as what the prompt
-  // says. After a move the prompt keeps the old path while that keeps the prompt cache: on the same connection
-  // and before any compaction. The prompt names the connection's SSH configuration, so another connection
-  // changes it anyway, and a compaction rewrites everything after it.
-  promptPath(sessionId: string, connectionId: string) {
+  // What the system prompt of a run says, given the PowerShell path of the connection it runs on. A prompt
+  // that changes costs the whole conversation's prompt cache, so it stays what it first was — through moves
+  // and reconnects, which `notice` tells Claude of — until a compaction, which rewrites everything after
+  // the prompt anyway; the run after that says what is current.
+  promptValues(sessionId: string, powershellPath: string) {
     const { session } = this.get(sessionId);
     const said = session.prompt;
-    const keep =
-      !!said &&
-      said.projectPath !== session.projectPath &&
-      said.connectionId === connectionId &&
-      !said.compacted;
-    const projectPath = keep ? said.projectPath : session.projectPath;
-    session.prompt = { projectPath, connectionId };
+    if (said && !said.compacted) {
+      if (!said.powershellPath) {
+        said.powershellPath = powershellPath;
+        this.save(session);
+      }
+      return { projectPath: said.projectPath, powershellPath: said.powershellPath };
+    }
+    const now = { projectPath: session.projectPath, powershellPath };
+    session.prompt = now;
     this.save(session);
-    return projectPath;
+    return now;
   }
   compacted(sessionId: string) {
     const { session } = this.get(sessionId);

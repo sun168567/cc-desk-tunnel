@@ -279,11 +279,17 @@ export const sessionSchema = z.object({
   effort: effortSchema.nullable().default(null),
   // A fork keeps its native history beside the session it was forked from; this names that session.
   nativeRoot: id.optional(),
-  // What the system prompt of the session's last native run said, when that still matters: a session moved to
-  // another project keeps the old path there until the prompt cache is lost anyway (another connection, or a
-  // compaction), so that moving does not cost the cache.
+  // What the system prompt of the session's native runs says. It is kept word for word until a compaction,
+  // which loses the prompt cache anyway: a move to another project, or a PowerShell path that differs on the
+  // connection in use, is told to Claude with the user's next message instead (`toldPowershellPath` is the
+  // path it was last told that way).
   prompt: z
-    .object({ projectPath: z.string(), connectionId: id, compacted: z.boolean().optional() })
+    .object({
+      projectPath: z.string(),
+      powershellPath: z.string().optional(),
+      toldPowershellPath: z.string().optional(),
+      compacted: z.boolean().optional(),
+    })
     .optional(),
   // The project path Claude was last told, while the move away from it has not been mentioned to it yet.
   movedFrom: z.string().optional(),

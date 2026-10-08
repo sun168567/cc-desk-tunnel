@@ -267,10 +267,12 @@ export function createProxyServer(options: ServerOptions) {
   async function native(run: Run) {
     try {
       const { session } = store.get(run.sessionId);
+      const ssh = run.owner.tunnel!.ssh!;
+      const said = store.promptValues(run.sessionId, ssh.powershellPath);
       const status = await runClaude(options.claude!, {
         sessionId: run.sessionId,
         nativeRoot: session.nativeRoot ?? session.id,
-        projectPath: store.promptPath(run.sessionId, run.owner.id),
+        projectPath: said.projectPath,
         permissionMode: session.permissionMode,
         model: session.model,
         effort: session.effort,
@@ -279,7 +281,10 @@ export function createProxyServer(options: ServerOptions) {
         dataDir: store.directory,
         resume: store.hasNativeContext(run.sessionId),
         signal: run.controller.signal,
-        ssh: sessionSsh(store.directory, run.sessionId, run.owner.tunnel!.ssh!),
+        ssh: {
+          ...sessionSsh(store.directory, run.sessionId, ssh),
+          powershellPath: said.powershellPath,
+        },
         emit: (event) => emit(run, event),
         approve: (toolId, waiting) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
@@ -615,7 +620,10 @@ export function createProxyServer(options: ServerOptions) {
       active.input.assertWritable();
       peer.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
-      active.input.submit(command.requestId, store.moveNotice(command.sessionId) + text);
+      active.input.submit(
+        command.requestId,
+        store.notice(command.sessionId, peer.tunnel?.ssh?.powershellPath) + text,
+      );
       return;
     }
     if (options.claude && mutations.size)
@@ -644,8 +652,12 @@ export function createProxyServer(options: ServerOptions) {
       scenario,
     });
     emit(run, { type: 'run.status', status: 'running', connectionId: run.owner.id });
-    // A move Claude has not heard of is told to it with this message; the transcript shows the user's own text.
-    run.input?.submit(command.requestId, store.moveNotice(command.sessionId) + text);
+    // What Claude's system prompt no longer has right is told to it with this message; the transcript shows the
+    // user's own text.
+    run.input?.submit(
+      command.requestId,
+      store.notice(command.sessionId, peer.tunnel?.ssh?.powershellPath) + text,
+    );
     track(
       options.claude
         ? native(run)
