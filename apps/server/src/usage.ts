@@ -6,6 +6,7 @@ type Summary = Omit<Extract<ServerMessage, { type: 'usage.summary' }>, 'type' | 
 type Page = Omit<Extract<ServerMessage, { type: 'usage.page' }>, 'type' | 'requestId'>;
 type RateLimits = {
   windows: { name: string; utilization: number | null; resetsAt: string | null }[];
+  measuredAt?: string | null;
 };
 export type UsageQuery = {
   from?: string;
@@ -20,6 +21,9 @@ export type UsageQuery = {
 const windowLength: Record<string, number> = { five_hour: 5 * 3600_000 };
 const lengthOf = (name: string) =>
   windowLength[name] ?? (name.startsWith('seven_day') ? 7 * 24 * 3600_000 : undefined);
+// Two readings taken at the same moment can differ by a point, and the later one may be the lower; a reset
+// takes away far more than that.
+const resetDrop = 5;
 const totals = `COUNT(*) AS requests, COALESCE(SUM(input_tokens), 0) AS inputTokens, COALESCE(SUM(output_tokens), 0) AS outputTokens,
   COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens, COALESCE(SUM(cache_creation_tokens), 0) AS cacheCreationTokens,
   COALESCE(SUM(cost_usd), 0) AS costUsd`;
@@ -55,8 +59,28 @@ export class UsageLog {
       CREATE TABLE IF NOT EXISTS usage_windows (
         name TEXT PRIMARY KEY, started_at INTEGER NOT NULL, resets_at INTEGER, utilization REAL, observed_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY);
     `);
+    this.restoreStarts();
     this.prune();
+  }
+  // Periods that a one-point dip in the reported utilization had cut short get back the start their reset time
+  // implies. Only the period boundary is corrected; the request records were never touched.
+  private restoreStarts(now = Date.now()) {
+    if (this.database.prepare("SELECT 1 FROM migrations WHERE name = 'usage-window-start'").get())
+      return;
+    const windows = this.database
+      .prepare('SELECT name, started_at, resets_at FROM usage_windows')
+      .all() as { name: string; started_at: number; resets_at: number | null }[];
+    for (const window of windows) {
+      const length = lengthOf(window.name);
+      if (!length || !window.resets_at || window.resets_at <= now) continue;
+      if (window.started_at > window.resets_at - length)
+        this.database
+          .prepare('UPDATE usage_windows SET started_at = ? WHERE name = ?')
+          .run(window.resets_at - length, window.name);
+    }
+    this.database.prepare("INSERT INTO migrations VALUES ('usage-window-start')").run();
   }
   // Accepts one OTLP/HTTP JSON log export and keeps only the model request records.
   ingest(body: unknown) {
@@ -109,8 +133,9 @@ export class UsageLog {
     return stored;
   }
   // Statistics follow the official quota periods. A period ends when the reported reset time moves or the utilization
-  // drops, which also covers resets granted outside the normal schedule.
+  // falls by more than the jitter between readings, which also covers resets granted outside the normal schedule.
   observe(rateLimits: RateLimits, now = Date.now()) {
+    const measuredAt = (rateLimits.measuredAt && Date.parse(rateLimits.measuredAt)) || now;
     for (const window of rateLimits.windows) {
       const previous = this.database
         .prepare(
@@ -124,10 +149,13 @@ export class UsageLog {
             observed_at: number;
           }
         | undefined;
+      // A long turn repeats its last reading with every context refresh, by then possibly older than another
+      // session's; only a newer reading says anything.
+      if (previous && measuredAt <= previous.observed_at) continue;
       const resetsAt = window.resetsAt ? Date.parse(window.resetsAt) || null : null;
       const length = lengthOf(window.name);
       const expected = resetsAt && length ? resetsAt - length : undefined;
-      let startedAt = previous?.started_at ?? Math.min(now, expected ?? now);
+      let startedAt = previous?.started_at ?? Math.min(measuredAt, expected ?? measuredAt);
       if (
         previous &&
         ((resetsAt !== null &&
@@ -135,17 +163,25 @@ export class UsageLog {
           Math.abs(resetsAt - previous.resets_at) > 5 * 60_000) ||
           (window.utilization !== null &&
             previous.utilization !== null &&
-            window.utilization < previous.utilization))
+            previous.utilization - window.utilization >= resetDrop))
       )
         // The reset happened between the two observations; the reported period start is used when it falls in between.
-        startedAt = Math.min(now, Math.max(previous.observed_at, expected ?? now));
+        startedAt = Math.min(measuredAt, Math.max(previous.observed_at, expected ?? measuredAt));
+      // An expired window is reported without a reset time until its next period begins; the last one known
+      // stays, so that the next period is recognised by its new reset time however little had been used.
       this.database
         .prepare(
           `INSERT INTO usage_windows (name, started_at, resets_at, utilization, observed_at) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(name) DO UPDATE SET started_at = excluded.started_at, resets_at = excluded.resets_at,
           utilization = excluded.utilization, observed_at = excluded.observed_at`,
         )
-        .run(window.name, startedAt, resetsAt, window.utilization, now);
+        .run(
+          window.name,
+          startedAt,
+          resetsAt ?? previous?.resets_at ?? null,
+          window.utilization,
+          measuredAt,
+        );
     }
   }
   summary(now = Date.now()): Summary {

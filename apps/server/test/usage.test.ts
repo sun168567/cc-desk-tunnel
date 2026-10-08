@@ -177,6 +177,65 @@ test('period statistics follow the official windows, including early resets and 
   assert.deepEqual(count(base + 8 * hour + 2), { five_hour: 2, seven_day: 1 });
 });
 
+test('a period survives jitter and repeated readings, and a cut-short one is restored', () => {
+  const database = new DatabaseSync(':memory:');
+  const log = new UsageLog(database);
+  const weekEnd = base + 3 * 24 * hour;
+  const weekStart = new Date(weekEnd - 7 * 24 * hour).toISOString();
+  const reading = (utilization: number, at: number, resetsAt: number | null = weekEnd) => ({
+    measuredAt: new Date(at).toISOString(),
+    windows: [
+      {
+        name: 'seven_day',
+        utilization,
+        resetsAt: resetsAt === null ? null : new Date(resetsAt).toISOString(),
+      },
+    ],
+  });
+  const started = () => log.summary(base + 3 * hour).windows[0].startedAt;
+  log.ingest(batch(request(base, 'j1')));
+  log.observe(reading(45, base + hour));
+  // Two readings a few milliseconds apart, the later one a point lower.
+  log.observe(reading(44, base + hour + 36));
+  assert.equal(started(), weekStart);
+  // Another session's long turn emits the reading it took earlier once more.
+  log.observe(reading(47, base + 2 * hour));
+  log.observe(reading(30, base + hour + 10), base + 2 * hour + 5);
+  assert.equal(started(), weekStart);
+  assert.equal(log.summary(base + 3 * hour).windows[0].utilization, 47);
+  assert.equal(log.summary(base + 3 * hour).windows[0].requests, 1);
+
+  // An expired window is reported empty and without a reset time; its next period is told by the new one.
+  const five = (utilization: number, at: number, resetsAt: number | null) => ({
+    measuredAt: new Date(at).toISOString(),
+    windows: [
+      {
+        name: 'five_hour',
+        utilization,
+        resetsAt: resetsAt === null ? null : new Date(resetsAt).toISOString(),
+      },
+    ],
+  });
+  const fiveStart = () =>
+    log.summary(base + 9 * hour).windows.find((window) => window.name === 'five_hour')!.startedAt;
+  log.observe(five(2, base + hour, base + 5 * hour));
+  log.observe(five(0, base + 6 * hour, null));
+  log.observe(five(1, base + 7 * hour, base + 11.5 * hour));
+  assert.equal(fiveStart(), new Date(base + 6.5 * hour).toISOString());
+
+  // A database written before the fix: the start is put back once, and the records stay.
+  const old = new DatabaseSync(':memory:');
+  new UsageLog(old).ingest(batch(request(Date.now() - hour, 'kept')));
+  const resetsAt = Date.now() + 2 * 24 * hour;
+  old.exec("DELETE FROM migrations WHERE name = 'usage-window-start'");
+  old
+    .prepare('INSERT INTO usage_windows VALUES (?, ?, ?, ?, ?)')
+    .run('seven_day', Date.now() - 60_000, resetsAt, 51, Date.now() - 1000);
+  const restored = new UsageLog(old).summary().windows[0];
+  assert.equal(restored.startedAt, new Date(resetsAt - 7 * 24 * hour).toISOString());
+  assert.equal(restored.requests, 1);
+});
+
 test('loopback receiver accepts OTLP JSON log exports', async () => {
   const log = new UsageLog(new DatabaseSync(':memory:'));
   const receiver = createUsageReceiver(log);
