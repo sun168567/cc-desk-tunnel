@@ -1,4 +1,13 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ArrowUpToLine,
   Bot,
@@ -24,6 +33,11 @@ import type { HistoryState } from './client.ts';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
 import { conversation } from './transcript.ts';
 import type { TranscriptItem, Turn, Work } from './transcript.ts';
+import { CopyButton, copyText } from './copy.tsx';
+import { messageTime } from './messageTime.ts';
+import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
+import { IconButton, Menu } from './ui.tsx';
+import type { MenuItem, MenuPosition } from './ui.tsx';
 
 const RichText = lazy(() => import('./RichText.tsx'));
 const Rich = ({ text }: { text: string }) => (
@@ -66,14 +80,16 @@ function Fold({
   children: () => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const shown = open || forced;
+  const searching = useContext(SearchExpanded);
+  const shown = open || forced || searching;
   return (
-    <details
-      className={className}
-      open={shown}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-    >
-      <summary>
+    <details className={className} open={shown}>
+      <summary
+        onClick={(event) => {
+          event.preventDefault();
+          if (!forced && !searching) setOpen(!open);
+        }}
+      >
         <ChevronRight className="fold-chevron" />
         {summary}
       </summary>
@@ -125,13 +141,25 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
     >
       {() => (
         <div className="tool-detail">
-          <pre className="tool-input">{tool.input}</pre>
-          {tool.liveOutput && !tool.output && <pre className="tool-output">{tool.liveOutput}</pre>}
-          {tool.output && (
-            <pre className="tool-output">
-              {tool.exitCode !== null && tool.exitCode !== undefined && `退出码 ${tool.exitCode}\n`}
-              {tool.output}
+          <CopyButton text={tool.input} label="复制工具输入" />
+          <pre className="tool-input" data-search-content>
+            {tool.input}
+          </pre>
+          {tool.liveOutput && !tool.output && (
+            <pre className="tool-output" data-search-content>
+              {tool.liveOutput}
             </pre>
+          )}
+          {tool.output && (
+            <>
+              <CopyButton text={tool.output} label="复制工具输出" />
+              <pre className="tool-output" data-search-content>
+                {tool.exitCode !== null &&
+                  tool.exitCode !== undefined &&
+                  `退出码 ${tool.exitCode}\n`}
+                {tool.output}
+              </pre>
+            </>
           )}
           {approval && (
             <div className="approval-actions">
@@ -201,7 +229,7 @@ function WorkGroup({
               }
             >
               {() => (
-                <div className="message-content tool-detail">
+                <div className="message-content tool-detail" data-search-content>
                   <Rich text={item.text} />
                 </div>
               )}
@@ -222,6 +250,7 @@ function Message({
   native: boolean;
   edit?: (item: Text) => void;
 }) {
+  const time = messageTime(item.at);
   return (
     <article className={`message ${item.kind}`}>
       <div className="message-label">
@@ -239,8 +268,14 @@ function Message({
         {item.kind === 'user' ? '你' : native ? 'Claude Code' : 'CC Desk Tunnel'}
         {item.kind === 'assistant' && !native && <span>模拟</span>}
         {item.kind === 'user' && item.delivery && <span>{item.delivery}</span>}
+        {time && (
+          <time className="message-time" dateTime={item.at} title={time.full}>
+            {time.short}
+          </time>
+        )}
+        <CopyButton text={item.text} />
       </div>
-      <div className="message-content">
+      <div className="message-content" data-search-content data-copy-text={item.text}>
         {item.kind === 'user' ? <p>{item.text}</p> : <Rich text={item.text} />}
       </div>
     </article>
@@ -289,6 +324,7 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
           key={item.id}
           className={`run-notice ${item.error ? 'failed' : ''}`}
           role={item.error ? 'alert' : 'status'}
+          data-search-content
         >
           {item.text}
         </div>
@@ -309,6 +345,7 @@ export default function Conversation({
   loadEarlier,
   replyApproval,
   edit,
+  findRequest,
 }: {
   session: Session | undefined;
   events: SessionEvent[];
@@ -318,7 +355,8 @@ export default function Conversation({
   ownsRun: boolean;
   busy: boolean;
   newSession: () => void;
-  loadEarlier: () => void;
+  loadEarlier: () => Promise<void>;
+  findRequest: number;
   replyApproval: (
     runId: string,
     approvalId: string,
@@ -328,6 +366,57 @@ export default function Conversation({
   edit?: (messageId: string, text: string) => void;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
+  const [findOpen, setFindOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [findError, setFindError] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
+  const [contextMenu, setContextMenu] = useState<(MenuPosition & { items: MenuItem[] }) | null>(
+    null,
+  );
+  const transcriptRoot = useRef<HTMLDivElement>(null);
+  const currentSession = useRef(session?.id);
+  const lastFindRequest = useRef(findRequest);
+  currentSession.current = session?.id;
+  const searching = findOpen && query.length > 0;
+  const openFind = () => {
+    follow.current = false;
+    setFindError('');
+    setFindOpen(true);
+  };
+  useEffect(() => {
+    setFindOpen(false);
+    setQuery('');
+    setFindError('');
+    setContextMenu(null);
+    setCopyStatus('');
+  }, [session?.id]);
+  useEffect(() => {
+    if (findRequest !== lastFindRequest.current) openFind();
+    lastFindRequest.current = findRequest;
+  }, [findRequest]);
+  useEffect(() => {
+    if (
+      !searching ||
+      !connected ||
+      !history?.hasEarlier ||
+      history.loading ||
+      history.loadingEarlier ||
+      findError
+    )
+      return;
+    const id = session?.id;
+    void loadEarlier().catch(() => {
+      if (currentSession.current === id) setFindError('早期记录加载失败，请关闭查找后重试');
+    });
+  }, [
+    searching,
+    connected,
+    history?.firstSequence,
+    history?.hasEarlier,
+    history?.loading,
+    history?.loadingEarlier,
+    findError,
+  ]);
   // Running timers tick once a second, and only while something runs.
   const [now, setNow] = useState(Date.now);
   const running = !!session?.activeRun;
@@ -369,83 +458,160 @@ export default function Conversation({
       return;
     }
     if (anchor) return;
-    if (follow.current) scroll.current?.scrollTo(0, scroll.current.scrollHeight);
+    if (follow.current && !findOpen) scroll.current?.scrollTo(0, scroll.current.scrollHeight);
   }, [events, history?.loadingEarlier, session?.id]);
 
   return (
-    <div
-      className="conversation"
-      ref={scroll}
-      onScroll={() => {
-        if (scroll.current)
-          follow.current =
-            scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight <
-            80;
-      }}
-    >
-      {!session ? (
-        <div className="empty-state">
-          <MessageSquare />
-          <h2>新会话</h2>
-          <button
-            type="button"
-            className="button primary"
-            disabled={!connected}
-            onClick={newSession}
-          >
-            <Plus />
-            新建会话
-          </button>
-        </div>
-      ) : (
-        <div className="transcript">
-          {history?.hasEarlier && (
-            <button
-              type="button"
-              className="history-load"
-              disabled={!connected || history.loadingEarlier || history.loading}
-              onClick={() => {
-                if (scroll.current)
-                  prependAnchor.current = {
-                    sessionId: session.id,
-                    height: scroll.current.scrollHeight,
-                    top: scroll.current.scrollTop,
-                  };
-                loadEarlier();
-              }}
-            >
-              <ArrowUpToLine />
-              {history.loadingEarlier ? '加载中' : '加载更早记录'}
-            </button>
-          )}
-          {history?.loading && (
-            <div className="history-status" role="status">
-              同步会话
-            </div>
-          )}
-          {turns.length === 0 && !history?.loading && (
-            <div className="empty-state">
-              <MessageSquare />
-              <h2>{session.title}</h2>
-              <span className="empty-project">{session.projectPath}</span>
-            </div>
-          )}
-          {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} native={native} live={live} />
-          ))}
-          {session.activeRun && (
-            <div className="run-indicator" role="status">
-              <span className="running-dot" />
-              {session.activeRun.status !== 'awaiting_approval'
-                ? '运行中'
-                : session.activeRun.waiting === 'question'
-                  ? '等待回答'
-                  : '等待审批'}
-              {!ownsRun && ' · 另一连接'}
-            </div>
-          )}
+    <SearchExpanded.Provider value={searching}>
+      {session && (
+        <div className="conversation-tools">
+          <span role="status">{copyStatus}</span>
+          <IconButton title="打开对话查找" onClick={openFind}>
+            <Search />
+          </IconButton>
         </div>
       )}
-    </div>
+      {findOpen && session && (
+        <ConversationFind
+          root={transcriptRoot}
+          scroll={scroll}
+          query={query}
+          change={setQuery}
+          request={findRequest}
+          partial={!!history?.hasEarlier || !!history?.loading}
+          loading={searching && !!(history?.loadingEarlier || history?.loading)}
+          error={findError}
+          close={() => {
+            setFindOpen(false);
+            setQuery('');
+            setFindError('');
+            scroll.current?.focus();
+          }}
+        />
+      )}
+      <div
+        className={`conversation ${searching ? 'searching' : ''}`}
+        tabIndex={-1}
+        ref={scroll}
+        onContextMenu={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest('input, textarea, [contenteditable="true"]')) return;
+          event.preventDefault();
+          const selection = window.getSelection()?.toString() ?? '';
+          const message = target.closest<HTMLElement>('[data-copy-text]');
+          const block = target.closest('pre');
+          const copy = (text: string) => {
+            void copyText(text).then(
+              () => setCopyStatus('已复制'),
+              () => setCopyStatus('复制失败，请重试'),
+            );
+          };
+          setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            items: [
+              { label: '复制选中文字', disabled: !selection, run: () => copy(selection) },
+              ...(block
+                ? [{ label: '复制代码 / 输出块', run: () => copy(block.textContent ?? '') }]
+                : []),
+              ...(message
+                ? [{ label: '复制整条消息', run: () => copy(message.dataset.copyText ?? '') }]
+                : []),
+              {
+                label: '全选对话文字',
+                run: () => {
+                  if (!transcriptRoot.current) return;
+                  const range = document.createRange();
+                  range.selectNodeContents(transcriptRoot.current);
+                  const selected = window.getSelection();
+                  selected?.removeAllRanges();
+                  selected?.addRange(range);
+                },
+              },
+              { label: '查找对话内容', separated: true, run: openFind },
+            ],
+          });
+        }}
+        onScroll={() => {
+          if (scroll.current)
+            follow.current =
+              scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight <
+              80;
+        }}
+      >
+        {!session ? (
+          <div className="empty-state">
+            <MessageSquare />
+            <h2>新会话</h2>
+            <button
+              type="button"
+              className="button primary"
+              disabled={!connected}
+              onClick={newSession}
+            >
+              <Plus />
+              新建会话
+            </button>
+          </div>
+        ) : (
+          <div className="transcript" ref={transcriptRoot}>
+            {!findOpen && findError && (
+              <div className="history-status" role="alert">
+                {findError}
+              </div>
+            )}
+            {history?.hasEarlier && (
+              <button
+                type="button"
+                className="history-load"
+                disabled={!connected || history.loadingEarlier || history.loading}
+                onClick={() => {
+                  setFindError('');
+                  if (scroll.current)
+                    prependAnchor.current = {
+                      sessionId: session.id,
+                      height: scroll.current.scrollHeight,
+                      top: scroll.current.scrollTop,
+                    };
+                  void loadEarlier().catch(() => setFindError('早期记录加载失败，请重试'));
+                }}
+              >
+                <ArrowUpToLine />
+                {history.loadingEarlier ? '加载中' : '加载更早记录'}
+              </button>
+            )}
+            {history?.loading && (
+              <div className="history-status" role="status">
+                同步会话
+              </div>
+            )}
+            {turns.length === 0 && !history?.loading && (
+              <div className="empty-state">
+                <MessageSquare />
+                <h2>{session.title}</h2>
+                <span className="empty-project">{session.projectPath}</span>
+              </div>
+            )}
+            {turns.map((turn) => (
+              <TurnView key={turn.id} turn={turn} native={native} live={live} />
+            ))}
+            {session.activeRun && (
+              <div className="run-indicator" role="status">
+                <span className="running-dot" />
+                {session.activeRun.status !== 'awaiting_approval'
+                  ? '运行中'
+                  : session.activeRun.waiting === 'question'
+                    ? '等待回答'
+                    : '等待审批'}
+                {!ownsRun && ' · 另一连接'}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {contextMenu && (
+        <Menu label="对话文字操作" {...contextMenu} onClose={() => setContextMenu(null)} />
+      )}
+    </SearchExpanded.Provider>
   );
 }

@@ -11,6 +11,7 @@ declare global {
       openFolder: (path: string) => Promise<void>;
       // The branch a project's working tree is on, or null outside a repository.
       gitBranch: (path: string) => Promise<string | null>;
+      copyText: (text: string) => Promise<void>;
       openExternal: (url: string) => Promise<void>;
       // The folders holding sessions without a project; new ones are made in the first.
       workspaceRoots: () => Promise<string[]>;

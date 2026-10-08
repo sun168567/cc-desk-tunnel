@@ -1177,6 +1177,101 @@ kbd {
   overflow-x: hidden;
   padding: 28px;
 }
+.conversation-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 30px;
+  padding: 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.conversation-find {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--side);
+}
+.conversation-find input {
+  flex: 1;
+  min-width: 90px;
+  width: 90px;
+}
+.find-count {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.conversation-find small {
+  flex-basis: 100%;
+  color: var(--muted);
+}
+.conversation.searching .message {
+  content-visibility: visible;
+}
+.conversation {
+  user-select: text;
+}
+.conversation ::selection {
+  background: #bad5ff;
+  color: #17243a;
+}
+::highlight(conversation-matches) {
+  background: #fff0a8;
+  color: #22262e;
+}
+::highlight(conversation-current) {
+  background: #f5b95c;
+  color: #22262e;
+}
+.message-time {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.message-label {
+  flex-wrap: wrap;
+}
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  user-select: none;
+}
+.copy-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.copy-button svg {
+  width: 13px;
+  height: 13px;
+}
+.message-label > .copy-button span {
+  display: none;
+}
+.code-block {
+  position: relative;
+}
+.code-block > .copy-button {
+  position: absolute;
+  right: 7px;
+  top: 7px;
+  background: var(--surface-2);
+}
+.message-content .code-block > pre {
+  padding-top: 38px;
+}
 .transcript {
   max-width: 820px;
   margin: 0 auto;
