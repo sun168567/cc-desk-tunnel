@@ -11,6 +11,7 @@ const {
   ipcMain,
   dialog,
   shell,
+  clipboard,
 } = require('electron');
 const path = require('node:path');
 const {
@@ -113,6 +114,10 @@ handle('folder:open', async (_event, directory) => {
   if (failure) throw new Error(failure);
 });
 handle('git:branch', (_event, directory) => gitBranch(directory));
+handle('clipboard:write', (_event, text) => {
+  if (typeof text !== 'string') throw new Error('Expected clipboard text');
+  clipboard.writeText(text);
+});
 // The official sign-in page and this project's own page open in the user's browser; nothing else is handed to the
 // system.
 handle('external:open', async (event, target) => {
@@ -413,6 +418,20 @@ app.whenReady().then(() => {
     },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // Electron does not provide an editing menu by default. Native roles keep text selection, undo and paste
+  // in the focused input, without exposing clipboard reads to the renderer.
+  window.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable) return;
+    Menu.buildFromTemplate([
+      { role: 'undo', label: '撤销', enabled: params.editFlags.canUndo },
+      { role: 'redo', label: '重做', enabled: params.editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', label: '剪切', enabled: params.editFlags.canCut },
+      { role: 'copy', label: '复制', enabled: params.editFlags.canCopy },
+      { role: 'paste', label: '粘贴', enabled: params.editFlags.canPaste },
+      { role: 'selectAll', label: '全选' },
+    ]).popup({ window });
+  });
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.loadFile(path.join(__dirname, '../dist/index.html'));
 

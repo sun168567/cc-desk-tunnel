@@ -177,6 +177,124 @@ test('period statistics follow the official windows, including early resets and 
   assert.deepEqual(count(base + 8 * hour + 2), { five_hour: 2, seven_day: 1 });
 });
 
+test('a period survives jitter and repeated readings, and a cut-short one is restored', () => {
+  const database = new DatabaseSync(':memory:');
+  const log = new UsageLog(database);
+  const weekEnd = base + 3 * 24 * hour;
+  const weekStart = new Date(weekEnd - 7 * 24 * hour).toISOString();
+  const reading = (utilization: number, at: number, resetsAt: number | null = weekEnd) => ({
+    measuredAt: new Date(at).toISOString(),
+    windows: [
+      {
+        name: 'seven_day',
+        utilization,
+        resetsAt: resetsAt === null ? null : new Date(resetsAt).toISOString(),
+      },
+    ],
+  });
+  const started = () => log.summary(base + 3 * hour).windows[0].startedAt;
+  log.ingest(batch(request(base, 'j1')));
+  log.observe(reading(45, base + hour));
+  // Two readings a few milliseconds apart, the later one a point lower.
+  log.observe(reading(44, base + hour + 36));
+  assert.equal(started(), weekStart);
+  // Another session's long turn emits the reading it took earlier once more.
+  log.observe(reading(47, base + 2 * hour));
+  log.observe(reading(30, base + hour + 10), base + 2 * hour + 5);
+  assert.equal(started(), weekStart);
+  assert.equal(log.summary(base + 3 * hour).windows[0].utilization, 47);
+  assert.equal(log.summary(base + 3 * hour).windows[0].requests, 1);
+  // Even a larger positive correction is not evidence that the quota has reset.
+  log.observe(reading(38, base + 2 * hour + 100));
+  assert.equal(started(), weekStart);
+  log.observe(reading(0, base + 2 * hour + 100));
+  assert.equal(log.summary(base + 3 * hour).windows[0].utilization, 38);
+
+  // An expired window is reported empty and without a reset time; its next period is told by the new one.
+  const five = (utilization: number, at: number, resetsAt: number | null) => ({
+    measuredAt: new Date(at).toISOString(),
+    windows: [
+      {
+        name: 'five_hour',
+        utilization,
+        resetsAt: resetsAt === null ? null : new Date(resetsAt).toISOString(),
+      },
+    ],
+  });
+  const fiveStart = () =>
+    log.summary(base + 9 * hour).windows.find((window) => window.name === 'five_hour')!.startedAt;
+  log.observe(five(2, base + hour, base + 5 * hour));
+  log.observe(five(0, base + 6 * hour, null));
+  log.observe(five(1, base + 7 * hour, base + 11.5 * hour));
+  assert.equal(fiveStart(), new Date(base + 6.5 * hour).toISOString());
+
+  // A database written before the fix: the start is put back once, and the records stay.
+  const old = new DatabaseSync(':memory:');
+  new UsageLog(old).ingest(batch(request(Date.now() - hour, 'kept')));
+  const resetsAt = Date.now() + 2 * 24 * hour;
+  old.exec("DELETE FROM migrations WHERE name = 'usage-window-start'");
+  old
+    .prepare('INSERT INTO usage_windows VALUES (?, ?, ?, ?, ?)')
+    .run('seven_day', Date.now() - 60_000, resetsAt, 51, Date.now() - 1000);
+  const records = old.prepare('SELECT * FROM api_requests ORDER BY id').all();
+  const restored = new UsageLog(old).summary().windows[0];
+  assert.equal(restored.startedAt, new Date(resetsAt - 7 * 24 * hour).toISOString());
+  assert.equal(restored.requests, 1);
+  assert.deepEqual(old.prepare('SELECT * FROM api_requests ORDER BY id').all(), records);
+  // Recovery is once only; a later explicitly observed reset must survive a restart.
+  old.prepare('UPDATE usage_windows SET started_at = ?').run(Date.now() - 500);
+  new UsageLog(old);
+  assert.ok(
+    Number(old.prepare('SELECT started_at FROM usage_windows').get()!.started_at) >
+      Date.now() - 5000,
+  );
+});
+
+test('period recovery preserves an early reset recorded in the original quota events', () => {
+  const db = new DatabaseSync(':memory:');
+  const log = new UsageLog(db);
+  const now = Date.now();
+  const end = now + 2 * 24 * hour;
+  log.ingest(batch(request(now - 4 * hour, 'before-reset'), request(now - hour, 'after-reset')));
+  db.exec(
+    "DELETE FROM migrations WHERE name = 'usage-window-start'; CREATE TABLE events (data TEXT NOT NULL)",
+  );
+  db.prepare('INSERT INTO usage_windows VALUES (?, ?, ?, ?, ?)').run(
+    'seven_day',
+    now - 60000,
+    end,
+    20,
+    now,
+  );
+  const insert = db.prepare('INSERT INTO events VALUES (?)');
+  for (const [at, utilization] of [
+    [now - 3 * hour, 60],
+    [now - 2 * hour, 0],
+    [now - hour, 20],
+  ]) {
+    insert.run(
+      JSON.stringify({
+        createdAt: new Date(at).toISOString(),
+        payload: {
+          type: 'native.metrics',
+          rateLimits: {
+            available: true,
+            measuredAt: new Date(at).toISOString(),
+            windows: [{ name: 'seven_day', resetsAt: new Date(end).toISOString(), utilization }],
+          },
+        },
+      }),
+    );
+  }
+  const records = db.prepare('SELECT * FROM api_requests ORDER BY id').all();
+  const events = db.prepare('SELECT * FROM events').all();
+  const recovered = new UsageLog(db).summary().windows[0];
+  assert.equal(recovered.requests, 1);
+  assert.equal(recovered.startedAt, new Date(now - 3 * hour).toISOString());
+  assert.deepEqual(db.prepare('SELECT * FROM api_requests ORDER BY id').all(), records);
+  assert.deepEqual(db.prepare('SELECT * FROM events').all(), events);
+});
+
 test('loopback receiver accepts OTLP JSON log exports', async () => {
   const log = new UsageLog(new DatabaseSync(':memory:'));
   const receiver = createUsageReceiver(log);

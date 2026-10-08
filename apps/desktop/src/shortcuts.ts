@@ -8,6 +8,7 @@ export type Action =
   | 'toggleSide'
   | 'newSession'
   | 'settings'
+  | 'find'
   | 'zoomIn'
   | 'zoomOut'
   | 'zoomReset';
@@ -18,6 +19,7 @@ export const actions: { id: Action; name: string; desktop?: boolean }[] = [
   { id: 'toggleSide', name: '收起或展开侧栏' },
   { id: 'newSession', name: '新建会话' },
   { id: 'settings', name: '打开设置' },
+  { id: 'find', name: '查找对话内容' },
   { id: 'zoomIn', name: '放大界面', desktop: true },
   { id: 'zoomOut', name: '缩小界面', desktop: true },
   { id: 'zoomReset', name: '恢复界面大小', desktop: true },
@@ -28,6 +30,7 @@ const defaults: Record<Action, string> = {
   toggleSide: 'Ctrl+KeyB',
   newSession: 'Ctrl+KeyN',
   settings: 'Ctrl+Comma',
+  find: 'Ctrl+KeyF',
   zoomIn: 'Ctrl+Equal',
   zoomOut: 'Ctrl+Minus',
   zoomReset: 'Ctrl+Digit0',

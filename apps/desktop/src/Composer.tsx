@@ -50,6 +50,7 @@ export default function Composer({
   connected,
   busy,
   refreshing,
+  canRefreshModels,
   ownsRun,
   inputDisabled,
   controlsDisabled,
@@ -78,6 +79,7 @@ export default function Composer({
   connected: boolean;
   busy: boolean;
   refreshing: boolean;
+  canRefreshModels: boolean;
   ownsRun: boolean;
   inputDisabled: boolean;
   controlsDisabled: boolean;
@@ -278,6 +280,9 @@ export default function Composer({
               metrics={metrics}
               disabled={controlsDisabled}
               configure={configure}
+              refresh={refresh}
+              refreshing={refreshing}
+              canRefreshModels={canRefreshModels}
             />
           )}
           {session.activeRun && (

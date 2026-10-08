@@ -121,6 +121,7 @@ export function App() {
   // One request at a time from this window; `refreshing` is the slower native status read.
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [findRequest, setFindRequest] = useState(0);
   const refreshed = useRef(new Set<string>());
   const [projects, setProjects] = useState(savedProjects);
   // The folders that hold sessions without a project; new ones are made in the first.
@@ -827,6 +828,12 @@ export function App() {
     {
       label: '视图',
       items: [
+        {
+          label: '查找对话内容',
+          hint: hint('find'),
+          disabled: !selected || place.page !== 'chat' || !!terminalSessionId,
+          run: () => setFindRequest((value) => value + 1),
+        },
         { label: sideOpen ? '收起侧栏' : '展开侧栏', hint: hint('toggleSide'), run: toggleSide },
         { label: '会话', separated: true, checked: place.page === 'chat', run: () => open('chat') },
         {
@@ -887,6 +894,11 @@ export function App() {
       toggleSide,
       newSession: canCreate && (() => void newSession()),
       settings: () => open('settings'),
+      find:
+        !!selected &&
+        place.page === 'chat' &&
+        !terminalSessionId &&
+        (() => setFindRequest((value) => value + 1)),
       zoomIn: window.desktop && (() => window.desktop!.zoom(1)),
       zoomOut: window.desktop && (() => window.desktop!.zoom(-1)),
       zoomReset: window.desktop && (() => window.desktop!.zoom(0)),
@@ -1094,6 +1106,7 @@ export function App() {
               </div>
             )}
             <Conversation
+              findRequest={findRequest}
               session={selected}
               events={events}
               history={history}
@@ -1104,9 +1117,7 @@ export function App() {
               newSession={() => {
                 void newSession();
               }}
-              loadEarlier={() => {
-                void act(() => client.loadEarlier(selected!.id));
-              }}
+              loadEarlier={() => client.loadEarlier(selected!.id)}
               edit={
                 controlsDisabled
                   ? undefined
@@ -1146,6 +1157,7 @@ export function App() {
                 connected={connected}
                 busy={busy}
                 refreshing={refreshing}
+                canRefreshModels={!state.sessions.some((session) => session.activeRun)}
                 ownsRun={ownsRun}
                 inputDisabled={inputDisabled}
                 controlsDisabled={controlsDisabled}

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('desktop', {
   saveFile: (name, text) => ipcRenderer.invoke('file:save', name, text),
   openFolder: (directory) => ipcRenderer.invoke('folder:open', directory),
   gitBranch: (directory) => ipcRenderer.invoke('git:branch', directory),
+  copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   workspaceRoots: () => ipcRenderer.invoke('workspace:roots'),
   chooseWorkspace: (reset) => ipcRenderer.invoke('workspace:choose', reset),

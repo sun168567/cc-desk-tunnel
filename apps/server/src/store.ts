@@ -51,6 +51,9 @@ function batchHistory(events: SessionEvent[]) {
   return result;
 }
 
+// Reading a session's native state when it is opened is not use of it: these do not move it up the list.
+const stateReadings = new Set<EventPayload['type']>(['native.capabilities', 'native.metrics']);
+
 export class SessionStore {
   directory: string;
   database: DatabaseSync;
@@ -76,6 +79,7 @@ export class SessionStore {
     `);
     try {
       this.importJson();
+      this.restoreUpdatedAt();
       for (const session of this.list()) {
         if (!session.activeRun) continue;
         const { id: runId, connectionId } = session.activeRun;
@@ -154,6 +158,41 @@ export class SessionStore {
           insert.run(event.sessionId, event.sequence, event.runId, JSON.stringify(event));
       }
       this.database.prepare('INSERT INTO migrations VALUES (?)').run('json-import');
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  // Sessions that had only been looked at carry the time of that look; they get back the time of what last
+  // happened in them.
+  private restoreUpdatedAt() {
+    if (this.database.prepare("SELECT 1 FROM migrations WHERE name = 'updated-at-activity'").get())
+      return;
+    const kinds = [...stateReadings].map((kind) => `'${kind}'`).join(', ');
+    const last = this.database.prepare(
+      'SELECT data FROM events WHERE session_id = ? ORDER BY sequence DESC LIMIT 1',
+    );
+    const activity = this.database.prepare(
+      `SELECT data FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') NOT IN (${kinds})
+      ORDER BY sequence DESC LIMIT 1`,
+    );
+    this.database.exec('BEGIN');
+    try {
+      for (const session of this.list()) {
+        const row = last.get(session.id);
+        if (!row) continue;
+        const event = JSON.parse(String(row.data)) as SessionEvent;
+        if (!stateReadings.has(event.payload.type) || session.updatedAt !== event.createdAt)
+          continue;
+        const before = activity.get(session.id);
+        session.updatedAt = before
+          ? (JSON.parse(String(before.data)) as SessionEvent).createdAt
+          : session.createdAt;
+        this.save(session);
+      }
+      this.database.prepare("INSERT INTO migrations VALUES ('updated-at-activity')").run();
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -395,7 +434,7 @@ export class SessionStore {
       createdAt: new Date().toISOString(),
       payload,
     };
-    session.updatedAt = event.createdAt;
+    if (!stateReadings.has(payload.type)) session.updatedAt = event.createdAt;
     if (payload.type === 'run.status')
       session.activeRun = terminalStatuses.has(payload.status)
         ? null

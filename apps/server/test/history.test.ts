@@ -162,3 +162,59 @@ test('legacy UTF-8 JSON is imported exactly once, kept intact and not resurrecte
   assert.equal(readFileSync(path, 'utf8'), original);
   second.close();
 });
+
+test('reading the native state of a session leaves its time of last use alone', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T12:00:00Z') });
+  const { store, directory, session } = fixture(t);
+  const runId = randomUUID();
+  store.append(session.id, runId, {
+    type: 'message.user',
+    messageId: randomUUID(),
+    text: 'hello',
+    scenario: 'chat',
+  });
+  const used = store.get(session.id).session.updatedAt;
+  t.mock.timers.tick(1000);
+  const reading: EventPayload = {
+    type: 'native.metrics',
+    context: null,
+    usage: null,
+    rateLimits: null,
+  };
+  store.append(session.id, randomUUID(), reading);
+  assert.equal(store.get(session.id).session.updatedAt, used);
+
+  // A store written before: the look had been taken for use, and is put back once.
+  store.append(session.id, randomUUID(), reading);
+  const moved = { ...store.get(session.id).session, updatedAt: '2030-01-01T00:00:00.000Z' };
+  store.database
+    .prepare('UPDATE events SET data = json_set(data, ?, ?) WHERE session_id = ? AND sequence = 3')
+    .run('$.createdAt', moved.updatedAt, session.id);
+  store.database
+    .prepare('UPDATE sessions SET metadata = ? WHERE id = ?')
+    .run(JSON.stringify(moved), session.id);
+  store.database.exec("DELETE FROM migrations WHERE name = 'updated-at-activity'");
+  const events = store.database.prepare('SELECT data FROM events ORDER BY sequence').all();
+  const reopened = new SessionStore(directory);
+  const restored = reopened.get(session.id).session.updatedAt;
+  assert.deepEqual(
+    reopened.database.prepare('SELECT data FROM events ORDER BY sequence').all(),
+    events,
+  );
+  reopened.append(session.id, randomUUID(), {
+    type: 'native.capabilities',
+    models: [],
+    commands: [],
+    account: {},
+  });
+  assert.equal(reopened.get(session.id).session.updatedAt, used);
+  reopened.append(session.id, randomUUID(), {
+    type: 'message.user',
+    messageId: randomUUID(),
+    text: 'new activity',
+    scenario: 'chat',
+  });
+  assert.notEqual(reopened.get(session.id).session.updatedAt, used);
+  reopened.close();
+  assert.equal(restored, used);
+});

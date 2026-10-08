@@ -4,15 +4,11 @@
 
 ## 本体与外层
 
-本项目按固定版本从官方 npm 安装 `@anthropic-ai/claude-code`（当前 2.1.286）。对该版本核对过：已安装的 `bin/claude.exe` 与官方 npm 包 `@anthropic-ai/claude-code-linux-x64@2.1.286` 中的 `claude`，SHA256 同为：
-
-```text
-fe503f65c6289d59c23e5b21ae44f03583f997dd33a2cbfc75ab4f96fb8fc73f
-```
-
-运行时 `/proc/<pid>/exe` 指向这个已安装文件；没有改写 CLI、替换内部工具、注入 `NODE_OPTIONS` / `LD_PRELOAD`、补丁包或执行 MCP。代理不提供自行判断工具风险的审批策略。自动与手动模式均交给 CLI。
+本项目按固定版本从官方 npm 安装 `@anthropic-ai/claude-code`（当前 2.1.293）。不改写 CLI、替换内部工具或注入代码；自动与手动审批均交给原生处理。
 
 外层采用官方 Agent SDK 0.3.286，指定 `pathToClaudeCodeExecutable`，经官方双向 stream-json / stdio 控制接口传递用户输入、公开事件、审批与取消。SDK 自身使用真实 `CLAUDE_CODE_ENTRYPOINT=sdk-ts`、版本标记与 `--permission-prompt-tool stdio`；这是原生 stdio 请求 / 回复入口，不是 MCP 工具。没有伪装成交互式终端，也没有覆盖官方标记。
+
+模型列表来自 CLI 初始化，桌面端不维护型号名单。CLI 按账号和提供方使用官方动态目录或内置目录；SDK 的 `supportedModels()` 返回初始化快照。空闲时“刷新模型列表”启动新的 CLI 读取状态。动态目录可带来新型号，内置目录和能力支持仍随 CLI 版本更新。
 
 代理有意变化限于外层：稳定 cwd / session ID、Windows SSH 提示词、用户选择的审批模式、可选的提供方 settings、公开增量输出、思考摘要显示（`--thinking-display summarized`）和官方持久化 / 恢复。不再额外设置禁用遥测 / 自动更新的变量，不默认限制任务轮数。服务读完自身配置后即从进程环境删除 `PROXY_*` / `FRPS_*` 与四个服务专用的 `CLAUDE_*` 变量，原生 CLI、其 shell 与控制终端继承到的只有宿主环境本身（容器内为 `HOME`、`PATH` 等），不含代理 token 或部署配置；用户有意放进环境的其他变量原样保留。这只避免无意带出：CLI 与服务同属一个 Linux 用户，配置文件仍可被读取，不构成多用户隔离。对“内层完全不变”的工程解释是同一原生可执行与 agent 引擎，不是声称 headless / SDK 和终端 TTY 环境或未公开服务端判断逐项相同。
 

@@ -265,8 +265,12 @@ test('approval modes are described where they are chosen, and models sit behind 
   };
   const runId = randomUUID();
   const modes: string[] = [];
+  let publishNewModel = false;
+  const background: Session = { ...session, id: randomUUID(), title: '后台会话' };
+  let updateSession: (updated: Session) => void;
   await page.routeWebSocket('ws://127.0.0.1:18890/ws', (route) => {
     const reply = (value: unknown) => route.send(JSON.stringify(value));
+    updateSession = (updated) => reply({ type: 'session.updated', session: updated });
     route.onMessage((raw) => {
       const message = JSON.parse(String(raw));
       if (message.type === 'auth') {
@@ -276,7 +280,7 @@ test('approval modes are described where they are chosen, and models sit behind 
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
-          sessions: [session],
+          sessions: [session, background],
         });
         return;
       }
@@ -315,6 +319,31 @@ test('approval modes are described where they are chosen, and models sit behind 
         session.permissionMode = message.permissionMode;
         reply({ type: 'session.updated', session });
       }
+      if (message.type === 'session.status' && publishNewModel)
+        reply({
+          type: 'session.event',
+          event: {
+            sessionId: session.id,
+            runId,
+            sequence: 2,
+            createdAt: now,
+            payload: {
+              type: 'native.capabilities',
+              account: {},
+              commands: [],
+              models: [
+                {
+                  value: 'haiku',
+                  resolvedModel: 'claude-haiku-5-5',
+                  displayName: 'Haiku',
+                  description: '来自更新后的原生目录',
+                  source: 'native',
+                  supportedEffortLevels: ['low', 'medium', 'high'],
+                },
+              ],
+            },
+          },
+        });
       reply({ type: 'response', requestId: message.requestId, ok: true });
     });
   });
@@ -346,6 +375,18 @@ test('approval modes are described where they are chosen, and models sit behind 
   await page.locator('.model-current').click();
   await expect(models.getByRole('option')).toHaveCount(4);
   await shot(page, '14-选择模型');
+  const refreshModels = page.getByRole('button', { name: '刷新模型列表', exact: true });
+  background.activeRun = { id: randomUUID(), status: 'running', connectionId: randomUUID() };
+  updateSession!(background);
+  await expect(refreshModels).toBeDisabled();
+  await expect(models.getByRole('option').nth(1)).toBeEnabled();
+  background.activeRun = null;
+  updateSession!(background);
+  await expect(refreshModels).toBeEnabled();
+  publishNewModel = true;
+  await refreshModels.click();
+  await expect(models.getByRole('option', { name: /Haiku/ })).toContainText('claude-haiku-5-5');
+  await expect(models.getByRole('option')).toHaveCount(2);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
