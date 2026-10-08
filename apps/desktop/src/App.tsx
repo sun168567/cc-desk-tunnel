@@ -48,6 +48,8 @@ import { exportSession } from './exportSession.ts';
 import { useNotifications } from './notifications.ts';
 import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
 import { setPrefs, toggled, usePrefs } from './prefs.ts';
+import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
+import type { Action } from './shortcuts.ts';
 import Rail from './Rail.tsx';
 import type { Page } from './Rail.tsx';
 import {
@@ -691,6 +693,9 @@ export function App() {
     : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
       ? (serviceUpdate?.label ?? null)
       : null;
+  // What a menu shows beside an item that has a shortcut.
+  const hint = (action: Action) =>
+    (prefs.shortcuts.enabled && comboText(keyFor(prefs, action))) || undefined;
   const settingsMenu: MenuItem[] = [
     {
       label: `账号 · ${accountName}`,
@@ -705,7 +710,7 @@ export function App() {
     {
       label: '设置',
       icon: <Settings />,
-      hint: 'Ctrl+,',
+      hint: hint('settings'),
       separated: true,
       run: () => open('settings', nativeMode ? 'claude' : 'general'),
     },
@@ -720,7 +725,7 @@ export function App() {
       items: [
         {
           label: '新建会话',
-          hint: 'Ctrl+N',
+          hint: hint('newSession'),
           disabled: !canCreate,
           run: () => {
             void newSession();
@@ -750,7 +755,7 @@ export function App() {
     {
       label: '视图',
       items: [
-        { label: sideOpen ? '收起侧栏' : '展开侧栏', hint: 'Ctrl+B', run: toggleSide },
+        { label: sideOpen ? '收起侧栏' : '展开侧栏', hint: hint('toggleSide'), run: toggleSide },
         { label: '会话', separated: true, checked: place.page === 'chat', run: () => open('chat') },
         {
           label: '定时任务',
@@ -759,7 +764,7 @@ export function App() {
         },
         {
           label: '设置',
-          hint: 'Ctrl+,',
+          hint: hint('settings'),
           checked: place.page === 'settings',
           run: () => open('settings'),
         },
@@ -767,12 +772,12 @@ export function App() {
           ? [
               {
                 label: '放大',
-                hint: 'Ctrl++',
+                hint: hint('zoomIn'),
                 separated: true,
                 run: () => window.desktop!.zoom(1),
               },
-              { label: '缩小', hint: 'Ctrl+-', run: () => window.desktop!.zoom(-1) },
-              { label: '实际大小', hint: 'Ctrl+0', run: () => window.desktop!.zoom(0) },
+              { label: '缩小', hint: hint('zoomOut'), run: () => window.desktop!.zoom(-1) },
+              { label: '实际大小', hint: hint('zoomReset'), run: () => window.desktop!.zoom(0) },
             ]
           : []),
       ],
@@ -783,28 +788,41 @@ export function App() {
         { label: '使用说明', run: () => open('settings', 'help') },
         {
           label: '快捷键',
-          run: () => {
-            open('settings', 'help');
-            setTimeout(() => document.getElementById('shortcuts')?.scrollIntoView(), 50);
-          },
+          run: () => open('settings', 'shortcuts'),
         },
         ...(project.url ? [{ label: '项目主页', separated: true, run: openProject }] : []),
         { label: '检查更新与版本信息', run: () => open('settings', 'about') },
       ],
     },
   ];
-  // The shortcuts the menus name.
+  // The shortcuts, as the user set them. A key press that something else already took, or that belongs to the
+  // native terminal or an open dialog, is left alone.
   const keys = useRef<(event: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
+    if (event.defaultPrevented || !prefs.shortcuts.enabled) return;
     if (!connected && state.status !== 'reconnecting') return;
-    const control = event.ctrlKey && !event.altKey && !event.shiftKey;
-    if (event.altKey && event.key === 'ArrowLeft' && !terminalSessionId) step(-1);
-    else if (event.altKey && event.key === 'ArrowRight' && !terminalSessionId) step(1);
-    else if (control && event.key.toLowerCase() === 'b') toggleSide();
-    else if (control && event.key.toLowerCase() === 'n' && canCreate) void newSession();
-    else if (control && event.key === ',') open('settings');
-    else return;
+    if (
+      (event.target as Element | null)?.closest?.('.native-terminal') ||
+      document.querySelector('dialog[open]')
+    )
+      return;
+    const combo = comboOf(event);
+    const action = combo && actions.find((item) => keyFor(prefs, item.id) === combo)?.id;
+    if (!action) return;
+    const run: Record<Action, (() => void) | false | undefined> = {
+      back: !terminalSessionId && (() => step(-1)),
+      forward: !terminalSessionId && (() => step(1)),
+      toggleSide,
+      newSession: canCreate && (() => void newSession()),
+      settings: () => open('settings'),
+      zoomIn: window.desktop && (() => window.desktop!.zoom(1)),
+      zoomOut: window.desktop && (() => window.desktop!.zoom(-1)),
+      zoomReset: window.desktop && (() => window.desktop!.zoom(0)),
+    };
+    const act = run[action];
+    if (!act) return;
     event.preventDefault();
+    act();
   };
   useEffect(() => {
     const listener = (event: KeyboardEvent) => keys.current(event);
@@ -854,6 +872,7 @@ export function App() {
     claude: 'Claude Code 设置',
     general: '常规设置',
     notifications: '通知设置',
+    shortcuts: '快捷键',
     help: '帮助',
     about: '关于与更新',
   };

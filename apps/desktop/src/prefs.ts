@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 // Choices that belong to this computer's window and never reach the service: what is pinned, what a project is
-// called here, and which events raise a notification.
+// called here, which events raise a notification, and the keyboard shortcuts.
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
 export type Prefs = {
   pinnedSessions: string[];
@@ -9,6 +9,8 @@ export type Prefs = {
   pinnedProjects: string[];
   projectNames: Record<string, string>;
   notify: { enabled: boolean; sound: boolean } & Record<NotifyKind, boolean>;
+  // `keys` holds only what the user changed, by action; an empty combination means none.
+  shortcuts: { enabled: boolean; keys: Record<string, string> };
 };
 
 const storageKey = 'proxy-prefs';
@@ -26,6 +28,7 @@ const defaults: Prefs = {
     schedule: true,
     connection: true,
   },
+  shortcuts: { enabled: true, keys: {} },
 };
 
 function read(): Prefs {
@@ -39,6 +42,14 @@ function read(): Prefs {
       projectNames:
         saved.projectNames && typeof saved.projectNames === 'object' ? saved.projectNames : {},
       notify: { ...defaults.notify, ...(typeof saved.notify === 'object' ? saved.notify : {}) },
+      shortcuts: {
+        enabled: saved.shortcuts?.enabled !== false,
+        keys: Object.fromEntries(
+          Object.entries(saved.shortcuts?.keys ?? {}).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        ),
+      },
     };
   } catch {
     return defaults;
