@@ -266,6 +266,7 @@ export default function ComposerControls({
                   type="button"
                   className="model-back"
                   disabled={disabled || refreshing || !canRefreshModels}
+                  title={canRefreshModels ? undefined : '有会话正在运行，结束后可刷新'}
                   onClick={refresh}
                 >
                   <RotateCcw />

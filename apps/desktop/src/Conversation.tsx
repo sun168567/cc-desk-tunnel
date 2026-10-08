@@ -368,55 +368,34 @@ export default function Conversation({
   const turns = useMemo(() => conversation(events), [events]);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [findError, setFindError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
   const [contextMenu, setContextMenu] = useState<(MenuPosition & { items: MenuItem[] }) | null>(
     null,
   );
   const transcriptRoot = useRef<HTMLDivElement>(null);
-  const currentSession = useRef(session?.id);
   const lastFindRequest = useRef(findRequest);
-  currentSession.current = session?.id;
   const searching = findOpen && query.length > 0;
   const openFind = () => {
     follow.current = false;
-    setFindError('');
     setFindOpen(true);
   };
   useEffect(() => {
     setFindOpen(false);
     setQuery('');
-    setFindError('');
+    setLoadError('');
     setContextMenu(null);
     setCopyStatus('');
   }, [session?.id]);
   useEffect(() => {
+    if (!copyStatus) return;
+    const timer = setTimeout(() => setCopyStatus(''), 2000);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+  useEffect(() => {
     if (findRequest !== lastFindRequest.current) openFind();
     lastFindRequest.current = findRequest;
   }, [findRequest]);
-  useEffect(() => {
-    if (
-      !searching ||
-      !connected ||
-      !history?.hasEarlier ||
-      history.loading ||
-      history.loadingEarlier ||
-      findError
-    )
-      return;
-    const id = session?.id;
-    void loadEarlier().catch(() => {
-      if (currentSession.current === id) setFindError('早期记录加载失败，请关闭查找后重试');
-    });
-  }, [
-    searching,
-    connected,
-    history?.firstSequence,
-    history?.hasEarlier,
-    history?.loading,
-    history?.loadingEarlier,
-    findError,
-  ]);
   // Running timers tick once a second, and only while something runs.
   const [now, setNow] = useState(Date.now);
   const running = !!session?.activeRun;
@@ -478,13 +457,10 @@ export default function Conversation({
           query={query}
           change={setQuery}
           request={findRequest}
-          partial={!!history?.hasEarlier || !!history?.loading}
-          loading={searching && !!(history?.loadingEarlier || history?.loading)}
-          error={findError}
+          partial={!!history?.hasEarlier}
           close={() => {
             setFindOpen(false);
             setQuery('');
-            setFindError('');
             scroll.current?.focus();
           }}
         />
@@ -512,7 +488,7 @@ export default function Conversation({
             items: [
               { label: '复制选中文字', disabled: !selection, run: () => copy(selection) },
               ...(block
-                ? [{ label: '复制代码 / 输出块', run: () => copy(block.textContent ?? '') }]
+                ? [{ label: '复制此代码块', run: () => copy(block.textContent ?? '') }]
                 : []),
               ...(message
                 ? [{ label: '复制整条消息', run: () => copy(message.dataset.copyText ?? '') }]
@@ -555,9 +531,9 @@ export default function Conversation({
           </div>
         ) : (
           <div className="transcript" ref={transcriptRoot}>
-            {!findOpen && findError && (
+            {loadError && (
               <div className="history-status" role="alert">
-                {findError}
+                {loadError}
               </div>
             )}
             {history?.hasEarlier && (
@@ -566,14 +542,14 @@ export default function Conversation({
                 className="history-load"
                 disabled={!connected || history.loadingEarlier || history.loading}
                 onClick={() => {
-                  setFindError('');
+                  setLoadError('');
                   if (scroll.current)
                     prependAnchor.current = {
                       sessionId: session.id,
                       height: scroll.current.scrollHeight,
                       top: scroll.current.scrollTop,
                     };
-                  void loadEarlier().catch(() => setFindError('早期记录加载失败，请重试'));
+                  void loadEarlier().catch(() => setLoadError('更早记录加载失败，请重试'));
                 }}
               >
                 <ArrowUpToLine />

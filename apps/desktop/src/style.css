@@ -1205,10 +1205,6 @@ kbd {
   color: var(--muted);
   white-space: nowrap;
 }
-.conversation-find small {
-  flex-basis: 100%;
-  color: var(--muted);
-}
 .conversation.searching .message {
   content-visibility: visible;
 }
