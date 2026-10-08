@@ -23,7 +23,9 @@ npm.cmd run prepare:windows:package
 npm.cmd run package:windows
 ```
 
-`scripts/package-windows.mjs` 使用 electron-builder 26.15.3 / NSIS；Vite 构建 React 和主进程连接桥 / 协议 / ws，发行包不安装 npm 依赖。PowerShell 脚本位于 `app.asar.unpacked`；组件位置相对 `resources/vendor`，不依赖开发机器绝对路径。不打包 `.local/` 的秘密 / 历史 / 运维测试文件。版本在构建脚本的 staging 清单内维护；客户端不自行联网查找新版本：安装包由所连接的服务端提供，下载校验后覆盖升级。
+`scripts/package-windows.mjs` 使用 electron-builder 26.15.3 / NSIS；Vite 构建 React 和主进程连接桥 / 协议 / ws，发行包不安装 npm 依赖。`electron/` 下的全部 `.cjs` 模块原样复制，避免新增主进程依赖时遗漏文件。PowerShell 脚本位于 `app.asar.unpacked`；组件位置相对 `resources/vendor`，不依赖开发机器绝对路径。不打包 `.local/` 的秘密 / 历史 / 运维测试文件。版本取自桌面 workspace 的 `package.json`；客户端不自行联网查找新版本：安装包由所连接的服务端提供，下载校验后覆盖升级。
+
+每次打包（包括 `--dir`）完成后，自动对实际 exe 运行 `test/package.spec.ts` 的离线冒烟检查：独立新 profile、移除开发工具 PATH，验证登录页、预加载接口、Git 分支读取和单实例。检查失败使打包命令失败，发布流程不会上传产物；不会使用调用者的真实连接配置。真实连接验证仍需显式启用，不能由离线检查替代。
 
 自带官方 PowerShell 7.6.6 便携包、OpenSSH 10.0p2 与 frpc 0.71.0，SHA256 固定在准备脚本中，保留许可证。无需修改系统 PATH、注册表 shell、系统 sshd / 防火墙，不需要管理员权限正常连接。需要写入受保护的安装目录时由标准安装器处理提权。构建目录是生成物；若测试 exe 正在运行或安全软件占用文件，先关闭该副本再重建，不在应用代码加入重试兼容层。
 

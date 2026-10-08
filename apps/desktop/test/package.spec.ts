@@ -1,5 +1,5 @@
 import { test, expect, _electron } from '@playwright/test';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
 
@@ -37,8 +37,12 @@ test('packaged exe runs without development dependencies and reclaims bundled re
   test.setTimeout(90000);
   const executablePath = resolve(process.env.WINDOWS_PACKAGE_EXE!);
   const resources = join(dirname(executablePath), 'resources');
-  const directory = resolve('.local/package-smoke');
-  mkdirSync(directory, { recursive: true });
+  const smokeRoot = resolve('.local/package-smoke');
+  mkdirSync(smokeRoot, { recursive: true });
+  const directory = mkdtempSync(join(smokeRoot, 'run-'));
+  const project = join(directory, '项目 fixture');
+  mkdirSync(join(project, '.git'), { recursive: true });
+  writeFileSync(join(project, '.git/HEAD'), 'ref: refs/heads/package-smoke\n');
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] =>
@@ -63,6 +67,9 @@ test('packaged exe runs without development dependencies and reclaims bundled re
     await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
     await expect(page.getByLabel('服务证书指纹', { exact: true })).toBeVisible();
     expect(await application.evaluate(({ app }) => app.isPackaged)).toBe(true);
+    expect(await page.evaluate((path) => window.desktop!.gitBranch(path), project)).toBe(
+      'package-smoke',
+    );
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
     await new Promise<void>((accept, reject) => {
       execFile(
