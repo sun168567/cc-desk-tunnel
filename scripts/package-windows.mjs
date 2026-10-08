@@ -1,5 +1,7 @@
 import { builtinModules } from 'node:module';
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import files from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -66,6 +68,21 @@ writeFileSync(
   ) + '\n',
 );
 const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/package.json'), 'utf8'));
+// Security software may hold an executable for some seconds after it is copied, while it scans it; electron-builder
+// writes the executable's resources right after copying it and fails. Its writes wait for the file instead.
+const writeFile = files.writeFile;
+files.writeFile = async (...args) => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await writeFile(...args);
+    } catch (error) {
+      if (attempt === 30 || !['UNKNOWN', 'EBUSY', 'EPERM', 'EACCES'].includes(error.code))
+        throw error;
+      if (attempt === 1) console.log(`Waiting for ${args[0]}, which another program holds.`);
+      await delay(2000);
+    }
+  }
+};
 const results = await electronBuild({
   targets: Platform.WINDOWS.createTarget(unpacked ? 'dir' : 'nsis', Arch.x64),
   publish: 'never',
