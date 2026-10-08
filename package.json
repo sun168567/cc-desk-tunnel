@@ -9,6 +9,7 @@
     "node": ">=24 <25"
   },
   "workspaces": [
+    "apps/cli",
     "apps/desktop",
     "apps/server",
     "packages/protocol"
@@ -19,7 +20,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test apps/server/test/*.test.ts packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs",
+    "test": "node --test apps/server/test/*.test.ts packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs apps/cli/test/*.test.mjs",
     "pretest:ui": "npm run build",
     "test:ui": "playwright test",
     "dev": "node scripts/dev.mjs",
@@ -33,7 +34,9 @@
     "prepare:windows:package": "pwsh.exe -NoLogo -NoProfile -File scripts/prepare-windows.ps1 -IncludePowerShell",
     "package:windows": "node scripts/package-windows.mjs",
     "release": "node scripts/release.mjs",
-    "desktop": "npm run start --workspace @cc-desk-tunnel/desktop"
+    "desktop": "npm run start --workspace @cc-desk-tunnel/desktop",
+    "package:linux": "node scripts/package-linux.mjs",
+    "install:cli": "node scripts/install-cli.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

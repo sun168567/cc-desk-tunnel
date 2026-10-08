@@ -41,6 +41,9 @@ export type HistoryState = {
 };
 export type ClientState = {
   status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+  // The local bridge is taking the service connection back after a network drop. The connection, its runs and
+  // terminal stay; what is sent meanwhile goes out once it is back.
+  resuming: boolean;
   connectionId: string | null;
   sessions: Session[];
   events: Record<string, SessionEvent[]>;
@@ -67,6 +70,7 @@ export type ClientState = {
 export class ProxyClient {
   state: ClientState = {
     status: 'disconnected',
+    resuming: false,
     connectionId: null,
     sessions: [],
     events: {},
@@ -135,6 +139,7 @@ export class ProxyClient {
     this.cacheOrder = [];
     this.update({
       status: 'connecting',
+      resuming: false,
       error: null,
       release: null,
       service: null,
@@ -196,6 +201,8 @@ export class ProxyClient {
           model: message.model ?? null,
         });
         if (selectedId) this.load(selectedId);
+      } else if (message.type === 'connection.state') {
+        this.update({ resuming: message.state === 'reconnecting' });
       } else if (message.type === 'response') {
         const request = this.pending.get(message.requestId);
         if (!request) return;
@@ -309,6 +316,7 @@ export class ProxyClient {
         this.credentials = null;
         this.update({
           status: 'disconnected',
+          resuming: false,
           connectionId: null,
           error: this.state.error ?? (nativeClosed ? '原生连接已结束，请重新连接。' : null),
         });
@@ -333,7 +341,7 @@ export class ProxyClient {
     socket?.close();
     this.rejectPending();
     this.retryAttempt = 0;
-    this.update({ status: 'disconnected', connectionId: null });
+    this.update({ status: 'disconnected', resuming: false, connectionId: null });
   }
   private rejectPending() {
     for (const request of this.pending.values()) {

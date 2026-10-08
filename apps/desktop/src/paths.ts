@@ -1,13 +1,21 @@
-// Windows paths compare case-insensitively and may arrive with either separator.
+// POSIX paths are case-sensitive; Windows drive and UNC paths are not.
+const windowsPath = (path: string) => /^[a-zA-Z]:[\\/]|^\\\\/.test(path);
 export const pathKey = (path: string) =>
-  path.replaceAll('/', '\\').replace(/\\+$/, '').toLowerCase();
+  windowsPath(path)
+    ? path.replaceAll('/', '\\').replace(/\\+$/, '').toLowerCase()
+    : path.replace(/\/+$/, '') || '/';
 export const folderName = (path: string) =>
-  path
-    .replace(/[\\/]+$/, '')
-    .split(/[\\/]/)
-    .at(-1) || path;
+  (windowsPath(path)
+    ? path
+        .replace(/[\\/]+$/, '')
+        .split(/[\\/]/)
+        .at(-1)
+    : path.replace(/\/+$/, '').split('/').at(-1)) || path;
 export const isInside = (path: string, root: string) =>
-  !!root && pathKey(path).startsWith(`${root.toLowerCase()}\\`);
+  !!root &&
+  pathKey(path).startsWith(
+    pathKey(root) + (pathKey(root) === '/' ? '' : windowsPath(root) ? '\\' : '/'),
+  );
 // Dotted numeric versions, e.g. 0.10.1 is newer than 0.9.0.
 export function isNewer(candidate: string, current: string) {
   const [a, b] = [candidate, current].map((version) => version.split('.').map(Number));
@@ -16,6 +24,4 @@ export function isNewer(candidate: string, current: string) {
   return false;
 }
 export const withProject = (projects: string[], path: string) =>
-  projects.some((item) => item.toLowerCase() === path.toLowerCase())
-    ? projects
-    : [...projects, path];
+  projects.some((item) => pathKey(item) === pathKey(path)) ? projects : [...projects, path];

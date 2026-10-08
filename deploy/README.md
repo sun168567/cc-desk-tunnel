@@ -74,7 +74,7 @@ sudo bash deploy/manage.sh connection
 
 `install.sh` 只检查 Docker / Compose 等依赖，缺少或 Docker 未运行时给出安装命令后退出；不安装系统软件，不修改 nginx、防火墙、SSH 或账号。首次构建联网下载系统包、固定 Node / CLI / frps 和锁定 npm 依赖；非 JS 编译安装，node-pty 在镜像构建阶段准备。Node 24 原生执行 TypeScript；发行检查仍必须 typecheck。
 
-默认两个公网 TCP 端口：WSS / HTTPS `8787`、强制 TLS frp `7000`。运维 SSH 遵循服务器已有端口。云防火墙与主机策略自行放行，**不需要 UDP 或公开 Windows / Linux 随机 SSH 映射端口**。Docker 发布端口可能绕过 UFW 的常规 INPUT 规则，应采用云安全组或 Docker 对应防火墙策略，不把启用 UFW 当成已限制发布端口。
+默认两个公网 TCP 端口：WSS / HTTPS `8787`、强制 TLS frp `7000`。只有 Linux 客户端（桌面或 `ccdt`）时 7000 可不放行，它们的执行通道经 `/ws` 中继。运维 SSH 遵循服务器已有端口。云防火墙与主机策略自行放行，**不需要 UDP 或公开 Windows / Linux 随机 SSH 映射端口**。Docker 发布端口可能绕过 UFW 的常规 INPUT 规则，应采用云安全组或 Docker 对应防火墙策略，不把启用 UFW 当成已限制发布端口。
 
 部分云厂商的主机安全组件会对容器里的 `frps` 告警；它是 frp 官方发布的原版文件（构建镜像时校验 SHA256），只在有客户端连接时运行。nginx 模式下服务按 `X-Real-IP` 区分来源地址做登录限速，请保留示例里的这一行。
 

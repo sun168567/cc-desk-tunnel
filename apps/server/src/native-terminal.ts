@@ -5,6 +5,8 @@ import type { ClaudeOptions } from './claude.ts';
 import { remotePrompt } from './claude.ts';
 import type { SshConnection } from './tunnel.ts';
 import { readFileSync } from 'node:fs';
+import headless from '@xterm/headless';
+import serialize from '@xterm/addon-serialize';
 
 // node-pty takes a plain string map, while a process environment may hold undefined entries.
 export function definedEnvironment(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -38,8 +40,14 @@ export type TerminalSpawner = (
   options: { cwd: string; cols: number; rows: number; env: Record<string, string>; name: string },
 ) => TerminalProcess;
 
-export function terminalArguments(options: ClaudeOptions, session: Session, ssh: SshConnection) {
+export function terminalArguments(
+  options: ClaudeOptions,
+  session: Session,
+  ssh: SshConnection,
+  continued = false,
+) {
   return [
+    ...(continued ? ['--continue'] : []),
     '--permission-mode',
     session.permissionMode === 'default' ? 'manual' : session.permissionMode,
     '--append-system-prompt',
@@ -50,19 +58,39 @@ export function terminalArguments(options: ClaudeOptions, session: Session, ssh:
   ];
 }
 
+// What a client may have switched on for the previous screen it showed; cleared before another screen is drawn.
+const RESET =
+  '\x1b[?25h\x1b[?2004l\x1b[?1004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1l\x1b[<u\x1b[>4;0m' +
+  '\x1b[?1049l\x1b[0m\x1b[H\x1b[2J\x1b[3J';
+// Keyboard modes a CLI may switch on that the screen model does not record: the kitty keyboard protocol and xterm's
+// modifyOtherKeys.
+const KEYBOARD = /\x1b\[>(\d+)u|\x1b\[<\d*u|\x1b\[>4;(\d+)m/g;
+
 // Native control sessions have their own CLI history; no terminal transcript is persisted by the proxy.
+//
+// A terminal keeps running while no client shows it. Its output always goes to a screen model, and a client that
+// attaches gets the current screen first, then the live output; while attached, output waits for the client's
+// acknowledgments. A client that stops acknowledging for 30 s is detached, not the CLI ended.
 export class NativeTerminal {
   process: TerminalProcess;
   outstanding = 0;
   paused = false;
+  attached = true;
   exited = false;
   closing = false;
   closed: Promise<void>;
+  private screen: InstanceType<typeof headless.Terminal>;
+  private serializer: InstanceType<typeof serialize.SerializeAddon>;
+  // Output that arrived while the screen was being captured for an attach; it follows the capture.
+  private pending?: string[];
+  private kitty = 0;
+  private otherKeys = 0;
+  private data: (text: string, bytes: number) => void;
   private resolveClosed!: () => void;
   private killTimer?: ReturnType<typeof setTimeout>;
   private ackTimer?: ReturnType<typeof setTimeout>;
-  private cols: number;
-  private rows: number;
+  cols: number;
+  rows: number;
   constructor(
     file: string,
     args: string[],
@@ -73,30 +101,28 @@ export class NativeTerminal {
   ) {
     this.cols = options.cols;
     this.rows = options.rows;
+    this.data = data;
+    this.screen = new headless.Terminal({
+      cols: options.cols,
+      rows: options.rows,
+      scrollback: 1000,
+      allowProposedApi: true,
+    });
+    this.serializer = new serialize.SerializeAddon();
+    this.screen.loadAddon(this.serializer);
     this.closed = new Promise((resolve) => {
       this.resolveClosed = resolve;
     });
     this.process = spawn(file, args, { ...options, name: 'xterm-256color' });
     this.process.onData((text) => {
       if (this.exited || this.closing) return;
-      // UTF-16 boundaries stay intact, while each frame is well below the control-frame limit.
-      for (let offset = 0; offset < text.length;) {
-        let end = Math.min(offset + 16384, text.length);
-        const last = text.charCodeAt(end - 1);
-        if (end < text.length && last >= 0xd800 && last <= 0xdbff) end--;
-        const chunk = text.slice(offset, end);
-        const bytes = Buffer.byteLength(chunk, 'utf8');
-        this.outstanding += bytes;
-        data(chunk, bytes);
-        offset = end;
+      this.screen.write(text);
+      for (const [, kitty, otherKeys] of text.matchAll(KEYBOARD)) {
+        if (otherKeys !== undefined) this.otherKeys = Number(otherKeys);
+        else this.kitty = kitty === undefined ? 0 : Number(kitty);
       }
-      if (this.outstanding >= 128 * 1024 && !this.paused) {
-        this.paused = true;
-        this.process.pause();
-        this.ackTimer = setTimeout(() => {
-          void this.close();
-        }, 30000);
-      }
+      if (this.pending) this.pending.push(text);
+      else if (this.attached) this.send(text);
     });
     this.process.onExit(({ exitCode }) => {
       this.exited = true;
@@ -110,9 +136,28 @@ export class NativeTerminal {
       try {
         exit(exitCode);
       } finally {
+        this.screen.dispose();
         this.resolveClosed();
       }
     });
+  }
+  private send(text: string) {
+    // UTF-16 boundaries stay intact, while each frame is well below the control-frame limit.
+    for (let offset = 0; offset < text.length;) {
+      let end = Math.min(offset + 16384, text.length);
+      const last = text.charCodeAt(end - 1);
+      if (end < text.length && last >= 0xd800 && last <= 0xdbff) end--;
+      const chunk = text.slice(offset, end);
+      const bytes = Buffer.byteLength(chunk, 'utf8');
+      this.outstanding += bytes;
+      this.data(chunk, bytes);
+      offset = end;
+    }
+    if (this.outstanding >= 128 * 1024 && !this.paused) {
+      this.paused = true;
+      this.process.pause();
+      this.ackTimer = setTimeout(() => this.detach(), 30000);
+    }
   }
   write(text: string) {
     if (!this.exited && !this.closing) this.process.write(text);
@@ -122,11 +167,51 @@ export class NativeTerminal {
       this.cols = cols;
       this.rows = rows;
       this.process.resize(cols, rows);
+      this.screen.resize(cols, rows);
     }
   }
+  // The CLI runs on unwatched: its output only updates the screen model.
+  detach() {
+    this.attached = false;
+    this.outstanding = 0;
+    clearTimeout(this.ackTimer);
+    if (this.paused && !this.closing && !this.exited) {
+      this.paused = false;
+      this.process.resume();
+    }
+  }
+  // Shows the terminal to a client at its size: the current screen, drawn from a cleared one, then live output.
+  async attach(cols: number, rows: number) {
+    if (this.exited || this.closing) return;
+    this.detach();
+    this.resize(cols, rows);
+    this.pending = [];
+    // Everything written before this point is in the screen when the callback runs.
+    await new Promise<void>((resolve) => this.screen.write('', resolve));
+    const core = (
+      this.screen as unknown as {
+        _core?: {
+          coreService?: { isCursorHidden?: boolean };
+          coreMouseService?: { activeEncoding?: string };
+        };
+      }
+    )._core;
+    const snapshot =
+      RESET +
+      this.serializer.serialize({ scrollback: 1000 }) +
+      (core?.coreMouseService?.activeEncoding === 'SGR' ? '\x1b[?1006h' : '') +
+      (this.kitty ? `\x1b[>${this.kitty}u` : '') +
+      (this.otherKeys ? `\x1b[>4;${this.otherKeys}m` : '') +
+      (core?.coreService?.isCursorHidden ? '\x1b[?25l' : '');
+    const later = this.pending;
+    this.pending = undefined;
+    if (this.exited || this.closing) return;
+    this.attached = true;
+    this.send(snapshot + later.join(''));
+  }
   acknowledge(bytes: number) {
-    if (bytes > this.outstanding) throw new Error('Invalid terminal acknowledgment');
-    this.outstanding -= bytes;
+    // Acknowledgments of output sent before a detach may still arrive; they count for nothing.
+    this.outstanding = Math.max(0, this.outstanding - bytes);
     if (this.paused && this.outstanding < 32 * 1024 && !this.closing) {
       this.paused = false;
       clearTimeout(this.ackTimer);

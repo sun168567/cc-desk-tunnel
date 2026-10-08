@@ -13,6 +13,7 @@ test('SSH config pins loopback target and host key, disallows interactive/agent 
   assert.match(files.config, /StrictHostKeyChecking yes/);
   assert.match(files.config, /BatchMode yes/);
   assert.match(files.config, /ForwardAgent no/);
+  assert.match(files.config, /IgnoreUnknown WarnWeakCrypto\n {2}WarnWeakCrypto no/);
   assert.equal(files.knownHosts, '[127.0.0.1]:32123 ssh-ed25519 AAAATEST\n');
 });
 test('context references native SSH configuration without inventing execution tools', () => {
@@ -50,4 +51,46 @@ test('missing frps executable fails and closes without leaving credentials or ha
   await assert.rejects(tunnel.start(), /startup failed/);
   await tunnel.close();
   assert.equal(existsSync(tunnel.directory), false);
+});
+
+test('Linux context targets desktop Bash and its actual schedules path', () => {
+  const prompt = remotePrompt(
+    "/home/user/it's 中文",
+    {
+      configPath: '/private/ssh_config',
+      powershellPath: '/bin/bash',
+      platform: 'linux',
+      schedulesPath: '/home/user/.config/CC Desk Tunnel/schedules.json',
+    },
+    'session-id',
+  );
+  assert.match(prompt, /Shell: \/bin\/bash/);
+  assert.match(prompt, /NOT this agent host/);
+  assert.match(prompt, /\.config\/CC Desk Tunnel\/schedules.json/);
+  assert.doesNotMatch(prompt, /PowerShell|%APPDATA%/);
+});
+
+test('Linux desktops share one SSH connection and wait for a reconnecting desktop', () => {
+  const linux = sshConfig('/data/connections/id', 32123, 'user', 'ssh-ed25519 AAAATEST', 'linux');
+  assert.match(
+    linux.config,
+    /ControlMaster auto\n {2}ControlPath "\/data\/connections\/id\/cm"\n {2}ControlPersist yes/,
+  );
+  assert.match(linux.config, /ConnectTimeout 30/);
+  // A socket path that does not fit in sun_path would make every ssh fail; such a directory goes without.
+  const long = sshConfig(`/${'x'.repeat(120)}`, 32123, 'user', 'ssh-ed25519 AAAATEST', 'linux');
+  assert.doesNotMatch(long.config, /ControlMaster/);
+  const windows = sshConfig('/data/connections/id', 32123, 'user', 'ssh-ed25519 AAAATEST');
+  assert.doesNotMatch(windows.config, /ControlMaster/);
+  assert.match(windows.config, /ConnectTimeout 5/);
+});
+
+test('Linux context without a scheduler does not point at one', () => {
+  const prompt = remotePrompt(
+    '/home/user/project',
+    { configPath: '/private/ssh_config', powershellPath: '/bin/bash', platform: 'linux' },
+    'session-id',
+  );
+  assert.doesNotMatch(prompt, /undefined|schedules/);
+  assert.match(prompt, /no scheduled prompts/);
 });

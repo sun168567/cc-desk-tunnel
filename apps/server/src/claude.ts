@@ -37,6 +37,20 @@ export type ClaudeRun = {
 };
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
 export function remotePrompt(projectPath: string, ssh: SshConnection, sessionId: string) {
+  if (ssh.platform === 'linux')
+    return [
+      'The user projects are on the connected Linux desktop, NOT this agent host.',
+      `Project cwd on the desktop: ${JSON.stringify(projectPath)}. Shell: /bin/bash. Encoding: UTF-8.`,
+      `Use native Bash to run ssh -F ${JSON.stringify(ssh.configPath)} windows '<remote command>'. The alias windows is retained for compatibility and targets the Linux desktop.`,
+      'Use SSH for ALL project reads, edits, searches and commands. Never fall back to files on this agent host.',
+      `Begin remote scripts with cd -- '${projectPath.replaceAll("'", "'\\''")}' && ...; quote shell arguments safely.`,
+      'SSH uses a temporary identity and pinned host key. Never disclose or copy the private key.',
+      'Each command has a separate Bash session. Keep long-running commands attached to a background native Bash task; ordinary child processes are stopped when the SSH channel closes. Do not daemonize them.',
+      'After interruption, report unknown results and never automatically retry side effects.',
+      ssh.schedulesPath
+        ? `Scheduled prompts are managed by the desktop. Edit its ${JSON.stringify(ssh.schedulesPath)} via SSH, using the JSON format documented in its 说明 field. Do not use cron on this host. Session ID: ${sessionId}.`
+        : 'This client runs no scheduled prompts. Do not use cron on this host for recurring work; tell the user it needs the desktop client.',
+    ].join('\n');
   return [
     'The user and all their projects are on the connected Windows computer, NOT on this Linux host.',
     `Windows project cwd: ${JSON.stringify(projectPath)}. Shell: PowerShell 7. Encoding: UTF-8.`,
@@ -62,6 +76,38 @@ export function nativeDirectory(dataDir: string, sessionId: string) {
   return join(dataDir, 'native', sessionId);
 }
 
+// A native terminal's CLI reports what it is doing through hooks in its directory's local settings. The command
+// posts to the address in CC_DESK_TUNNEL_HOOK, which only terminals get, so for runs it does nothing. A permission
+// prompt or question is `waiting`; the end of a turn is `idle`; a prompt or a finished tool is `busy` again.
+const HOOK_VARIABLE = 'CC_DESK_TUNNEL_HOOK';
+const hookCommand = (status: string) =>
+  `[ -z "$${HOOK_VARIABLE}" ] || curl -fsS -m 2 -o /dev/null -X POST "$${HOOK_VARIABLE}/${status}" >/dev/null 2>&1; exit 0`;
+const statusHooks: Record<string, { matcher?: string; status: string }> = {
+  SessionStart: { status: 'idle' },
+  UserPromptSubmit: { status: 'busy' },
+  PostToolUse: { matcher: '*', status: 'busy' },
+  Notification: { matcher: 'permission_prompt|elicitation_dialog', status: 'waiting' },
+  Stop: { status: 'idle' },
+};
+type HookGroup = { matcher?: string; hooks?: { type?: string; command?: string }[] };
+// Replaces this service's hooks and keeps any the user added to the directory.
+export function withStatusHooks(settings: { hooks?: Record<string, HookGroup[]> }) {
+  const hooks: Record<string, HookGroup[]> = {};
+  for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
+    const kept = groups.filter(
+      (group) => !group.hooks?.some((hook) => hook.command?.includes(HOOK_VARIABLE)),
+    );
+    if (kept.length) hooks[event] = kept;
+  }
+  for (const [event, { matcher, status }] of Object.entries(statusHooks))
+    hooks[event] = [
+      ...(hooks[event] ?? []),
+      { ...(matcher && { matcher }), hooks: [{ type: 'command', command: hookCommand(status) }] },
+    ];
+  return { ...settings, hooks };
+}
+export const hookEnvironment = (address: string) => ({ [HOOK_VARIABLE]: address });
+
 export function prepareNativeDirectory(options: ClaudeOptions, dataDir: string, sessionId: string) {
   const cwd = nativeDirectory(dataDir, sessionId);
   mkdirSync(cwd, { recursive: true, mode: 0o700 });
@@ -72,7 +118,9 @@ export function prepareNativeDirectory(options: ClaudeOptions, dataDir: string, 
     ? JSON.parse(readFileSync(localSettingsPath, 'utf8'))
     : {};
   settings.cleanupPeriodDays = options.contextRetentionDays ?? 3650;
-  writeFileSync(localSettingsPath, JSON.stringify(settings, null, 2) + '\n', { mode: 0o600 });
+  writeFileSync(localSettingsPath, JSON.stringify(withStatusHooks(settings), null, 2) + '\n', {
+    mode: 0o600,
+  });
   return cwd;
 }
 

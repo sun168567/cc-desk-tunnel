@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
   PROTOCOL_VERSION,
+  ResumeLog,
   authSchema,
   commandSchema,
   eventSchema,
@@ -82,4 +83,24 @@ test('terminal control frames are explicitly scoped and bounded without request 
     }).success,
     false,
   );
+});
+
+test('a resume log replays exactly what the other side missed and acknowledges in batches', () => {
+  const acknowledged: number[] = [];
+  const log = new ResumeLog((received) => acknowledged.push(received), 10);
+  for (const frame of ['a', 'b', 'c']) assert.equal(log.record(frame), true);
+  assert.deepEqual(log.since(1), ['b', 'c']);
+  log.confirm(2);
+  assert.deepEqual(log.since(2), ['c']);
+  assert.equal(log.since(1), null, 'confirmed frames are gone');
+  assert.equal(log.since(4), null, 'nothing was sent past the third');
+  assert.deepEqual(log.since(3), []);
+  assert.equal(log.record('x'.repeat(10)), false, 'over the limit');
+  for (let index = 0; index < 64; index++) log.receive();
+  assert.deepEqual(acknowledged, [64]);
+  log.receive();
+  log.flush();
+  assert.deepEqual(acknowledged, [64, 65]);
+  log.flush();
+  assert.deepEqual(acknowledged, [64, 65], 'nothing new, no acknowledgment');
 });

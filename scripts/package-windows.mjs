@@ -36,6 +36,7 @@ await viteBuild({
       external: [
         ...builtinModules,
         ...builtinModules.map((name) => `node:${name}`),
+        'ssh2',
         'bufferutil',
         'utf-8-validate',
       ],

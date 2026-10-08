@@ -15,6 +15,7 @@
 
 ```text
 Windows：桌面客户端 + frpc + 回环 OpenSSH + PowerShell 7 + 项目
+Linux 桌面：桌面客户端或终端客户端 ccdt + 纯 JS 回环 SSH（Bash） + 项目，执行通道走 WSS 中继
   │ 主动 WSS：认证、对话、审批、设置
   ▼
 Linux：代理服务 ── 官方 Agent SDK ── 未修改的 Claude Code ── 模型服务
@@ -32,7 +33,7 @@ Windows：读写文件 / PowerShell 命令 → 结果回到 Claude → 事件回
 | 客户端 | Electron + React + Vite | 渲染页无 Node 权限；主进程只管连接、本机组件和少量本机文件 |
 | 服务端 | Node.js + ws | 一条 WSS 承载全部控制消息；没有 REST 会话接口或网页界面 |
 | 原生集成 | 官方 Agent SDK `query` + 指定的 CLI 可执行文件 | 输入、事件、审批、取消都走官方接口；不解析终端画面 |
-| 执行通道 | frp + OpenSSH | 成熟组件各管一段：frp 做反向映射，OpenSSH 做认证与命令传输 |
+| 执行通道 | frp + OpenSSH；Linux 桌面为 WSS 中继 + OpenSSH | frp 或中继做反向映射，OpenSSH 做认证与命令传输；中继只用控制端口，见 [Linux 桌面指南](linux-desktop.md#执行通道) |
 | 部署 | Docker / Compose | CLI、frps、PTY 与服务同容器；数据在宿主机目录 |
 
 控制通道负责身份、会话、输入输出和审批；执行通道只负责模型发起的 Windows 操作。客户端不直接调用模型，模型请求都发生在 Linux。

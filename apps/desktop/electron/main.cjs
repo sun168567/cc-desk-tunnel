@@ -150,7 +150,10 @@ handle('proxy:connect', async (event, config) => {
   const connection = await openProxyBridge(
     config,
     {
-      frpc: path.join(vendor, 'frpc.exe'),
+      frpc:
+        process.env.PROXY_FRPC_PATH ??
+        path.join(vendor, process.platform === 'linux' ? 'frpc' : 'frpc.exe'),
+      schedulesPath: schedulesPath(),
       openssh,
       powershell,
       scriptDirectory: app.isPackaged
@@ -174,13 +177,17 @@ handle('proxy:connect', async (event, config) => {
   keepAwake(true);
   return { url: bridge.url };
 });
+const secureStorageAvailable = () =>
+  safeStorage.isEncryptionAvailable() &&
+  (process.platform !== 'linux' ||
+    !['basic_text', 'unknown'].includes(safeStorage.getSelectedStorageBackend()));
 // The service token is kept only when the user asks, encrypted for the current Windows account.
 handle('login:load', () => {
   const { login } = readSettings();
   if (!login) return null;
   let token = '';
   try {
-    if (login.token && safeStorage.isEncryptionAvailable())
+    if (login.token && secureStorageAvailable())
       token = safeStorage.decryptString(Buffer.from(login.token, 'base64'));
   } catch {}
   return {
@@ -193,7 +200,9 @@ handle('login:load', () => {
   };
 });
 handle('login:save', (_event, login) => {
-  const remember = login?.remember === true && safeStorage.isEncryptionAvailable();
+  if (login?.remember && !secureStorageAvailable())
+    throw new Error('系统密钥环不可用，无法安全记住凭据。请解锁 GNOME Keyring，或取消记住凭据。');
+  const remember = login?.remember === true && secureStorageAvailable();
   writeSettings({
     login: remember
       ? {
@@ -266,6 +275,7 @@ handle('app:version', () => app.getVersion());
 // Upgrades in place: the installer comes from the connected service, runs silently over the current install
 // and starts the new version.
 handle('update:install', async () => {
+  if (process.platform !== 'win32') throw new Error('Linux 请使用新的 deb 安装包升级。');
   if (!lastBridge) throw new Error('请先连接服务。');
   if (!app.isPackaged) throw new Error('源码运行不支持自升级；请重新打包安装。');
   const installer = await lastBridge.downloadInstaller(
@@ -311,7 +321,7 @@ app.whenReady().then(() => {
   window.loadFile(path.join(__dirname, '../dist/index.html'));
 
   // Long tasks keep running with the window closed: closing hides it, and the tray icon brings it back or quits.
-  const closeToTray = () => readSettings().closeToTray !== false;
+  const closeToTray = () => readSettings().closeToTray ?? process.platform === 'win32';
   const tray = new Tray(
     nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 32, height: 32 }),
   );
@@ -341,10 +351,11 @@ app.whenReady().then(() => {
     window.hide();
     if (!readSettings().trayHintShown) {
       writeSettings({ trayHintShown: true });
-      tray.displayBalloon({
-        title: 'CC Desk Tunnel 仍在后台运行',
-        content: '点击托盘图标恢复窗口；右键图标选择“退出”才会结束连接。',
-      });
+      if (process.platform === 'win32')
+        tray.displayBalloon({
+          title: 'CC Desk Tunnel 仍在后台运行',
+          content: '点击托盘图标恢复窗口；右键图标选择“退出”才会结束连接。',
+        });
     }
   });
 });

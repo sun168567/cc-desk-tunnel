@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 12;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -392,11 +392,19 @@ export const commandSchema = z.discriminatedUnion('type', [
       sessionId: id,
       cols: z.number().int().min(20).max(400),
       rows: z.number().int().min(5).max(160),
+      // Picks up the session's latest native conversation, if it has one, instead of starting a new one.
+      continue: z.boolean().optional(),
     })
     .strict(),
   z
     .object({ type: z.literal('terminal.close'), ...request, sessionId: id, terminalId: id })
     .strict(),
+  // Stops showing a terminal while its CLI keeps running; `terminal.open` on the session shows it again.
+  z
+    .object({ type: z.literal('terminal.detach'), ...request, sessionId: id, terminalId: id })
+    .strict(),
+  // Asks for `terminals.state`.
+  z.object({ type: z.literal('terminal.list'), ...request }).strict(),
   z
     .object({
       type: z.literal('session.subscribe'),
@@ -463,6 +471,9 @@ export const terminalControlSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 export type TerminalControl = z.infer<typeof terminalControlSchema>;
+// The secret that lets a client take back a connection the network dropped, and a count of frames.
+const resumeKey = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const frameCount = z.number().int().nonnegative();
 export const authSchema = z
   .object({
     type: z.literal('auth'),
@@ -471,8 +482,45 @@ export const authSchema = z
     token: z.string().min(24).max(512),
     deviceName: z.string().trim().min(1).max(120),
     tunnel: z.boolean().default(false),
+    // How the service reaches the desktop's SSH endpoint: through frp and its own port, or relayed over further WSS
+    // connections the desktop opens to this service, which needs neither.
+    tunnelTransport: z.enum(['frp', 'relay']).default('frp'),
+    // A client that reconnects by itself asks to keep its connection, with its runs, terminal and tunnel, through a
+    // network drop; the service then grants a key in `ready`.
+    resumable: z.boolean().default(false),
+    // Takes back such a connection; `received` counts the service frames that arrived before it dropped.
+    resume: z
+      .object({ connectionId: id, key: resumeKey, received: frameCount })
+      .strict()
+      .optional(),
   })
   .strict();
+// How many frames of a resumable connection one side has received; sent now and then, so the other can let them go.
+export const resumeAckSchema = z
+  .object({ type: z.literal('resume.ack'), received: frameCount })
+  .strict();
+// The per-connection secret that admits the desktop's relay connections.
+const relaySecret = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+// The first and only protocol frame of a relay connection. The service answers with RELAY_BEGIN when it hands the
+// connection an SSH connection; from then on it carries that connection's bytes as binary frames.
+export const tunnelAttachSchema = z
+  .object({ type: z.literal('tunnel.attach'), connectionId: id, secret: relaySecret })
+  .strict();
+export type TunnelAttach = z.infer<typeof tunnelAttachSchema>;
+export const RELAY_BEGIN = JSON.stringify({ type: 'tunnel.begin' });
+// What a native terminal's CLI is doing, as its hooks report it: working, waiting for an answer (a permission or a
+// question), or done with its turn. `starting` until the CLI first reports.
+export const terminalStatusSchema = z.enum(['starting', 'busy', 'waiting', 'idle']);
+export type TerminalStatus = z.infer<typeof terminalStatusSchema>;
+export const terminalInfoSchema = z.object({
+  terminalId: id,
+  sessionId: id,
+  status: terminalStatusSchema,
+  // Whether a client is showing it.
+  attached: z.boolean(),
+  since: timestamp,
+});
+export type TerminalInfo = z.infer<typeof terminalInfoSchema>;
 export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('ready'),
@@ -486,6 +534,8 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     // The newest Windows installer the service holds, for clients that want to upgrade themselves.
     client: installerSchema.optional(),
     sessions: z.array(sessionSchema),
+    // Granted to a resumable connection: how long the service keeps it after it dropped.
+    resume: z.object({ key: resumeKey, graceMs: z.number().int().positive() }).optional(),
   }),
   z.object({
     type: z.literal('response'),
@@ -517,6 +567,11 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     terminalId: id,
     exitCode: z.number().int().nullable(),
   }),
+  // The terminals this connection runs, sent whenever one starts, ends, changes state or is shown or hidden.
+  z.object({
+    type: z.literal('terminals.state'),
+    terminals: z.array(terminalInfoSchema),
+  }),
   // Every version must keep reading this frame: with code `version_mismatch` it is how a client of another
   // protocol version learns the service's version and the installer it may fetch.
   z.object({
@@ -537,7 +592,13 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     certificate: z.string().min(1),
     serverName: z.string().min(1),
   }),
+  z.object({ type: z.literal('tunnel.relay'), connectionId: id, secret: relaySecret }),
   z.object({ type: z.literal('tunnel.ready'), connectionId: id }),
+  z.object({ type: z.literal('resume.ack'), received: frameCount }),
+  // The answer to `auth.resume`, before the frames the client missed; `received` is what the service got.
+  z.object({ type: z.literal('resumed'), connectionId: id, received: frameCount }),
+  // From the local bridge to its own client only: the service connection is being re-established, or is back.
+  z.object({ type: z.literal('connection.state'), state: z.enum(['reconnecting', 'connected']) }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
@@ -553,6 +614,60 @@ export const tunnelCredentialsSchema = z
     privateKey: z.string().min(1).max(16384),
     hostPublicKey: z.string().regex(/^ssh-ed25519 [A-Za-z0-9+/=]+$/),
     powershellPath: z.string().min(1).max(2048),
+    platform: z.enum(['win32', 'linux']).optional(),
+    schedulesPath: z.string().min(1).max(4096).optional(),
   })
   .strict();
 export type TunnelCredentials = z.infer<typeof tunnelCredentialsSchema>;
+
+// One side of a resumable connection. Frames sent after sign-in are numbered in order and kept until the other side
+// acknowledges them; after a reconnect each side replays what the other did not receive. WebSocket delivery is
+// ordered, so counting frames is enough.
+export class ResumeLog {
+  sent = 0;
+  received = 0;
+  private frames: string[] = [];
+  private size = 0;
+  private acknowledged = 0;
+  private timer?: ReturnType<typeof setTimeout>;
+  private acknowledge: (received: number) => void;
+  private limit: number;
+  constructor(acknowledge: (received: number) => void, limit = 16 * 1024 * 1024) {
+    this.acknowledge = acknowledge;
+    this.limit = limit;
+  }
+  // Keeps an outgoing frame; false once more is unacknowledged than the limit allows.
+  record(frame: string) {
+    this.sent++;
+    this.frames.push(frame);
+    this.size += frame.length;
+    return this.size <= this.limit;
+  }
+  // The other side has these; they need not be kept.
+  confirm(received: number) {
+    const drop = Math.min(received - (this.sent - this.frames.length), this.frames.length);
+    if (drop > 0) for (const frame of this.frames.splice(0, drop)) this.size -= frame.length;
+  }
+  // The frames after the first `received`, or null when they are not all held any more.
+  since(received: number) {
+    const first = this.sent - this.frames.length;
+    if (received < first || received > this.sent) return null;
+    return this.frames.slice(received - first);
+  }
+  // Counts an incoming frame; acknowledgments go out in batches.
+  receive() {
+    this.received++;
+    if (this.received - this.acknowledged >= 64) this.flush();
+    else this.timer ??= setTimeout(() => this.flush(), 1000);
+  }
+  flush() {
+    this.stop();
+    if (this.received === this.acknowledged) return;
+    this.acknowledged = this.received;
+    this.acknowledge(this.received);
+  }
+  stop() {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+  }
+}

@@ -39,7 +39,7 @@ async function sessionAction(page: Page, action: string) {
 async function createSession(page: Page, prefix: string) {
   const title = `${prefix} ${Date.now()}`;
   await page.getByRole('button', { name: '添加项目', exact: true }).click();
-  await page.getByLabel('Windows 项目目录').fill('D:\\工作\\中文项目');
+  await page.getByLabel('本机项目目录').fill('D:\\工作\\中文项目');
   await page.getByRole('button', { name: '添加', exact: true }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await page.getByRole('button', { name: '新建会话 · D:\\工作\\中文项目', exact: true }).click();
@@ -180,7 +180,7 @@ test('reconnect replays history without repeating a request or keeping stale app
 });
 
 test('Electron loads the built UI with sandbox and closes its execution connection', async () => {
-  test.skip(process.platform !== 'win32', 'Windows desktop smoke test');
+  test.skip(!['win32', 'linux'].includes(process.platform), 'Desktop smoke test');
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env))
     if (value !== undefined && name !== 'ELECTRON_RUN_AS_NODE') env[name] = value;

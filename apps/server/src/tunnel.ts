@@ -16,7 +16,14 @@ export type TunnelOptions = {
   serverName: string;
   bindHost?: string;
 };
-export type SshConnection = { configPath: string; powershellPath: string };
+// What the desktop needs to open its side of the tunnel.
+export type TunnelOffer = Extract<ServerMessage, { type: 'tunnel.configure' | 'tunnel.relay' }>;
+export type SshConnection = {
+  configPath: string;
+  powershellPath: string;
+  platform?: 'win32' | 'linux';
+  schedulesPath?: string;
+};
 
 export async function availablePort() {
   const server = createServer();
@@ -47,11 +54,14 @@ async function reachable(port: number) {
     });
   });
 }
-export function sshProbe(configPath: string, powershellPath: string) {
+export function sshProbe(configPath: string, powershellPath: string, platform = 'win32') {
   const script =
     "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); Write-Output 'CC_DESK_TUNNEL_SSH_READY'; exit 0";
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  const command = `"${powershellPath.replaceAll('"', '')}" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+  const command =
+    platform === 'linux'
+      ? 'printf CC_DESK_TUNNEL_SSH_READY'
+      : `"${powershellPath.replaceAll('"', '')}" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
   return new Promise<void>((resolve, reject) => {
     execFile(
       'ssh',
@@ -70,9 +80,19 @@ export function sshConfig(
   port: number,
   username: string,
   hostPublicKey: string,
+  platform = 'win32',
 ) {
   if (directory.includes('\n') || directory.includes('"'))
     throw new Error('Unsupported data directory');
+  // The Linux desktop is reached through the WSS relay, where an SSH handshake takes several round trips to the
+  // desktop: one connection carries every command, which then costs a channel instead (about 0.4 s instead of 1.5 s
+  // on a distant service). It ends with the tunnel's relay. The socket path must fit in sun_path.
+  const control = join(directory, 'cm');
+  const linux = platform === 'linux';
+  const multiplex =
+    linux && Buffer.byteLength(control) < 100
+      ? ['  ControlMaster auto', `  ControlPath "${control}"`, '  ControlPersist yes']
+      : [];
   return {
     knownHosts: `[127.0.0.1]:${port} ${hostPublicKey}\n`,
     config: [
@@ -85,11 +105,17 @@ export function sshConfig(
       '  IdentitiesOnly yes',
       '  BatchMode yes',
       '  StrictHostKeyChecking yes',
-      '  ConnectTimeout 5',
+      // Linux: long enough for a command issued during a reconnect to wait for the desktop.
+      `  ConnectTimeout ${linux ? 30 : 5}`,
+      ...multiplex,
       '  ServerAliveInterval 10',
       '  ServerAliveCountMax 2',
       '  ForwardAgent no',
       '  ClearAllForwardings yes',
+      // The Linux desktop's SSH implementation has no post-quantum key exchange, which OpenSSH 10.1+ reports on every
+      // command's stderr. The connection only ever runs inside the service's verified TLS, which carries that concern.
+      '  IgnoreUnknown WarnWeakCrypto',
+      '  WarnWeakCrypto no',
       '',
     ].join('\n'),
   };
@@ -110,7 +136,7 @@ export class WindowsTunnel {
     this.directory = join(dataDir, 'connections', id);
     this.unexpectedClose = unexpectedClose;
   }
-  async start(): Promise<Extract<ServerMessage, { type: 'tunnel.configure' }>> {
+  async start(): Promise<TunnelOffer> {
     const { options } = this;
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     this.remotePort = await availablePort();
@@ -172,6 +198,7 @@ export class WindowsTunnel {
       this.remotePort,
       credentials.username,
       credentials.hostPublicKey,
+      credentials.platform,
     );
     const configPath = join(this.directory, 'ssh_config');
     writeFileSync(join(this.directory, 'identity'), credentials.privateKey, { mode: 0o600 });
@@ -180,9 +207,14 @@ export class WindowsTunnel {
     for (let attempt = 0; attempt < 20; attempt++) {
       if (this.controller.signal.aborted) throw new Error('Tunnel closed');
       try {
-        await sshProbe(configPath, credentials.powershellPath);
+        await sshProbe(configPath, credentials.powershellPath, credentials.platform);
         if (this.controller.signal.aborted) throw new Error('Tunnel closed');
-        this.ssh = { configPath, powershellPath: credentials.powershellPath };
+        this.ssh = {
+          configPath,
+          powershellPath: credentials.powershellPath,
+          platform: credentials.platform,
+          schedulesPath: credentials.schedulesPath,
+        };
         return;
       } catch {
         await delay(300, undefined, { signal: this.controller.signal });

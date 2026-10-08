@@ -17,7 +17,7 @@ Node.js、Claude Code、Agent SDK、frp 均为固定版本（见 `scripts/instal
 | 直连入口 | 宿主 `0.0.0.0:8787` → 容器 8787 | HTTPS `/health`、WSS `/ws` | 客户端可访问 |
 | nginx 入口 | 通常 `443`，遵循已有配置 | nginx 终止 TLS，WSS 反代 | 客户端可访问 |
 | nginx 上游 | 宿主 `127.0.0.1:8787` → 容器 8787 | HTTP / WS，只允许可信反代 | 不开放 |
-| frps | 宿主 `0.0.0.0:7000` → 同端口 | frp TCP，强制 TLS，每连接启动 | 客户端可访问 |
+| frps | 宿主 `0.0.0.0:7000` → 同端口 | frp TCP，强制 TLS，每连接启动；只有 Windows 客户端使用，Linux 客户端经 `/ws` 中继 | Windows 客户端可访问 |
 | Windows 映射 | 容器 `127.0.0.1:<随机>` | SSH 到 Windows | 不开放 |
 | Windows sshd / UI bridge | Windows `127.0.0.1:<随机>` | SSH / 本机 nonce + Origin WS | 不开放 |
 | 运维 SSH | 遵循 VPS 原有端口，常见 22 | SSH / SFTP 管理 | 管理者可访问 |

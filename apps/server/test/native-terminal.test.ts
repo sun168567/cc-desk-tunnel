@@ -72,7 +72,6 @@ test('native terminal forwards exact UTF-8 data with bounded frames and pauses u
     f.output.every((frame) => frame.bytes === Buffer.byteLength(frame.text) && frame.bytes < 65536),
   );
   assert.equal(f.counts().paused, 1);
-  assert.throws(() => f.terminal.acknowledge(f.terminal.outstanding + 1), /Invalid/);
   f.terminal.acknowledge(f.terminal.outstanding);
   assert.equal(f.counts().resumed, 1);
   f.terminal.write('/config\r');
@@ -87,6 +86,45 @@ test('native terminal forwards exact UTF-8 data with bounded frames and pauses u
   assert.equal(f.output.map((frame) => frame.text).join(''), text);
 });
 
+test('a terminal no client acknowledges is detached after 30 s, not ended, and keeps running', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture();
+  f.data('x'.repeat(200 * 1024));
+  assert.equal(f.counts().paused, 1);
+  t.mock.timers.tick(30000);
+  assert.equal(f.terminal.attached, false);
+  assert.equal(f.counts().killed, 0);
+  assert.equal(f.counts().resumed, 1, 'the CLI runs on unwatched');
+  const sent = f.output.length;
+  f.data('unwatched');
+  assert.equal(f.output.length, sent, 'nothing is sent while detached');
+});
+
+test('attaching draws the current screen from a cleared one, then follows live output', async () => {
+  const f = fixture();
+  f.terminal.detach();
+  f.data('\x1b[?1049h\x1b[?25l\x1b[2;3H中文界面');
+  f.data('\x1b[>1u');
+  const sent = f.output.length;
+  await f.terminal.attach(100, 30);
+  assert.deepEqual(f.sizes, [[100, 30]]);
+  const snapshot = f.output
+    .slice(sent)
+    .map((frame) => frame.text)
+    .join('');
+  assert.ok(snapshot.startsWith('\x1b[?25h'), 'previous modes are cleared first');
+  assert.match(snapshot, /\x1b\[\?1049h/);
+  assert.match(snapshot, /中文界面/);
+  assert.match(snapshot, /\x1b\[>1u/, 'keyboard protocol the screen model does not keep');
+  assert.ok(snapshot.endsWith('\x1b[?25l'), 'hidden cursor');
+  f.data('live');
+  assert.equal(f.output.at(-1)?.text, 'live');
+  // Acknowledgments of output from before the detach count for nothing rather than end the terminal.
+  f.terminal.acknowledge(10 * 1024 * 1024);
+  assert.equal(f.terminal.outstanding, 0);
+  await f.terminal.close();
+});
+
 test('control terminal launches the official CLI directly with remote guidance and no shell, MCP or bypass', () => {
   const args = terminalArguments(
     { executable: '/native/claude', model: 'provider', settingsPath: '/private/provider.json' },
@@ -98,6 +136,16 @@ test('control terminal launches the official CLI directly with remote guidance a
   assert.ok(args.includes('provider'));
   assert.ok(args.includes('high'));
   assert.ok(!args.includes('--resume') && !args.includes('--session-id'));
+  assert.ok(!args.includes('--continue'));
+  assert.equal(
+    terminalArguments(
+      { executable: 'claude' },
+      { projectPath: '/home/user', permissionMode: 'auto' } as Session,
+      { configPath: '/ssh', powershellPath: '/bin/bash' } as never,
+      true,
+    )[0],
+    '--continue',
+  );
   assert.ok(
     !args.some((arg) => arg.includes('bypass') || arg.includes('mcp') || arg.includes('sdk-ts')),
   );

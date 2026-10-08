@@ -29,11 +29,11 @@ export function AddProjectDialog({
         }}
       >
         <label>
-          Windows 项目目录
+          本机项目目录
           <input
             value={path}
             onChange={(event) => setPath(event.target.value)}
-            placeholder="D:\projects\my-project"
+            placeholder="项目的绝对路径"
             maxLength={2048}
             required
             spellCheck={false}
@@ -81,7 +81,7 @@ export function DeleteSessionDialog({
       <p className="delete-question">删除“{session.title}”？</p>
       <p className="muted">
         {native
-          ? '原生 Claude Code 会话及代理展示记录将删除，Windows 项目文件保持不变。'
+          ? '原生 Claude Code 会话及代理展示记录将删除，本机项目文件保持不变。'
           : '会话记录将被删除，项目文件保持不变。'}
       </p>
       {error && (

@@ -226,7 +226,10 @@ export function App() {
     });
   }, []);
   useEffect(() => {
-    if (connected) void window.desktop?.saveLogin(form);
+    if (connected)
+      void window.desktop?.saveLogin(form).catch((error) => {
+        setError(error instanceof Error ? error.message : '无法保存登录凭据。');
+      });
   }, [connected]);
   useEffect(() => {
     const close = () => client.disconnect();
@@ -661,6 +664,12 @@ export function App() {
               <div className="connection-banner" role="status">
                 <Unplug />
                 连接中断，等待恢复
+              </div>
+            )}
+            {connected && state.resuming && (
+              <div className="connection-banner" role="status">
+                <Unplug />
+                网络中断，正在重连；运行和终端在服务端继续
               </div>
             )}
             <Conversation

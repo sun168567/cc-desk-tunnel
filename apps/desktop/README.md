@@ -1,4 +1,6 @@
-# Windows 客户端
+# 桌面客户端
+
+Linux / Ubuntu 桌面适配见 [Linux 桌面指南](../../docs/linux-desktop.md)。以下章节说明现有 Windows 发行流程。
 
 Electron + React 的 Windows 桌面客户端：界面、到服务端的连接桥，以及随连接启停的本机 OpenSSH / frpc。登录页和连接菜单里的项目链接由 `src/project.tsx` 配置，地址为空时不显示。
 

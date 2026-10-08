@@ -178,7 +178,7 @@ export default function Sidebar({
           </IconButton>
         </div>
         {groups.map(({ path, sessions: members }) => (
-          <section className="project-group" key={path.toLowerCase()}>
+          <section className="project-group" key={pathKey(path)}>
             <h2 title={path}>
               <Folder />
               <span>{folderName(path)}</span>

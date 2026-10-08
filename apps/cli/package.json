@@ -1,0 +1,16 @@
+{
+  "name": "@cc-desk-tunnel/cli",
+  "version": "0.2.5",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Linux terminal client: the official Claude Code UI in the user's own terminal",
+  "bin": {
+    "ccdt": "bin/ccdt.mjs"
+  },
+  "dependencies": {
+    "@cc-desk-tunnel/protocol": "0.0.0",
+    "ssh2": "1.17.0",
+    "ws": "8.22.0"
+  }
+}
