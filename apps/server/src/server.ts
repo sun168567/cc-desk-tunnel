@@ -1,5 +1,5 @@
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import type { IncomingMessage, RequestListener } from 'node:http';
@@ -40,7 +40,7 @@ import type { NativeTerminal } from './native-terminal.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
-import { WindowsTunnel } from './tunnel.ts';
+import { WindowsTunnel, sessionSsh, sessionSshPath } from './tunnel.ts';
 import type { TunnelOptions } from './tunnel.ts';
 import { ServiceUpdates, serviceVersion } from './updates.ts';
 import type { UpdateOptions } from './updates.ts';
@@ -278,7 +278,7 @@ export function createProxyServer(options: ServerOptions) {
         dataDir: store.directory,
         resume: store.hasNativeContext(run.sessionId),
         signal: run.controller.signal,
-        ssh: run.owner.tunnel!.ssh!,
+        ssh: sessionSsh(store.directory, run.sessionId, run.owner.tunnel!.ssh!),
         emit: (event) => emit(run, event),
         approve: (toolId) => {
           if (run.controller.signal.aborted) return Promise.resolve(false);
@@ -437,7 +437,11 @@ export function createProxyServer(options: ServerOptions) {
       completeOnboarding();
       current.process = new NativeTerminal(
         options.claude.executable,
-        terminalArguments(options.claude, session, peer.tunnel.ssh),
+        terminalArguments(
+          options.claude,
+          session,
+          sessionSsh(store.directory, session.id, peer.tunnel.ssh),
+        ),
         {
           cwd: prepareNativeDirectory(options.claude, store.directory, nativeRoot(session.id)),
           cols: command.cols,
@@ -502,6 +506,7 @@ export function createProxyServer(options: ServerOptions) {
       }
       if (command.type === 'session.delete') {
         store.delete(command.sessionId);
+        rmSync(sessionSshPath(store.directory, command.sessionId), { force: true });
         broadcast({ type: 'session.deleted', sessionId: command.sessionId });
         for (const other of peers) other.subscriptions.delete(command.sessionId);
       } else {

@@ -34,7 +34,7 @@ Claude Code 原生存储是模型会话上下文的唯一权威，包含原生�
 - 首轮 `sessionId`，后续 `resume`；显式 `persistSession: true`。即使每轮启动新 CLI 进程，原生上下文仍由同一 session 恢复。
 - 恢复前通过官方 `getSessionInfo` 检查原生记录存在；缺失则明确失败，不静默另开会话，不用代理事件假装恢复。
 - 运行结束通过官方接口确认记录已保存，并同步保存状态到 GUI。压缩由 CLI 执行，客户端只展示实际公开的压缩 / 状态事件。
-- 临时 SSH config / key 在 `connections/<connection-id>/`；断连回收这个目录，不碰 `native/<session-id>/`、CLI 原生 transcript 或记忆。重连注入新连接路径，不丢失会话。
+- 临时 SSH config / key 在 `connections/<connection-id>/`；断连回收这个目录，不碰 `native/<session-id>/`、CLI 原生 transcript 或记忆。系统提示词里写的不是这个目录，而是每个会话固定的 `session-ssh/<session-id>.conf`，它只有一行 `Include`，每次运行前指向当前连接的配置：连接目录每次重连都换，提示词若跟着变，模型侧的提示缓存从系统提示词之后全部失效，整段对话要重新写入缓存。重连不丢失会话，也不改变提示词。
 
 代理 `PROXY_DATA_DIR/sessions.sqlite` 只是 GUI 事件、项目绑定、审批偏好与索引的展示镜像；Windows 只有有界会话内容缓存与草稿，打开会话按页拉取，不重放所有 token。不应把“界面历史存在”当作“原生上下文存在”。
 

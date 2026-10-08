@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { sshConfig, WindowsTunnel, availablePort } from '../src/tunnel.ts';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { sshConfig, sessionSsh, WindowsTunnel, availablePort } from '../src/tunnel.ts';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -30,6 +30,24 @@ test('context references native SSH configuration without inventing execution to
   assert.match(prompt, /ssh -F/);
   assert.match(prompt, /it''s/);
   assert.doesNotMatch(prompt, /mcp__/);
+});
+test('a session keeps one SSH path, and so one system prompt, across reconnects', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'claude-session-ssh-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const session = '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11';
+  const prompts = ['first', 'second'].map((connection) => {
+    const configPath = join(directory, 'connections', connection, 'ssh_config');
+    const ssh = sessionSsh(directory, session, { configPath, powershellPath: 'pwsh.exe' });
+    assert.equal(readFileSync(ssh.configPath, 'utf8'), `Include ${JSON.stringify(configPath)}\n`);
+    return remotePrompt('D:\\work', ssh, session);
+  });
+  assert.equal(prompts[0], prompts[1]);
+  assert.doesNotMatch(prompts[0]!, /connections/);
+  assert.notEqual(
+    sessionSsh(directory, randomUUID(), { configPath: '/x', powershellPath: 'pwsh.exe' })
+      .configPath,
+    sessionSsh(directory, session, { configPath: '/x', powershellPath: 'pwsh.exe' }).configPath,
+  );
 });
 test('missing frps executable fails and closes without leaving credentials or hanging', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'claude-tunnel-failure-'));
