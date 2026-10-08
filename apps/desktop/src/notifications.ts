@@ -76,23 +76,15 @@ export function useNotifications(client: ProxyClient, viewing: () => string | nu
     };
     // The run's last events are merged into the store a moment after the session itself changes.
     const later = (report: () => void) => setTimeout(report, 200);
-    const waiting = (session: Session) =>
-      later(() => {
-        const events = client.state.events[session.id] ?? [];
-        const request = events.findLast((event) => event.payload.type === 'approval.requested');
-        const toolId = request?.payload.type === 'approval.requested' && request.payload.toolId;
-        const tool = events.find(
-          (event) => event.payload.type === 'tool.requested' && event.payload.toolId === toolId,
-        );
-        const question =
-          tool?.payload.type === 'tool.requested' && tool.payload.name === 'AskUserQuestion';
-        push({
-          kind: question ? 'question' : 'approval',
-          title: question ? 'Claude 有问题要问你' : '等待审批',
-          body: session.title,
-          sessionId: session.id,
-        });
+    const waiting = (session: Session) => {
+      const question = session.activeRun?.waiting === 'question';
+      push({
+        kind: question ? 'question' : 'approval',
+        title: question ? 'Claude 有问题要问你' : '等待审批',
+        body: session.title,
+        sessionId: session.id,
       });
+    };
     const ended = (session: Session, runId: string) =>
       later(() => {
         const events = (client.state.events[session.id] ?? []).filter(

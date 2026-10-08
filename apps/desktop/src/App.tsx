@@ -11,6 +11,7 @@ import {
   CircleHelp,
   Download,
   FileDown,
+  FolderInput,
   FolderOpen,
   GitFork,
   LogOut,
@@ -80,6 +81,7 @@ type OpenMenu = MenuPosition &
   (
     | { kind: 'session'; sessionId: string }
     | { kind: 'project'; path: string }
+    | { kind: 'move'; sessionId: string }
     | { kind: 'settings' }
     | { kind: 'update' }
     | { kind: 'bar'; label: string }
@@ -154,6 +156,7 @@ export function App() {
   const [deleteSession, setDeleteSession] = useState<Session | null>(null);
   const [renameSession, setRenameSession] = useState<Session | null>(null);
   const [renameProject, setRenameProject] = useState<string | null>(null);
+  const [repointProject, setRepointProject] = useState<string | null>(null);
 
   const nativeMode = state.adapter === 'claude-code';
   const connected = state.status === 'connected';
@@ -653,6 +656,18 @@ export function App() {
           setPrefs((value) => ({ ...value, pinnedProjects: toggled(value.pinnedProjects, key) })),
       },
       { label: '修改显示名称', icon: <Pencil />, run: () => setRenameProject(path) },
+      {
+        label: '更改文件夹…',
+        icon: <FolderInput />,
+        disabled: !connected || busy || !!terminalSessionId || terminalActive,
+        run: () => {
+          if (!window.desktop) return setRepointProject(path);
+          void act(async () => {
+            const chosen = await window.desktop!.chooseProject();
+            if (chosen) await repoint(path, chosen);
+          });
+        },
+      },
       ...(window.desktop
         ? [
             {
@@ -666,6 +681,63 @@ export function App() {
           ]
         : []),
     ];
+  }
+  const projectLabel = (path: string) => prefs.projectNames[pathKey(path)] || folderName(path);
+  // Every project the session could belong to, the one it is in marked.
+  function moveMenu(session: Session): MenuItem[] {
+    const paths = [...projects];
+    for (const item of state.sessions)
+      if (
+        !isInside(item.projectPath, workspaceRoots) &&
+        !paths.some((path) => pathKey(path) === pathKey(item.projectPath))
+      )
+        paths.push(item.projectPath);
+    return paths.map((path) => ({
+      label: projectLabel(path),
+      detail: path,
+      checked: pathKey(path) === pathKey(session.projectPath),
+      run: () => {
+        if (pathKey(path) !== pathKey(session.projectPath))
+          void act(async () => {
+            await client.request({
+              type: 'session.move',
+              sessionId: session.id,
+              projectPath: path,
+            });
+          });
+      },
+    }));
+  }
+  // Points a project at another folder: its sessions move there, and what this computer keeps about the
+  // project (its place in the list, its name, its pin) follows.
+  async function repoint(from: string, to: string) {
+    const key = pathKey(from);
+    const next = pathKey(to);
+    if (key === next) return;
+    const members = state.sessions.filter((item) => pathKey(item.projectPath) === key);
+    if (members.some((item) => item.activeRun))
+      throw new Error('这个项目里有会话正在运行，结束后再更改文件夹。');
+    for (const item of members)
+      await client.request({ type: 'session.move', sessionId: item.id, projectPath: to });
+    setProjects((value) => [
+      ...new Map(
+        value
+          .map((path) => (pathKey(path) === key ? to : path))
+          .map((path) => [pathKey(path), path]),
+      ).values(),
+    ]);
+    setPrefs((value) => {
+      const projectNames = { ...value.projectNames };
+      if (projectNames[key] && !projectNames[next]) projectNames[next] = projectNames[key];
+      delete projectNames[key];
+      return {
+        ...value,
+        projectNames,
+        pinnedProjects: [
+          ...new Set(value.pinnedProjects.map((item) => (item === key ? next : item))),
+        ],
+      };
+    });
   }
   const adapterName = nativeMode ? 'Claude Code' : 'Simulation';
   const accountName = signedOut
@@ -841,14 +913,22 @@ export function App() {
         ? { label: `会话操作 · ${menuSession!.title}`, items: sessionMenu(menuSession!) }
         : menu.kind === 'project'
           ? { label: `项目操作 · ${menu.path}`, items: projectMenu(menu.path) }
-          : menu.kind === 'settings'
-            ? { label: '设置与账号', items: settingsMenu }
-            : menu.kind === 'update'
-              ? { label: '更新', items: updates }
-              : {
-                  label: menu.label,
-                  items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
-                };
+          : menu.kind === 'move'
+            ? {
+                label: '会话所在的项目',
+                heading: '把会话移到另一个项目；下一条消息会告诉 Claude 项目已变更',
+                items: state.sessions.some((item) => item.id === menu.sessionId)
+                  ? moveMenu(state.sessions.find((item) => item.id === menu.sessionId)!)
+                  : [],
+              }
+            : menu.kind === 'settings'
+              ? { label: '设置与账号', items: settingsMenu }
+              : menu.kind === 'update'
+                ? { label: '更新', items: updates }
+                : {
+                    label: menu.label,
+                    items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
+                  };
   const sectionNames: Record<Section, string> = {
     account: '账号与额度',
     claude: 'Claude Code 设置',
@@ -1015,7 +1095,7 @@ export function App() {
                       void fork(selected!, { id, text });
                     }
               }
-              replyApproval={(runId, approvalId, allowed) => {
+              replyApproval={(runId, approvalId, allowed, answers) => {
                 void act(async () => {
                   await client.request({
                     type: 'approval.reply',
@@ -1023,6 +1103,7 @@ export function App() {
                     runId,
                     approvalId,
                     allowed,
+                    ...(answers ? { answers } : {}),
                   });
                 });
               }}
@@ -1033,8 +1114,12 @@ export function App() {
                 projectName={
                   isInside(selected.projectPath, workspaceRoots)
                     ? null
-                    : prefs.projectNames[pathKey(selected.projectPath)] ||
-                      folderName(selected.projectPath)
+                    : projectLabel(selected.projectPath)
+                }
+                chooseProject={
+                  controlsDisabled
+                    ? undefined
+                    : (position) => setMenu({ kind: 'move', sessionId: selected.id, ...position })
                 }
                 draft={draft}
                 setDraft={(text) => setDraft(selected.id, text)}
@@ -1080,11 +1165,29 @@ export function App() {
       {menu && openMenu && (
         <Menu
           label={openMenu.label}
+          heading={'heading' in openMenu ? openMenu.heading : undefined}
           x={menu.x}
           y={menu.y}
           above={menu.above}
           onClose={closeMenu}
           items={openMenu.items}
+        />
+      )}
+      {repointProject && (
+        <AddProjectDialog
+          title="更改项目文件夹"
+          action="更改"
+          busy={busy}
+          connected={connected}
+          error={error}
+          close={() => setRepointProject(null)}
+          add={(path) => {
+            void act(async () => {
+              if (!path) return;
+              await repoint(repointProject, path);
+              setRepointProject(null);
+            });
+          }}
         />
       )}
       {createOpen && (

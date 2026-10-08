@@ -404,6 +404,7 @@ export class SessionStore {
             status: payload.status,
             connectionId: payload.connectionId,
             ...(payload.surface ? { surface: payload.surface } : {}),
+            ...(payload.waiting ? { waiting: payload.waiting } : {}),
           };
     this.database.exec('BEGIN');
     try {
@@ -438,6 +439,54 @@ export class SessionStore {
     session.updatedAt = new Date().toISOString();
     this.save(session);
     return session;
+  }
+  // Points the session at another project. Once Claude has been told a path, the one it knows is kept until
+  // the next message tells it of the move.
+  move(sessionId: string, projectPath: string) {
+    const { session } = this.get(sessionId);
+    if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再更换项目。');
+    if (session.projectPath === projectPath) return session;
+    if (this.hasNativeContext(sessionId)) {
+      const known = session.movedFrom ?? session.projectPath;
+      session.movedFrom = known === projectPath ? undefined : known;
+    }
+    session.projectPath = projectPath;
+    session.updatedAt = new Date().toISOString();
+    this.save(session);
+    return session;
+  }
+  // The text that tells Claude of a move it has not heard of, to go in front of the user's next message; it is
+  // given out once.
+  moveNotice(sessionId: string) {
+    const { session } = this.get(sessionId);
+    if (!session.movedFrom) return '';
+    const from = session.movedFrom;
+    session.movedFrom = undefined;
+    this.save(session);
+    return `[CC Desk Tunnel: the user moved this session to another Windows project. The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(from)}). From now on use the new directory as the project cwd, in place of the one given earlier.]\n\n`;
+  }
+  // The project path for the system prompt of a run on `connectionId`, which is recorded as what the prompt
+  // says. After a move the prompt keeps the old path while that keeps the prompt cache: on the same connection
+  // and before any compaction. The prompt names the connection's SSH configuration, so another connection
+  // changes it anyway, and a compaction rewrites everything after it.
+  promptPath(sessionId: string, connectionId: string) {
+    const { session } = this.get(sessionId);
+    const said = session.prompt;
+    const keep =
+      !!said &&
+      said.projectPath !== session.projectPath &&
+      said.connectionId === connectionId &&
+      !said.compacted;
+    const projectPath = keep ? said.projectPath : session.projectPath;
+    session.prompt = { projectPath, connectionId };
+    this.save(session);
+    return projectPath;
+  }
+  compacted(sessionId: string) {
+    const { session } = this.get(sessionId);
+    if (!session.prompt || session.prompt.compacted) return;
+    session.prompt.compacted = true;
+    this.save(session);
   }
   rename(sessionId: string, title: string) {
     const { session } = this.get(sessionId);

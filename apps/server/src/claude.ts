@@ -30,7 +30,11 @@ export type ClaudeRun = {
   resume: boolean;
   signal: AbortSignal;
   emit: (event: EventPayload) => void;
-  approve: (toolId: string) => Promise<boolean>;
+  // Asks the user about a tool call. A question Claude asks comes back with the answers chosen.
+  approve: (
+    toolId: string,
+    waiting: 'approval' | 'question',
+  ) => Promise<{ allowed: boolean; answers?: Record<string, string> }>;
   ssh: SshConnection;
   // Filled in while the CLI is running, so the service can ask it for fresh account quota mid-run.
   controls: { refresh?: () => Promise<void> };
@@ -130,12 +134,24 @@ export async function runClaude(
         },
         canUseTool: async (name, input, context) => {
           const tool = mapper.tool(name, input, context.toolUseID);
-          const allowed =
-            !context.signal.aborted && !run.signal.aborted && (await run.approve(tool.id));
+          const question = name === 'AskUserQuestion';
+          const { allowed, answers } =
+            context.signal.aborted || run.signal.aborted
+              ? { allowed: false }
+              : await run.approve(tool.id, question ? 'question' : 'approval');
           tool.denied = !allowed;
-          return allowed
-            ? { behavior: 'allow', updatedInput: input }
-            : { behavior: 'deny', message: 'The Windows user denied or cancelled this request.' };
+          if (!allowed)
+            return {
+              behavior: 'deny',
+              message: question
+                ? 'The Windows user declined to answer.'
+                : 'The Windows user denied or cancelled this request.',
+            };
+          // The official tool takes the user's choices as `answers`, keyed by question text.
+          return {
+            behavior: 'allow',
+            updatedInput: question && answers ? { ...input, answers } : input,
+          };
         },
       },
     });

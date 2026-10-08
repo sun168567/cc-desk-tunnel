@@ -65,8 +65,8 @@ export type Run = {
   toolId?: string;
   toolFinished: boolean;
   approvalId?: string;
-  decide?: (allowed: boolean) => void;
-  approvals: Map<string, (allowed: boolean) => void>;
+  decide?: (allowed: boolean, answers?: Record<string, string>) => void;
+  approvals: Map<string, (allowed: boolean, answers?: Record<string, string>) => void>;
   cancelReason?: string;
   input?: NativeInput;
   controls: { refresh?: () => Promise<void> };
@@ -227,6 +227,7 @@ export function createProxyServer(options: ServerOptions) {
         type: 'session.updated',
         session: store.renameNative(run.sessionId, payload.title),
       });
+    if (payload.type === 'native.compact') store.compacted(run.sessionId);
     if (payload.type === 'run.status') updated(run.sessionId);
   }
   function finish(run: Run, status: 'completed' | 'cancelled' | 'failed', reason?: string) {
@@ -269,7 +270,7 @@ export function createProxyServer(options: ServerOptions) {
       const status = await runClaude(options.claude!, {
         sessionId: run.sessionId,
         nativeRoot: session.nativeRoot ?? session.id,
-        projectPath: session.projectPath,
+        projectPath: store.promptPath(run.sessionId, run.owner.id),
         permissionMode: session.permissionMode,
         model: session.model,
         effort: session.effort,
@@ -280,19 +281,20 @@ export function createProxyServer(options: ServerOptions) {
         signal: run.controller.signal,
         ssh: run.owner.tunnel!.ssh!,
         emit: (event) => emit(run, event),
-        approve: (toolId) => {
-          if (run.controller.signal.aborted) return Promise.resolve(false);
+        approve: (toolId, waiting) => {
+          if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
           const approvalId = randomUUID();
-          return new Promise<boolean>((resolve) => {
-            run.approvals.set(approvalId, (allowed) => {
+          return new Promise((resolve) => {
+            run.approvals.set(approvalId, (allowed, answers) => {
               emit(run, { type: 'approval.resolved', approvalId, allowed });
-              resolve(allowed);
+              resolve({ allowed, answers });
             });
             emit(run, { type: 'approval.requested', approvalId, toolId });
             emit(run, {
               type: 'run.status',
               status: 'awaiting_approval',
               connectionId: run.owner.id,
+              waiting,
             });
           });
         },
@@ -608,7 +610,7 @@ export function createProxyServer(options: ServerOptions) {
       active.input.assertWritable();
       peer.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
-      active.input.submit(command.requestId, text);
+      active.input.submit(command.requestId, store.moveNotice(command.sessionId) + text);
       return;
     }
     if (options.claude && mutations.size)
@@ -637,7 +639,8 @@ export function createProxyServer(options: ServerOptions) {
       scenario,
     });
     emit(run, { type: 'run.status', status: 'running', connectionId: run.owner.id });
-    run.input?.submit(command.requestId, text);
+    // A move Claude has not heard of is told to it with this message; the transcript shows the user's own text.
+    run.input?.submit(command.requestId, store.moveNotice(command.sessionId) + text);
     track(
       options.claude
         ? native(run)
@@ -667,7 +670,7 @@ export function createProxyServer(options: ServerOptions) {
       const decide = run.approvals.get(command.approvalId);
       if (!decide) throw new DomainError('approval_inactive', '审批已失效。');
       run.approvals.delete(command.approvalId);
-      decide(command.allowed);
+      decide(command.allowed, command.answers);
       if (!run.approvals.size)
         emit(run, { type: 'run.status', status: 'running', connectionId: peer.id });
       return;
@@ -676,7 +679,7 @@ export function createProxyServer(options: ServerOptions) {
       throw new DomainError('approval_inactive', '审批已失效。');
     const decide = run.decide;
     run.decide = undefined;
-    decide(command.allowed);
+    decide(command.allowed, command.answers);
   }
 
   // Resolves to the session ID carried in the response frame; account and usage commands have none.
@@ -790,6 +793,12 @@ export function createProxyServer(options: ServerOptions) {
             command.model,
             command.effort,
           ),
+        });
+        break;
+      case 'session.move':
+        broadcast({
+          type: 'session.updated',
+          session: store.move(command.sessionId, command.projectPath),
         });
         break;
       case 'session.delete':

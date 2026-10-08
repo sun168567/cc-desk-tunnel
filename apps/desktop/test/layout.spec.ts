@@ -6,7 +6,15 @@ import { readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
-import { createSession, login, screenshots, send, sessionAction, settled } from './helpers.ts';
+import {
+  createSession,
+  expandActivity,
+  login,
+  screenshots,
+  send,
+  sessionAction,
+  settled,
+} from './helpers.ts';
 
 const shot = (page: Page, name: string) =>
   page.screenshot({ path: resolve(screenshots, 'redesign', `${name}.png`) });
@@ -135,6 +143,72 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
   await sessionAction(page, '删除');
   await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
   expect(errors).toEqual([]);
+});
+
+test('a question is answered with its choices, and a session or a whole project moves to another folder', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await login(page);
+  const title = await createSession(page, '提问');
+
+  // Claude's question shows its choices instead of allow / deny; the answers go back by question.
+  await send(page, '问我', 'question');
+  const card = page.getByRole('form', { name: 'Claude 的提问' });
+  await expect(card).toBeVisible();
+  await expect(page.getByRole('button', { name: '允许', exact: true })).toHaveCount(0);
+  await expect(page.locator('.session-row.selected')).toContainText('等待回答');
+  const submit = card.getByRole('button', { name: '提交回答', exact: true });
+  await card.getByRole('checkbox', { name: '界面', exact: true }).click();
+  await card.getByRole('checkbox', { name: '文档', exact: true }).click();
+  await expect(submit).toBeDisabled();
+  await card.getByRole('radio', { name: '现在', exact: true }).click();
+  await card.getByLabel('其他回答：什么时候开始？').fill('下周一');
+  await expect(card.getByRole('radio', { name: '现在', exact: true })).not.toBeChecked();
+  await shot(page, '17-提问卡片');
+  await submit.click();
+  await settled(page);
+  await expect(page.locator('.message.assistant').last()).toContainText(
+    '收到回答：界面, 文档；下周一',
+  );
+  await send(page, '再问一次', 'question');
+  await card.getByRole('button', { name: '不回答', exact: true }).click();
+  await settled(page);
+  await expect(page.locator('.message.assistant').last()).toContainText('没有得到回答');
+
+  // The session moves to another project from the chip above the message box.
+  const other = 'D:\\工作\\另一个项目';
+  await page.getByRole('button', { name: '添加项目', exact: true }).click();
+  await page.getByLabel('Windows 项目目录').fill(other);
+  await page.getByRole('button', { name: '添加', exact: true }).click();
+  const chip = page.getByRole('button', { name: '会话所在的项目', exact: true });
+  await expect(chip).toContainText('中文项目');
+  await chip.click();
+  await shot(page, '18-更换项目');
+  await page.getByRole('menuitemradio', { name: '另一个项目', exact: true }).click();
+  await expect(chip).toContainText('另一个项目');
+  await expect(
+    page.locator('.project-group').filter({ hasText: '另一个项目' }).locator('.session-row'),
+  ).toContainText([title]);
+  await send(page, '检查目录', 'tool');
+  await page.getByRole('button', { name: '允许', exact: true }).click();
+  await settled(page);
+  await expandActivity(page);
+  await expect(page.locator('.tool-output').last()).toContainText(other);
+
+  // Pointing the project at another folder takes its sessions along.
+  const moved = 'E:\\搬家后\\另一个项目';
+  await page.getByRole('button', { name: `项目操作 · ${other}`, exact: true }).click();
+  await page.getByRole('menuitem', { name: '更改文件夹…', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Windows 项目目录').fill(moved);
+  await page.getByRole('dialog').getByRole('button', { name: '更改', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(chip).toHaveAttribute('title', moved);
+  await expect(page.getByRole('button', { name: `项目操作 · ${other}`, exact: true })).toHaveCount(
+    0,
+  );
+  await sessionAction(page, '删除');
+  await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
 });
 
 test('approval modes are described where they are chosen, and models sit behind the effort slider', async ({

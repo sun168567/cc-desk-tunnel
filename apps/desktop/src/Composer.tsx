@@ -11,8 +11,9 @@ import type {
 import ComposerControls from './ComposerControls.tsx';
 import PermissionMenu from './PermissionMenu.tsx';
 import { IconButton } from './ui.tsx';
+import type { MenuPosition } from './ui.tsx';
 
-export type Scenario = 'chat' | 'tool' | 'error';
+export type Scenario = 'chat' | 'tool' | 'question' | 'error';
 // A draft that is only a slash and an optional command name opens the command menu.
 const slashDraft = /^[/\\][^ \n]*$/;
 const compactDraft = /^[/\\](compact)?$/;
@@ -42,6 +43,7 @@ function useBranch(path: string, running: boolean) {
 export default function Composer({
   session,
   projectName,
+  chooseProject,
   draft,
   setDraft,
   native,
@@ -68,6 +70,8 @@ export default function Composer({
   session: Session;
   // Absent for a session that belongs to no project.
   projectName: string | null;
+  // Opens the list of projects the session can be moved to; absent while it cannot be moved.
+  chooseProject?: (position: MenuPosition) => void;
   draft: string;
   setDraft: (text: string) => void;
   native: boolean;
@@ -156,10 +160,21 @@ export default function Composer({
         </div>
       )}
       <div className="composer-context">
-        <span className="chip quiet" title={session.projectPath}>
+        <button
+          type="button"
+          className="chip quiet"
+          aria-label="会话所在的项目"
+          aria-haspopup="menu"
+          title={session.projectPath}
+          disabled={!chooseProject}
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            chooseProject!({ x: box.left, y: box.top - 6, above: true });
+          }}
+        >
           <Folder />
           <span>{projectName ?? '普通会话'}</span>
-        </span>
+        </button>
         {branch && (
           <span className="chip quiet" title="项目当前所在的 git 分支">
             <GitBranch />
@@ -241,6 +256,7 @@ export default function Composer({
               >
                 <option value="chat">对话</option>
                 <option value="tool">工具审批</option>
+                <option value="question">提问</option>
                 <option value="error">上游错误</option>
               </select>
             </label>

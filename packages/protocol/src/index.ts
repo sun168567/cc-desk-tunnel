@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -150,9 +150,12 @@ export const runStatusSchema = z.enum([
   'cancelled',
   'failed',
 ]);
+// What a run in `awaiting_approval` waits for: a decision on a tool, or an answer to a question Claude asked.
+export const waitingSchema = z.enum(['approval', 'question']);
 export const terminalStatuses = new Set<RunStatus>(['completed', 'cancelled', 'failed']);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
+const scenarioSchema = z.enum(['chat', 'tool', 'question', 'error']);
 const toolSchema = z.object({
   toolId: z.string().min(1),
   name: z.string().min(1),
@@ -164,7 +167,7 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     type: z.literal('message.user'),
     messageId: id,
     text: z.string(),
-    scenario: z.enum(['chat', 'tool', 'error']),
+    scenario: scenarioSchema,
   }),
   z.object({
     type: z.literal('message.delivery'),
@@ -176,6 +179,7 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     status: runStatusSchema,
     connectionId: id,
     surface: z.enum(['chat', 'terminal']).optional(),
+    waiting: waitingSchema.optional(),
     reason: z.string().optional(),
   }),
   z.object({ type: z.literal('text.delta'), messageId: id, text: z.string() }),
@@ -265,6 +269,14 @@ export const sessionSchema = z.object({
   effort: effortSchema.nullable().default(null),
   // A fork keeps its native history beside the session it was forked from; this names that session.
   nativeRoot: id.optional(),
+  // What the system prompt of the session's last native run said, when that still matters: a session moved to
+  // another project keeps the old path there until the prompt cache is lost anyway (another connection, or a
+  // compaction), so that moving does not cost the cache.
+  prompt: z
+    .object({ projectPath: z.string(), connectionId: id, compacted: z.boolean().optional() })
+    .optional(),
+  // The project path Claude was last told, while the move away from it has not been mentioned to it yet.
+  movedFrom: z.string().optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
   activeRun: z
@@ -273,6 +285,7 @@ export const sessionSchema = z.object({
       status: runStatusSchema,
       connectionId: id,
       surface: z.enum(['chat', 'terminal']).optional(),
+      waiting: waitingSchema.optional(),
     })
     .nullable(),
 });
@@ -373,6 +386,15 @@ export const commandSchema = z.discriminatedUnion('type', [
       effort: effortSchema.nullable().optional(),
     })
     .strict(),
+  // Points a session at another Windows project directory.
+  z
+    .object({
+      type: z.literal('session.move'),
+      ...request,
+      sessionId: id,
+      projectPath: z.string().trim().min(1).max(2048),
+    })
+    .strict(),
   z.object({ type: z.literal('session.compact'), ...request, sessionId: id }).strict(),
   // Copies a session under a new ID. With `beforeMessageId` the copy ends just before that user message,
   // which is how an earlier message is edited and sent again without losing the original.
@@ -419,7 +441,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       sessionId: id,
       text: z.string().trim().min(1).max(16000),
-      scenario: z.enum(['chat', 'tool', 'error']).default('chat'),
+      scenario: scenarioSchema.default('chat'),
     })
     .strict(),
   z.object({ type: z.literal('run.cancel'), ...request, sessionId: id, runId: id }).strict(),
@@ -431,6 +453,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       runId: id,
       approvalId: id,
       allowed: z.boolean(),
+      // The answers to a question Claude asked, keyed by the question's text.
+      answers: z.record(z.string().max(2000), z.string().max(4000)).optional(),
     })
     .strict(),
 ]);

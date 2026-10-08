@@ -99,7 +99,7 @@ export function summarize(work: Work, active: boolean, latest: boolean) {
         last.at,
       );
   let label: string;
-  if (waiting) label = '等待审批';
+  if (waiting) label = waiting.name === 'AskUserQuestion' ? '等待回答' : '等待审批';
   else if (running.length)
     label = `正在${[...new Set(running.map((tool) => words[categoryOf(tool)][2]))].slice(0, 2).join('、')}`;
   else if (!tools.length) label = active && latest ? '正在思考' : '思考';

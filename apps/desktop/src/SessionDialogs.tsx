@@ -13,11 +13,13 @@ export function AddProjectDialog({
   error,
   close,
   add,
-}: DialogProps & { add: (path: string) => void }) {
+  title = '添加项目',
+  action = '添加',
+}: DialogProps & { add: (path: string) => void; title?: string; action?: string }) {
   const [path, setPath] = useState('');
   return (
     <Modal
-      title="添加项目"
+      title={title}
       onClose={() => {
         if (!busy) close();
       }}
@@ -51,7 +53,7 @@ export function AddProjectDialog({
           </button>
           <button className="button primary" disabled={busy || !connected}>
             <Plus />
-            添加
+            {action}
           </button>
         </div>
       </form>
