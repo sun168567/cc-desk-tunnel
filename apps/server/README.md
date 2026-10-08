@@ -18,7 +18,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 生产部署见[操作手册](../../deploy/README.md)。`src/config.ts` 读取配置：`PROXY_ADAPTER=claude-code`、`PROXY_TOKEN`、`PROXY_DATA_DIR`、`PROXY_PUBLIC_HOST`、`FRPS_TLS_CERT/KEY`、`FRPS_SERVER_NAME`、`FRPS_PATH/PORT`、`CLAUDE_PATH`；直连还需要 `PROXY_TLS_CERT/KEY`，反代明确设置 `PROXY_TLS_MODE=reverse-proxy`。反代原生进程默认仅回环，Compose 显式使用容器网卡并仅宿主回环发布。API 调试可用 `CLAUDE_MODEL`、`CLAUDE_SETTINGS_PATH` 指向私有提供方配置。原生保留期 `CLAUDE_CONTEXT_RETENTION_DAYS` 默认 3650（正整数）。不会自动获取或转发订阅 OAuth。
 
-- `src/tunnel.ts`：每个在线设备独立 frps，临时 token、限定回环映射端口；注册密钥后用原生 ssh 探测。凭据在 `connections/<id>/`（目录 0700、文件 0600），断连停止 frps 并删除目录。
+- `src/tunnel.ts`：每个在线设备独立 frps，临时 token、限定回环映射端口；注册密钥后用原生 ssh 探测。凭据在 `connections/<id>/`（目录 0700、文件 0600），断连停止 frps 并删除目录。会话的系统提示词引用的是固定的 `session-ssh/<会话>.conf`（只含指向当前连接配置的 `Include`，不含凭据），重连不改变提示词，见[原生运行时](../../docs/native-runtime.md)。
 - `src/claude.ts`：官方 SDK `query` 驱动指定的原生 CLI；提示词给 Windows cwd、PowerShell 和 SSH config 路径。`canUseTool` 只转发原生权限请求，不注册新增 MCP 工具、不自行决定审批策略。
 - `src/native-input.ts`：同一运行可追加 async user message，带客户端 UUID、human origin，原生负责调度 / 合并。结果按 `user_message_uuids` 和 `queued_turn_count` 处理，不能首个 result 就丢弃后续输入；收尾同步停止接收。取消 / 断连 / 重启不重放，未送达与接收未确认分别记录。
 - `src/claude-stream.ts`：适配公开文字 / 思考 / 工具入参和结果。不解析未公开隐藏推理，不把自建结果格式塞回原生工具。

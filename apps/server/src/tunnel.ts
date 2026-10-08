@@ -1,6 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { createServer, connect } from 'node:net';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -17,6 +17,22 @@ export type TunnelOptions = {
   bindHost?: string;
 };
 export type SshConnection = { configPath: string; powershellPath: string };
+
+// The SSH configuration a session's system prompt names. Its path is the session's for good; each run points
+// it at the connection it runs over. A connection's own directory is new on every reconnect, and a system
+// prompt that named it would change with it — the model's prompt cache would then match nothing of the
+// conversation, and all of it would be written to the cache again.
+export function sessionSshPath(dataDir: string, sessionId: string) {
+  return join(dataDir, 'session-ssh', `${sessionId}.conf`);
+}
+export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnection): SshConnection {
+  const configPath = sessionSshPath(dataDir, sessionId);
+  mkdirSync(join(dataDir, 'session-ssh'), { recursive: true, mode: 0o700 });
+  const next = `${configPath}.${randomBytes(6).toString('hex')}`;
+  writeFileSync(next, `Include ${JSON.stringify(ssh.configPath)}\n`, { mode: 0o600 });
+  renameSync(next, configPath);
+  return { ...ssh, configPath };
+}
 
 export async function availablePort() {
   const server = createServer();
