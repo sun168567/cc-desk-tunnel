@@ -319,6 +319,8 @@ button.chip:hover:not(:disabled) {
   font-size: 13px;
   margin-bottom: 0;
   overflow-wrap: anywhere;
+  /* A connection failure says what happened on its first line and what to check on the next. */
+  white-space: pre-line;
 }
 .login-page {
   min-height: 100dvh;

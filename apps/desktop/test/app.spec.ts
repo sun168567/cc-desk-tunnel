@@ -39,7 +39,7 @@ test('desktop login, chat, allow/deny, stop, errors and delete', async ({ page }
   await page.getByLabel('服务地址').fill(connection().serverUrl);
   await page.getByLabel('服务凭据').fill('incorrect-test-token-with-enough-length');
   await page.getByRole('button', { name: '连接', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('认证失败');
+  await expect(page.getByRole('alert')).toContainText('服务凭据不正确');
   await login(page);
   const title = await createSession(page, '开发会话');
   await send(page, '梳理当前项目');

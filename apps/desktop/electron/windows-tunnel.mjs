@@ -1,11 +1,12 @@
 import { spawn, execFile } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { connect, createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { httpProxy } from './system-proxy.mjs';
+import { componentFailure, missingComponent } from './connect-errors.mjs';
 
 function execute(file, args) {
   return new Promise((resolve, reject) => {
@@ -17,7 +18,9 @@ function execute(file, args) {
         if (error)
           reject(
             new Error(
-              'Windows SSH preparation failed. Check bundled OpenSSH, PowerShell 7 and directory permissions.',
+              error.code === 'ENOENT'
+                ? missingComponent('PowerShell（pwsh.exe）')
+                : '本机 SSH 服务的准备步骤失败。\n内置的 PowerShell 或 OpenSSH 可能被安全软件拦截，或临时目录不可写；请检查安全软件的保护记录后重新连接，仍然失败时重新安装本应用。',
             ),
           );
         else resolve(stdout);
@@ -94,20 +97,36 @@ export async function startWindowsTunnel(configuration, binaries, signal, onFail
   const check = () => {
     if (signal.aborted || closed) throw new Error('Tunnel cancelled');
   };
+  const tunnel = `${configuration.serverAddr}:${configuration.serverPort}`;
   function launch(file, args) {
     check();
-    const child = spawn(file, args, { windowsHide: true, stdio: 'ignore' });
+    // The host and its components print why they stop; the end of that is kept to explain a failure.
+    const child = spawn(file, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const started = Date.now();
+    let output = '';
+    for (const stream of [child.stdout, child.stderr])
+      stream.on('data', (chunk) => {
+        output = (output + chunk.toString('utf8')).slice(-8192);
+      });
     children.push(child);
     child.once('error', () => {
-      if (!closed) onFailure('组件启动失败，请检查安装与杀毒软件状态。');
+      if (!closed) onFailure(missingComponent('PowerShell（pwsh.exe）'));
     });
     child.once('close', () => {
-      if (!closed) onFailure('Windows 隧道组件已退出，请重新连接。');
+      if (!closed) onFailure(componentFailure(output, tunnel, Date.now() - started < 30000));
     });
     return child;
   }
   try {
     check();
+    for (const [name, file] of [
+      ['sshd.exe', join(binaries.openssh, 'sshd.exe')],
+      ['frpc.exe', binaries.frpc],
+    ])
+      if (file)
+        await access(file).catch(() => {
+          throw new Error(missingComponent(name));
+        });
     const port = await availablePort();
     const metadata = JSON.parse(
       await execute(powershell, [
@@ -183,7 +202,10 @@ export async function startWindowsTunnel(configuration, binaries, signal, onFail
       }
       await delay(100);
     }
-    if (!ready) throw new Error('Windows OpenSSH startup timed out');
+    if (!ready)
+      throw new Error(
+        '本机的 SSH 服务在 10 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。',
+      );
     return {
       credentials: {
         type: 'tunnel.credentials',

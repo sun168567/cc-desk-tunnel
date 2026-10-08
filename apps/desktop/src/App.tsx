@@ -283,7 +283,7 @@ export function App() {
       notifications.push({
         kind: 'connection',
         title: '连接中断',
-        body: client.state.error ?? '远程连接已关闭，请重新登录。',
+        body: client.state.error?.split('\n')[0] ?? '远程连接已关闭，请重新登录。',
       });
     });
     window.addEventListener('beforeunload', close);
