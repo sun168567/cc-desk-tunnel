@@ -57,7 +57,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `src/LoginPage.tsx`、`TitleBar.tsx`、`Rail.tsx`、`Sidebar.tsx`、`Conversation.tsx`、`Composer.tsx`、`SessionDialogs.tsx` | 各界面区域，只渲染并上报用户意图：标题栏、图标栏、会话侧栏、会话区、输入区、对话框 |
 | `src/SettingsPage.tsx`、`SettingsPanel.tsx`、`Help.tsx` | 设置页的分类与客户端自身的设置；云端 Claude Code 的设置项；帮助文案 |
 | `src/shortcuts.ts`、`ShortcutSettings.tsx` | 快捷键的动作、默认组合键与按键的识别；修改它们的设置页 |
-| `src/ComposerControls.tsx`、`PermissionMenu.tsx`、`AccountPanel.tsx`、`UsagePanel.tsx`、`NativeTerminal.tsx` | 模型 / effort / 上下文、审批模式菜单、账号页、调用日志、原生终端 |
+| `src/QuestionCard.tsx`、`ComposerControls.tsx`、`PermissionMenu.tsx`、`AccountPanel.tsx`、`UsagePanel.tsx`、`NativeTerminal.tsx` | Claude 提问的作答卡片、模型 / effort / 上下文、审批模式菜单、账号页、调用日志、原生终端 |
 | `src/drafts.ts`、`prefs.ts`、`schedules.ts`、`SchedulePanel.tsx` | 只属于这台电脑的数据：未发送的草稿；置顶、项目显示名称、通知开关与快捷键；定时任务的格式、到点判断与面板 |
 | `src/notifications.ts`、`NoticeBell.tsx`、`exportSession.ts` | 从会话运行状态的变化得出通知，及其列表；把会话导出为 Markdown |
 | `src/ui.tsx`、`paths.ts` | 图标按钮 / 对话框 / 菜单；Windows 路径比较 |
@@ -76,7 +76,8 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 - 快捷键：后退 / 前进、收起侧栏、新建会话、打开设置和界面缩放各有一个组合键，在设置页的“快捷键”里逐项修改、去掉或整体关闭。按键由页面自己处理，只在本窗口处于前台时起作用，不向系统注册全局热键；内嵌的原生终端里和对话框打开时不响应。安装版不带 Electron 的默认菜单，因此没有设置之外的组合键。
 - 通知：窗口收在托盘或不在前台时，任务完成、失败、等待审批、Claude 提问、定时任务没能发出、连接中断经 Windows 系统通知提醒，点通知回到对应会话；侧栏的铃铛保留最近 50 条。每一类可在设置里单独关闭。只有内容已在本窗口缓存的会话能分辨“提问”与“审批”，其余按“等待审批”提醒。
 - 会话与项目可以置顶；项目可以另起一个只在本机显示的名称，可在资源管理器中打开。不提供移除项目与归档。会话菜单可把整个会话导出为 Markdown（先把历史分页取全）。
-- 输入框上方显示会话所在的项目与项目当前的 git 分支（只读）。加号、拖入或粘贴文件时，放进消息的是文件在这台电脑上的路径，由 Claude 经执行通道读取；没有上传。
+- Claude 向用户提问时，会话区显示问题与选项（单选、多选或自己写），提交后原生继续；不回答等同拒绝。
+- 输入框上方显示会话所在的项目与项目当前的 git 分支（只读）。点项目标签可把会话移到另一个项目；项目菜单的“更改文件夹”把整个项目连同其下的会话指向新位置。已经聊过的会话在下一条消息里告诉 Claude 项目变了，做法见[原生运行](../../docs/native-runtime.md#更换项目)。加号、拖入或粘贴文件时，放进消息的是文件在这台电脑上的路径，由 Claude 经执行通道读取；没有上传。
 - 关闭窗口默认留在托盘后台，托盘图标右键“退出”才结束连接；可在设置或托盘菜单关掉这一行为。远程连接期间阻止系统睡眠。
 - 输入框里未发送的内容按会话保存在本机用户目录的 `drafts.json`（不经过服务端）：切换会话、关闭窗口、崩溃或强杀后重新打开都还在；发送成功或删除会话后才清除。
 - 会话菜单“分叉会话”把当前会话连同上下文复制成一个新会话；用户消息上的“编辑重发”从该消息之前分叉，并把原文放回输入框。原会话都保留。已执行的文件改动不会撤回。

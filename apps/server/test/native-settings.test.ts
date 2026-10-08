@@ -37,6 +37,16 @@ test('native settings edit only the listed keys of the CLI user settings file', 
     autoCompactWindow: 500_000,
     language: 'chinese',
   });
+  // The CLI's own richer forms of a value are left as they are and shown as unset.
+  writeFileSync(path, JSON.stringify({ attribution: { commit: '自定义' }, fallbackModel: [] }));
+  assert.equal(readNativeSettings(path).attribution, null);
+  assert.equal(readNativeSettings(path).fallbackModel, null);
+  updateNativeSettings({ fallbackModel: ['sonnet'], bashOutputMaxChars: 60_000 }, path);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {
+    attribution: { commit: '自定义' },
+    fallbackModel: ['sonnet'],
+    bashOutputMaxChars: 60_000,
+  });
   writeFileSync(path, '{ broken');
   assert.throws(() => updateNativeSettings({ fastMode: true }, path));
   assert.equal(readFileSync(path, 'utf8'), '{ broken', 'An unreadable file is never overwritten');

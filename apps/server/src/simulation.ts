@@ -10,6 +10,31 @@ type Host = {
   finish: (status: 'completed' | 'failed', reason?: string) => void;
 };
 
+// What the simulated model asks in the `question` scenario, in the official tool's input format.
+const question = {
+  questions: [
+    {
+      question: '这次改动要包含哪些部分？',
+      header: '范围',
+      multiSelect: true,
+      options: [
+        { label: '界面', description: '页面布局与样式' },
+        { label: '服务端', description: '协议与服务端逻辑' },
+        { label: '文档', description: '说明与变更记录' },
+      ],
+    },
+    {
+      question: '什么时候开始？',
+      header: '时间',
+      multiSelect: false,
+      options: [
+        { label: '现在', description: '立即开始' },
+        { label: '稍后', description: '先不动，等进一步确认' },
+      ],
+    },
+  ],
+};
+
 // The offline adapter: scripted replies and one fake tool, so the GUI and protocol can be exercised without a model,
 // a tunnel or any real command.
 export async function simulate(
@@ -37,7 +62,42 @@ export async function simulate(
       finish('failed', '模拟上游错误');
       return;
     }
-    if (command.scenario === 'tool') {
+    if (command.scenario === 'question') {
+      run.toolId = randomUUID();
+      run.approvalId = randomUUID();
+      const reply = new Promise<Record<string, string> | undefined>((resolve) => {
+        run.decide = (allowed, answers) => resolve(allowed ? (answers ?? {}) : undefined);
+      });
+      emit({
+        type: 'tool.requested',
+        toolId: run.toolId,
+        name: 'AskUserQuestion',
+        input: JSON.stringify(question, null, 2),
+        target: 'Windows (simulation)',
+      });
+      emit({ type: 'approval.requested', approvalId: run.approvalId, toolId: run.toolId });
+      emit({
+        type: 'run.status',
+        status: 'awaiting_approval',
+        connectionId: run.owner.id,
+        waiting: 'question',
+      });
+      const answers = await reply;
+      if (run.controller.signal.aborted) return;
+      run.decide = undefined;
+      emit({ type: 'approval.resolved', approvalId: run.approvalId, allowed: !!answers });
+      emit({ type: 'run.status', status: 'running', connectionId: run.owner.id });
+      run.toolFinished = true;
+      const chosen = Object.values(answers ?? {}).join('；');
+      emit({
+        type: 'tool.result',
+        toolId: run.toolId,
+        status: answers ? 'completed' : 'denied',
+        output: answers ? chosen : '用户没有回答。',
+        exitCode: null,
+      });
+      await stream(answers ? `收到回答：${chosen}` : '没有得到回答，本轮到此为止。');
+    } else if (command.scenario === 'tool') {
       run.toolId = randomUUID();
       run.approvalId = randomUUID();
       const decision = new Promise<boolean>((resolve) => {

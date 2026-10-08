@@ -21,6 +21,7 @@ import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
 import type { HistoryState } from './client.ts';
+import QuestionCard, { questionsOf } from './QuestionCard.tsx';
 import { conversation } from './transcript.ts';
 import type { TranscriptItem, Turn, Work } from './transcript.ts';
 
@@ -38,7 +39,7 @@ type Live = {
   now: number;
   busy: boolean;
   canApprove: (tool: Tool) => boolean;
-  reply: (tool: Tool, allowed: boolean) => void;
+  reply: (tool: Tool, allowed: boolean, answers?: Record<string, string>) => void;
   // Absent while a fork cannot be made.
   edit?: (item: Text) => void;
 };
@@ -85,6 +86,17 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
   const { category, verb, subject, added, removed, running, failed } = describe(tool, active);
   const Icon = icons[category];
   const approval = live.canApprove(tool);
+  // A question Claude asks is answered, not allowed or denied.
+  const questions = tool.name === 'AskUserQuestion' ? questionsOf(tool.input) : null;
+  if (approval && questions)
+    return (
+      <QuestionCard
+        questions={questions}
+        busy={live.busy}
+        answer={(answers) => live.reply(tool, true, answers)}
+        skip={() => live.reply(tool, false)}
+      />
+    );
   return (
     <Fold
       className={`tool ${failed ? 'failed' : ''}`}
@@ -307,7 +319,12 @@ export default function Conversation({
   busy: boolean;
   newSession: () => void;
   loadEarlier: () => void;
-  replyApproval: (runId: string, approvalId: string, allowed: boolean) => void;
+  replyApproval: (
+    runId: string,
+    approvalId: string,
+    allowed: boolean,
+    answers?: Record<string, string>,
+  ) => void;
   edit?: (messageId: string, text: string) => void;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
@@ -329,7 +346,8 @@ export default function Conversation({
       session?.activeRun?.id === tool.runId &&
       !tool.resolved &&
       !!tool.approvalId,
-    reply: (tool, allowed) => replyApproval(tool.runId, tool.approvalId!, allowed),
+    reply: (tool, allowed, answers) =>
+      replyApproval(tool.runId, tool.approvalId!, allowed, answers),
     edit: edit && !running ? (item) => edit(item.id, item.text) : undefined,
   };
   const scroll = useRef<HTMLDivElement>(null);
@@ -418,7 +436,11 @@ export default function Conversation({
           {session.activeRun && (
             <div className="run-indicator" role="status">
               <span className="running-dot" />
-              {session.activeRun.status === 'awaiting_approval' ? '等待审批' : '运行中'}
+              {session.activeRun.status !== 'awaiting_approval'
+                ? '运行中'
+                : session.activeRun.waiting === 'question'
+                  ? '等待回答'
+                  : '等待审批'}
               {!ownsRun && ' · 另一连接'}
             </div>
           )}

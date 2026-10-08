@@ -57,6 +57,7 @@ export async function createSession(page: Page, prefix: string) {
 }
 export async function send(page: Page, text: string, scenario = 'chat') {
   await page.getByLabel('模拟场景').selectOption(scenario);
+  await expect(page.getByLabel('模拟场景')).toHaveValue(scenario);
   await page.getByRole('textbox', { name: '消息' }).fill(text);
   await page.getByRole('button', { name: '发送消息', exact: true }).click();
 }

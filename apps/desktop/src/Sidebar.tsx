@@ -11,7 +11,8 @@ import type { MenuPosition } from './ui.tsx';
 function activity(session: Session) {
   if (!session.activeRun) return ago(Date.parse(session.updatedAt));
   if (session.activeRun.surface === 'terminal') return '原生终端';
-  return session.activeRun.status === 'awaiting_approval' ? '等待处理' : '运行中';
+  if (session.activeRun.status !== 'awaiting_approval') return '运行中';
+  return session.activeRun.waiting === 'question' ? '等待回答' : '等待审批';
 }
 
 export default function Sidebar({
