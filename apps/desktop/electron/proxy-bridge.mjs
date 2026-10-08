@@ -9,6 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { serverMessageSchema, MAX_FRAME_BYTES } from '@cc-desk-tunnel/protocol';
 import { startWindowsTunnel } from './windows-tunnel.mjs';
 import { httpProxy, openSocket } from './system-proxy.mjs';
+import { controlFailure } from './connect-errors.mjs';
 
 export function certificateMatches(observed, trusted) {
   if (typeof trusted !== 'string' || typeof observed !== 'string') return false;
@@ -23,9 +24,11 @@ export function controlTlsOptions(config) {
 }
 // Starts TLS with the service, through the system's HTTP proxy when the Windows settings name one for it. The proxy
 // only relays bytes: the certificate is still the service's own and is judged as on a direct connection.
-async function connectService(address, config, resolveProxy) {
+// `route`, when given, is told the proxy that was used, for the words of a failure.
+async function connectService(address, config, resolveProxy, route) {
   const port = Number(address.port || 443);
   const proxy = httpProxy(await resolveProxy?.(`https://${address.hostname}:${port}`));
+  if (route) route.proxy = proxy;
   return connect({
     socket: await openSocket(proxy, address.hostname, port),
     servername: isIP(address.hostname) ? undefined : address.hostname,
@@ -102,10 +105,11 @@ export async function openProxyBridge(
   });
   wss.on('connection', (local) => {
     // CA verification completes at TLS handshake; explicit pins are checked before sending credentials.
+    const route = { proxy: null };
     const remote = new WebSocket(address, {
       // Node's HTTP client also takes the connection through this callback once it is ready.
       createConnection: (_options, created) => {
-        connectService(address, config, binaries.resolveProxy).then(
+        connectService(address, config, binaries.resolveProxy, route).then(
           (socket) => created(null, socket),
           created,
         );
@@ -117,7 +121,15 @@ export async function openProxyBridge(
     let verified = false;
     let nativeReady;
     let configurationReceived = false;
-    const timer = setTimeout(() => fail('Windows SSH 连接准备超时。'), 45000);
+    const timer = setTimeout(
+      () =>
+        fail(
+          configurationReceived
+            ? '执行通道在 45 秒内没有就绪。\n服务凭据已通过，本机的隧道组件也已启动，但服务端经隧道连不回本机：请检查服务器防火墙 / 云安全组是否放行了隧道端口，以及安全软件是否拦截了内置的 frpc.exe 或 sshd.exe。'
+            : '服务端在 45 秒内没有完成应答。\n请检查网络是否稳定，或稍后重试；反复出现时查看服务端日志。',
+        ),
+      45000,
+    );
     function fail(message) {
       if (local.readyState === WebSocket.OPEN)
         local.send(JSON.stringify({ type: 'connection.error', code: 'tunnel_failed', message }));
@@ -129,7 +141,9 @@ export async function openProxyBridge(
         config.fingerprint &&
         !certificateMatches(remote._socket.getPeerCertificate().fingerprint256, config.fingerprint)
       ) {
-        fail('服务证书指纹不匹配；未发送服务凭据。');
+        fail(
+          '服务证书指纹不匹配；未发送服务凭据。\n请核对“服务证书指纹”是否与安装时给出的一致；服务端更换过证书后需要填新的指纹。若两者都没变，说明连到的不是你的服务器。',
+        );
         return;
       }
       verified = true;
@@ -155,7 +169,7 @@ export async function openProxyBridge(
       try {
         message = serverMessageSchema.parse(JSON.parse(raw.toString('utf8')));
       } catch {
-        fail('服务协议不兼容。');
+        fail('服务端的消息无法识别。\n客户端与服务端的版本可能不一致，请把两者升级到同一版本。');
         return;
       }
       // A service of another version refuses the connection but may still offer the installer for its own.
@@ -199,11 +213,11 @@ export async function openProxyBridge(
       });
       socket.on('error', (error) =>
         fail(
-          error.code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH'
-            ? '会话历史超过 WebSocket 接收上限。'
-            : /\b429\b/.test(error.message)
-              ? '登录失败次数过多，服务端已暂时拒绝本机，请稍后再试。'
-              : '代理连接失败，请检查服务地址和网络。',
+          controlFailure(
+            error,
+            `${address.hostname}:${address.port || 443}`,
+            socket === remote ? route.proxy : null,
+          ),
         ),
       );
     }

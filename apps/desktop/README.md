@@ -62,6 +62,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `src/notifications.ts`、`NoticeBell.tsx`、`exportSession.ts` | 从会话运行状态的变化得出通知，及其列表；把会话导出为 Markdown |
 | `src/ui.tsx`、`paths.ts` | 图标按钮 / 对话框 / 菜单；Windows 路径比较 |
 | `electron/main.cjs`、`preload.cjs` | 窗口、托盘、系统通知、IPC（选目录与文件、保存导出、普通会话目录、打开授权页、连接）和暴露给页面的 `window.desktop` |
+| `electron/connect-errors.mjs` | 连接失败时给用户的说明：按系统错误码、TLS 错误和组件的输出区分原因，第一行是原因，其后是该检查的地方 |
 | `electron/git-branch.cjs` | 从仓库文件读出项目当前所在的分支，不依赖本机安装 git |
 | `electron/proxy-bridge.mjs`、`windows-tunnel.mjs` | 主进程连接桥：校验服务证书后转发 WSS，并按服务端下发的配置启动本机隧道 |
 | `electron/system-proxy.mjs` | 读出系统代理中的 HTTP 代理，并经它建立到服务端的 TCP 连接 |

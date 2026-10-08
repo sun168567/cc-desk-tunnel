@@ -106,7 +106,12 @@ public static class ComponentHost {
         var command = new StringBuilder("\""+executables[index]+"\" "+arguments[index]);
         // Assign while suspended so no component child can escape the owner's job.
         if(!CreateProcess(executables[index],command,IntPtr.Zero,IntPtr.Zero,true,CreateNoWindow | CreateSuspended,
-          IntPtr.Zero,null,ref startup,out info)) throw new Win32Exception();
+          IntPtr.Zero,null,ref startup,out info)) {
+          var refused = new Win32Exception();
+          // Read by the client to tell the user which component the system would not start, and why.
+          Console.Error.WriteLine("cc-desk-tunnel: cannot start "+Path.GetFileName(executables[index])+" error "+refused.NativeErrorCode);
+          throw refused;
+        }
         processes[index] = info.process;
         try {
           if(!AssignProcessToJobObject(job,info.process)) {
@@ -126,6 +131,7 @@ public static class ComponentHost {
       if(completed >= executables.Length) return 0;
       uint code;
       if(!GetExitCodeProcess(processes[completed],out code)) throw new Win32Exception();
+      Console.Error.WriteLine("cc-desk-tunnel: "+Path.GetFileName(executables[completed])+" exited "+code);
       return code == 0 ? 1 : (int)code;
     } finally {
       CloseHandle(job);

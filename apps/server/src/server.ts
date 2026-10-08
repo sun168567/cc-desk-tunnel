@@ -844,7 +844,12 @@ export function createProxyServer(options: ServerOptions) {
     if (typeof token !== 'string' || !authorized(token)) refuse(peer.address);
     else throttle.succeed(peer.address);
     if (!auth.success || !authorized(auth.data.token)) {
-      send(peer, { type: 'connection.error', code: 'unauthorized', message: '认证失败。' });
+      send(peer, {
+        type: 'connection.error',
+        code: 'unauthorized',
+        message:
+          '服务凭据不正确。\n请核对安装时给出的服务凭据，注意不要带上首尾空格；在服务器上更换过凭据后要用新的。连续失败多次会被暂时拒绝。',
+      });
       peer.socket.close(4001, 'Unauthorized');
       return false;
     }
@@ -877,7 +882,8 @@ export function createProxyServer(options: ServerOptions) {
         send(peer, {
           type: 'connection.error',
           code: 'device_busy',
-          message: '已有 Windows 设备连接或正在清理，请稍后重试。',
+          message:
+            '服务端已有一台 Windows 设备在线，或上一次连接还在清理。\n同一时间只支持一台设备：请先断开另一台，或等几秒后重试。',
         });
         peer.socket.close(4003, 'Device busy');
         return true;
@@ -894,7 +900,8 @@ export function createProxyServer(options: ServerOptions) {
             send(peer, {
               type: 'connection.error',
               code: 'tunnel_failed',
-              message: 'frps 启动失败，请检查服务配置与端口。',
+              message:
+                '服务端的隧道服务（frps）没能启动。\n请在服务器上检查隧道端口是否被别的程序占用，并查看服务日志。',
             });
             peer.socket.close(4003, 'Tunnel failed');
           }),
@@ -919,7 +926,8 @@ export function createProxyServer(options: ServerOptions) {
           send(peer, {
             type: 'connection.error',
             code: 'ssh_failed',
-            message: 'Windows SSH / PowerShell 就绪探测失败。',
+            message:
+              '服务端经隧道连不上本机的 SSH 服务。\n隧道已经建立，但探测命令没有得到应答：常见于安全软件拦截了内置的 sshd.exe 或 PowerShell，请检查保护记录后重新连接。',
           });
           peer.socket.close(4003, 'SSH probe failed');
         }),
