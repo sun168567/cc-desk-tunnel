@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   UserRound,
   RefreshCw,
-  X,
   Activity,
   ShieldCheck,
   LogIn,
@@ -31,7 +30,6 @@ export default function AccountPanel({
   disabled,
   error,
   refresh,
-  close,
 }: {
   client: ProxyClient;
   account: AccountState | null;
@@ -41,7 +39,6 @@ export default function AccountPanel({
   disabled: boolean;
   error: string | null;
   refresh: () => void;
-  close: () => void;
 }) {
   const account = capabilities?.account;
   const [working, setWorking] = useState(false);
@@ -86,9 +83,6 @@ export default function AccountPanel({
         </h1>
         <IconButton title="刷新账号信息" disabled={disabled} onClick={refresh}>
           <RefreshCw className={refreshing ? 'spinning' : ''} />
-        </IconButton>
-        <IconButton title="关闭账号信息" onClick={close}>
-          <X />
         </IconButton>
       </header>
       <div className="account-body">

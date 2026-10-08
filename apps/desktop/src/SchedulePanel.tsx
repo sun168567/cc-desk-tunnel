@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarClock, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
+import { CalendarClock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import type { Effort, NativeCapabilities, Session } from '@cc-desk-tunnel/protocol';
 import { folderName } from './paths.ts';
 import { describeSchedule, parseTasks, stamp } from './schedules.ts';
@@ -297,20 +297,19 @@ function Editor({
   );
 }
 
+// The tasks are listed in the side column; the main area holds the editor, or says what the page is for.
 export default function SchedulePanel({
   schedules,
   sessions,
   projects,
   capabilities,
-  close,
 }: {
   schedules: Schedules;
   sessions: Session[];
   projects: string[];
   capabilities: NativeCapabilities | null;
-  close: () => void;
 }) {
-  // `null` is a new task; `undefined` shows the list.
+  // `null` is a new task; `undefined` shows the overview.
   const [editing, setEditing] = useState<Task | null | undefined>(undefined);
   const [removing, setRemoving] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -323,78 +322,48 @@ export default function SchedulePanel({
     return sessions.find((session) => session.id === sessionId)?.title ?? '会话已不存在';
   };
   return (
-    <section className="account-page" aria-label="定时任务">
-      <header className="account-heading">
-        <h1>
-          <CalendarClock />
-          定时任务
-        </h1>
-        <IconButton title="关闭定时任务" onClick={close}>
-          <X />
-        </IconButton>
-      </header>
-      <div className="account-body">
-        {editing !== undefined ? (
-          <Editor
-            task={editing}
-            sessions={sessions}
-            projects={projects}
-            capabilities={capabilities}
-            cancel={() => setEditing(undefined)}
-            save={async (task) => {
-              await schedules.save(
-                tasks.some((item) => item.id === task.id)
-                  ? tasks.map((item) => (item.id === task.id ? task : item))
-                  : [...tasks, task],
-              );
-              setEditing(undefined);
-            }}
-          />
-        ) : (
-          <>
-            <p className="muted">
-              到点时由这台电脑上的客户端向会话发送一条带“定时任务”标签的消息。只在客户端运行并已连接时触发，晚于计划
-              10 分钟仍发不出的那一次会跳过。无人值守时请让目标会话使用自动审批，否则会停在审批处。
-            </p>
-            {schedules.path && (
-              <p className="muted">
-                配置文件 <code>{schedules.path}</code>
-                ：可以直接编辑，也可以让 Claude 代为设置，几秒内生效。
-              </p>
-            )}
-            {[...schedules.problems, ...(failure ? [failure] : [])].map((problem) => (
-              <p key={problem} className="error-text" role="alert">
-                {problem}
-              </p>
-            ))}
-            <div className="schedule-list">
-              {tasks.map((task) => {
-                const next = schedules.next(task);
-                const last = schedules.last(task);
-                return (
-                  <div key={task.id} className="schedule-row">
-                    <input
-                      type="checkbox"
-                      aria-label={`启用 ${task.name}`}
-                      checked={task.enabled}
-                      onChange={(event) =>
-                        void store(
-                          tasks.map((item) =>
-                            item.id === task.id ? { ...item, enabled: event.target.checked } : item,
-                          ),
-                        )
-                      }
-                    />
-                    <span>
-                      <strong>{task.name}</strong>
-                      <small>
-                        {describeSchedule(task.schedule)} · {where(task)}
-                      </small>
-                      <small>
-                        {task.enabled ? (next ? `下次 ${stamp(next)}` : '不会再运行') : '已停用'}
-                        {last && ` · 上次 ${stamp(last.at)} ${last.text}`}
-                      </small>
-                    </span>
+    <>
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand">定时任务</span>
+        </div>
+        <button type="button" className="side-action" onClick={() => setEditing(null)}>
+          <Plus />
+          新建任务
+        </button>
+        <nav className="session-list" aria-label="任务列表">
+          <div className="list-heading">任务</div>
+          {tasks.length === 0 && <p className="project-empty">暂无已安排的任务</p>}
+          {tasks.map((task) => {
+            const next = schedules.next(task);
+            const last = schedules.last(task);
+            return (
+              <div
+                key={task.id}
+                className={`schedule-row ${editing?.id === task.id ? 'selected' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`启用 ${task.name}`}
+                  checked={task.enabled}
+                  onChange={(event) =>
+                    void store(
+                      tasks.map((item) =>
+                        item.id === task.id ? { ...item, enabled: event.target.checked } : item,
+                      ),
+                    )
+                  }
+                />
+                <span>
+                  <strong>{task.name}</strong>
+                  <small>
+                    {describeSchedule(task.schedule)} · {where(task)}
+                  </small>
+                  <small>
+                    {task.enabled ? (next ? `下次 ${stamp(next)}` : '不会再运行') : '已停用'}
+                    {last && ` · 上次 ${stamp(last.at)} ${last.text}`}
+                  </small>
+                  <span className="schedule-row-actions">
                     <IconButton
                       title={`立即运行 ${task.name}`}
                       onClick={() => void schedules.runNow(task)}
@@ -410,6 +379,7 @@ export default function SchedulePanel({
                         className="button danger"
                         onClick={() => {
                           setRemoving(null);
+                          if (editing?.id === task.id) setEditing(undefined);
                           void store(tasks.filter((item) => item.id !== task.id));
                         }}
                       >
@@ -420,17 +390,69 @@ export default function SchedulePanel({
                         <Trash2 />
                       </IconButton>
                     )}
-                  </div>
-                );
-              })}
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </nav>
+      </aside>
+      <main className="workspace">
+        <section className="page" aria-label="定时任务">
+          {editing !== undefined ? (
+            <div className="page-body">
+              <h1 className="page-title">{editing ? '编辑任务' : '新建任务'}</h1>
+              <div className="card">
+                <Editor
+                  key={editing?.id ?? 'new'}
+                  task={editing}
+                  sessions={sessions}
+                  projects={projects}
+                  capabilities={capabilities}
+                  cancel={() => setEditing(undefined)}
+                  save={async (task) => {
+                    await schedules.save(
+                      tasks.some((item) => item.id === task.id)
+                        ? tasks.map((item) => (item.id === task.id ? task : item))
+                        : [...tasks, task],
+                    );
+                    setEditing(undefined);
+                  }}
+                />
+              </div>
             </div>
-            <button type="button" className="button primary" onClick={() => setEditing(null)}>
-              <Plus />
-              新建任务
-            </button>
-          </>
-        )}
-      </div>
-    </section>
+          ) : (
+            <div className="page-body page-center">
+              <div className="empty-state">
+                <CalendarClock />
+                <h2>安排任务</h2>
+                <p className="muted">
+                  到点时由这台电脑上的客户端向会话发送一条带“定时任务”标签的消息，让 Claude Code
+                  替你处理重复的事。
+                </p>
+                <button type="button" className="button primary" onClick={() => setEditing(null)}>
+                  新建任务
+                </button>
+              </div>
+              <ul className="page-notes muted">
+                <li>只在客户端运行并已连接时触发；晚于计划 10 分钟仍发不出的那一次会跳过。</li>
+                <li>无人值守时请让目标会话使用自动审批，否则会停在审批处。</li>
+                {schedules.path && (
+                  <li>
+                    配置文件 <code>{schedules.path}</code>
+                    ：可以直接编辑，也可以让 Claude 代为设置，几秒内生效。
+                  </li>
+                )}
+              </ul>
+              {[...schedules.problems, ...(failure ? [failure] : [])].map((problem) => (
+                <p key={problem} className="error-text" role="alert">
+                  {problem}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
+    </>
   );
 }

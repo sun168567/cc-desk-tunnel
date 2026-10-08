@@ -8,17 +8,22 @@ import {
   useSyncExternalStore,
 } from 'react';
 import {
-  CalendarClock,
+  CircleHelp,
   Download,
+  FileDown,
+  FolderOpen,
   GitFork,
   LogOut,
-  Settings2,
-  PanelLeft,
   Pencil,
+  Pin,
+  PinOff,
+  Plus,
   RefreshCw,
+  Settings,
   SquareTerminal,
   Trash2,
   Unplug,
+  UserRound,
   X,
 } from 'lucide-react';
 import { GithubMark, openProject, project } from './project.tsx';
@@ -39,12 +44,25 @@ import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
 import LoginPage from './LoginPage.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
-import { isInside, isNewer, withProject } from './paths.ts';
-import { AddProjectDialog, DeleteSessionDialog, RenameSessionDialog } from './SessionDialogs.tsx';
-import SettingsPanel from './SettingsPanel.tsx';
+import { exportSession } from './exportSession.ts';
+import { useNotifications } from './notifications.ts';
+import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
+import { setPrefs, toggled, usePrefs } from './prefs.ts';
+import Rail from './Rail.tsx';
+import type { Page } from './Rail.tsx';
+import {
+  AddProjectDialog,
+  DeleteSessionDialog,
+  RenameProjectDialog,
+  RenameSessionDialog,
+} from './SessionDialogs.tsx';
+import SettingsPage from './SettingsPage.tsx';
+import type { Section } from './SettingsPage.tsx';
 import Sidebar from './Sidebar.tsx';
+import TitleBar from './TitleBar.tsx';
+import type { BarMenu } from './TitleBar.tsx';
 import { IconButton, Menu } from './ui.tsx';
-import type { MenuItem } from './ui.tsx';
+import type { MenuItem, MenuPosition } from './ui.tsx';
 
 const NativeTerminal = lazy(() => import('./NativeTerminal.tsx'));
 
@@ -55,6 +73,18 @@ function latest<T extends EventPayload['type']>(events: SessionEvent[], type: T)
     { type: T }
   > | null;
 }
+// Where the window is: a page, the settings section when that page is open, and the session being read.
+type Place = { page: Page; section: Section; sessionId: string | null };
+// Which menu is open. Its items are built while rendering, so they follow the state as it changes.
+type OpenMenu = MenuPosition &
+  (
+    | { kind: 'session'; sessionId: string }
+    | { kind: 'project'; path: string }
+    | { kind: 'settings' }
+    | { kind: 'update' }
+    | { kind: 'bar'; label: string }
+  );
+const narrow = () => matchMedia('(max-width: 700px)').matches;
 function savedProjects(): string[] {
   try {
     const value = JSON.parse(localStorage.getItem('proxy-projects') ?? '[]');
@@ -89,30 +119,41 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false);
   const refreshed = useRef(new Set<string>());
   const [projects, setProjects] = useState(savedProjects);
-  const [workspaceRoot, setWorkspaceRoot] = useState('');
+  // The folders that hold sessions without a project; new ones are made in the first.
+  const [workspaceRoots, setWorkspaceRoots] = useState<string[]>([]);
   const [drafts, setDraft] = useDrafts();
   const [scenario, setScenario] = useState<Scenario>('chat');
   const [slashOpen, setSlashOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  // The page shown in place of the conversation, if any.
-  const [panel, setPanel] = useState<'account' | 'settings' | 'schedules' | null>(null);
-  const accountOpen = panel === 'account';
+  // The side column is shown beside the page on a wide window and laid over it on a narrow one.
+  const [sideOpen, setSideOpen] = useState(() => !narrow());
+  const closeSide = useCallback(() => {
+    if (narrow()) setSideOpen(false);
+  }, []);
+  // Crossing between the two layouts starts from each one's usual state.
+  useEffect(() => {
+    const query = matchMedia('(max-width: 700px)');
+    const follow = () => setSideOpen(!query.matches);
+    query.addEventListener('change', follow);
+    return () => query.removeEventListener('change', follow);
+  }, []);
+  const [place, setPlace] = useState<Place>({ page: 'chat', section: 'account', sessionId: null });
+  // Places visited, for the title bar's way back and forward.
+  const trail = useRef<{ places: Place[]; at: number }>({ places: [place], at: 0 });
+  const [, setTrailAt] = useState(0);
+  const accountOpen = place.page === 'settings' && place.section === 'account';
+  const prefs = usePrefs();
   const [version, setVersion] = useState('');
   useEffect(() => {
     void window.desktop?.version().then(setVersion);
   }, []);
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
   const closeTerminal = useCallback(() => setTerminalSessionId(null), []);
-  const [menu, setMenu] = useState<{
-    sessionId?: string;
-    x: number;
-    y: number;
-    above?: boolean;
-  } | null>(null);
+  const [menu, setMenu] = useState<OpenMenu | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteSession, setDeleteSession] = useState<Session | null>(null);
   const [renameSession, setRenameSession] = useState<Session | null>(null);
+  const [renameProject, setRenameProject] = useState<string | null>(null);
 
   const nativeMode = state.adapter === 'claude-code';
   const connected = state.status === 'connected';
@@ -227,13 +268,18 @@ export function App() {
   }, []);
   useEffect(() => {
     if (connected) void window.desktop?.saveLogin(form);
-  }, [connected]);
+  }, [connected, form.remember, form.autoLogin]);
   useEffect(() => {
     const close = () => client.disconnect();
     const unsubscribe = window.desktop?.onProxyClosed(() => {
       client.disconnect();
       setForm((current) => (current.remember ? current : { ...current, token: '' }));
       setError((value) => value ?? client.state.error ?? '远程连接已关闭，请重新登录。');
+      notifications.push({
+        kind: 'connection',
+        title: '连接中断',
+        body: client.state.error ?? '远程连接已关闭，请重新登录。',
+      });
     });
     window.addEventListener('beforeunload', close);
     return () => {
@@ -249,7 +295,7 @@ export function App() {
     }
   }, [connected]);
   useEffect(() => {
-    if (connected) void window.desktop?.workspaceRoot().then(setWorkspaceRoot);
+    if (connected) void window.desktop?.workspaceRoots().then(setWorkspaceRoots);
   }, [connected]);
   useEffect(() => {
     localStorage.setItem('proxy-projects', JSON.stringify(projects));
@@ -324,11 +370,47 @@ export function App() {
     setForm((current) => (current.remember ? current : { ...current, token: '' }));
     void window.desktop?.disconnectProxy();
   }
-  function show(sessionId: string) {
-    client.select(sessionId);
-    setPanel(null);
-    setSidebarOpen(false);
+  // Moves the window to a place and remembers it; going back or forward revisits without adding to the trail.
+  function visit(next: Place, record = true) {
+    if (next.sessionId && next.sessionId !== client.state.selectedId) client.select(next.sessionId);
+    setPlace(next);
+    closeSide();
+    if (!record) return;
+    const { places, at } = trail.current;
+    const last = places[at];
+    if (
+      last.page === next.page &&
+      last.section === next.section &&
+      last.sessionId === next.sessionId
+    )
+      return;
+    trail.current = { places: [...places.slice(0, at + 1), next].slice(-50), at: 0 };
+    trail.current.at = trail.current.places.length - 1;
+    setTrailAt(trail.current.at);
   }
+  function step(by: number) {
+    const { places } = trail.current;
+    // Sessions deleted since are passed over.
+    for (let at = trail.current.at + by; at >= 0 && at < places.length; at += by) {
+      const target = places[at];
+      if (target.sessionId && !state.sessions.some((item) => item.id === target.sessionId))
+        continue;
+      trail.current.at = at;
+      setTrailAt(at);
+      visit(target, false);
+      return;
+    }
+  }
+  const stepAvailable = (by: number) => {
+    const { places } = trail.current;
+    for (let at = trail.current.at + by; at >= 0 && at < places.length; at += by)
+      if (!places[at].sessionId || state.sessions.some((item) => item.id === places[at].sessionId))
+        return true;
+    return false;
+  };
+  const show = (sessionId: string) => visit({ ...place, page: 'chat', sessionId });
+  const open = (page: Page, section: Section = place.section) =>
+    visit({ page, section, sessionId: client.state.selectedId });
   async function refreshStatus(sessionId = selected?.id ?? state.sessions[0]?.id) {
     if (!sessionId || refreshing) return;
     setRefreshing(true);
@@ -342,14 +424,10 @@ export function App() {
   }
   async function createSession(projectPath: string) {
     const response = await client.request({ type: 'session.create', title: '新会话', projectPath });
-    if (response.sessionId) client.select(response.sessionId);
+    if (response.sessionId) show(response.sessionId);
   }
   async function createInProject(path: string) {
-    await act(async () => {
-      await createSession(path);
-      setPanel(null);
-      setSidebarOpen(false);
-    });
+    await act(() => createSession(path));
   }
   async function addProject() {
     if (!window.desktop?.chooseProject) {
@@ -372,8 +450,6 @@ export function App() {
           await window.desktop!.removeWorkspace(directory);
           throw error;
         }
-        setPanel(null);
-        setSidebarOpen(false);
       });
       return;
     }
@@ -383,46 +459,58 @@ export function App() {
   }
   // A due task is an ordinary message: to its session once that is idle, or to a session made for it. It is
   // never queued into a run, and waits while the native terminal holds the CLI.
-  const schedules = useSchedules(async (task, due) => {
-    const { status, sessions, selectedId } = client.state;
-    if (status !== 'connected' || sessions.some((item) => item.activeRun?.surface === 'terminal'))
-      return false;
-    let session: Session | undefined;
-    if (task.target.type === 'session') {
-      const { sessionId } = task.target;
-      session = sessions.find((item) => item.id === sessionId);
-      if (!session) throw new Error('目标会话已不存在');
-      if (session.activeRun) return false;
-    } else {
-      const created = await client.request({
-        type: 'session.create',
-        title: task.name,
-        projectPath: task.target.projectPath,
-      });
-      session = client.state.sessions.find((item) => item.id === created.sessionId);
-      if (!session) throw new Error('新会话创建失败');
-      // Creating a session moved the live stream to it; the session being read takes it back.
-      if (selectedId) client.select(selectedId);
-    }
-    if (
-      (task.model && task.model !== session.model) ||
-      (task.effort && task.effort !== session.effort)
-    )
+  const notifications = useNotifications(client, () =>
+    place.page === 'chat' ? client.state.selectedId : null,
+  );
+  useEffect(() => window.desktop?.onNotifyClicked((sessionId) => sessionId && show(sessionId)));
+  const schedules = useSchedules(
+    async (task, due) => {
+      const { status, sessions, selectedId } = client.state;
+      if (status !== 'connected' || sessions.some((item) => item.activeRun?.surface === 'terminal'))
+        return false;
+      let session: Session | undefined;
+      if (task.target.type === 'session') {
+        const { sessionId } = task.target;
+        session = sessions.find((item) => item.id === sessionId);
+        if (!session) throw new Error('目标会话已不存在');
+        if (session.activeRun) return false;
+      } else {
+        const created = await client.request({
+          type: 'session.create',
+          title: task.name,
+          projectPath: task.target.projectPath,
+        });
+        session = client.state.sessions.find((item) => item.id === created.sessionId);
+        if (!session) throw new Error('新会话创建失败');
+        // Creating a session moved the live stream to it; the session being read takes it back.
+        if (selectedId) client.select(selectedId);
+      }
+      if (
+        (task.model && task.model !== session.model) ||
+        (task.effort && task.effort !== session.effort)
+      )
+        await client.request({
+          type: 'session.configure',
+          sessionId: session.id,
+          permissionMode: session.permissionMode,
+          model: task.model ?? session.model,
+          effort: task.effort ?? session.effort,
+        });
       await client.request({
-        type: 'session.configure',
+        type: 'message.send',
         sessionId: session.id,
-        permissionMode: session.permissionMode,
-        model: task.model ?? session.model,
-        effort: task.effort ?? session.effort,
+        text: taskMessage(task, due),
+        scenario: 'chat',
       });
-    await client.request({
-      type: 'message.send',
-      sessionId: session.id,
-      text: taskMessage(task, due),
-      scenario: 'chat',
-    });
-    return true;
-  });
+      return true;
+    },
+    (task, outcome) =>
+      notifications.push({
+        kind: 'schedule',
+        title: '定时任务未发出',
+        body: `${task.name}：${outcome.text}`,
+      }),
+  );
   // A fork continues from the same context in a session of its own. Forking before a message brings that
   // message back as a draft, which is how an earlier message is edited and sent again.
   async function fork(session: Session, before?: { id: string; text: string }) {
@@ -472,14 +560,24 @@ export function App() {
   function sessionMenu(session: Session): MenuItem[] {
     const idle = connected && !busy && !terminalSessionId && !terminalActive;
     const anyRun = state.sessions.some((item) => !!item.activeRun);
+    const pinned = prefs.pinnedSessions.includes(session.id);
     return [
+      {
+        label: pinned ? '取消置顶' : '置顶',
+        icon: pinned ? <PinOff /> : <Pin />,
+        run: () =>
+          setPrefs((value) => ({
+            ...value,
+            pinnedSessions: toggled(value.pinnedSessions, session.id),
+          })),
+      },
       {
         label: '重命名',
         icon: <Pencil />,
         disabled: !idle || !!session.activeRun,
         run: () => {
           setError(null);
-          setSidebarOpen(false);
+          closeSide();
           setRenameSession(session);
         },
       },
@@ -489,6 +587,16 @@ export function App() {
         disabled: !idle || !!session.activeRun,
         run: () => {
           void fork(session);
+        },
+      },
+      {
+        label: '导出为 Markdown',
+        icon: <FileDown />,
+        disabled: !connected || !!terminalSessionId || terminalActive,
+        run: () => {
+          void act(async () => {
+            await exportSession(client, session);
+          });
         },
       },
       ...(nativeMode
@@ -516,15 +624,193 @@ export function App() {
         label: '删除',
         icon: <Trash2 />,
         danger: true,
+        separated: true,
         disabled: !connected || !!session.activeRun || !!terminalSessionId || terminalActive,
         run: () => {
           setError(null);
-          setSidebarOpen(false);
+          closeSide();
           setDeleteSession(session);
         },
       },
     ];
   }
+  function projectMenu(path: string): MenuItem[] {
+    const key = pathKey(path);
+    const pinned = prefs.pinnedProjects.includes(key);
+    return [
+      {
+        label: '新建会话',
+        icon: <Plus />,
+        disabled: !connected || busy || refreshing || terminalActive,
+        run: () => {
+          void createInProject(path);
+        },
+      },
+      {
+        label: pinned ? '取消置顶' : '置顶',
+        icon: pinned ? <PinOff /> : <Pin />,
+        run: () =>
+          setPrefs((value) => ({ ...value, pinnedProjects: toggled(value.pinnedProjects, key) })),
+      },
+      { label: '修改显示名称', icon: <Pencil />, run: () => setRenameProject(path) },
+      ...(window.desktop
+        ? [
+            {
+              label: '在资源管理器中打开',
+              icon: <FolderOpen />,
+              separated: true,
+              run: () => {
+                void act(() => window.desktop!.openFolder(path));
+              },
+            },
+          ]
+        : []),
+    ];
+  }
+  const adapterName = nativeMode ? 'Claude Code' : 'Simulation';
+  const accountName = signedOut
+    ? '未登录'
+    : (state.account?.email ?? capabilities?.account.email ?? (nativeMode ? '账号' : '离线模拟'));
+  const upgradeItem: MenuItem | null = upgrade
+    ? {
+        label: `升级客户端到 ${upgrade}`,
+        icon: <Download />,
+        disabled: busy || state.sessions.some((item) => !!item.activeRun),
+        run: () => {
+          void act(() => window.desktop!.installUpdate());
+        },
+      }
+    : null;
+  const updates = [
+    ...(upgradeItem ? [upgradeItem] : []),
+    ...(serviceUpdate ? [serviceUpdate] : []),
+  ];
+  // The rail shows its button only for an update that exists, not for the standing offer to look for one.
+  const pendingUpdate = upgrade
+    ? `客户端可升级到 ${upgrade}`
+    : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
+      ? (serviceUpdate?.label ?? null)
+      : null;
+  const settingsMenu: MenuItem[] = [
+    {
+      label: `账号 · ${accountName}`,
+      icon: <UserRound />,
+      detail: signedOut
+        ? '点击登录 Claude 账号'
+        : (state.account?.subscriptionType ??
+          capabilities?.account.subscriptionType ??
+          '账号与额度'),
+      run: () => open('settings', 'account'),
+    },
+    {
+      label: '设置',
+      icon: <Settings />,
+      hint: 'Ctrl+,',
+      separated: true,
+      run: () => open('settings', nativeMode ? 'claude' : 'general'),
+    },
+    { label: '帮助', icon: <CircleHelp />, run: () => open('settings', 'help') },
+    { label: '断开连接', icon: <LogOut />, separated: true, run: disconnect },
+  ];
+  const toggleSide = () => setSideOpen((value) => !value);
+  const canCreate = connected && !busy && !refreshing && !terminalSessionId && !terminalActive;
+  const barMenus: BarMenu[] = [
+    {
+      label: '文件',
+      items: [
+        {
+          label: '新建会话',
+          hint: 'Ctrl+N',
+          disabled: !canCreate,
+          run: () => {
+            void newSession();
+          },
+        },
+        {
+          label: '添加项目…',
+          disabled: !connected || busy || terminalActive,
+          run: () => {
+            void addProject();
+          },
+        },
+        {
+          label: '导出当前会话…',
+          disabled: !selected || !connected || !!terminalSessionId || terminalActive,
+          separated: true,
+          run: () => {
+            void act(async () => {
+              await exportSession(client, selected!);
+            });
+          },
+        },
+        { label: '断开连接', separated: true, run: disconnect },
+        ...(window.desktop ? [{ label: '退出', run: () => void window.desktop!.quit() }] : []),
+      ],
+    },
+    {
+      label: '视图',
+      items: [
+        { label: sideOpen ? '收起侧栏' : '展开侧栏', hint: 'Ctrl+B', run: toggleSide },
+        { label: '会话', separated: true, checked: place.page === 'chat', run: () => open('chat') },
+        {
+          label: '定时任务',
+          checked: place.page === 'schedules',
+          run: () => open('schedules'),
+        },
+        {
+          label: '设置',
+          hint: 'Ctrl+,',
+          checked: place.page === 'settings',
+          run: () => open('settings'),
+        },
+        ...(window.desktop
+          ? [
+              {
+                label: '放大',
+                hint: 'Ctrl++',
+                separated: true,
+                run: () => window.desktop!.zoom(1),
+              },
+              { label: '缩小', hint: 'Ctrl+-', run: () => window.desktop!.zoom(-1) },
+              { label: '实际大小', hint: 'Ctrl+0', run: () => window.desktop!.zoom(0) },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: '帮助',
+      items: [
+        { label: '使用说明', run: () => open('settings', 'help') },
+        {
+          label: '快捷键',
+          run: () => {
+            open('settings', 'help');
+            setTimeout(() => document.getElementById('shortcuts')?.scrollIntoView(), 50);
+          },
+        },
+        ...(project.url ? [{ label: '项目主页', separated: true, run: openProject }] : []),
+        { label: '检查更新与版本信息', run: () => open('settings', 'about') },
+      ],
+    },
+  ];
+  // The shortcuts the menus name.
+  const keys = useRef<(event: KeyboardEvent) => void>(() => {});
+  keys.current = (event) => {
+    if (!connected && state.status !== 'reconnecting') return;
+    const control = event.ctrlKey && !event.altKey && !event.shiftKey;
+    if (event.altKey && event.key === 'ArrowLeft' && !terminalSessionId) step(-1);
+    else if (event.altKey && event.key === 'ArrowRight' && !terminalSessionId) step(1);
+    else if (control && event.key.toLowerCase() === 'b') toggleSide();
+    else if (control && event.key.toLowerCase() === 'n' && canCreate) void newSession();
+    else if (control && event.key === ',') open('settings');
+    else return;
+    event.preventDefault();
+  };
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => keys.current(event);
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, []);
 
   if (state.status === 'disconnected' || state.status === 'connecting')
     return (
@@ -546,88 +832,133 @@ export function App() {
         }}
       />
     );
-  const menuSession = menu && state.sessions.find((item) => item.id === menu.sessionId);
+  const menuSession =
+    menu?.kind === 'session' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
+  const openMenu =
+    !menu || (menu.kind === 'session' && !menuSession)
+      ? null
+      : menu.kind === 'session'
+        ? { label: `会话操作 · ${menuSession!.title}`, items: sessionMenu(menuSession!) }
+        : menu.kind === 'project'
+          ? { label: `项目操作 · ${menu.path}`, items: projectMenu(menu.path) }
+          : menu.kind === 'settings'
+            ? { label: '设置与账号', items: settingsMenu }
+            : menu.kind === 'update'
+              ? { label: '更新', items: updates }
+              : {
+                  label: menu.label,
+                  items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
+                };
+  const sectionNames: Record<Section, string> = {
+    account: '账号与额度',
+    claude: 'Claude Code 设置',
+    general: '常规设置',
+    notifications: '通知设置',
+    help: '帮助',
+    about: '关于与更新',
+  };
   return (
-    <div className={`shell ${sidebarOpen ? 'sidebar-open' : ''}`}>
-      {sidebarOpen && (
+    <div className={`shell ${sideOpen ? '' : 'side-closed'}`}>
+      <TitleBar
+        title={
+          place.page === 'chat'
+            ? (selected?.title ?? 'CC Desk Tunnel')
+            : place.page === 'schedules'
+              ? '定时任务'
+              : sectionNames[place.section]
+        }
+        back={!terminalSessionId && stepAvailable(-1) ? () => step(-1) : undefined}
+        forward={!terminalSessionId && stepAvailable(1) ? () => step(1) : undefined}
+        sideOpen={sideOpen}
+        toggleSide={toggleSide}
+        menus={barMenus}
+        openMenu={(item, position) => setMenu({ kind: 'bar', label: item.label, ...position })}
+        connected={connected}
+        adapterName={adapterName}
+      />
+      <Rail
+        page={place.page}
+        go={(page) => open(page)}
+        update={pendingUpdate}
+        openUpdate={(position) => setMenu({ kind: 'update', ...position })}
+        openSettings={(position) => setMenu({ kind: 'settings', ...position })}
+      />
+      {sideOpen && (
         <button
           className="sidebar-shade"
-          aria-label="收起会话列表"
-          onClick={() => setSidebarOpen(false)}
+          aria-label="收起侧栏"
+          onClick={() => setSideOpen(false)}
         />
       )}
-      <Sidebar
-        sessions={state.sessions}
-        selectedId={selected?.id}
-        projects={projects}
-        workspaceRoot={workspaceRoot}
-        connected={connected}
-        busy={busy}
-        refreshing={refreshing}
-        terminalOpen={!!terminalSessionId}
-        terminalActive={terminalActive}
-        adapterName={nativeMode ? 'Claude Code' : 'Simulation'}
-        accountName={
-          signedOut ? '未登录' : (state.account?.email ?? capabilities?.account.email ?? '账号')
-        }
-        accountDetail={
-          signedOut
-            ? '点击登录 Claude 账号'
-            : (state.account?.subscriptionType ??
-              capabilities?.account.subscriptionType ??
-              (nativeMode ? 'Claude Code' : '离线模拟'))
-        }
-        select={show}
-        newSession={() => {
-          void newSession();
-        }}
-        addProject={() => {
-          void addProject();
-        }}
-        createInProject={(path) => {
-          void createInProject(path);
-        }}
-        openAccount={() => {
-          setPanel('account');
-          setSidebarOpen(false);
-        }}
-        sessionMenu={(session, position) => setMenu({ sessionId: session.id, ...position })}
-        connectionMenu={setMenu}
-        close={() => setSidebarOpen(false)}
-      />
-      <main className="workspace">
-        {panel === 'settings' ? (
-          <SettingsPanel client={client} close={() => setPanel(null)} />
-        ) : panel === 'schedules' ? (
-          <SchedulePanel
-            schedules={schedules}
+      {place.page === 'settings' ? (
+        <SettingsPage
+          client={client}
+          section={place.section}
+          go={(section) => open('settings', section)}
+          native={nativeMode}
+          form={form}
+          changeForm={changeForm}
+          workspaceRoot={workspaceRoots[0] ?? ''}
+          chooseWorkspace={(reset) => {
+            void act(async () => {
+              setWorkspaceRoots(await window.desktop!.chooseWorkspace(reset));
+            });
+          }}
+          version={version}
+          service={state.service}
+          adapterName={adapterName}
+          updates={updates}
+          account={
+            <AccountPanel
+              client={client}
+              account={nativeMode ? state.account : null}
+              capabilities={signedOut ? null : capabilities}
+              metrics={signedOut ? null : accountMetrics}
+              refreshing={refreshing}
+              disabled={!state.sessions.length || !connected || refreshing || terminalActive}
+              error={currentError}
+              refresh={() => {
+                void refreshStatus();
+              }}
+            />
+          }
+        />
+      ) : place.page === 'schedules' ? (
+        <SchedulePanel
+          schedules={schedules}
+          sessions={state.sessions}
+          projects={projects}
+          capabilities={capabilities}
+        />
+      ) : (
+        <>
+          <Sidebar
             sessions={state.sessions}
+            selectedId={selected?.id}
             projects={projects}
-            capabilities={capabilities}
-            close={() => setPanel(null)}
-          />
-        ) : accountOpen ? (
-          <AccountPanel
-            client={client}
-            account={nativeMode ? state.account : null}
-            capabilities={signedOut ? null : capabilities}
-            metrics={signedOut ? null : accountMetrics}
+            workspaceRoots={workspaceRoots}
+            connected={connected}
+            busy={busy}
             refreshing={refreshing}
-            disabled={!state.sessions.length || !connected || refreshing || terminalActive}
-            error={currentError}
-            refresh={() => {
-              void refreshStatus();
+            terminalOpen={!!terminalSessionId}
+            terminalActive={terminalActive}
+            notifications={notifications}
+            select={show}
+            newSession={() => {
+              void newSession();
             }}
-            close={() => setPanel(null)}
+            addProject={() => {
+              void addProject();
+            }}
+            createInProject={(path) => {
+              void createInProject(path);
+            }}
+            sessionMenu={(session, position) =>
+              setMenu({ kind: 'session', sessionId: session.id, ...position })
+            }
+            projectMenu={(path, position) => setMenu({ kind: 'project', path, ...position })}
           />
-        ) : (
-          <>
-            <header className="workspace-bar">
-              <IconButton title="展开会话列表" onClick={() => setSidebarOpen(true)}>
-                <PanelLeft />
-              </IconButton>
-              <h1>{selected?.title ?? '会话'}</h1>
-            </header>
+          <main className="workspace">
             {terminalSessionId && connected && (
               <Suspense
                 fallback={
@@ -699,6 +1030,12 @@ export function App() {
             {selected && !terminalSessionId && (
               <Composer
                 session={selected}
+                projectName={
+                  isInside(selected.projectPath, workspaceRoots)
+                    ? null
+                    : prefs.projectNames[pathKey(selected.projectPath)] ||
+                      folderName(selected.projectPath)
+                }
                 draft={draft}
                 setDraft={(text) => setDraft(selected.id, text)}
                 native={nativeMode}
@@ -737,59 +1074,17 @@ export function App() {
                 }}
               />
             )}
-          </>
-        )}
-      </main>
-      {menu && (!menu.sessionId || menuSession) && (
+          </main>
+        </>
+      )}
+      {menu && openMenu && (
         <Menu
-          label={menuSession ? `会话操作 · ${menuSession.title}` : '连接'}
+          label={openMenu.label}
           x={menu.x}
           y={menu.y}
           above={menu.above}
           onClose={closeMenu}
-          items={
-            menuSession
-              ? sessionMenu(menuSession)
-              : [
-                  ...(nativeMode
-                    ? [
-                        {
-                          label: 'Claude Code 设置',
-                          icon: <Settings2 />,
-                          run: () => {
-                            setPanel('settings');
-                            setSidebarOpen(false);
-                          },
-                        },
-                      ]
-                    : []),
-                  {
-                    label: '定时任务',
-                    icon: <CalendarClock />,
-                    run: () => {
-                      setPanel('schedules');
-                      setSidebarOpen(false);
-                    },
-                  },
-                  ...(upgrade
-                    ? [
-                        {
-                          label: `升级到 ${upgrade}`,
-                          icon: <Download />,
-                          disabled: busy || state.sessions.some((item) => !!item.activeRun),
-                          run: () => {
-                            void act(() => window.desktop!.installUpdate());
-                          },
-                        },
-                      ]
-                    : []),
-                  ...(serviceUpdate ? [serviceUpdate] : []),
-                  ...(project.url
-                    ? [{ label: project.name, icon: <GithubMark />, run: openProject }]
-                    : []),
-                  { label: '断开连接', icon: <LogOut />, run: disconnect },
-                ]
-          }
+          items={openMenu.items}
         />
       )}
       {createOpen && (
@@ -820,10 +1115,26 @@ export function App() {
               await client.request({ type: 'session.delete', sessionId: deleteSession.id });
               setDraft(deleteSession.id, '');
               // A plain session's directory goes with it when the session left nothing there.
-              if (isInside(deleteSession.projectPath, workspaceRoot))
+              if (isInside(deleteSession.projectPath, workspaceRoots))
                 void window.desktop?.removeWorkspace(deleteSession.projectPath);
               setDeleteSession(null);
             });
+          }}
+        />
+      )}
+      {renameProject && (
+        <RenameProjectDialog
+          path={renameProject}
+          name={prefs.projectNames[pathKey(renameProject)] ?? ''}
+          close={() => setRenameProject(null)}
+          rename={(name) => {
+            setPrefs((value) => {
+              const projectNames = { ...value.projectNames };
+              if (name) projectNames[pathKey(renameProject)] = name;
+              else delete projectNames[pathKey(renameProject)];
+              return { ...value, projectNames };
+            });
+            setRenameProject(null);
           }}
         />
       )}

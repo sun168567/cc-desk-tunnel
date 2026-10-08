@@ -1,114 +1,136 @@
-import { useMemo, useState } from 'react';
-import {
-  ChevronDown,
-  Ellipsis,
-  Folder,
-  MessageSquare,
-  Plus,
-  Search,
-  SquareTerminal,
-  UserRound,
-  X,
-} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Ellipsis, Folder, Pin, Plus, Search, SquarePen, X } from 'lucide-react';
 import type { Session } from '@cc-desk-tunnel/protocol';
-import { folderName, isInside, pathKey } from './paths.ts';
+import NoticeBell from './NoticeBell.tsx';
+import type { Notifications } from './notifications.ts';
+import { ago, folderName, isInside, pathKey } from './paths.ts';
+import { setPrefs, toggled, usePrefs } from './prefs.ts';
 import { IconButton } from './ui.tsx';
-
-type MenuPosition = { x: number; y: number; above?: boolean };
+import type { MenuPosition } from './ui.tsx';
 
 function activity(session: Session) {
-  if (!session.activeRun) return new Date(session.updatedAt).toLocaleDateString('zh-CN');
+  if (!session.activeRun) return ago(Date.parse(session.updatedAt));
   if (session.activeRun.surface === 'terminal') return '原生终端';
-  return session.activeRun.status === 'awaiting_approval' ? '等待审批' : '运行中';
+  return session.activeRun.status === 'awaiting_approval' ? '等待处理' : '运行中';
 }
 
 export default function Sidebar({
   sessions,
   selectedId,
   projects,
-  workspaceRoot,
+  workspaceRoots,
   connected,
   busy,
   refreshing,
   terminalOpen,
   terminalActive,
-  adapterName,
-  accountName,
-  accountDetail,
+  notifications,
   select,
   newSession,
   addProject,
   createInProject,
-  openAccount,
   sessionMenu,
-  connectionMenu,
-  close,
+  projectMenu,
 }: {
   sessions: Session[];
   selectedId: string | undefined;
   projects: string[];
-  // Sessions whose directory lies under this root belong to no project and are listed on their own.
-  workspaceRoot: string;
+  // Sessions whose directory lies under one of these belong to no project and are listed on their own.
+  workspaceRoots: string[];
   connected: boolean;
   busy: boolean;
   refreshing: boolean;
   // `terminalOpen` is this window's terminal; `terminalActive` also covers one held by another connection.
   terminalOpen: boolean;
   terminalActive: boolean;
-  adapterName: string;
-  accountName: string;
-  accountDetail: string;
+  notifications: Notifications;
   select: (sessionId: string) => void;
   newSession: () => void;
   addProject: () => void;
   createInProject: (path: string) => void;
-  openAccount: () => void;
   sessionMenu: (session: Session, position: MenuPosition) => void;
-  connectionMenu: (position: MenuPosition) => void;
-  close: () => void;
+  projectMenu: (path: string, position: MenuPosition) => void;
 }) {
+  const prefs = usePrefs();
   const [search, setSearch] = useState('');
-  const { plain, groups } = useMemo(() => {
+  const [searching, setSearching] = useState(false);
+  const { pinned, plain, groups } = useMemo(() => {
     const grouped = new Map<string, Session[]>();
     const plain: Session[] = [];
+    const pinned: Session[] = [];
     const term = search.trim().toLowerCase();
     for (const path of projects) grouped.set(pathKey(path), []);
     for (const session of sessions) {
-      if (isInside(session.projectPath, workspaceRoot)) {
-        if (session.title.toLowerCase().includes(term)) plain.push(session);
+      const loose = isInside(session.projectPath, workspaceRoots);
+      const text = loose ? session.title : `${session.title} ${session.projectPath}`;
+      if (!text.toLowerCase().includes(term)) continue;
+      if (prefs.pinnedSessions.includes(session.id)) {
+        pinned.push(session);
+        if (loose) continue;
+      } else if (loose) {
+        plain.push(session);
         continue;
       }
-      if (!`${session.title} ${session.projectPath}`.toLowerCase().includes(term)) continue;
       const key = pathKey(session.projectPath);
       const members = grouped.get(key) ?? [];
-      members.push(session);
+      if (!prefs.pinnedSessions.includes(session.id)) members.push(session);
       grouped.set(key, members);
     }
+    const first = (key: string) => (prefs.pinnedProjects.includes(key) ? 0 : 1);
     return {
+      pinned,
       plain,
       groups: [...grouped.entries()]
         .map(([key, members]) => ({
-          path: members[0]?.projectPath ?? projects.find((path) => pathKey(path) === key)!,
+          key,
+          path:
+            projects.find((path) => pathKey(path) === key) ??
+            sessions.find((session) => pathKey(session.projectPath) === key)!.projectPath,
           sessions: members,
         }))
         .filter(
-          (group) =>
-            group.sessions.length ||
-            !search ||
-            group.path.toLowerCase().includes(search.toLowerCase()),
-        ),
+          (group) => group.sessions.length || !term || group.path.toLowerCase().includes(term),
+        )
+        // Array.sort is stable: pinned projects come first, the rest keep their order.
+        .sort((a, b) => first(a.key) - first(b.key)),
     };
-  }, [sessions, search, projects, workspaceRoot]);
+  }, [sessions, search, projects, workspaceRoots, prefs.pinnedSessions, prefs.pinnedProjects]);
+
+  // A card beside the row tells what the short line cannot: the whole title, the project and the time.
+  const [card, setCard] = useState<{ session: Session; top: number; left: number } | null>(null);
+  const hover = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const aside = useRef<HTMLElement>(null);
+  const leave = () => {
+    clearTimeout(hover.current);
+    setCard(null);
+  };
+  useEffect(() => leave, []);
 
   function renderSession(session: Session) {
+    const isPinned = prefs.pinnedSessions.includes(session.id);
     return (
       <div
         className={`session-row ${selectedId === session.id ? 'selected' : ''}`}
         key={session.id}
         onContextMenu={(event) => {
           event.preventDefault();
+          leave();
           sessionMenu(session, { x: event.clientX, y: event.clientY });
         }}
+        onMouseEnter={(event) => {
+          const row = event.currentTarget.getBoundingClientRect();
+          clearTimeout(hover.current);
+          hover.current = setTimeout(
+            () =>
+              setCard({
+                session,
+                top: row.top,
+                left: aside.current!.getBoundingClientRect().right + 8,
+              }),
+            600,
+          );
+        }}
+        onMouseLeave={leave}
       >
         <button
           type="button"
@@ -116,18 +138,28 @@ export default function Sidebar({
           disabled={terminalOpen || terminalActive}
           onClick={() => select(session.id)}
         >
-          <MessageSquare />
-          <span>
-            <strong>{session.title}</strong>
-            <small>{activity(session)}</small>
-          </span>
+          <strong>{session.title}</strong>
           {session.activeRun && <span className="running-dot" />}
+          <small>{activity(session)}</small>
         </button>
         <IconButton
+          title={isPinned ? '取消置顶' : '置顶'}
+          className="row-action"
+          onClick={() =>
+            setPrefs((value) => ({
+              ...value,
+              pinnedSessions: toggled(value.pinnedSessions, session.id),
+            }))
+          }
+        >
+          <Pin />
+        </IconButton>
+        <IconButton
           title="会话操作"
-          className="session-more"
+          className="row-action session-more"
           onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
+            leave();
             sessionMenu(session, { x: box.left, y: box.bottom + 4 });
           }}
         >
@@ -137,36 +169,50 @@ export default function Sidebar({
     );
   }
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" ref={aside}>
       <div className="sidebar-brand">
-        <div className="brand">
-          <SquareTerminal />
-          <span>CC Desk Tunnel</span>
-        </div>
-        <IconButton className="mobile-only" title="收起会话列表" onClick={close}>
-          <X />
+        <span className="brand">CC Desk Tunnel</span>
+        <NoticeBell notifications={notifications} open={select} />
+        <IconButton
+          title={searching ? '关闭搜索' : '搜索'}
+          onClick={() => {
+            setSearching((value) => !value);
+            setSearch('');
+          }}
+        >
+          {searching ? <X /> : <Search />}
         </IconButton>
       </div>
+      {searching && (
+        <label className="session-search">
+          <Search />
+          <input
+            autoFocus
+            aria-label="搜索会话"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setSearching(false);
+                setSearch('');
+              }
+            }}
+            placeholder="搜索会话或项目"
+          />
+        </label>
+      )}
       <button
         type="button"
-        className="button new-session"
+        className="side-action new-session"
         disabled={!connected || busy || refreshing || terminalOpen || terminalActive}
         onClick={newSession}
       >
-        <Plus />
+        <SquarePen />
         新建会话
       </button>
-      <label className="session-search">
-        <Search />
-        <input
-          aria-label="搜索会话"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="搜索会话或项目"
-        />
-      </label>
       <nav className="session-list" aria-label="会话列表">
-        {plain.map(renderSession)}
+        {pinned.length > 0 && <div className="list-heading">置顶</div>}
+        {pinned.map(renderSession)}
         <div className="list-heading">
           项目
           <IconButton
@@ -177,13 +223,31 @@ export default function Sidebar({
             <Plus />
           </IconButton>
         </div>
-        {groups.map(({ path, sessions: members }) => (
-          <section className="project-group" key={path.toLowerCase()}>
-            <h2 title={path}>
+        {groups.map(({ key, path, sessions: members }) => (
+          <section className="project-group" key={key}>
+            <h2
+              title={path}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                projectMenu(path, { x: event.clientX, y: event.clientY });
+              }}
+            >
               <Folder />
-              <span>{folderName(path)}</span>
+              <span>{prefs.projectNames[key] || folderName(path)}</span>
+              {prefs.pinnedProjects.includes(key) && <Pin className="pin-mark" />}
+              <IconButton
+                title={`项目操作 · ${path}`}
+                className="row-action"
+                onClick={(event) => {
+                  const box = event.currentTarget.getBoundingClientRect();
+                  projectMenu(path, { x: box.left, y: box.bottom + 4 });
+                }}
+              >
+                <Ellipsis />
+              </IconButton>
               <IconButton
                 title={`新建会话 · ${path}`}
+                className="row-action"
                 disabled={!connected || busy || refreshing || terminalActive}
                 onClick={() => createInProject(path)}
               >
@@ -194,32 +258,29 @@ export default function Sidebar({
             {!members.length && <p className="project-empty">暂无会话</p>}
           </section>
         ))}
-        {groups.length === 0 && plain.length === 0 && (
-          <p className="list-empty">{search ? '没有匹配会话' : '暂无会话'}</p>
+        {groups.length === 0 && (
+          <p className="project-empty">{search ? '没有匹配的项目' : '还没有项目'}</p>
+        )}
+        {plain.length > 0 && <div className="list-heading">最近</div>}
+        {plain.map(renderSession)}
+        {search && groups.length === 0 && plain.length === 0 && pinned.length === 0 && (
+          <p className="list-empty">没有匹配会话</p>
         )}
       </nav>
-      <button className="account-entry" type="button" onClick={openAccount}>
-        <UserRound />
-        <span>
-          <strong>{accountName}</strong>
-          <small>{accountDetail}</small>
-        </span>
-        <ChevronDown />
-      </button>
-      <button
-        className="sidebar-footer"
-        type="button"
-        aria-haspopup="menu"
-        title="连接"
-        onClick={(event) => {
-          const box = event.currentTarget.getBoundingClientRect();
-          connectionMenu({ x: box.left + 12, y: box.top + 2, above: true });
-        }}
-      >
-        <span className={`connection-dot ${connected ? 'online' : ''}`} />
-        <span>{connected ? '已连接' : '重连中'}</span>
-        <span className="adapter-label">{adapterName}</span>
-      </button>
+      {card && (
+        <div className="session-card" role="tooltip" style={{ top: card.top, left: card.left }}>
+          <strong>{card.session.title}</strong>
+          <span>
+            <Folder />
+            {isInside(card.session.projectPath, workspaceRoots)
+              ? '普通会话'
+              : card.session.projectPath}
+          </span>
+          <small>
+            {activity(card.session)} · {new Date(card.session.updatedAt).toLocaleString('zh-CN')}
+          </small>
+        </div>
+      )}
     </aside>
   );
 }

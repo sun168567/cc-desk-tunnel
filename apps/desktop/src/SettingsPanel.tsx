@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Settings2, X } from 'lucide-react';
 import type { NativeSettings } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
-import { IconButton } from './ui.tsx';
 
 type Toggle = {
   [K in keyof NativeSettings]: NativeSettings[K] extends boolean | null ? K : never;
@@ -42,13 +40,7 @@ const size = (tokens: number) =>
 
 // Edits the official CLI's user settings on the cloud host. Each change is saved at once; "默认" removes the
 // key so the CLI's own default applies.
-export default function SettingsPanel({
-  client,
-  close,
-}: {
-  client: ProxyClient;
-  close: () => void;
-}) {
+export default function SettingsPanel({ client }: { client: ProxyClient }) {
   const [values, setValues] = useState<NativeSettings | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -81,17 +73,9 @@ export default function SettingsPanel({
     }
   }
   return (
-    <section className="account-page" aria-label="Claude Code 设置">
-      <header className="account-heading">
-        <h1>
-          <Settings2 />
-          Claude Code 设置
-        </h1>
-        <IconButton title="关闭设置" onClick={close}>
-          <X />
-        </IconButton>
-      </header>
-      <div className="account-body">
+    <section className="page" aria-label="Claude Code 设置">
+      <div className="page-body">
+        <h1 className="page-title">Claude Code</h1>
         <p className="muted">
           这里修改的是云端官方 CLI 的用户设置文件，从下一次运行起生效；“默认”表示不写入该项，由 CLI
           自行决定。
@@ -102,7 +86,7 @@ export default function SettingsPanel({
           </p>
         )}
         {values && (
-          <div className="settings-list">
+          <div className="settings-list card">
             <label>
               <span>
                 <strong>自动压缩窗口</strong>

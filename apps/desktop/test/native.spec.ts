@@ -25,6 +25,11 @@ async function send(page: Page, text: string) {
   await page.getByRole('button', { name: '发送消息', exact: true }).click();
   await expect(page.locator('.message.user')).toHaveCount(before + 1);
 }
+async function permission(page: Page, name: string) {
+  await page.getByRole('button', { name: '审批模式', exact: true }).click();
+  await page.getByRole('menuitemradio', { name, exact: true }).click();
+  await expect(page.getByRole('button', { name: '审批模式', exact: true })).toContainText(name);
+}
 async function rename(page: Page, title: string) {
   await settled(page);
   const row = page.locator('.session-row.selected');
@@ -93,7 +98,7 @@ test('official subscription: account metrics, Windows execution, running input, 
       await page.getByLabel('服务证书指纹', { exact: true }).fill(connection.fingerprint ?? '');
       await page.getByLabel('服务凭据', { exact: true }).fill(connection.token);
       await page.getByRole('button', { name: '连接', exact: true }).click();
-      await expect(page.locator('.sidebar-footer')).toContainText('已连接', { timeout: 45000 });
+      await expect(page.locator('.connection-status')).toContainText('已连接', { timeout: 45000 });
     }
     await connect();
     await page.getByRole('button', { name: '添加项目', exact: true }).click();
@@ -102,15 +107,17 @@ test('official subscription: account metrics, Windows execution, running input, 
     const marker = `PRO-STREAM-${Date.now()}`;
     await rename(page, marker);
 
-    await page.locator('.account-entry').click();
+    await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^账号/ }).click();
     const account = page.getByRole('region', { name: '账号信息' });
     await expect(account.locator('.account-identity')).toContainText(/pro/i);
     await expect(account.locator('.quota-row')).not.toHaveCount(0);
     await expect(account.locator('.quota-row').first()).toContainText('重置');
     await page.screenshot({ path: resolve('.local/screenshots/subscription-account.png') });
-    await page.getByRole('button', { name: '关闭账号信息', exact: true }).click();
+    await page.getByRole('button', { name: '会话', exact: true }).click();
 
     await page.getByRole('button', { name: '模型与推理强度', exact: true }).click();
+    await page.locator('.model-current').click();
     await expect(
       page.getByRole('listbox', { name: '模型', exact: true }).getByRole('option'),
     ).not.toHaveCount(0);
@@ -122,8 +129,7 @@ test('official subscription: account metrics, Windows execution, running input, 
     await expect(page.getByRole('tooltip')).toContainText('tokens');
     await page.mouse.move(10, 10);
 
-    await page.getByLabel('审批模式').selectOption('default');
-    await expect(page.getByLabel('审批模式')).toHaveValue('default');
+    await permission(page, '手动审批');
     await send(
       page,
       '仅调用一次 Bash，通过 SSH 在 Windows PowerShell 执行 Start-Sleep -Seconds 5，然后回复完成。不要读写任何文件。',
@@ -143,8 +149,7 @@ test('official subscription: account metrics, Windows execution, running input, 
     await expect(page.locator('.tool-heading').filter({ hasText: 'mcp__' })).toHaveCount(0);
     await page.screenshot({ path: resolve('.local/screenshots/subscription-intervention.png') });
 
-    await page.getByLabel('审批模式').selectOption('auto');
-    await expect(page.getByLabel('审批模式')).toHaveValue('auto');
+    await permission(page, '自动审批');
     await page.getByRole('textbox', { name: '消息' }).fill('/');
     await expect(page.getByRole('listbox', { name: '会话命令' })).toBeVisible();
     await page.getByRole('option', { name: '压缩上下文', exact: false }).click();
@@ -155,7 +160,7 @@ test('official subscription: account metrics, Windows execution, running input, 
     await settled(page);
     await expect(page.locator('.message.assistant').last()).toContainText(marker);
 
-    await page.getByLabel('审批模式').selectOption('default');
+    await permission(page, '手动审批');
     const file = `${marker}-denied.txt`;
     await send(page, `仅通过一次 Bash / SSH 在 Windows 项目创建 ${file}。用户拒绝后不得重试。`);
     expect(await drive(page, '拒绝')).toBeGreaterThan(0);
@@ -178,7 +183,7 @@ test('official subscription: account metrics, Windows execution, running input, 
     await page.keyboard.press('Escape');
     await page.screenshot({ path: resolve('.local/screenshots/subscription-mobile.png') });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.getByRole('button', { name: '连接', exact: true }).click();
+    await page.getByRole('button', { name: '设置与账号', exact: true }).click();
     await page.getByRole('menuitem', { name: '断开连接', exact: true }).click();
     await connect();
     await page.locator('.session-select').filter({ hasText: marker }).click();

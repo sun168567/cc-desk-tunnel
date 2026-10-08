@@ -2,6 +2,7 @@ const {
   app,
   BrowserWindow,
   Menu,
+  Notification,
   Tray,
   nativeImage,
   powerSaveBlocker,
@@ -23,7 +24,8 @@ const {
   writeFileSync,
   writeSync,
 } = require('node:fs');
-const { mkdtemp } = require('node:fs/promises');
+const { mkdtemp, stat, writeFile } = require('node:fs/promises');
+const { gitBranch } = require('./git-branch.cjs');
 const { tmpdir } = require('node:os');
 const { spawn } = require('node:child_process');
 const { mkdir, rmdir } = require('node:fs/promises');
@@ -85,6 +87,32 @@ handle('project:choose', async (event) => {
   });
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
+// Files the user wants to mention in a message: only their paths go to the page.
+handle('files:choose', async (event) => {
+  const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+    title: '添加文件',
+    properties: ['openFile', 'multiSelections'],
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+// Writes text the page produced (an exported session) where the user chooses.
+handle('file:save', async (event, name, text) => {
+  const result = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+    title: '导出',
+    defaultPath: path.join(app.getPath('downloads'), path.basename(String(name))),
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+  });
+  if (result.canceled || !result.filePath) return false;
+  await writeFile(result.filePath, String(text), 'utf8');
+  return true;
+});
+handle('folder:open', async (_event, directory) => {
+  const target = path.resolve(String(directory));
+  if (!(await stat(target)).isDirectory()) throw new Error('不是文件夹。');
+  const failure = await shell.openPath(target);
+  if (failure) throw new Error(failure);
+});
+handle('git:branch', (_event, directory) => gitBranch(directory));
 // The official sign-in page and this project's own page open in the user's browser; nothing else is handed to the
 // system.
 handle('external:open', async (event, target) => {
@@ -96,16 +124,38 @@ handle('external:open', async (event, target) => {
     throw new Error('Unexpected link');
   await shell.openExternal(url.toString());
 });
-// Sessions without a project still need a Windows working directory; they get one under Documents, grouped by day.
-const workspaceRoot = () => path.join(app.getPath('documents'), 'CC Desk Tunnel');
-handle('workspace:root', (event) => {
-  return workspaceRoot();
+// Sessions without a project still need a Windows working directory; they get one under Documents, grouped by
+// day, unless the user chose another folder. Folders used before are remembered: their sessions are still
+// sessions without a project.
+const defaultRoot = () => path.join(app.getPath('documents'), 'CC Desk Tunnel');
+function workspaceRoots() {
+  const saved = readSettings().workspaceRoots;
+  const roots = [...(Array.isArray(saved) ? saved : []), defaultRoot()].filter(
+    (root) => typeof root === 'string' && root,
+  );
+  return roots.filter(
+    (root, index) => roots.findIndex((item) => item.toLowerCase() === root.toLowerCase()) === index,
+  );
+}
+handle('workspace:roots', () => workspaceRoots());
+handle('workspace:choose', async (event, reset) => {
+  let chosen = defaultRoot();
+  if (reset !== true) {
+    const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+      title: '普通会话的文件夹',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || !result.filePaths[0]) return workspaceRoots();
+    chosen = result.filePaths[0];
+  }
+  writeSettings({ workspaceRoots: [chosen, ...workspaceRoots()] });
+  return workspaceRoots();
 });
 handle('workspace:create', async (event) => {
   const now = new Date();
   const pad = (value) => String(value).padStart(2, '0');
   const day = path.join(
-    workspaceRoot(),
+    workspaceRoots()[0],
     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
   );
   await mkdir(day, { recursive: true });
@@ -122,7 +172,12 @@ handle('workspace:create', async (event) => {
 });
 handle('workspace:remove', async (event, directory) => {
   const target = path.resolve(String(directory));
-  if (!/^\d{4}-\d{2}-\d{2}[\\/][^\\/]+$/.test(path.relative(workspaceRoot(), target))) return;
+  if (
+    !workspaceRoots().some((root) =>
+      /^\d{4}-\d{2}-\d{2}[\\/][^\\/]+$/.test(path.relative(root, target)),
+    )
+  )
+    return;
   // rmdir only removes empty directories, so anything the session produced stays.
   try {
     await rmdir(target);
@@ -263,6 +318,42 @@ handle('schedules:save', (_event, text) => {
   replaceFile(schedulesPath(), schedules);
 });
 handle('app:version', () => app.getVersion());
+handle('app:quit', () => app.quit());
+let refreshTray = () => {};
+handle('window:settings', () => ({ closeToTray: readSettings().closeToTray !== false }));
+handle('window:settings:set', (_event, values) => {
+  writeSettings({ closeToTray: values?.closeToTray !== false });
+  refreshTray();
+});
+// What the user should know while the window is not in front goes through the system's own notifications.
+// A notification is kept until it closes, or it could be collected before it is clicked.
+const toasts = new Set();
+handle('notify:show', (event, notice) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || !Notification.isSupported()) return;
+  const inFront = window.isVisible() && window.isFocused() && !window.isMinimized();
+  if (inFront && notice?.always !== true) return;
+  const toast = new Notification({
+    title: String(notice?.title ?? '').slice(0, 80),
+    body: String(notice?.body ?? '').slice(0, 300),
+    silent: notice?.silent === true,
+    icon: path.join(__dirname, 'icon.png'),
+  });
+  toasts.add(toast);
+  toast.on('close', () => toasts.delete(toast));
+  toast.on('click', () => {
+    toasts.delete(toast);
+    showWindow();
+    if (!event.sender.isDestroyed())
+      event.sender.send('notify:clicked', notice?.sessionId ? String(notice.sessionId) : null);
+  });
+  toast.show();
+  // A window left open behind others also asks for attention in the taskbar.
+  if (window.isVisible() && !inFront) {
+    window.flashFrame(true);
+    window.once('focus', () => window.flashFrame(false));
+  }
+});
 // Upgrades in place: the installer comes from the connected service, runs silently over the current install
 // and starts the new version.
 handle('update:install', async () => {
@@ -282,6 +373,9 @@ ipcMain.handle('proxy:disconnect', async () => {
   await previous?.close();
 });
 
+// Windows files notifications under this identity; the installer gives the shortcut the same one.
+if (process.platform === 'win32')
+  app.setAppUserModelId(app.isPackaged ? 'io.github.ccdesktunnel.desktop' : process.execPath);
 app.whenReady().then(() => {
   if (!ownsInstance) return;
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
@@ -292,8 +386,11 @@ app.whenReady().then(() => {
     height: 850,
     minWidth: 380,
     minHeight: 560,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#edf0f6',
     title: 'CC Desk Tunnel',
+    // The page draws the title bar; the system adds only its window buttons, over the bar's right end.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#edf0f6', symbolColor: '#22262e', height: 40 },
     icon: path.join(__dirname, 'icon.png'),
     autoHideMenuBar: true,
     show: !process.argv.includes('--smoke-test'),
@@ -335,6 +432,7 @@ app.whenReady().then(() => {
   tray.setToolTip('CC Desk Tunnel');
   tray.on('click', showWindow);
   buildMenu();
+  refreshTray = buildMenu;
   window.on('close', (event) => {
     if (quitting || !closeToTray()) return;
     event.preventDefault();

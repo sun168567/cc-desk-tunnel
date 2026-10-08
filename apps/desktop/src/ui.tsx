@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 
 export function IconButton({
   title,
@@ -26,6 +26,30 @@ export function IconButton({
     >
       {children}
     </button>
+  );
+}
+
+export function Switch({
+  label,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      className="switch"
+      aria-label={label}
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+    />
   );
 }
 
@@ -64,24 +88,32 @@ export function Modal({
 
 export type MenuItem = {
   label: string;
-  icon: ReactNode;
+  icon?: ReactNode;
+  // A line under the label saying what the choice does.
+  detail?: string;
+  // Shown at the right edge: a keyboard shortcut or a current value.
+  hint?: string;
+  // Present on a choice among alternatives; the chosen one carries the mark.
+  checked?: boolean;
   disabled?: boolean;
   danger?: boolean;
+  // A rule is drawn above this item.
+  separated?: boolean;
   run: () => void;
 };
-// One menu serves both right-click (opens at the pointer) and the row / footer buttons (opens beside them).
+export type MenuPosition = { x: number; y: number; above?: boolean };
+// One menu serves right-click (opens at the pointer) and every button that opens a list beside itself.
 export function Menu({
   label,
   x,
   y,
   above = false,
+  heading,
   items,
   onClose,
-}: {
+}: MenuPosition & {
   label: string;
-  x: number;
-  y: number;
-  above?: boolean;
+  heading?: string;
   items: MenuItem[];
   onClose: () => void;
 }) {
@@ -130,21 +162,31 @@ export function Menu({
         buttons[(next + buttons.length) % buttons.length]?.focus();
       }}
     >
+      {heading && <p className="menu-heading">{heading}</p>}
       {items.map((item) => (
-        <button
-          type="button"
-          role="menuitem"
-          key={item.label}
-          className={item.danger ? 'danger' : ''}
-          disabled={item.disabled}
-          onClick={() => {
-            onClose();
-            item.run();
-          }}
-        >
-          {item.icon}
-          {item.label}
-        </button>
+        <Fragment key={item.label}>
+          {item.separated && <hr />}
+          <button
+            type="button"
+            role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+            aria-checked={item.checked}
+            aria-label={item.label}
+            className={`${item.danger ? 'danger' : ''} ${item.detail ? 'detailed' : ''}`}
+            disabled={item.disabled}
+            onClick={() => {
+              onClose();
+              item.run();
+            }}
+          >
+            {item.icon}
+            <span className="menu-label">
+              {item.label}
+              {item.detail && <small>{item.detail}</small>}
+            </span>
+            {item.hint && <kbd>{item.hint}</kbd>}
+            {item.checked && <Check className="menu-check" />}
+          </button>
+        </Fragment>
       ))}
     </div>
   );
