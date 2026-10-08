@@ -4,6 +4,7 @@ import {
   Bell,
   CircleHelp,
   Info,
+  Keyboard,
   Search,
   Settings2,
   SlidersHorizontal,
@@ -16,10 +17,12 @@ import { setPrefs, usePrefs } from './prefs.ts';
 import type { NotifyKind } from './prefs.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
+import ShortcutSettings from './ShortcutSettings.tsx';
 import { Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
-export type Section = 'account' | 'claude' | 'general' | 'notifications' | 'help' | 'about';
+export type Section =
+  'account' | 'claude' | 'general' | 'notifications' | 'shortcuts' | 'help' | 'about';
 // `words` is what the search box matches besides the name: the settings found inside.
 const sections: { id: Section; name: string; group: string; icon: typeof Bell; words: string }[] = [
   {
@@ -50,7 +53,14 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     icon: Bell,
     words: '提醒 完成 失败 审批 提问 定时任务 连接 提示音',
   },
-  { id: 'help', name: '帮助', group: '其他', icon: CircleHelp, words: '说明 快捷键 常见问题' },
+  {
+    id: 'shortcuts',
+    name: '快捷键',
+    group: '客户端',
+    icon: Keyboard,
+    words: '键盘 组合键 热键 后退 前进 侧栏 缩放',
+  },
+  { id: 'help', name: '帮助', group: '其他', icon: CircleHelp, words: '说明 常见问题' },
   {
     id: 'about',
     name: '关于与更新',
@@ -383,6 +393,8 @@ export default function SettingsPage({
           />
         ) : section === 'notifications' ? (
           <Notices />
+        ) : section === 'shortcuts' ? (
+          <ShortcutSettings />
         ) : section === 'help' ? (
           <Help />
         ) : (

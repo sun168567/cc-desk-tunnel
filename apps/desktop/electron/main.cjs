@@ -378,6 +378,15 @@ if (process.platform === 'win32')
   app.setAppUserModelId(app.isPackaged ? 'io.github.ccdesktunnel.desktop' : process.execPath);
 app.whenReady().then(() => {
   if (!ownsInstance) return;
+  // Shortcuts are the page's, where the user can change them or turn them off; Electron's default menu would
+  // add its own on top (zoom, reload, close). A run from source keeps reload and the developer tools.
+  Menu.setApplicationMenu(
+    app.isPackaged
+      ? null
+      : Menu.buildFromTemplate([
+          { label: '开发', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }] },
+        ]),
+  );
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
     callback(false),
   );

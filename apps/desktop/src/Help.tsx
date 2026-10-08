@@ -59,11 +59,6 @@ const keys: [string, string][] = [
   ['Shift + Enter', '换行'],
   ['/ 或 \\', '打开会话命令（压缩上下文、刷新状态）'],
   ['Esc', '关闭菜单与弹出层'],
-  ['Alt + ← / →', '后退 / 前进'],
-  ['Ctrl + B', '收起或展开侧栏'],
-  ['Ctrl + N', '新建会话'],
-  ['Ctrl + ,', '打开设置'],
-  ['Ctrl + 加号 / 减号 / 0', '放大 / 缩小 / 恢复界面大小'],
 ];
 
 export default function Help() {
@@ -81,9 +76,7 @@ export default function Help() {
             </div>
           </div>
         ))}
-        <h2 className="page-heading" id="shortcuts">
-          快捷键
-        </h2>
+        <h2 className="page-heading">按键</h2>
         <dl className="card key-list">
           {keys.map(([key, use]) => (
             <div key={key}>
@@ -94,6 +87,9 @@ export default function Help() {
             </div>
           ))}
         </dl>
+        <p className="muted">
+          后退、前进、侧栏、新建会话、缩放等组合键在“设置 → 快捷键”里查看和修改，也可以整体关闭。
+        </p>
         {project.url && (
           <p className="muted">
             更完整的部署与使用说明见项目主页 <code>{project.url}</code>。

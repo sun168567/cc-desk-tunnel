@@ -91,6 +91,7 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
     ['Claude Code', 'Claude Code'],
     ['常规', '常规'],
     ['通知', '通知'],
+    ['快捷键', '快捷键'],
     ['帮助', '帮助'],
     ['关于与更新', '关于与更新'],
   ]) {
@@ -100,6 +101,41 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
     ).toBeVisible();
     await shot(page, `08-设置-${name}`);
   }
+  // Shortcuts can be changed, refuse a combination already in use, and can all be turned off.
+  await sections.getByRole('button', { name: '快捷键', exact: true }).click();
+  const side = page.getByRole('button', { name: '修改快捷键：收起或展开侧栏', exact: true });
+  await expect(side).toHaveText('Ctrl+B');
+  await side.click();
+  await page.keyboard.press('Control+Shift+KeyL');
+  await expect(side).toHaveText('Ctrl+Shift+L');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await page.keyboard.press('Control+b');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await page.keyboard.press('Control+Shift+KeyL');
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await page.keyboard.press('Control+Shift+KeyL');
+  const create = page.getByRole('button', { name: '修改快捷键：新建会话', exact: true });
+  await create.click();
+  await page.keyboard.press('KeyK');
+  await expect(page.getByRole('alert')).toContainText('妨碍正常输入');
+  await page.keyboard.press('Control+Shift+KeyL');
+  await expect(page.getByRole('alert')).toContainText('已被“收起或展开侧栏”使用');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await page.keyboard.press('Backspace');
+  await expect(create).toHaveText('未设置');
+  await page.getByRole('button', { name: '文件', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: '新建会话', exact: true })).not.toContainText(
+    'Ctrl',
+  );
+  await page.keyboard.press('Escape');
+  await page.getByRole('switch', { name: '启用快捷键', exact: true }).click();
+  await page.keyboard.press('Control+Shift+KeyL');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(side).toBeDisabled();
+  await page.getByRole('switch', { name: '启用快捷键', exact: true }).click();
+  await page.getByRole('button', { name: '恢复默认组合键', exact: true }).click();
+  await expect(side).toHaveText('Ctrl+B');
+  await expect(create).toHaveText('Ctrl+N');
   await page.getByLabel('搜索设置').fill('提示音');
   await expect(sections.getByRole('button')).toHaveText(['通知']);
   await sections.getByRole('button', { name: '通知', exact: true }).click();
@@ -351,6 +387,15 @@ test('Electron: frameless window, the project branch, files by path and window s
     await page.getByRole('button', { name: /^添加文件/ }).click();
     await expect(page.getByRole('textbox', { name: '消息' })).toHaveValue(`"${picked}" `);
     await page.screenshot({ path: resolve(screenshots, 'redesign', '15-桌面窗口.png') });
+    // Zoom is the page's own shortcut, one step a press: Electron's default menu no longer adds its own.
+    const zoom = () =>
+      application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].webContents.getZoomLevel(),
+      );
+    await page.keyboard.press('Control+Equal');
+    await expect.poll(zoom).toBe(0.5);
+    await page.keyboard.press('Control+Digit0');
+    await expect.poll(zoom).toBe(0);
 
     await page.getByRole('button', { name: '设置与账号', exact: true }).click();
     await page.getByRole('menuitem', { name: '设置', exact: true }).click();

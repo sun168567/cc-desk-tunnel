@@ -1077,6 +1077,23 @@ kbd {
   border-radius: 6px;
   background: var(--surface-2);
 }
+.key-button {
+  flex: none;
+  min-width: 120px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+.key-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.key-button.recording {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
 /* Scheduled tasks are listed in the side column; the form is in the page. */
 .schedule-row {
   display: flex;
