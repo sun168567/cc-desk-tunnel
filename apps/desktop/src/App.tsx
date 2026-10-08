@@ -1157,6 +1157,7 @@ export function App() {
                 connected={connected}
                 busy={busy}
                 refreshing={refreshing}
+                canRefreshModels={!state.sessions.some((session) => session.activeRun)}
                 ownsRun={ownsRun}
                 inputDisabled={inputDisabled}
                 controlsDisabled={controlsDisabled}

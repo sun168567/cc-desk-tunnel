@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NODE_VERSION=v24.21.0
-CLAUDE_VERSION=2.1.286
+CLAUDE_VERSION=2.1.293
 RUNTIME="${CC_DESK_TUNNEL_RUNTIME:-$HOME/.local/share/cc-desk-tunnel/runtime}"
 case "$(uname -m)" in
   x86_64) ARCH=x64 ;;

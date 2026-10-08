@@ -24,6 +24,9 @@ export default function ComposerControls({
   metrics,
   disabled,
   configure,
+  refresh,
+  refreshing,
+  canRefreshModels,
 }: {
   model: string | null;
   effort: Effort | null;
@@ -32,6 +35,9 @@ export default function ComposerControls({
   metrics: NativeMetrics | null;
   disabled: boolean;
   configure: (values: { model?: string | null; effort?: Effort | null }) => Promise<void>;
+  refresh: () => void;
+  refreshing: boolean;
+  canRefreshModels: boolean;
 }) {
   const [open, setOpen] = useState(false),
     [contextOpen, setContextOpen] = useState(false);
@@ -249,12 +255,22 @@ export default function ComposerControls({
                       >
                         <span>
                           {row.displayName}
+                          {row.resolvedModel && <small>{row.resolvedModel}</small>}
                           <small>{row.description}</small>
                         </span>
                         {model !== null && chosen?.value === row.value && <Check />}
                       </button>
                     ))}
                 </div>
+                <button
+                  type="button"
+                  className="model-back"
+                  disabled={disabled || refreshing || !canRefreshModels}
+                  onClick={refresh}
+                >
+                  <RotateCcw />
+                  {refreshing ? '正在刷新模型列表…' : '刷新模型列表'}
+                </button>
               </>
             )}
           </div>

@@ -12,7 +12,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 原生连接
 
-`scripts/install-linux.sh` 为普通用户准备 Node 24.21.0、官方 Claude Code 2.1.286、frps 0.71.0；frps 下载 SHA256 固定在脚本中。CLI 使用官方 npm 发布包，无二进制修改。当前 frps 校验包只支持 Linux x64。
+`scripts/install-linux.sh` 为普通用户准备 Node 24.21.0、官方 Claude Code 2.1.293、frps 0.71.0；frps 下载 SHA256 固定在脚本中。CLI 使用官方 npm 发布包，无二进制修改。当前 frps 校验包只支持 Linux x64。
 
 开发部署用 `scripts/deploy-linux.mjs`：通过可信 SSH 传输应用与私有配置，生成 IP 可用的固定自签证书，原生服务 WSS 监听 `PROXY_PORT`，frps 监听 `FRPS_PORT`（默认 7000）。生产需放行这两个端口，映射出的 Windows SSH 端口仍只监听 Linux `127.0.0.1`。
 
@@ -39,6 +39,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 - 模块：`main.ts` / `config.ts` 读环境并启动；`server.ts` 是连接与命令的唯一入口；`store.ts` 持久化；`claude.ts`（SDK 运行）、`claude-stream.ts`（原生消息转协议事件）、`native-input.ts`（运行中追加输入）、`native-controls.ts`（账号 / 模型 / 额度）、`native-terminal.ts`、`native-account.ts`、`native-onboarding.ts` 组成原生适配；`tunnel.ts` 管 frps 与 SSH 配置；`usage.ts` 收集调用统计；`simulation.ts` 是离线模拟；`errors.ts` 是可回给客户端的错误。
 - `src/server.ts`：认证、请求、连接归属和广播；每类命令一个处理函数，`execute` 只做分发。模拟器在 `src/simulation.ts`。三种场景为聊天、一次 PowerShell 审批、上游错误。PowerShell 仅显示固定 `Get-Location` 和模拟结果，从不创建命令进程。
 - `src/store.ts`：Node 24 内置 SQLite / WAL，摘要与原始事件分表、每事件事务落盘，不逐 token 重写整份历史。旧 UTF-8 JSON 一次性事务导入、原文件保留作迁移备份；日后备份以 SQLite 和原生 CLI 存储为准。启动恢复未结束轮次，不重放。
+- 状态读取不改变会话的最近使用时间。升级时修正旧的活动时间和用量周期边界，原始事件与调用记录保留。提前重置的时间靠额度读数推断，历史读数缺失时不能精确恢复。
 - 登录只发会话目录，打开会话取最近页且仅订阅当前会话；向上加载完整轮次。1000 事件 / 512 KiB 软预算，单个大轮次不切断；历史连续文本增量在传输层合并，原始事件不改写。重连小差量按游标补齐，大差量回到最近页，不整段逐 token 重播。
 - `session.fork` 用 SDK 的 `forkSession` 复制原生会话并复制事件记录，可截到某条用户消息之前。分叉的原生记录在源会话的 Linux 目录里，会话元数据的 `nativeRoot` 指向它。带截取点的分叉分两步：先截到该消息，再截到它的前一条，中间副本随即删除；该消息之前没有内容时新会话不带原生上下文。
 - 同时允许多会话，单会话只有一个运行。审批/取消仅原连接可操作。断线的在途模拟工具标记未执行；真实执行的“结果未知”语义由 P2 定义，不能套用模拟结论。
