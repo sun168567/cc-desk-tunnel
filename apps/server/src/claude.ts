@@ -103,6 +103,8 @@ export async function runClaude(
   let stderr = '',
     failure: Error | undefined;
   let session: Query | undefined;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  let settled = false;
   try {
     session = query({
       prompt: run.input.stream(),
@@ -175,7 +177,26 @@ export async function runClaude(
       quotaAt = Date.now();
       if (!run.signal.aborted) run.emit(payload);
     };
+    // Background Bash tasks and subagents live in the CLI process, and the completion of one starts a turn of
+    // its own. Closing the CLI with the turn that started them would kill them, so the run stays open until
+    // none is left.
+    let background = 0;
+    let idle = false;
     for await (const message of session) {
+      if (message.type === 'system' && message.subtype === 'background_tasks_changed') {
+        background = message.tasks.filter((task) => !task.ambient).length;
+        // The turn a finished task starts follows at once. When none does, nothing is left to wait for.
+        clearTimeout(settle);
+        if (idle && !background)
+          settle = setTimeout(() => {
+            settled = true;
+            run.input.close();
+            running.close();
+          }, 15000);
+      } else if (['user', 'assistant', 'stream_event'].includes(message.type)) {
+        idle = false;
+        clearTimeout(settle);
+      }
       if (!run.signal.aborted) {
         run.input.observe(message);
         mapper.accept(message);
@@ -207,7 +228,7 @@ export async function runClaude(
       }
       if (message.type === 'result') {
         await refresh;
-        const done = run.input.endTurn(message);
+        const done = run.input.endTurn(message, background > 0);
         if (!run.signal.aborted) {
           try {
             const payload = await nativeMetrics(session, message);
@@ -218,11 +239,19 @@ export async function runClaude(
           }
         }
         if (done || run.signal.aborted) break;
+        idle = true;
+        if (background)
+          run.emit({
+            type: 'native.notice',
+            text: '后台任务仍在运行，本次运行保持开启：任务结束后 Claude 会接着处理。现在停止运行会同时结束后台任务。',
+          });
       }
     }
   } catch (error) {
-    failure = error instanceof Error ? error : new Error('Native SDK process failed.');
+    if (!settled)
+      failure = error instanceof Error ? error : new Error('Native SDK process failed.');
   } finally {
+    clearTimeout(settle);
     run.controls.refresh = undefined;
     run.input.close();
     session?.close();

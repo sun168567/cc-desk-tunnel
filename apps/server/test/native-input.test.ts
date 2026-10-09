@@ -163,3 +163,13 @@ test('fatal and older native results seal the input while reporting uncertain de
     await stream.next();
   }
 });
+
+test('a turn that leaves background tasks running keeps the input open for the turn they start', () => {
+  const { input } = fixture();
+  assert.equal(input.endTurn(result([]), true), false);
+  input.assertWritable();
+  assert.equal(input.endTurn({ ...result([]), is_error: true } as SDKResultMessage, true), true);
+  assert.throws(() => input.assertWritable());
+  const idle = fixture().input;
+  assert.equal(idle.endTurn(result([])), true);
+});
