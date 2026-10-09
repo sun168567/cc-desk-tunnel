@@ -160,7 +160,10 @@ test('find covers the loaded part of a long session and follows it as earlier pa
   await page.getByLabel('查找对话内容', { exact: true }).fill('早期唯一词');
   await expect(page.locator('.find-count')).toHaveText('0 / 0（仅已加载部分）');
   await expect(page.getByText('早期唯一词', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: '加载更早记录', exact: true }).click();
+  // Reading upwards to the start of what is loaded brings the earlier page without a click.
+  await page.locator('.conversation').hover();
+  await page.mouse.wheel(0, -100000);
+  await expect(page.getByRole('button', { name: '加载更早记录', exact: true })).toHaveCount(0);
   await expect(page.locator('.find-count')).toHaveText('1 / 1');
   await expect(page.getByText('早期唯一词', { exact: true })).toBeVisible();
 });

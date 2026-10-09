@@ -423,6 +423,19 @@ export default function Conversation({
   const follow = useRef(true);
   // Earlier history is inserted above; the anchor keeps the lines being read where they were.
   const prependAnchor = useRef<{ sessionId: string; height: number; top: number } | null>(null);
+  const lastTop = useRef(0);
+  const loadMore = () => {
+    if (!session || !connected || !history?.hasEarlier || history.loadingEarlier || history.loading)
+      return;
+    setLoadError('');
+    if (scroll.current)
+      prependAnchor.current = {
+        sessionId: session.id,
+        height: scroll.current.scrollHeight,
+        top: scroll.current.scrollTop,
+      };
+    void loadEarlier().catch(() => setLoadError('更早记录加载失败，请重试'));
+  };
   useLayoutEffect(() => {
     prependAnchor.current = null;
     follow.current = true;
@@ -509,10 +522,16 @@ export default function Conversation({
           });
         }}
         onScroll={() => {
-          if (scroll.current)
-            follow.current =
-              scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight <
-              80;
+          if (!scroll.current) return;
+          const top = scroll.current.scrollTop;
+          follow.current = scroll.current.scrollHeight - top - scroll.current.clientHeight < 80;
+          // Reading on upwards past what is loaded brings the page before it; a failed load waits for the button.
+          if (top < lastTop.current && top < 240 && !loadError) loadMore();
+          lastTop.current = top;
+        }}
+        onWheel={(event) => {
+          // A loaded page shorter than the window cannot scroll, so the wheel itself asks for more.
+          if (event.deltaY < 0 && scroll.current?.scrollTop === 0 && !loadError) loadMore();
         }}
       >
         {!session ? (
@@ -541,16 +560,7 @@ export default function Conversation({
                 type="button"
                 className="history-load"
                 disabled={!connected || history.loadingEarlier || history.loading}
-                onClick={() => {
-                  setLoadError('');
-                  if (scroll.current)
-                    prependAnchor.current = {
-                      sessionId: session.id,
-                      height: scroll.current.scrollHeight,
-                      top: scroll.current.scrollTop,
-                    };
-                  void loadEarlier().catch(() => setLoadError('更早记录加载失败，请重试'));
-                }}
+                onClick={loadMore}
               >
                 <ArrowUpToLine />
                 {history.loadingEarlier ? '加载中' : '加载更早记录'}
