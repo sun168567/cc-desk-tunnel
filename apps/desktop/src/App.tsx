@@ -377,6 +377,13 @@ export function App() {
       setProxyConnecting(false);
     }
   }
+  function stopRun() {
+    if (!selected?.activeRun) return;
+    const { id: sessionId, activeRun } = selected;
+    void act(async () => {
+      await client.request({ type: 'run.cancel', sessionId, runId: activeRun.id });
+    });
+  }
   function disconnect() {
     client.disconnect();
     setForm((current) => (current.remember ? current : { ...current, token: '' }));
@@ -1156,6 +1163,17 @@ export function App() {
                       void fork(selected!, { id, text });
                     }
               }
+              stopTask={(taskId) => {
+                void act(async () => {
+                  await client.request({
+                    type: 'run.task.stop',
+                    sessionId: selected!.id,
+                    runId: selected!.activeRun!.id,
+                    taskId,
+                  });
+                });
+              }}
+              stop={stopRun}
               replyApproval={(runId, approvalId, allowed, answers) => {
                 void act(async () => {
                   await client.request({
@@ -1210,15 +1228,7 @@ export function App() {
                   void refreshStatus();
                 }}
                 configure={configure}
-                stop={() => {
-                  void act(async () => {
-                    await client.request({
-                      type: 'run.cancel',
-                      sessionId: selected.id,
-                      runId: selected.activeRun!.id,
-                    });
-                  });
-                }}
+                stop={stopRun}
               />
             )}
           </main>

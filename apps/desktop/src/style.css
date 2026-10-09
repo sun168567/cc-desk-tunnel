@@ -1635,6 +1635,33 @@ details[open] > summary > .fold-chevron {
 .run-indicator .running-dot {
   margin-top: 0;
 }
+.background-tasks {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.background-tasks ul {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.background-tasks li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-s);
+  font-size: 13px;
+}
+.background-tasks li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .composer-area {
   position: relative;
   padding: 6px 28px 22px;

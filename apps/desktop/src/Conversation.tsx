@@ -344,6 +344,8 @@ export default function Conversation({
   newSession,
   loadEarlier,
   replyApproval,
+  stopTask,
+  stop,
   edit,
   findRequest,
 }: {
@@ -357,6 +359,9 @@ export default function Conversation({
   newSession: () => void;
   loadEarlier: () => Promise<void>;
   findRequest: number;
+  // Ends one background task of the run, or the run with all of them.
+  stopTask: (taskId: string) => void;
+  stop: () => void;
   replyApproval: (
     runId: string,
     approvalId: string,
@@ -366,6 +371,13 @@ export default function Conversation({
   edit?: (messageId: string, text: string) => void;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
+  const background = session?.activeRun?.waiting === 'background';
+  const tasks = useMemo(() => {
+    const last = events.findLast(
+      (event) => event.payload.type === 'native.tasks' && event.runId === session?.activeRun?.id,
+    )?.payload;
+    return last?.type === 'native.tasks' ? last.tasks : [];
+  }, [events, session?.activeRun?.id]);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -581,7 +593,42 @@ export default function Conversation({
             {turns.map((turn) => (
               <TurnView key={turn.id} turn={turn} native={native} live={live} />
             ))}
-            {session.activeRun && (
+            {session.activeRun && background && (
+              <div className="background-tasks">
+                <div className="run-indicator" role="status">
+                  <span className="running-dot" />
+                  后台任务{tasks.length ? ` ${tasks.length} 个` : ''} · Claude
+                  已答完，任务结束后会接着处理
+                  {!ownsRun && ' · 另一连接'}
+                </div>
+                <ul>
+                  {tasks.map((task) => (
+                    <li key={task.id}>
+                      <span>{task.description || task.kind}</span>
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={!connected || !ownsRun || busy}
+                        onClick={() => stopTask(task.id)}
+                      >
+                        结束
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {tasks.length !== 1 && (
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!connected || !ownsRun || busy}
+                    onClick={stop}
+                  >
+                    全部结束
+                  </button>
+                )}
+              </div>
+            )}
+            {session.activeRun && !background && (
               <div className="run-indicator" role="status">
                 <span className="running-dot" />
                 {session.activeRun.status !== 'awaiting_approval'
