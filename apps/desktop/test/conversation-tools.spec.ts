@@ -107,7 +107,9 @@ test('find opens folded tool details then restores folds, and never steals dialo
   await expect(page.getByRole('search', { name: '对话内查找' })).toHaveCount(0);
 });
 
-test('find loads older history before reporting the complete match count', async ({ page }) => {
+test('find covers the loaded part of a long session and follows it as earlier pages are loaded', async ({
+  page,
+}) => {
   await page.goto('/');
   await login(page);
   const title = await createSession(page, '长历史查找');
@@ -156,9 +158,14 @@ test('find loads older history before reporting the complete match count', async
   await expect(page.getByText('早期唯一词', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Control+f');
   await page.getByLabel('查找对话内容', { exact: true }).fill('早期唯一词');
+  await expect(page.locator('.find-count')).toHaveText('0 / 0（仅已加载部分）');
+  await expect(page.getByText('早期唯一词', { exact: true })).toHaveCount(0);
+  // Reading upwards to the start of what is loaded brings the earlier page without a click.
+  await page.locator('.conversation').hover();
+  await page.mouse.wheel(0, -100000);
+  await expect(page.getByRole('button', { name: '加载更早记录', exact: true })).toHaveCount(0);
   await expect(page.locator('.find-count')).toHaveText('1 / 1');
   await expect(page.getByText('早期唯一词', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '加载更早记录', exact: true })).toHaveCount(0);
 });
 
 test('Electron copies text and supplies the native editing context menu', async () => {

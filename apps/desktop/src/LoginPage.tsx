@@ -1,4 +1,4 @@
-import { Download, SquareTerminal, Unplug } from 'lucide-react';
+import { Download, Settings, SquareTerminal, Unplug } from 'lucide-react';
 import { GithubMark, openProject, project } from './project.tsx';
 
 export type ConnectionForm = {
@@ -19,6 +19,7 @@ export default function LoginPage({
   upgrade,
   install,
   submit,
+  openSettings,
 }: {
   form: ConnectionForm;
   change: (values: Partial<ConnectionForm>) => void;
@@ -28,6 +29,8 @@ export default function LoginPage({
   upgrade: string | null;
   install: () => void;
   submit: () => void;
+  // This computer's own settings, which need no connection.
+  openSettings: () => void;
 }) {
   return (
     <main className="login-page">
@@ -152,12 +155,18 @@ export default function LoginPage({
             {connecting ? '连接中…' : '连接'}
           </button>
         </form>
-        {project.url && (
-          <button className="project-link" type="button" onClick={openProject}>
-            <GithubMark />
-            {project.name}
+        <div className="login-links">
+          <button className="project-link" type="button" onClick={openSettings}>
+            <Settings />
+            本机设置
           </button>
-        )}
+          {project.url && (
+            <button className="project-link" type="button" onClick={openProject}>
+              <GithubMark />
+              {project.name}
+            </button>
+          )}
+        </div>
       </div>
     </main>
   );

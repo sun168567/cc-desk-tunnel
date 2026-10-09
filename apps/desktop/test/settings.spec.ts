@@ -92,3 +92,19 @@ test('Claude Code settings load from the service and save each change at once', 
   await expect(panel.getByLabel('自动压缩窗口', { exact: true })).toHaveValue('1000000');
   await page.screenshot({ path: resolve('.local/screenshots/settings.png') });
 });
+
+test('the settings of this computer open from the login page without a connection', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '本机设置', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveText([
+    '常规',
+    '通知',
+    '快捷键',
+  ]);
+  await page.getByRole('button', { name: '通知', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '通知', level: 1 })).toBeVisible();
+  await page.getByRole('button', { name: '返回登录', exact: true }).click();
+  await expect(page.getByLabel('服务地址')).toBeVisible();
+});

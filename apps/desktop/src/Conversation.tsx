@@ -344,6 +344,8 @@ export default function Conversation({
   newSession,
   loadEarlier,
   replyApproval,
+  stopTask,
+  stop,
   edit,
   findRequest,
 }: {
@@ -357,6 +359,9 @@ export default function Conversation({
   newSession: () => void;
   loadEarlier: () => Promise<void>;
   findRequest: number;
+  // Ends one background task of the run, or the run with all of them.
+  stopTask: (taskId: string) => void;
+  stop: () => void;
   replyApproval: (
     runId: string,
     approvalId: string,
@@ -366,57 +371,43 @@ export default function Conversation({
   edit?: (messageId: string, text: string) => void;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
+  const background = session?.activeRun?.waiting === 'background';
+  const tasks = useMemo(() => {
+    const last = events.findLast(
+      (event) => event.payload.type === 'native.tasks' && event.runId === session?.activeRun?.id,
+    )?.payload;
+    return last?.type === 'native.tasks' ? last.tasks : [];
+  }, [events, session?.activeRun?.id]);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [findError, setFindError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
   const [contextMenu, setContextMenu] = useState<(MenuPosition & { items: MenuItem[] }) | null>(
     null,
   );
   const transcriptRoot = useRef<HTMLDivElement>(null);
-  const currentSession = useRef(session?.id);
   const lastFindRequest = useRef(findRequest);
-  currentSession.current = session?.id;
   const searching = findOpen && query.length > 0;
   const openFind = () => {
     follow.current = false;
-    setFindError('');
     setFindOpen(true);
   };
   useEffect(() => {
     setFindOpen(false);
     setQuery('');
-    setFindError('');
+    setLoadError('');
     setContextMenu(null);
     setCopyStatus('');
   }, [session?.id]);
   useEffect(() => {
+    if (!copyStatus) return;
+    const timer = setTimeout(() => setCopyStatus(''), 2000);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+  useEffect(() => {
     if (findRequest !== lastFindRequest.current) openFind();
     lastFindRequest.current = findRequest;
   }, [findRequest]);
-  useEffect(() => {
-    if (
-      !searching ||
-      !connected ||
-      !history?.hasEarlier ||
-      history.loading ||
-      history.loadingEarlier ||
-      findError
-    )
-      return;
-    const id = session?.id;
-    void loadEarlier().catch(() => {
-      if (currentSession.current === id) setFindError('早期记录加载失败，请关闭查找后重试');
-    });
-  }, [
-    searching,
-    connected,
-    history?.firstSequence,
-    history?.hasEarlier,
-    history?.loading,
-    history?.loadingEarlier,
-    findError,
-  ]);
   // Running timers tick once a second, and only while something runs.
   const [now, setNow] = useState(Date.now);
   const running = !!session?.activeRun;
@@ -444,6 +435,19 @@ export default function Conversation({
   const follow = useRef(true);
   // Earlier history is inserted above; the anchor keeps the lines being read where they were.
   const prependAnchor = useRef<{ sessionId: string; height: number; top: number } | null>(null);
+  const lastTop = useRef(0);
+  const loadMore = () => {
+    if (!session || !connected || !history?.hasEarlier || history.loadingEarlier || history.loading)
+      return;
+    setLoadError('');
+    if (scroll.current)
+      prependAnchor.current = {
+        sessionId: session.id,
+        height: scroll.current.scrollHeight,
+        top: scroll.current.scrollTop,
+      };
+    void loadEarlier().catch(() => setLoadError('更早记录加载失败，请重试'));
+  };
   useLayoutEffect(() => {
     prependAnchor.current = null;
     follow.current = true;
@@ -478,13 +482,10 @@ export default function Conversation({
           query={query}
           change={setQuery}
           request={findRequest}
-          partial={!!history?.hasEarlier || !!history?.loading}
-          loading={searching && !!(history?.loadingEarlier || history?.loading)}
-          error={findError}
+          partial={!!history?.hasEarlier}
           close={() => {
             setFindOpen(false);
             setQuery('');
-            setFindError('');
             scroll.current?.focus();
           }}
         />
@@ -512,7 +513,7 @@ export default function Conversation({
             items: [
               { label: '复制选中文字', disabled: !selection, run: () => copy(selection) },
               ...(block
-                ? [{ label: '复制代码 / 输出块', run: () => copy(block.textContent ?? '') }]
+                ? [{ label: '复制此代码块', run: () => copy(block.textContent ?? '') }]
                 : []),
               ...(message
                 ? [{ label: '复制整条消息', run: () => copy(message.dataset.copyText ?? '') }]
@@ -533,10 +534,16 @@ export default function Conversation({
           });
         }}
         onScroll={() => {
-          if (scroll.current)
-            follow.current =
-              scroll.current.scrollHeight - scroll.current.scrollTop - scroll.current.clientHeight <
-              80;
+          if (!scroll.current) return;
+          const top = scroll.current.scrollTop;
+          follow.current = scroll.current.scrollHeight - top - scroll.current.clientHeight < 80;
+          // Reading on upwards past what is loaded brings the page before it; a failed load waits for the button.
+          if (top < lastTop.current && top < 240 && !loadError) loadMore();
+          lastTop.current = top;
+        }}
+        onWheel={(event) => {
+          // A loaded page shorter than the window cannot scroll, so the wheel itself asks for more.
+          if (event.deltaY < 0 && scroll.current?.scrollTop === 0 && !loadError) loadMore();
         }}
       >
         {!session ? (
@@ -555,9 +562,9 @@ export default function Conversation({
           </div>
         ) : (
           <div className="transcript" ref={transcriptRoot}>
-            {!findOpen && findError && (
+            {loadError && (
               <div className="history-status" role="alert">
-                {findError}
+                {loadError}
               </div>
             )}
             {history?.hasEarlier && (
@@ -565,16 +572,7 @@ export default function Conversation({
                 type="button"
                 className="history-load"
                 disabled={!connected || history.loadingEarlier || history.loading}
-                onClick={() => {
-                  setFindError('');
-                  if (scroll.current)
-                    prependAnchor.current = {
-                      sessionId: session.id,
-                      height: scroll.current.scrollHeight,
-                      top: scroll.current.scrollTop,
-                    };
-                  void loadEarlier().catch(() => setFindError('早期记录加载失败，请重试'));
-                }}
+                onClick={loadMore}
               >
                 <ArrowUpToLine />
                 {history.loadingEarlier ? '加载中' : '加载更早记录'}
@@ -595,7 +593,42 @@ export default function Conversation({
             {turns.map((turn) => (
               <TurnView key={turn.id} turn={turn} native={native} live={live} />
             ))}
-            {session.activeRun && (
+            {session.activeRun && background && (
+              <div className="background-tasks">
+                <div className="run-indicator" role="status">
+                  <span className="running-dot" />
+                  后台任务{tasks.length ? ` ${tasks.length} 个` : ''} · Claude
+                  已答完，任务结束后会接着处理
+                  {!ownsRun && ' · 另一连接'}
+                </div>
+                <ul>
+                  {tasks.map((task) => (
+                    <li key={task.id}>
+                      <span>{task.description || task.kind}</span>
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={!connected || !ownsRun || busy}
+                        onClick={() => stopTask(task.id)}
+                      >
+                        结束
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {tasks.length !== 1 && (
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!connected || !ownsRun || busy}
+                    onClick={stop}
+                  >
+                    全部结束
+                  </button>
+                )}
+              </div>
+            )}
+            {session.activeRun && !background && (
               <div className="run-indicator" role="status">
                 <span className="running-dot" />
                 {session.activeRun.status !== 'awaiting_approval'

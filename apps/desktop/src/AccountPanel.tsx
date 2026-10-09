@@ -20,6 +20,7 @@ import type {
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
 import { IconButton } from './ui.tsx';
+import { copyText } from './copy.tsx';
 
 export default function AccountPanel({
   client,
@@ -188,10 +189,13 @@ export default function AccountPanel({
                 type="button"
                 className="button secondary"
                 onClick={() => {
-                  void navigator.clipboard.writeText(state.login!.url).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
+                  void copyText(state.login!.url).then(
+                    () => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    },
+                    () => setFailure('复制失败，请重试。'),
+                  );
                 }}
               >
                 {copied ? <Check /> : <Copy />}

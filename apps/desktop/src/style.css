@@ -337,11 +337,30 @@ button.chip:hover:not(:disabled) {
   margin-bottom: 42px;
   font-size: 24px;
 }
+.login-links {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+.settings-only {
+  display: grid;
+  grid-template-columns: 284px minmax(0, 1fr);
+  height: 100dvh;
+  padding-top: var(--bar);
+  background: var(--chrome);
+}
+.settings-only .workspace {
+  grid-column: 2;
+}
+.setting-number {
+  width: 76px;
+  text-align: right;
+}
 .project-link {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 28px auto 0;
   padding: 4px 8px;
   border: 0;
   background: none;
@@ -1029,6 +1048,7 @@ button.chip:hover:not(:disabled) {
 }
 .setting-actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
@@ -1204,10 +1224,6 @@ kbd {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
-}
-.conversation-find small {
-  flex-basis: 100%;
-  color: var(--muted);
 }
 .conversation.searching .message {
   content-visibility: visible;
@@ -1618,6 +1634,33 @@ details[open] > summary > .fold-chevron {
 }
 .run-indicator .running-dot {
   margin-top: 0;
+}
+.background-tasks {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.background-tasks ul {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.background-tasks li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-s);
+  font-size: 13px;
+}
+.background-tasks li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .composer-area {
   position: relative;

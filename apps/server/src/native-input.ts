@@ -68,9 +68,11 @@ export class NativeInput {
       if (message.type === 'result') this.outstanding.delete(id);
     }
   }
-  endTurn(result: Extract<SDKMessage, { type: 'result' }>) {
+  // `waiting` says background tasks are still alive in the CLI; the turn their completion starts is yet to come.
+  endTurn(result: Extract<SDKMessage, { type: 'result' }>, waiting = false) {
     // Seal synchronously before post-turn metrics, so new inputs cannot be lost in cleanup.
     if (result.is_error || (!this.outstanding.size && !(result.queued_turn_count ?? 0))) {
+      if (waiting && !result.is_error) return false;
       this.accepting = false;
       return true;
     }

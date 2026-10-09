@@ -14,8 +14,6 @@ export default function ConversationFind({
   close,
   request,
   partial,
-  loading,
-  error,
 }: {
   root: RefObject<HTMLDivElement | null>;
   scroll: RefObject<HTMLDivElement | null>;
@@ -23,9 +21,8 @@ export default function ConversationFind({
   change: (query: string) => void;
   close: () => void;
   request: number;
+  // Earlier pages of the session are not loaded, and so not searched.
   partial: boolean;
-  loading: boolean;
-  error: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const ranges = useRef<Range[]>([]);
@@ -115,7 +112,7 @@ export default function ConversationFind({
       />
       <span className="find-count" role="status">
         {result.index} / {result.count}
-        {partial ? '（已加载）' : ''}
+        {partial ? '（仅已加载部分）' : ''}
       </span>
       <IconButton
         title="上一个匹配（Shift+Enter）"
@@ -130,7 +127,6 @@ export default function ConversationFind({
       <IconButton title="关闭查找（Esc）" onClick={close}>
         <X />
       </IconButton>
-      {(loading || error) && <small role="status">{error || '正在加载更早记录…'}</small>}
     </div>
   );
 }

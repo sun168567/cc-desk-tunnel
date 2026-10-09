@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  ArrowLeft,
   Bell,
   CircleHelp,
   Info,
@@ -13,12 +14,12 @@ import {
 import type { ProxyClient } from './client.ts';
 import Help from './Help.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
-import { setPrefs, usePrefs } from './prefs.ts';
-import type { NotifyKind } from './prefs.ts';
+import { connectionWaits, setPrefs, usePrefs, waitRange } from './prefs.ts';
+import type { ConnectionWaits, NotifyKind } from './prefs.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
 import ShortcutSettings from './ShortcutSettings.tsx';
-import { Switch } from './ui.tsx';
+import { IconButton, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
 export type Section =
@@ -44,7 +45,7 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     name: '常规',
     group: '客户端',
     icon: SlidersHorizontal,
-    words: '托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹',
+    words: '托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH',
   },
   {
     id: 'notifications',
@@ -90,6 +91,57 @@ function Row({ title, detail, children }: { title: string; detail?: string; chil
   );
 }
 
+const waits: { step: keyof ConnectionWaits; title: string; detail: string }[] = [
+  { step: 'connect', title: '连接服务器', detail: '与服务端建立网络连接' },
+  {
+    step: 'ssh',
+    title: '本机 SSH 服务启动',
+    detail: '域账号连不上域控制器、或安全软件扫描较慢时，启动会久一些',
+  },
+  {
+    step: 'ready',
+    title: '执行通道就绪',
+    detail: '从连上服务端到隧道接通的总时间；至少比上一项多 35 秒',
+  },
+];
+// A number of seconds, taken when the field is left or Enter is pressed; anything out of range is put back.
+function Seconds({
+  label,
+  value,
+  change,
+}: {
+  label: string;
+  value: number;
+  change: (value: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const seconds = Number(text);
+    if (Number.isInteger(seconds) && seconds >= waitRange.min && seconds <= waitRange.max)
+      change(seconds);
+    else setText(String(value));
+  };
+  return (
+    <span className="setting-actions">
+      <input
+        className="setting-number"
+        type="number"
+        min={waitRange.min}
+        max={waitRange.max}
+        aria-label={label}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') commit();
+        }}
+      />
+      秒
+    </span>
+  );
+}
+
 function General({
   form,
   changeForm,
@@ -102,6 +154,7 @@ function General({
   chooseWorkspace: (reset: boolean) => void;
 }) {
   const [closeToTray, setCloseToTray] = useState<boolean | null>(null);
+  const { connection } = usePrefs();
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
   }, []);
@@ -165,6 +218,37 @@ function General({
                     changeForm({ autoLogin, remember: autoLogin || form.remember })
                   }
                 />
+              </Row>
+            </div>
+            <h2 className="page-heading">连接等待时间</h2>
+            <div className="card">
+              {waits.map(({ step, title, detail }) => (
+                <Row
+                  key={step}
+                  title={title}
+                  detail={`${detail}。默认 ${connectionWaits[step]} 秒`}
+                >
+                  <Seconds
+                    label={title}
+                    value={connection[step]}
+                    change={(seconds) =>
+                      setPrefs((prefs) => ({
+                        ...prefs,
+                        connection: { ...prefs.connection, [step]: seconds },
+                      }))
+                    }
+                  />
+                </Row>
+              ))}
+              <Row title="恢复默认" detail="下次连接时生效；连接正常时不需要改">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={waits.every(({ step }) => connection[step] === connectionWaits[step])}
+                  onClick={() => setPrefs((prefs) => ({ ...prefs, connection: connectionWaits }))}
+                >
+                  恢复默认
+                </button>
               </Row>
             </div>
           </>
@@ -314,7 +398,10 @@ export default function SettingsPage({
   service,
   adapterName,
   updates,
+  back,
 }: {
+  // Given before a connection exists: only this computer's own settings are shown, and this leaves them.
+  back?: () => void;
   client: ProxyClient;
   section: Section;
   go: (section: Section) => void;
@@ -332,14 +419,21 @@ export default function SettingsPage({
 }) {
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
-  const shown = sections.filter((item) =>
-    `${item.name} ${item.words}`.toLowerCase().includes(term),
+  const shown = sections.filter(
+    (item) =>
+      (!back || item.group === '客户端') &&
+      `${item.name} ${item.words}`.toLowerCase().includes(term),
   );
   return (
     <>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand">设置</span>
+          {back && (
+            <IconButton title="返回登录" onClick={back}>
+              <ArrowLeft />
+            </IconButton>
+          )}
+          <span className="brand">{back ? '本机设置' : '设置'}</span>
         </div>
         <label className="session-search">
           <Search />

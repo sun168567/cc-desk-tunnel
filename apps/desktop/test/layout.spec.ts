@@ -247,6 +247,110 @@ test('a question is answered with its choices, and a session or a whole project 
   await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
 });
 
+test('a run that goes on only for background tasks looks finished, lists them and ends one', async ({
+  page,
+}) => {
+  const now = new Date().toISOString();
+  const connectionId = randomUUID();
+  const runId = randomUUID();
+  const session: Session = {
+    id: randomUUID(),
+    title: '后台渲染',
+    autoTitle: false,
+    projectPath: 'D:\\工作\\渲染',
+    permissionMode: 'auto',
+    model: null,
+    effort: null,
+    createdAt: now,
+    updatedAt: now,
+    activeRun: { id: runId, status: 'running', connectionId, waiting: 'background' },
+  };
+  const tasks = [
+    { id: 'b1', kind: 'local_bash', description: '完整渲染' },
+    { id: 'b2', kind: 'local_bash', description: '开发服务器' },
+  ];
+  const stopped: string[] = [];
+  await page.routeWebSocket('ws://127.0.0.1:18890/ws', (route) => {
+    const reply = (value: unknown) => route.send(JSON.stringify(value));
+    const event = (sequence: number, payload: unknown) => ({
+      sessionId: session.id,
+      runId,
+      sequence,
+      createdAt: now,
+      payload,
+    });
+    route.onMessage((raw) => {
+      const message = JSON.parse(String(raw));
+      if (message.type === 'auth') {
+        reply({
+          type: 'ready',
+          protocolVersion: PROTOCOL_VERSION,
+          version: '0.0.1',
+          connectionId,
+          adapter: 'claude-code',
+          sessions: [session],
+        });
+        return;
+      }
+      if (message.type === 'session.subscribe')
+        reply({
+          type: 'session.snapshot',
+          requestId: message.requestId,
+          session,
+          mode: 'replace',
+          firstSequence: 1,
+          lastSequence: 4,
+          hasEarlier: false,
+          events: [
+            event(1, {
+              type: 'message.user',
+              messageId: randomUUID(),
+              text: '渲染',
+              scenario: 'chat',
+            }),
+            event(2, { type: 'text.delta', messageId: randomUUID(), text: '渲染已在后台开始。' }),
+            event(3, { type: 'native.tasks', tasks }),
+            event(4, {
+              type: 'run.status',
+              status: 'running',
+              connectionId,
+              waiting: 'background',
+            }),
+          ],
+        });
+      if (message.type === 'run.task.stop') {
+        stopped.push(message.taskId);
+        reply({
+          type: 'session.event',
+          event: event(5, { type: 'native.tasks', tasks: [tasks[1]] }),
+        });
+      }
+      reply({ type: 'response', requestId: message.requestId, ok: true });
+    });
+  });
+  await page.goto('/');
+  await page.getByLabel('服务地址', { exact: true }).fill('ws://127.0.0.1:18890/ws');
+  await page
+    .getByLabel('服务凭据', { exact: true })
+    .fill('test-only-layout-token-with-enough-length');
+  await page.getByRole('button', { name: '连接', exact: true }).click();
+  const row = page.locator('.session-row').filter({ hasText: session.title });
+  await expect(row).toContainText('后台任务');
+  await row.locator('.session-select').click();
+  const panel = page.locator('.background-tasks');
+  await expect(panel.getByRole('status')).toContainText('后台任务 2 个');
+  await expect(panel.getByRole('listitem')).toHaveText([/完整渲染/, /开发服务器/]);
+  // The turn itself is over: its answer shows as final, and the composer offers sending, not stopping.
+  await expect(page.locator('.message.assistant')).toContainText('渲染已在后台开始。');
+  await expect(page.getByRole('button', { name: '停止运行', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '发送消息', exact: true })).toBeVisible();
+  await shot(page, '15-后台任务');
+  await panel.getByRole('listitem').first().getByRole('button', { name: '结束' }).click();
+  await expect(panel.getByRole('listitem')).toHaveText([/开发服务器/]);
+  expect(stopped).toEqual(['b1']);
+  await expect(panel.getByRole('button', { name: '全部结束' })).toHaveCount(0);
+});
+
 test('approval modes are described where they are chosen, and models sit behind the effort slider', async ({
   page,
 }) => {

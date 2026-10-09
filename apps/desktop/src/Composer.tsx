@@ -285,7 +285,7 @@ export default function Composer({
               canRefreshModels={canRefreshModels}
             />
           )}
-          {session.activeRun && (
+          {session.activeRun && session.activeRun.waiting !== 'background' && (
             <IconButton
               title="停止运行"
               className="stop-button"

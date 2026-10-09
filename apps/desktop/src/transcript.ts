@@ -205,13 +205,16 @@ export type Turn = {
 };
 
 export function conversation(events: SessionEvent[]): Turn[] {
+  // A run that goes on only for its background tasks has finished its turn; the turn a task starts reopens it.
   const ended = new Map<string, string>();
   for (const { runId, createdAt, payload } of events)
-    if (
-      payload.type === 'run.status' &&
-      ['completed', 'cancelled', 'failed'].includes(payload.status)
+    if (payload.type !== 'run.status') continue;
+    else if (
+      ['completed', 'cancelled', 'failed'].includes(payload.status) ||
+      payload.waiting === 'background'
     )
       ended.set(runId, createdAt);
+    else if (payload.status === 'running') ended.delete(runId);
   const turns: Turn[] = [];
   let runId = '';
   for (const item of transcript(events)) {

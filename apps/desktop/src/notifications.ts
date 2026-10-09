@@ -69,7 +69,10 @@ export function useNotifications(client: ProxyClient, viewing: () => string | nu
           if (now?.surface === 'terminal' || before?.surface === 'terminal') continue;
           if (now?.status === 'awaiting_approval' && before?.status !== 'awaiting_approval')
             waiting(session);
-          if (before && !now) ended(session, before.id);
+          // Claude's turn is over once only background tasks go on; their ending without another turn is no news.
+          if (now?.waiting === 'background' && before && before.waiting !== 'background')
+            push({ kind: 'done', title: '任务完成', body: session.title, sessionId: session.id });
+          if (before && !now && before.waiting !== 'background') ended(session, before.id);
         }
       previous = runs;
       known = true;
