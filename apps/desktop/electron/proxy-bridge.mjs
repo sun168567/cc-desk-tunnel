@@ -22,6 +22,18 @@ export function controlTlsOptions(config) {
     throw new Error('请输入可信安装信息中的 SHA256 证书指纹，或留空使用 CA 验证。');
   return { rejectUnauthorized: false };
 }
+// The waits of connecting, in milliseconds. Whatever is not a sensible number of seconds takes the default, and
+// the whole is never shorter than the local SSH service is given plus the rest of the way.
+export function connectionWaits(values) {
+  const wait = (seconds, fallback) =>
+    (Number.isInteger(seconds) && seconds >= 5 && seconds <= 600 ? seconds : fallback) * 1000;
+  const ssh = wait(values?.ssh, 10);
+  return {
+    connect: wait(values?.connect, 15),
+    ssh,
+    ready: Math.max(wait(values?.ready, 45), ssh + 35000),
+  };
+}
 // Starts TLS with the service, through the system's HTTP proxy when the Windows settings name one for it. The proxy
 // only relays bytes: the certificate is still the service's own and is judged as on a direct connection.
 // `route`, when given, is told the proxy that was used, for the words of a failure.
@@ -30,7 +42,7 @@ async function connectService(address, config, resolveProxy, route) {
   const proxy = httpProxy(await resolveProxy?.(`https://${address.hostname}:${port}`));
   if (route) route.proxy = proxy;
   return connect({
-    socket: await openSocket(proxy, address.hostname, port),
+    socket: await openSocket(proxy, address.hostname, port, connectionWaits(config.waits).connect),
     servername: isIP(address.hostname) ? undefined : address.hostname,
     ...controlTlsOptions(config),
   });
@@ -82,6 +94,7 @@ export async function openProxyBridge(
     throw new Error('原生模式需要不含凭据的 WSS 地址。');
   // A malformed pin is refused here, before anything listens or connects.
   controlTlsOptions(config);
+  const waits = connectionWaits(config.waits);
   const nonce = randomBytes(32).toString('hex');
   const server = createServer();
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
@@ -125,10 +138,10 @@ export async function openProxyBridge(
       () =>
         fail(
           configurationReceived
-            ? '执行通道在 45 秒内没有就绪。\n服务凭据已通过，本机的隧道组件也已启动，但服务端经隧道连不回本机：请检查服务器防火墙 / 云安全组是否放行了隧道端口，以及安全软件是否拦截了内置的 frpc.exe 或 sshd.exe。'
-            : '服务端在 45 秒内没有完成应答。\n请检查网络是否稳定，或稍后重试；反复出现时查看服务端日志。',
+            ? `执行通道在 ${waits.ready / 1000} 秒内没有就绪。\n服务凭据已通过，本机的隧道组件也已启动，但服务端经隧道连不回本机：请检查服务器防火墙 / 云安全组是否放行了隧道端口，以及安全软件是否拦截了内置的 frpc.exe 或 sshd.exe。`
+            : `服务端在 ${waits.ready / 1000} 秒内没有完成应答。\n请检查网络是否稳定，或稍后重试；反复出现时查看服务端日志。`,
         ),
-      45000,
+      waits.ready,
     );
     function fail(message) {
       if (local.readyState === WebSocket.OPEN)
@@ -184,7 +197,13 @@ export async function openProxyBridge(
           return;
         }
         configurationReceived = true;
-        current.preparing = startWindowsTunnel(message, binaries, current.controller.signal, fail)
+        current.preparing = startWindowsTunnel(
+          message,
+          binaries,
+          current.controller.signal,
+          fail,
+          waits.ssh,
+        )
           .then((tunnel) => {
             current.tunnel = tunnel;
             if (!closed && remote.readyState === WebSocket.OPEN)

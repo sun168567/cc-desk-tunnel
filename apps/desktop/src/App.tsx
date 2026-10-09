@@ -48,7 +48,7 @@ import type { ConnectionForm } from './LoginPage.tsx';
 import { exportSession } from './exportSession.ts';
 import { useNotifications } from './notifications.ts';
 import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
-import { setPrefs, toggled, usePrefs } from './prefs.ts';
+import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
 import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
 import Rail from './Rail.tsx';
@@ -122,6 +122,11 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [findRequest, setFindRequest] = useState(0);
+  // Which of this computer's settings is open on the login page.
+  const [localSettings, setLocalSettings] = useState<Section | null>(null);
+  useEffect(() => {
+    if (state.status !== 'disconnected' && state.status !== 'connecting') setLocalSettings(null);
+  }, [state.status]);
   const refreshed = useRef(new Set<string>());
   const [projects, setProjects] = useState(savedProjects);
   // The folders that hold sessions without a project; new ones are made in the first.
@@ -358,6 +363,7 @@ export function App() {
         const connection = await window.desktop!.connectProxy({
           url: form.url,
           fingerprint: form.fingerprint,
+          waits: getPrefs().connection,
         });
         client.connect(connection.url, form.token, false);
       } else {
@@ -915,8 +921,33 @@ export function App() {
   }, []);
 
   if (state.status === 'disconnected' || state.status === 'connecting')
-    return (
+    return localSettings ? (
+      <div className="settings-only">
+        <div className="window-drag" />
+        <SettingsPage
+          client={client}
+          section={localSettings}
+          go={setLocalSettings}
+          back={() => setLocalSettings(null)}
+          native={false}
+          account={null}
+          form={form}
+          changeForm={changeForm}
+          workspaceRoot={workspaceRoots[0] ?? ''}
+          chooseWorkspace={(reset) => {
+            void act(async () => {
+              setWorkspaceRoots(await window.desktop!.chooseWorkspace(reset));
+            });
+          }}
+          version={version}
+          service={null}
+          adapterName=""
+          updates={[]}
+        />
+      </div>
+    ) : (
       <LoginPage
+        openSettings={() => setLocalSettings('general')}
         form={form}
         change={changeForm}
         error={

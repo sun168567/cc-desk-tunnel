@@ -8,24 +8,19 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { httpProxy } from './system-proxy.mjs';
 import { componentFailure, missingComponent } from './connect-errors.mjs';
 
-function execute(file, args) {
+function execute(file, args, timeout) {
   return new Promise((resolve, reject) => {
-    execFile(
-      file,
-      args,
-      { windowsHide: true, encoding: 'utf8', timeout: 30000 },
-      (error, stdout) => {
-        if (error)
-          reject(
-            new Error(
-              error.code === 'ENOENT'
-                ? missingComponent('PowerShell（pwsh.exe）')
-                : '本机 SSH 服务的准备步骤失败。\n内置的 PowerShell 或 OpenSSH 可能被安全软件拦截，或临时目录不可写；请检查安全软件的保护记录后重新连接，仍然失败时重新安装本应用。',
-            ),
-          );
-        else resolve(stdout);
-      },
-    );
+    execFile(file, args, { windowsHide: true, encoding: 'utf8', timeout }, (error, stdout) => {
+      if (error)
+        reject(
+          new Error(
+            error.code === 'ENOENT'
+              ? missingComponent('PowerShell（pwsh.exe）')
+              : '本机 SSH 服务的准备步骤失败。\n内置的 PowerShell 或 OpenSSH 可能被安全软件拦截，或临时目录不可写；请检查安全软件的保护记录后重新连接，仍然失败时重新安装本应用。',
+          ),
+        );
+      else resolve(stdout);
+    });
   });
 }
 async function waitForHost(child) {
@@ -73,7 +68,14 @@ function probe(port) {
     });
   });
 }
-export async function startWindowsTunnel(configuration, binaries, signal, onFailure) {
+// `readyMs` is how long the local SSH service may take to start listening.
+export async function startWindowsTunnel(
+  configuration,
+  binaries,
+  signal,
+  onFailure,
+  readyMs = 10000,
+) {
   if (process.platform !== 'win32') throw new Error('Windows OpenSSH requires Windows.');
   const directory = await mkdtemp(join(tmpdir(), 'cc-desk-tunnel-ssh-'));
   const powershell = binaries.powershell ?? 'pwsh.exe';
@@ -129,19 +131,23 @@ export async function startWindowsTunnel(configuration, binaries, signal, onFail
         });
     const port = await availablePort();
     const metadata = JSON.parse(
-      await execute(powershell, [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-File',
-        scriptPath('prepare-ssh.ps1'),
-        '-Runtime',
-        directory,
-        '-OpenSshDirectory',
-        binaries.openssh,
-        '-Port',
-        String(port),
-      ]),
+      await execute(
+        powershell,
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-File',
+          scriptPath('prepare-ssh.ps1'),
+          '-Runtime',
+          directory,
+          '-OpenSshDirectory',
+          binaries.openssh,
+          '-Port',
+          String(port),
+        ],
+        Math.max(30000, readyMs),
+      ),
     );
     const proxy = httpProxy(
       await binaries.resolveProxy?.(
@@ -194,7 +200,7 @@ export async function startWindowsTunnel(configuration, binaries, signal, onFail
       binaries.frpc,
     ]);
     let ready = false;
-    for (let attempt = 0; attempt < 100; attempt++) {
+    for (const started = Date.now(); Date.now() - started < readyMs;) {
       check();
       if (await probe(port)) {
         ready = true;
@@ -204,7 +210,7 @@ export async function startWindowsTunnel(configuration, binaries, signal, onFail
     }
     if (!ready)
       throw new Error(
-        '本机的 SSH 服务在 10 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。',
+        `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。这台电脑启动较慢时，可在“设置 → 常规”里调大等待时间。`,
       );
     return {
       credentials: {

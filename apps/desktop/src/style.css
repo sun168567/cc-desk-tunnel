@@ -337,11 +337,30 @@ button.chip:hover:not(:disabled) {
   margin-bottom: 42px;
   font-size: 24px;
 }
+.login-links {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+.settings-only {
+  display: grid;
+  grid-template-columns: 284px minmax(0, 1fr);
+  height: 100dvh;
+  padding-top: var(--bar);
+  background: var(--chrome);
+}
+.settings-only .workspace {
+  grid-column: 2;
+}
+.setting-number {
+  width: 76px;
+  text-align: right;
+}
 .project-link {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 28px auto 0;
   padding: 4px 8px;
   border: 0;
   background: none;
@@ -1029,6 +1048,7 @@ button.chip:hover:not(:disabled) {
 }
 .setting-actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;

@@ -3,6 +3,11 @@ import { useSyncExternalStore } from 'react';
 // Choices that belong to this computer's window and never reach the service: what is pinned, what a project is
 // called here, which events raise a notification, and the keyboard shortcuts.
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
+// How many seconds each step of connecting may take. The defaults suit most computers; a domain account whose
+// domain controller is out of reach, or slow security software, can need more.
+export type ConnectionWaits = { connect: number; ssh: number; ready: number };
+export const connectionWaits: ConnectionWaits = { connect: 15, ssh: 10, ready: 45 };
+export const waitRange = { min: 5, max: 600 };
 export type Prefs = {
   pinnedSessions: string[];
   // Projects are named by pathKey().
@@ -11,6 +16,7 @@ export type Prefs = {
   notify: { enabled: boolean; sound: boolean } & Record<NotifyKind, boolean>;
   // `keys` holds only what the user changed, by action; an empty combination means none.
   shortcuts: { enabled: boolean; keys: Record<string, string> };
+  connection: ConnectionWaits;
 };
 
 const storageKey = 'proxy-prefs';
@@ -29,6 +35,7 @@ const defaults: Prefs = {
     connection: true,
   },
   shortcuts: { enabled: true, keys: {} },
+  connection: connectionWaits,
 };
 
 function read(): Prefs {
@@ -50,6 +57,17 @@ function read(): Prefs {
           ),
         ),
       },
+      connection: Object.fromEntries(
+        Object.entries(connectionWaits).map(([step, seconds]) => {
+          const value = saved.connection?.[step];
+          return [
+            step,
+            Number.isInteger(value) && value >= waitRange.min && value <= waitRange.max
+              ? value
+              : seconds,
+          ];
+        }),
+      ) as ConnectionWaits,
     };
   } catch {
     return defaults;

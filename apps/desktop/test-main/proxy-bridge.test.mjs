@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   certificateMatches,
+  connectionWaits,
   controlTlsOptions,
   openProxyBridge,
 } from '../electron/proxy-bridge.mjs';
@@ -48,4 +49,18 @@ test('local browser test bridge only accepts its explicitly configured origin', 
   } finally {
     await bridge.close();
   }
+});
+
+test('connection waits take the defaults unless given sensible seconds, and the whole outlasts SSH', () => {
+  assert.deepEqual(connectionWaits(undefined), { connect: 15000, ssh: 10000, ready: 45000 });
+  assert.deepEqual(connectionWaits({ connect: 4, ssh: '30', ready: 601 }), {
+    connect: 15000,
+    ssh: 10000,
+    ready: 45000,
+  });
+  assert.deepEqual(connectionWaits({ connect: 30, ssh: 40, ready: 50 }), {
+    connect: 30000,
+    ssh: 40000,
+    ready: 75000,
+  });
 });

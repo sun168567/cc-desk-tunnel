@@ -42,7 +42,12 @@ declare global {
       quit: () => Promise<void>;
       version: () => Promise<string>;
       installUpdate: () => Promise<void>;
-      connectProxy: (config: { url: string; fingerprint: string }) => Promise<{ url: string }>;
+      connectProxy: (config: {
+        url: string;
+        fingerprint: string;
+        // Seconds allowed for reaching the service, for the local SSH service to start, and for the whole.
+        waits?: { connect: number; ssh: number; ready: number };
+      }) => Promise<{ url: string }>;
       disconnectProxy: () => Promise<void>;
       onProxyClosed: (callback: () => void) => () => void;
     };
