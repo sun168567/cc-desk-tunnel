@@ -36,8 +36,11 @@ export type ClaudeRun = {
     waiting: 'approval' | 'question',
   ) => Promise<{ allowed: boolean; answers?: Record<string, string> }>;
   ssh: SshConnection;
-  // Filled in while the CLI is running, so the service can ask it for fresh account quota mid-run.
-  controls: { refresh?: () => Promise<void> };
+  // Told when Claude has finished its turn and the run goes on only for background tasks, and when it resumes.
+  waiting: (background: boolean) => void;
+  // Filled in while the CLI is running, so the service can ask it for fresh account quota mid-run and end
+  // one of its background tasks.
+  controls: { refresh?: () => Promise<void>; stopTask?: (taskId: string) => Promise<void> };
 };
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
 export function remotePrompt(projectPath: string, ssh: SshConnection, sessionId: string) {
@@ -171,6 +174,7 @@ export async function runClaude(
     let refreshedAt = 0;
     let quotaAt = Date.now();
     const running = session;
+    run.controls.stopTask = (taskId) => running.stopTask(taskId);
     run.controls.refresh = async () => {
       const payload = await nativeMetrics(running);
       if (payload.type === 'native.metrics') metrics = payload;
@@ -182,18 +186,35 @@ export async function runClaude(
     // none is left.
     let background = 0;
     let idle = false;
+    let told = false;
     for await (const message of session) {
       if (message.type === 'system' && message.subtype === 'background_tasks_changed') {
-        background = message.tasks.filter((task) => !task.ambient).length;
-        // The turn a finished task starts follows at once. When none does, nothing is left to wait for.
+        const tasks = message.tasks.filter((task) => !task.ambient);
+        background = tasks.length;
+        if (!run.signal.aborted)
+          run.emit({
+            type: 'native.tasks',
+            tasks: tasks.map((task) => ({
+              id: task.task_id,
+              kind: task.task_type,
+              description: task.description,
+            })),
+          });
+        // The turn a finished task starts follows at once, announced by the CLI's `init`. When none does,
+        // as after the user ended the last task, nothing is left to wait for.
         clearTimeout(settle);
         if (idle && !background)
           settle = setTimeout(() => {
             settled = true;
             run.input.close();
             running.close();
-          }, 15000);
-      } else if (['user', 'assistant', 'stream_event'].includes(message.type)) {
+          }, 3000);
+      } else if (
+        (message.type === 'system' && message.subtype === 'init') ||
+        ['user', 'assistant', 'stream_event'].includes(message.type)
+      ) {
+        if (told && !run.signal.aborted) run.waiting(false);
+        told = false;
         idle = false;
         clearTimeout(settle);
       }
@@ -240,11 +261,10 @@ export async function runClaude(
         }
         if (done || run.signal.aborted) break;
         idle = true;
-        if (background)
-          run.emit({
-            type: 'native.notice',
-            text: '后台任务仍在运行，本次运行保持开启：任务结束后 Claude 会接着处理。现在停止运行会同时结束后台任务。',
-          });
+        if (background) {
+          told = true;
+          run.waiting(true);
+        }
       }
     }
   } catch (error) {
@@ -253,6 +273,7 @@ export async function runClaude(
   } finally {
     clearTimeout(settle);
     run.controls.refresh = undefined;
+    run.controls.stopTask = undefined;
     run.input.close();
     session?.close();
     run.signal.removeEventListener('abort', stop);

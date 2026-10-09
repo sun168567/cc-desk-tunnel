@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -160,8 +160,9 @@ export const runStatusSchema = z.enum([
   'cancelled',
   'failed',
 ]);
-// What a run in `awaiting_approval` waits for: a decision on a tool, or an answer to a question Claude asked.
-export const waitingSchema = z.enum(['approval', 'question']);
+// What a run waits for. In `awaiting_approval`: a decision on a tool, or an answer to a question Claude asked.
+// While `running`, `background`: Claude has finished its turn and only the background tasks it started go on.
+export const waitingSchema = z.enum(['approval', 'question', 'background']);
 export const terminalStatuses = new Set<RunStatus>(['completed', 'cancelled', 'failed']);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
@@ -211,6 +212,11 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     updatedAt: timestamp.optional(),
   }),
   z.object({ type: z.literal('native.notice'), text: z.string() }),
+  // The background tasks alive in the run's CLI; each list replaces the one before.
+  z.object({
+    type: z.literal('native.tasks'),
+    tasks: z.array(z.object({ id: z.string().min(1), kind: z.string(), description: z.string() })),
+  }),
   z.object({
     type: z.literal('native.capabilities'),
     models: z.array(modelInfoSchema),
@@ -461,6 +467,15 @@ export const commandSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('run.cancel'), ...request, sessionId: id, runId: id }).strict(),
+  z
+    .object({
+      type: z.literal('run.task.stop'),
+      ...request,
+      sessionId: id,
+      runId: id,
+      taskId: z.string().min(1).max(200),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('approval.reply'),

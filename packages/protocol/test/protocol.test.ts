@@ -83,3 +83,34 @@ test('terminal control frames are explicitly scoped and bounded without request 
     false,
   );
 });
+
+test('a run waiting only for background tasks, its task list and the request to end one are valid', () => {
+  const event = {
+    sessionId: randomUUID(),
+    runId: randomUUID(),
+    sequence: 1,
+    createdAt: new Date().toISOString(),
+  };
+  const status = { type: 'run.status', status: 'running', connectionId: randomUUID() };
+  assert.ok(
+    eventSchema.safeParse({ ...event, payload: { ...status, waiting: 'background' } }).success,
+  );
+  assert.ok(
+    eventSchema.safeParse({
+      ...event,
+      payload: {
+        type: 'native.tasks',
+        tasks: [{ id: 'b1', kind: 'local_bash', description: '渲染' }],
+      },
+    }).success,
+  );
+  const stop = {
+    type: 'run.task.stop',
+    requestId: randomUUID(),
+    sessionId: event.sessionId,
+    runId: event.runId,
+    taskId: 'b1',
+  };
+  assert.ok(commandSchema.safeParse(stop).success);
+  assert.equal(commandSchema.safeParse({ ...stop, taskId: '' }).success, false);
+});

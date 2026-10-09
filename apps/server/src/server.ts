@@ -69,7 +69,7 @@ export type Run = {
   approvals: Map<string, (allowed: boolean, answers?: Record<string, string>) => void>;
   cancelReason?: string;
   input?: NativeInput;
-  controls: { refresh?: () => Promise<void> };
+  controls: { refresh?: () => Promise<void>; stopTask?: (taskId: string) => Promise<void> };
 };
 type Terminal = { id: string; sessionId: string; owner: Peer; process?: NativeTerminal };
 type Login = { process: NativeLogin; owner: Peer; url?: string };
@@ -278,6 +278,13 @@ export function createProxyServer(options: ServerOptions) {
         effort: session.effort,
         input: run.input!,
         controls: run.controls,
+        waiting: (background) =>
+          emit(run, {
+            type: 'run.status',
+            status: 'running',
+            connectionId: run.owner.id,
+            ...(background ? { waiting: 'background' as const } : {}),
+          }),
         dataDir: store.directory,
         resume: store.hasNativeContext(run.sessionId),
         signal: run.controller.signal,
@@ -669,11 +676,20 @@ export function createProxyServer(options: ServerOptions) {
           }),
     );
   }
-  function controlRun(peer: Peer, command: CommandOf<'run.cancel' | 'approval.reply'>) {
+  function controlRun(
+    peer: Peer,
+    command: CommandOf<'run.cancel' | 'run.task.stop' | 'approval.reply'>,
+  ) {
     const run = runs.get(command.sessionId);
     if (!run || run.id !== command.runId)
       throw new DomainError('run_inactive', '运行已结束，操作未生效。');
     if (run.owner !== peer) throw new DomainError('not_owner', '该运行属于另一连接。');
+    if (command.type === 'run.task.stop') {
+      if (!run.controls.stopTask) throw new DomainError('task_inactive', '后台任务已经结束。');
+      // The CLI reports the task gone through its task list; a task already over is not an error.
+      void run.controls.stopTask(command.taskId).catch(() => {});
+      return;
+    }
     if (command.type === 'run.cancel') {
       cancel(
         run,
@@ -789,6 +805,7 @@ export function createProxyServer(options: ServerOptions) {
         });
         return command.sessionId;
       case 'run.cancel':
+      case 'run.task.stop':
       case 'approval.reply':
         controlRun(peer, command);
         return command.sessionId;
