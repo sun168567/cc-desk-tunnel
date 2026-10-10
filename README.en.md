@@ -179,6 +179,10 @@ docs/               Architecture, deployment and development documentation
 
 We recognize [LINUX DO](https://linux.do/) and its values of sincerity, friendliness, solidarity and professionalism, and appreciate the community's discussions of remote development and open-source tools. Feedback is welcome; redact account details, service tokens, server addresses and private project information first. Report security vulnerabilities through the [private reporting channel](SECURITY.md#报告漏洞).
 
+## Star history
+
+[![Star history chart](https://api.star-history.com/svg?repos=sun168567/cc-desk-tunnel&type=Date)](https://star-history.com/#sun168567/cc-desk-tunnel&Date)
+
 ## License
 
 [Apache License 2.0](LICENSE). Bundled third-party components and their licenses are listed in [NOTICE](NOTICE).

@@ -23,8 +23,9 @@ Claude Code（简称 CC）运行在一台 Linux 服务器上；项目代码、�
 
 ## 工作方式
 
-![工作方式：Windows 上的桌面客户端经 WSS 连接 Linux 服务器上的代理服务，并在同一个地址上主动建立执行通道；Claude Code 经通道 SSH 回到本机执行命令](docs/images/workflow.png)
+![工作方式：Windows 电脑与 Linux 服务器之间是一条 WSS 加密隧道，里面有两类连接。一类连接桌面客户端与代理服务，传用户消息、Claude 输出和审批请求；另一类是 SSH，连接本机的 OpenSSH 与服务器上的通道转发，传命令、文件和执行结果。Claude Code 的工具调用经通道转发和 SSH 到本机的项目里执行](docs/images/workflow.png)
 
+- 两台机器之间只有一条 WSS 加密隧道，用同一个地址和端口。里面有两类连接：桌面客户端与代理服务之间的对话（文档里叫控制连接），和 Claude Code 经 SSH 操作本机的执行通道。
 - Windows 主动连出，不需要公网 IP，也不需要开放任何入站端口。
 - 每次连接临时生成 SSH 密钥，断开即销毁；Windows 上不安装常驻服务。
 - 项目只是官方 Agent SDK 与未修改的官方 Claude Code 之上的一层胶水：不改 CLI 本体，不替换它的工具、审批和上下文管理。会话与长期记忆由云端的 Claude Code 自己保存。
@@ -181,6 +182,10 @@ docs/               跨模块的架构、部署、开发文档
 ## 社区
 
 认可 [LINUX DO](https://linux.do/) 社区倡导的真诚、友善、团结与专业，也感谢佬友们关于远程开发和开源工具的讨论。欢迎交流使用体验；反馈问题时请先遮盖账号、服务凭据、服务器地址和项目隐私。安全漏洞请走[私下报告入口](SECURITY.md#报告漏洞)。
+
+## Star 趋势
+
+[![Star 趋势图](https://api.star-history.com/svg?repos=sun168567/cc-desk-tunnel&type=Date)](https://star-history.com/#sun168567/cc-desk-tunnel&Date)
 
 ## 许可
 

@@ -1,6 +1,6 @@
 # Linux 服务
 
-Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude Code、维护到 Windows 的反向隧道，并记录调用统计。`src/throttle.ts` 按来源地址限制凭据错误的重试和未认证连接的数量。
+Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude Code、维护到 Windows 的执行通道，并记录调用统计。`src/throttle.ts` 按来源地址限制凭据错误的重试和未认证连接的数量。
 
 ## 开发入口
 
