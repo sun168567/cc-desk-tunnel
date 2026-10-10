@@ -55,6 +55,9 @@ export type ClientState = {
   update: ServiceUpdate | null;
   // The service refused this client for its version; it may still hand out an installer.
   mismatch: boolean;
+  // How much of the installer of its own version the service has fetched so far, from 0 to 1, while it is
+  // still fetching it.
+  preparing: number | null;
   model: string | null;
   // The latest native readings from any session, for views that are not tied to the selected one.
   capabilities: NativeCapabilities | null;
@@ -78,6 +81,7 @@ export class ProxyClient {
     service: null,
     update: null,
     mismatch: false,
+    preparing: null,
     model: null,
     capabilities: null,
     metrics: null,
@@ -140,6 +144,7 @@ export class ProxyClient {
       service: null,
       update: null,
       mismatch: false,
+      preparing: null,
       sessions: [],
       events: {},
       history: {},
@@ -210,6 +215,11 @@ export class ProxyClient {
             mismatch: true,
             service: message.service ?? null,
             release: message.client?.version ?? null,
+            preparing: message.preparing
+              ? message.preparing.size
+                ? message.preparing.received / message.preparing.size
+                : 0
+              : null,
           });
         if (
           [

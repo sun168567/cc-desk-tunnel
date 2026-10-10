@@ -352,7 +352,7 @@ function About({
         <div className="card">
           <Row
             title="客户端与服务端需要同一版本"
-            detail="服务端跟随发布页；客户端的安装包由所连接的服务端提供，下载校验后覆盖升级"
+            detail="服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级"
           >
             <span className="setting-actions">
               {updates.map((item) => (
