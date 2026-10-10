@@ -142,11 +142,17 @@ export const usagePageSchema = z.object({
     outputPerSecond: z.number().nonnegative().nullable(),
   }),
   models: z.array(z.string()),
+  // Every model of the time range, whatever the model filter, the costliest first.
+  byModel: z.array(z.object({ model: z.string(), ...usageTotals })),
   series: z.array(
     z.object({
       at: timestamp,
       requests: z.number().int().nonnegative(),
       tokens: z.number().nonnegative(),
+      inputTokens: z.number().nonnegative(),
+      outputTokens: z.number().nonnegative(),
+      cacheReadTokens: z.number().nonnegative(),
+      cacheCreationTokens: z.number().nonnegative(),
       costUsd: z.number().nonnegative(),
     }),
   ),
@@ -383,6 +389,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       to: timestamp.optional(),
       model: z.string().min(1).max(200).optional(),
       beforeId: z.number().int().positive().optional(),
+      // Rows to skip from the newest, for a page of a range whose end is fixed.
+      offset: z.number().int().min(0).max(10_000_000).optional(),
       limit: z.number().int().min(1).max(200).default(100),
       bucketMinutes: z.number().int().min(5).max(1440).default(60),
       // Minutes east of UTC, so day buckets follow the viewer's calendar.
@@ -518,6 +526,7 @@ export const terminalControlSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 export type TerminalControl = z.infer<typeof terminalControlSchema>;
+const tunnelSecret = z.string().min(32).max(128);
 export const authSchema = z
   .object({
     type: z.literal('auth'),
@@ -526,7 +535,6 @@ export const authSchema = z
     token: z.string().min(24).max(512),
     deviceName: z.string().trim().min(1).max(120),
     tunnel: z.boolean().default(false),
-const tunnelSecret = z.string().min(32).max(128);
   })
   .strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
@@ -592,14 +600,6 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
-export const tunnelCredentialsSchema = z
-  .object({
-    type: z.literal('tunnel.credentials'),
-    connectionId: id,
-    username: z
-      .string()
-      .min(1)
-      .max(256)
 // The first and only text frame of a channel connection. Once the service has accepted it, every frame in
 // either direction is the bytes of one SSH connection, and closing the connection ends that one.
 export const tunnelAttachSchema = z
@@ -614,6 +614,14 @@ export type TunnelAttach = z.infer<typeof tunnelAttachSchema>;
 // How a channel connection is closed when it could not be attached.
 export const TUNNEL_CLOSE = { refused: 4001, unknown: 4004 } as const;
 
+export const tunnelCredentialsSchema = z
+  .object({
+    type: z.literal('tunnel.credentials'),
+    connectionId: id,
+    username: z
+      .string()
+      .min(1)
+      .max(256)
       .regex(/^[a-zA-Z0-9_.\\@-]+$/),
     privateKey: z.string().min(1).max(16384),
     hostPublicKey: z.string().regex(/^ssh-ed25519 [A-Za-z0-9+/=]+$/),
