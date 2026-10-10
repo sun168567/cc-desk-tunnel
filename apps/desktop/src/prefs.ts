@@ -12,6 +12,8 @@ export type Prefs = {
   pinnedSessions: string[];
   // Projects are named by pathKey().
   pinnedProjects: string[];
+  // Projects whose sessions are folded away in the sidebar.
+  collapsedProjects: string[];
   projectNames: Record<string, string>;
   notify: { enabled: boolean; sound: boolean } & Record<NotifyKind, boolean>;
   // `keys` holds only what the user changed, by action; an empty combination means none.
@@ -23,6 +25,7 @@ const storageKey = 'proxy-prefs';
 const defaults: Prefs = {
   pinnedSessions: [],
   pinnedProjects: [],
+  collapsedProjects: [],
   projectNames: {},
   notify: {
     enabled: true,
@@ -46,6 +49,7 @@ function read(): Prefs {
     return {
       pinnedSessions: strings(saved.pinnedSessions),
       pinnedProjects: strings(saved.pinnedProjects),
+      collapsedProjects: strings(saved.collapsedProjects),
       projectNames:
         saved.projectNames && typeof saved.projectNames === 'object' ? saved.projectNames : {},
       notify: { ...defaults.notify, ...(typeof saved.notify === 'object' ? saved.notify : {}) },

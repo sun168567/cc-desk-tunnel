@@ -404,6 +404,33 @@ test('unsent text stays with its session across switching and a restart', async 
   await expect(box).toHaveValue('乙的草稿');
 });
 
+test('a project folds its sessions away, remembers it, and a search still finds them', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await login(page);
+  const title = await createSession(page, '折叠');
+  const rows = page
+    .locator('.project-group')
+    .filter({ hasText: '中文项目' })
+    .locator('.session-row');
+  await expect(rows.filter({ hasText: title })).toHaveCount(1);
+  await page.getByRole('button', { name: '收起项目 · 中文项目', exact: true }).click();
+  await expect(rows).toHaveCount(0);
+  const expand = page.getByRole('button', { name: '展开项目 · 中文项目', exact: true });
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  await page.reload();
+  await login(page);
+  await expect(expand).toBeVisible();
+  await expect(rows).toHaveCount(0);
+  await search(page, title);
+  await expect(rows.filter({ hasText: title })).toHaveCount(1);
+  await search(page, '');
+  await expect(rows).toHaveCount(0);
+  await expand.click();
+  await expect(rows.filter({ hasText: title })).toHaveCount(1);
+});
+
 test('usage log: period-independent totals, chart hover, model filter and table', async ({
   page,
 }) => {

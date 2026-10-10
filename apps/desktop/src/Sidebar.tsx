@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Ellipsis, Folder, Pin, Plus, Search, SquarePen, X } from 'lucide-react';
+import { Ellipsis, Folder, FolderOpen, Pin, Plus, Search, SquarePen, X } from 'lucide-react';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
@@ -225,41 +225,63 @@ export default function Sidebar({
             <Plus />
           </IconButton>
         </div>
-        {groups.map(({ key, path, sessions: members }) => (
-          <section className="project-group" key={key}>
-            <h2
-              title={path}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                projectMenu(path, { x: event.clientX, y: event.clientY });
-              }}
-            >
-              <Folder />
-              <span>{prefs.projectNames[key] || folderName(path)}</span>
-              {prefs.pinnedProjects.includes(key) && <Pin className="pin-mark" />}
-              <IconButton
-                title={`项目操作 · ${path}`}
-                className="row-action"
-                onClick={(event) => {
-                  const box = event.currentTarget.getBoundingClientRect();
-                  projectMenu(path, { x: box.left, y: box.bottom + 4 });
+        {groups.map(({ key, path, sessions: members }) => {
+          // A search shows what it found, folded or not.
+          const collapsed = !search.trim() && prefs.collapsedProjects.includes(key);
+          const name = prefs.projectNames[key] || folderName(path);
+          return (
+            <section className="project-group" key={key}>
+              <h2
+                title={path}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  projectMenu(path, { x: event.clientX, y: event.clientY });
                 }}
               >
-                <Ellipsis />
-              </IconButton>
-              <IconButton
-                title={`新建会话 · ${path}`}
-                className="row-action"
-                disabled={!connected || busy || refreshing || terminalActive}
-                onClick={() => createInProject(path)}
-              >
-                <Plus />
-              </IconButton>
-            </h2>
-            {members.map(renderSession)}
-            {!members.length && <p className="project-empty">暂无会话</p>}
-          </section>
-        ))}
+                <button
+                  type="button"
+                  className="project-toggle"
+                  aria-expanded={!collapsed}
+                  aria-label={`${collapsed ? '展开' : '收起'}项目 · ${name}`}
+                  onClick={() =>
+                    setPrefs((value) => ({
+                      ...value,
+                      collapsedProjects: toggled(value.collapsedProjects, key),
+                    }))
+                  }
+                >
+                  {collapsed ? <Folder /> : <FolderOpen />}
+                  <span>{name}</span>
+                  {collapsed && members.some((session) => session.activeRun) && (
+                    <i className="running-dot" />
+                  )}
+                  {collapsed && members.length > 0 && <small>{members.length}</small>}
+                </button>
+                {prefs.pinnedProjects.includes(key) && <Pin className="pin-mark" />}
+                <IconButton
+                  title={`项目操作 · ${path}`}
+                  className="row-action"
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    projectMenu(path, { x: box.left, y: box.bottom + 4 });
+                  }}
+                >
+                  <Ellipsis />
+                </IconButton>
+                <IconButton
+                  title={`新建会话 · ${path}`}
+                  className="row-action"
+                  disabled={!connected || busy || refreshing || terminalActive}
+                  onClick={() => createInProject(path)}
+                >
+                  <Plus />
+                </IconButton>
+              </h2>
+              {!collapsed && members.map(renderSession)}
+              {!collapsed && !members.length && <p className="project-empty">暂无会话</p>}
+            </section>
+          );
+        })}
         {groups.length === 0 && (
           <p className="project-empty">{search ? '没有匹配的项目' : '还没有项目'}</p>
         )}
