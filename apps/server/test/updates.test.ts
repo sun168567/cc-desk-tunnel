@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -64,7 +64,7 @@ async function feed(t: TestContext, version: string, runtime = 1) {
       (state) => states.push(state),
     );
   };
-  return { directory, name, installer, requests, states, updates };
+  return { directory, name, installer, manifest, requests, states, updates };
 }
 
 test('version comparison is numeric', () => {
@@ -121,4 +121,97 @@ test('the installer of the running version is fetched for clients and checked ag
     }
   }
   assert.fail('The installer was not downloaded.');
+});
+
+test('an installer download that slows to a halt is continued on new connections, and tried again after the page fails', async (t) => {
+  const version = serviceVersion();
+  const installer = Buffer.from(Array.from({ length: 20_000 }, (_, index) => index % 251));
+  const name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`;
+  const manifest = {
+    version,
+    runtime: 1,
+    files: [
+      {
+        name,
+        size: installer.length,
+        sha256: createHash('sha256').update(installer).digest('hex'),
+      },
+    ],
+  };
+  const ranges: (string | undefined)[] = [];
+  let pages = 0;
+  const server = createServer((request, response) => {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    if (request.url === `/repos/owner/name/releases/tags/v${version}`) {
+      // The release page is out of reach the first time it is asked.
+      if (++pages === 1) return void response.writeHead(503).end();
+      response.end(
+        JSON.stringify({
+          assets: [
+            { name: 'release.json', url: `${base}/assets/1` },
+            { name, url: `${base}/assets/2` },
+          ],
+        }),
+      );
+    } else if (request.url === '/assets/1') response.end(JSON.stringify(manifest));
+    else if (request.url === '/assets/2') {
+      ranges.push(request.headers.range);
+      const start = Number(/^bytes=(\d+)-$/.exec(request.headers.range ?? '')?.[1] ?? 0);
+      // The second connection delivers nothing at all; every other one sends 6,000 bytes and then goes quiet
+      // without closing.
+      response.writeHead(start ? 206 : 200, { 'Content-Type': 'application/octet-stream' });
+      response.flushHeaders();
+      if (ranges.length !== 2) response.write(installer.subarray(start, start + 6000));
+      if (start + 6000 >= installer.length && ranges.length !== 2) response.end();
+    } else response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-updates-'));
+  const updates = new ServiceUpdates(
+    {
+      repository: 'owner/name',
+      api: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+      clientDir: join(directory, 'client'),
+      restart: () => undefined,
+      download: { stretch: 2000, stall: 60, attempts: 3, retry: 50 },
+    },
+    () => undefined,
+  );
+  t.after(() => {
+    updates.stop();
+    server.closeAllConnections();
+    server.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  updates.start();
+  const target = join(directory, 'client', name);
+  let seen = 0;
+  for (let attempt = 0; attempt < 500 && !existsSync(target); attempt++) {
+    seen = Math.max(seen, updates.preparing?.received ?? 0);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.deepEqual(readFileSync(target), installer);
+  assert.equal(pages, 2);
+  assert.deepEqual(ranges, [
+    undefined,
+    'bytes=6000-',
+    'bytes=6000-',
+    'bytes=12000-',
+    'bytes=18000-',
+  ]);
+  // While it was on its way, clients could be told how far it was; nothing is left to tell afterwards.
+  assert.ok(seen >= 6000 && seen < installer.length);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(updates.preparing, undefined);
+  assert.equal(existsSync(`${target}.part`), false);
+});
+
+test('a download whose connections keep delivering nothing is given up, and one that is not the announced file is discarded', async (t) => {
+  const f = await feed(t, serviceVersion());
+  f.manifest.files[0].sha256 = '0'.repeat(64);
+  const updates = f.updates();
+  updates.start();
+  t.after(() => updates.stop());
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.deepEqual(readdirSync(join(f.directory, 'client')), []);
 });

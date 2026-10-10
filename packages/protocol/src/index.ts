@@ -588,6 +588,14 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     code: z.string(),
     message: z.string(),
     service: versionSchema.optional(),
+    // The installer of the service's version, while the service is still fetching it.
+    preparing: z
+      .object({
+        version: versionSchema,
+        received: z.number().int().nonnegative(),
+        size: z.number().int().nonnegative(),
+      })
+      .optional(),
     client: installerSchema.optional(),
   }),
   z.object({ type: z.literal('service.update'), ...serviceUpdateSchema.shape }),

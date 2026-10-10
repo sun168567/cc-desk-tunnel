@@ -874,12 +874,19 @@ export function createProxyServer(options: ServerOptions) {
     }
     // A client of another version is told which version runs here and, if held, the installer to fetch.
     if (auth.data.protocolVersion !== PROTOCOL_VERSION) {
+      // The installer of this version may still be on its way here, or its download may have failed: the
+      // client is told how far it is and the download is started again if it is not running.
+      const held = installer();
+      if (held?.version !== version) updates?.prepareInstaller();
       send(peer, {
         type: 'connection.error',
         code: 'version_mismatch',
         message: `客户端与服务端（${version}）的版本不一致，需要升级其中一方。`,
         service: version,
-        client: installer(),
+        client: held,
+        ...(held?.version !== version && updates?.preparing
+          ? { preparing: updates.preparing }
+          : {}),
       });
       peer.socket.close(4002, 'Version mismatch');
       return false;
