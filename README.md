@@ -183,6 +183,10 @@ docs/               跨模块的架构、部署、开发文档
 
 认可 [LINUX DO](https://linux.do/) 社区倡导的真诚、友善、团结与专业，也感谢佬友们关于远程开发和开源工具的讨论。欢迎交流使用体验；反馈问题时请先遮盖账号、服务凭据、服务器地址和项目隐私。安全漏洞请走[私下报告入口](SECURITY.md#报告漏洞)。
 
+## Star 趋势
+
+[![Star 趋势图](https://api.star-history.com/svg?repos=sun168567/cc-desk-tunnel&type=Date)](https://star-history.com/#sun168567/cc-desk-tunnel&Date)
+
 ## 许可
 
 [Apache License 2.0](LICENSE)。随包分发的第三方组件及其许可见 [NOTICE](NOTICE)。
