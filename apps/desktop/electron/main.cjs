@@ -12,6 +12,7 @@ const {
   dialog,
   shell,
   clipboard,
+  net,
 } = require('electron');
 const path = require('node:path');
 const {
@@ -358,14 +359,31 @@ handle('notify:show', (event, notice) => {
     window.once('focus', () => window.flashFrame(false));
   }
 });
-// Upgrades in place: the installer comes from the connected service, runs silently over the current install
-// and starts the new version.
-handle('update:install', async () => {
-  if (!lastBridge) throw new Error('请先连接服务。');
+// Upgrades in place: the installer runs silently over the current install and starts the new version. It
+// comes from the connected service, or, when the user chooses so, straight from the release page: `version`
+// is then the one to fetch, which the service's refusal of this client named.
+handle('update:install', async (event, version) => {
   if (!app.isPackaged) throw new Error('源码运行不支持自升级；请重新打包安装。');
-  const installer = await lastBridge.downloadInstaller(
-    await mkdtemp(path.join(tmpdir(), 'cc-desk-tunnel-update-')),
-  );
+  const directory = await mkdtemp(path.join(tmpdir(), 'cc-desk-tunnel-update-'));
+  let installer;
+  if (version === undefined) {
+    if (!lastBridge) throw new Error('请先连接服务。');
+    installer = await lastBridge.downloadInstaller(directory);
+  } else {
+    const { downloadRelease } = await import(
+      pathToFileURL(path.join(__dirname, 'release-download.mjs')).href
+    );
+    let told = 0;
+    // Chromium's network stack: the Windows proxy settings apply, as they do to the connection itself.
+    installer = await downloadRelease((url, init) => net.fetch(url, init), version, directory, {
+      announced: lastBridge?.release(),
+      progress(received, size) {
+        if (Date.now() - told < 500 && received < size) return;
+        told = Date.now();
+        if (!event.sender.isDestroyed()) event.sender.send('update:progress', { received, size });
+      },
+    });
+  }
   spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
   app.quit();
 });

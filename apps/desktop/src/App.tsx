@@ -212,6 +212,30 @@ export function App() {
   // Offered when the service holds a newer installer than the running client.
   const upgrade =
     version && state.release && isNewer(state.release, version) ? state.release : null;
+  // The service refused this client as the older one: its version can also be fetched from the release page,
+  // whether or not the service holds the installer.
+  const direct =
+    state.mismatch && window.desktop && version && state.service && isNewer(state.service, version)
+      ? state.service
+      : null;
+  // How far an installer being fetched from the release page is, from 0 to 1.
+  const [downloaded, setDownloaded] = useState<number | null>(null);
+  useEffect(
+    () =>
+      window.desktop?.onUpdateProgress(({ received, size }) =>
+        setDownloaded(size ? received / size : 0),
+      ),
+    [],
+  );
+  const install = (version?: string) => {
+    void act(async () => {
+      try {
+        await window.desktop!.installUpdate(version);
+      } finally {
+        setDownloaded(null);
+      }
+    });
+  };
 
   // A check or an upgrade of the service that failed says why.
   const update = state.update;
@@ -961,13 +985,19 @@ export function App() {
         change={changeForm}
         error={
           currentError && state.mismatch && !upgrade && state.service && version
-            ? `${currentError}${isNewer(version, state.service) ? '此客户端较新，请先升级服务端。' : '服务端还没有备好对应的客户端安装包，请稍后重试或手动安装。'}`
+            ? `${currentError}${
+                isNewer(version, state.service)
+                  ? '此客户端较新，请先升级服务端。'
+                  : state.preparing !== null
+                    ? `服务端正在下载这一版的安装包（${Math.floor(state.preparing * 100)}%），稍后重新连接就能从服务端升级；也可以现在直接从 GitHub 发布页下载。`
+                    : '服务端还没有这一版的安装包，它会继续尝试下载；可以直接从 GitHub 发布页下载，或稍后重试。'
+              }`
             : currentError
         }
         upgrade={state.mismatch && window.desktop ? upgrade : null}
-        install={() => {
-          void act(() => window.desktop!.installUpdate());
-        }}
+        direct={direct}
+        downloaded={downloaded}
+        install={install}
         connecting={state.status === 'connecting' || proxyConnecting || busy}
         submit={() => {
           void login(form);

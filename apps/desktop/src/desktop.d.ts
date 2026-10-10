@@ -43,7 +43,12 @@ declare global {
       zoom: (direction: number) => void;
       quit: () => Promise<void>;
       version: () => Promise<string>;
-      installUpdate: () => Promise<void>;
+      // Fetches and runs an installer: the one the connected service holds, or, given a version, that
+      // version's from the release page.
+      installUpdate: (version?: string) => Promise<void>;
+      onUpdateProgress: (
+        callback: (progress: { received: number; size: number }) => void,
+      ) => () => void;
       connectProxy: (config: {
         url: string;
         fingerprint: string;

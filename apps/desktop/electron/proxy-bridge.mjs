@@ -339,5 +339,7 @@ export async function openProxyBridge(
     url: `ws://127.0.0.1:${server.address().port}/bridge/${nonce}`,
     close,
     downloadInstaller,
+    // The installer the service last announced, if any.
+    release: () => release,
   };
 }

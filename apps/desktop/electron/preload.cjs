@@ -36,7 +36,12 @@ contextBridge.exposeInMainWorld('desktop', {
     webFrame.setZoomLevel(direction ? webFrame.getZoomLevel() + Math.sign(direction) * 0.5 : 0),
   quit: () => ipcRenderer.invoke('app:quit'),
   version: () => ipcRenderer.invoke('app:version'),
-  installUpdate: () => ipcRenderer.invoke('update:install'),
+  installUpdate: (version) => ipcRenderer.invoke('update:install', version),
+  onUpdateProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('update:progress', listener);
+    return () => ipcRenderer.removeListener('update:progress', listener);
+  },
   connectProxy: (config) => ipcRenderer.invoke('proxy:connect', config),
   disconnectProxy: () => ipcRenderer.invoke('proxy:disconnect'),
   onProxyClosed: (callback) => {

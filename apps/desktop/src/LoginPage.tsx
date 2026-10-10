@@ -17,6 +17,8 @@ export default function LoginPage({
   connecting,
   error,
   upgrade,
+  direct,
+  downloaded,
   install,
   submit,
   openSettings,
@@ -27,7 +29,12 @@ export default function LoginPage({
   error: string | null;
   // The version of the installer a service of another version offers this client.
   upgrade: string | null;
-  install: () => void;
+  // The service's version, when this client is the older one: its installer can be fetched from the release
+  // page instead, and `downloaded` is how far that is, from 0 to 1.
+  direct: string | null;
+  downloaded: number | null;
+  // Fetches and runs the installer the service holds, or the given version's from the release page.
+  install: (version?: string) => void;
   submit: () => void;
   // This computer's own settings, which need no connection.
   openSettings: () => void;
@@ -142,10 +149,25 @@ export default function LoginPage({
               className="button login-submit"
               type="button"
               disabled={connecting}
-              onClick={install}
+              onClick={() => install()}
             >
               <Download />
               升级客户端到 {upgrade}
+            </button>
+          )}
+          {direct && (
+            <button
+              className="button login-submit"
+              type="button"
+              disabled={connecting}
+              onClick={() => install(direct)}
+            >
+              <Download />
+              {downloaded !== null
+                ? `正在从 GitHub 下载 ${Math.floor(downloaded * 100)}%`
+                : upgrade
+                  ? `改从 GitHub 发布页下载 ${direct}`
+                  : `从 GitHub 发布页下载并升级到 ${direct}`}
             </button>
           )}
           <button className="button primary login-submit" disabled={connecting}>
