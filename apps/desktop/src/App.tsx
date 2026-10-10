@@ -273,8 +273,10 @@ export function App() {
     loaded.current = true;
     void window.desktop?.loadLogin().then((saved) => {
       if (!saved) return;
-      setForm(saved);
-      if (saved.autoLogin) void login(saved);
+      // The installed client has no simulation mode, whatever an earlier version saved.
+      const restored = window.desktop!.dev ? saved : { ...saved, mode: 'remote' as const };
+      setForm(restored);
+      if (restored.autoLogin) void login(restored);
     });
   }, []);
   useEffect(() => {

@@ -414,6 +414,8 @@ app.whenReady().then(() => {
       // A hidden window keeps its connection timers at full rate.
       backgroundThrottling: false,
       preload: path.join(__dirname, 'preload.cjs'),
+      // Only a build run from the source tree offers the login page's simulation mode.
+      additionalArguments: app.isPackaged ? [] : ['--cc-desk-tunnel-dev'],
     },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
