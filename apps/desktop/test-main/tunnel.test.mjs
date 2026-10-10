@@ -121,13 +121,13 @@ async function service() {
     tunnel: {
       // The service is made for Linux, where the login key it writes is private by its file mode. Here it runs
       // on Windows, whose `ssh` refuses a key that inherited access for anyone else from the temporary folder.
-      async probe(configPath, powershellPath) {
+      async probe(configPath) {
         await execute(
           'icacls.exe',
           [join(dirname(configPath), 'identity'), '/inheritance:r', '/grant:r', `*${account}:F`],
           { windowsHide: true },
         );
-        return sshProbe(configPath, powershellPath);
+        return sshProbe(configPath);
       },
     },
   });
@@ -145,13 +145,19 @@ async function service() {
     },
   };
 }
+const schedules = 'C:\\任务 目录\\schedules.json';
 // A device connected to the service through a forwarder, and what `ssh` on the service's machine can do with it.
 async function device(svc, { route = () => svc.port, binaries = {}, config = {} } = {}) {
   const forward = await forwarder(route);
   let closedByBridge = false;
   const bridge = await openProxyBridge(
     { url: `wss://127.0.0.1:${forward.port}/ws`, fingerprint: svc.fingerprint, ...config },
-    { openssh: join(vendor, 'openssh'), powershell: 'pwsh.exe', ...binaries },
+    {
+      openssh: join(vendor, 'openssh'),
+      powershell: 'pwsh.exe',
+      environment: { CC_DESK_TUNNEL_SCHEDULES: schedules },
+      ...binaries,
+    },
     () => (closedByBridge = true),
   );
   const local = new WebSocket(bridge.url);
@@ -166,6 +172,7 @@ async function device(svc, { route = () => svc.port, binaries = {}, config = {} 
       deviceName: '测试设备',
     }),
   );
+  local.send(JSON.stringify({ type: 'device', id: randomUUID() }));
   async function next(type, seconds = 40) {
     for (const deadline = Date.now() + seconds * 1000; Date.now() < deadline;) {
       const index = messages.findIndex((message) => message.type === type);
@@ -281,6 +288,13 @@ test('commands reach the device over the service address alone', windows(), asyn
       assert.match(error.stderr.toString(), /坏了/);
       return true;
     },
+  );
+  // What the client gave the SSH service for its commands to read is there for each of them.
+  assert.equal(
+    (await ssh(svc, connectionId, ps('Write-Output $env:CC_DESK_TUNNEL_SCHEDULES')))
+      .toString()
+      .trim(),
+    schedules,
   );
   // Each command had a connection of its own, and none is kept once it has finished.
   assert.ok(dev.forward.links.length >= 3);

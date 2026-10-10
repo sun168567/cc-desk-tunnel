@@ -13,9 +13,9 @@ export type TunnelOptions = {
   // How long an SSH connection waits for the device to open its channel before it is dropped.
   pairMs?: number;
   // Tells whether a command reaches the device through the SSH configuration; `sshProbe` unless a test replaces it.
-  probe?: (configPath: string, powershellPath: string) => Promise<void>;
+  probe?: (configPath: string) => Promise<void>;
 };
-export type SshConnection = { configPath: string; powershellPath: string };
+export type SshConnection = { configPath: string };
 
 // SSH connections that may wait for their channel at once, and that may be open at once. Far above what one
 // device's commands need; they bound what a stray local process connecting to the port can make the device do.
@@ -38,15 +38,16 @@ export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnectio
   return { ...ssh, configPath };
 }
 
-export function sshProbe(configPath: string, powershellPath: string) {
+// Runs what the system prompt tells Claude to run: the device's SSH service names its PowerShell in a variable.
+export function sshProbe(configPath: string) {
   const script =
     "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); Write-Output 'CC_DESK_TUNNEL_SSH_READY'; exit 0";
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  const command = `"${powershellPath.replaceAll('"', '')}" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+  const command = `"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
   return new Promise<void>((resolve, reject) => {
     execFile(
       'ssh',
-      ['-F', configPath, 'windows', command],
+      ['-F', configPath, 'device', command],
       { timeout: 20000, maxBuffer: 65536 },
       (error, stdout) => {
         if (error || !stdout.includes('CC_DESK_TUNNEL_SSH_READY'))
@@ -56,18 +57,28 @@ export function sshProbe(configPath: string, powershellPath: string) {
     );
   });
 }
+// Where the commands of one device share an SSH connection, or nothing when they cannot: the `ssh` of Windows,
+// which tests run this service with, has no connection sharing, and the path of a Unix socket is limited to
+// 108 bytes, of which `ssh` takes 17 for the name it binds under before renaming.
+export function sharedConnectionPath(directory: string, platform = process.platform) {
+  const path = join(directory, 'mux');
+  return platform !== 'win32' && Buffer.byteLength(path) <= 88 ? path : undefined;
+}
 export function sshConfig(
   directory: string,
   port: number,
   username: string,
   hostPublicKey: string,
+  platform = process.platform,
 ) {
   if (directory.includes('\n') || directory.includes('"'))
     throw new Error('Unsupported data directory');
+  const shared = sharedConnectionPath(directory, platform);
   return {
     knownHosts: `[127.0.0.1]:${port} ${hostPublicKey}\n`,
     config: [
-      'Host windows',
+      // `device` is the name the system prompt gives; conversations begun before 0.2.11 know it as `windows`.
+      'Host device windows',
       '  HostName 127.0.0.1',
       `  Port ${port}`,
       `  User ${username}`,
@@ -83,6 +94,12 @@ export function sshConfig(
       '  ServerAliveCountMax 2',
       '  ForwardAgent no',
       '  ClearAllForwardings yes',
+      // Signing in costs several round trips to the device, which a command would otherwise pay each time.
+      // The first command opens a connection that the following ones run over, and that stays for a while
+      // after the last; it ends with the tunnel, whose close cuts it.
+      ...(shared
+        ? ['  ControlMaster auto', `  ControlPath "${shared}"`, '  ControlPersist 600']
+        : []),
       '',
     ].join('\n'),
   };
@@ -203,9 +220,9 @@ export class Tunnel {
     for (let attempt = 0; attempt < 20; attempt++) {
       if (this.controller.signal.aborted) throw new Error('Tunnel closed');
       try {
-        await this.probe(configPath, credentials.powershellPath);
+        await this.probe(configPath);
         if (this.controller.signal.aborted) throw new Error('Tunnel closed');
-        this.ssh = { configPath, powershellPath: credentials.powershellPath };
+        this.ssh = { configPath };
         return;
       } catch {
         await delay(300, undefined, { signal: this.controller.signal });

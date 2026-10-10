@@ -431,6 +431,44 @@ test('a project folds its sessions away, remembers it, and a search still finds 
   await expect(rows.filter({ hasText: title })).toHaveCount(1);
 });
 
+test('a session on another computer is listed apart, read, and taken over with a directory here', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  await page.goto('/');
+  await login(page);
+  const title = await createSession(page, '换电脑');
+  await send(page, '第一台电脑上的话');
+  await settled(page);
+  // Another browser profile is another computer to the service.
+  const context = await browser.newContext({ baseURL });
+  const other = await context.newPage();
+  await other.goto('/');
+  await login(other);
+  const row = other.locator('.session-row').filter({ hasText: title });
+  await expect(row).toHaveCount(0);
+  await other.getByRole('button', { name: '展开其他设备的会话', exact: true }).click();
+  await row.click();
+  await expect(other.getByText('第一台电脑上的话')).toBeVisible();
+  const bar = other.locator('.elsewhere-bar');
+  await expect(bar).toContainText('浏览器');
+  await expect(other.locator('.composer')).toHaveCount(0);
+  await other.screenshot({ path: resolve(screenshots, 'desktop-elsewhere.png') });
+  other.once('dialog', (dialog) => void dialog.accept('E:\\另一台\\接管目录'));
+  await bar.getByRole('button', { name: '在本机继续…', exact: true }).click();
+  await expect(bar).toHaveCount(0);
+  await expect(
+    other.locator('.project-group').filter({ hasText: '接管目录' }).locator('.session-row'),
+  ).toHaveCount(1);
+  await send(other, '第二台电脑上的话');
+  await settled(other);
+  // The computer it was taken from still has it open, and now as one of another's.
+  await expect(page.locator('.elsewhere-bar')).toContainText('接管目录');
+  await expect(page.getByText('第二台电脑上的话')).toBeVisible();
+  await context.close();
+});
+
 test('usage log: period-independent totals, chart hover, model filter and table', async ({
   page,
 }) => {

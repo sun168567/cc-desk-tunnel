@@ -96,7 +96,12 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
   function launch(file, args) {
     check();
     // The host and its components print why they stop; the end of that is kept to explain a failure.
-    const child = spawn(file, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    // What the host is given here reaches every command of the SSH service it starts.
+    const child = spawn(file, args, {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...binaries.environment },
+    });
     const started = Date.now();
     let output = '';
     for (const stream of [child.stdout, child.stderr])
@@ -170,7 +175,6 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
         type: 'tunnel.credentials',
         connectionId,
         username: metadata.username,
-        powershellPath: metadata.powershellPath,
         privateKey: metadata.privateKey,
         hostPublicKey: metadata.hostPublicKey,
       },

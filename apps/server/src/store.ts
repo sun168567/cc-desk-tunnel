@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { snapshotSchema, sessionSchema, terminalStatuses } from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
 import type {
+  Device,
   Effort,
   EventPayload,
   HistoryPage,
@@ -260,7 +261,7 @@ export class SessionStore {
     return row ? (JSON.parse(String(row.data)) as SessionEvent) : undefined;
   }
 
-  create(requestId: string, title: string, projectPath: string): Session {
+  create(requestId: string, title: string, projectPath: string, device: Device): Session {
     const row = this.database
       .prepare('SELECT metadata FROM sessions WHERE create_request_id = ?')
       .get(requestId);
@@ -279,6 +280,7 @@ export class SessionStore {
       title,
       autoTitle: title === '新会话',
       projectPath,
+      device,
       permissionMode: 'auto',
       model: null,
       effort: null,
@@ -307,14 +309,16 @@ export class SessionStore {
       throw new DomainError('fork_point', '运行途中追加的消息不能作为分叉点。');
     return event.sequence;
   }
-  // Copies a session and its events before `beforeSequence` under `id`. Without native history to resume,
-  // the copy also drops the events that would claim there is one.
+  // Copies a session and its events before `beforeSequence` under `id`, onto the computer that asked and
+  // into its directory there. Without native history to resume, the copy also drops the events that would
+  // claim there is one.
   fork(
     requestId: string,
     sourceId: string,
     id: string,
     title: string,
     native: boolean,
+    place: { device: Device; projectPath?: string },
     beforeSequence?: number,
   ): Session {
     const { session: source } = this.get(sourceId);
@@ -323,6 +327,8 @@ export class SessionStore {
       ...source,
       id,
       title,
+      device: place.device,
+      projectPath: place.projectPath ?? source.projectPath,
       autoTitle: false,
       nativeRoot: native ? (source.nativeRoot ?? source.id) : undefined,
       createdAt: now,
@@ -479,55 +485,66 @@ export class SessionStore {
     this.save(session);
     return session;
   }
-  // Points the session at another project. Once Claude has been told a path, the one it knows is kept until
-  // the next message tells it of the move.
-  move(sessionId: string, projectPath: string) {
+  // Points the session at a project directory on a computer, which may be another one than it was on. What
+  // Claude knows of either changes with the next message: `notice`.
+  move(sessionId: string, projectPath: string, device: Device) {
     const { session } = this.get(sessionId);
     if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再更换项目。');
-    if (session.projectPath === projectPath) return session;
-    if (this.hasNativeContext(sessionId)) {
-      const known = session.movedFrom ?? session.projectPath;
-      session.movedFrom = known === projectPath ? undefined : known;
-    }
+    if (session.projectPath === projectPath && session.device?.id === device.id) return session;
     session.projectPath = projectPath;
+    session.device = device;
     session.updatedAt = new Date().toISOString();
     this.save(session);
     return session;
   }
-  // The text that tells Claude what its system prompt no longer has right, to go in front of the user's next
-  // message: a move it has not heard of, and a PowerShell path on the connection in use that is not the one
-  // it knows. Each is given out once.
-  notice(sessionId: string, powershellPath?: string) {
+  // A session from before computers were told apart becomes that of the first one to use it, where it is.
+  claim(sessionId: string, device: Device) {
     const { session } = this.get(sessionId);
-    let text = '';
-    if (session.movedFrom) {
-      text += `[CC Desk Tunnel: the user moved this session to another Windows project. The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(session.movedFrom)}). From now on use the new directory as the project cwd, in place of the one given earlier.]\n\n`;
-      session.movedFrom = undefined;
+    if (session.device) return session;
+    session.device = device;
+    if (session.prompt) {
+      session.prompt.device ??= device.id;
+      if (session.prompt.told) session.prompt.told.device ??= device.id;
     }
-    const said = session.prompt;
-    const known = said && !said.compacted && (said.toldPowershellPath ?? said.powershellPath);
-    if (said && known && powershellPath && known !== powershellPath) {
-      text += `[CC Desk Tunnel: the PowerShell executable on the connected Windows computer is now ${JSON.stringify(powershellPath)} (it was ${JSON.stringify(known)}). From now on use the new path, in place of the one given earlier.]\n\n`;
-      said.toldPowershellPath = powershellPath;
-    }
-    if (text) this.save(session);
-    return text;
+    this.save(session);
+    return session;
   }
-  // What the system prompt of a run says, given the PowerShell path of the connection it runs on. A prompt
-  // that changes costs the whole conversation's prompt cache, so it stays what it first was — through moves
-  // and reconnects, which `notice` tells Claude of — until a compaction, which rewrites everything after
-  // the prompt anyway; the run after that says what is current.
-  promptValues(sessionId: string, powershellPath: string) {
+  // A computer goes by the name it last signed in with, in every session that is on it.
+  named(device: Device) {
+    const changed: Session[] = [];
+    for (const session of this.list())
+      if (session.device?.id === device.id && session.device.name !== device.name) {
+        session.device = device;
+        this.save(session);
+        changed.push(session);
+      }
+    return changed;
+  }
+  // The text that tells Claude what its system prompt no longer has right, to go in front of the user's next
+  // message: a project directory or a computer other than the one it knows, from the prompt or from an
+  // earlier notice. It is given out once.
+  notice(sessionId: string) {
     const { session } = this.get(sessionId);
     const said = session.prompt;
-    if (said && !said.compacted) {
-      if (!said.powershellPath) {
-        said.powershellPath = powershellPath;
-        this.save(session);
-      }
-      return { projectPath: said.projectPath, powershellPath: said.powershellPath };
-    }
-    const now = { projectPath: session.projectPath, powershellPath };
+    if (!said || said.compacted) return '';
+    const known = said.told ?? said;
+    const device = session.device?.id;
+    if (known.projectPath === session.projectPath && known.device === device) return '';
+    said.told = { projectPath: session.projectPath, device };
+    this.save(session);
+    const paths = `The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(known.projectPath)}).`;
+    return known.device === device
+      ? `[CC Desk Tunnel: the user moved this session to another project on the device. ${paths} From now on use the new directory as the project directory, in place of the one given earlier.]\n\n`
+      : `[CC Desk Tunnel: the user now continues this session from another of their computers, ${JSON.stringify(session.device!.name)}. From now on the device is that computer: Windows. ${paths} What the earlier computer had, its files, paths and running processes, is not on this one unless you find it there.]\n\n`;
+  }
+  // What the system prompt of a run says. A prompt that changes costs the whole conversation's prompt cache,
+  // so it stays what it first was — through moves, which `notice` tells Claude of — until a compaction,
+  // which rewrites everything after the prompt anyway; the run after that says what is current.
+  promptValues(sessionId: string) {
+    const { session } = this.get(sessionId);
+    const said = session.prompt;
+    if (said && !said.compacted) return { projectPath: said.projectPath };
+    const now = { projectPath: session.projectPath, device: session.device?.id };
     session.prompt = now;
     this.save(session);
     return now;

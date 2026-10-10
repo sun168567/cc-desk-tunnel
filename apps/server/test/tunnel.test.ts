@@ -79,22 +79,37 @@ function collect(socket: Socket) {
 
 test('SSH config pins loopback target and host key, disallows interactive/agent forwarding', () => {
   const files = sshConfig('/tmp/private', 32123, 'user', 'ssh-ed25519 AAAATEST');
+  assert.match(files.config, /^Host device windows$/m);
   assert.match(files.config, /HostName 127\.0\.0\.1/);
   assert.match(files.config, /StrictHostKeyChecking yes/);
   assert.match(files.config, /BatchMode yes/);
   assert.match(files.config, /ForwardAgent no/);
   assert.equal(files.knownHosts, '[127.0.0.1]:32123 ssh-ed25519 AAAATEST\n');
 });
+test('commands share one SSH connection where the platform and the length of the path allow it', () => {
+  const config = (directory: string, platform: NodeJS.Platform) =>
+    sshConfig(directory, 32123, 'user', 'ssh-ed25519 AAAATEST', platform).config;
+  const shared = config('/data/state/connections/0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11', 'linux');
+  assert.match(shared, /ControlMaster auto/);
+  assert.match(shared, /ControlPath ".*0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11[\\/]mux"/);
+  assert.match(shared, /ControlPersist \d+/);
+  assert.doesNotMatch(config('/tmp/private', 'win32'), /Control/);
+  assert.doesNotMatch(config(`/srv/${'long-name/'.repeat(9)}connections/id`, 'linux'), /Control/);
+});
 test('context references native SSH configuration without inventing execution tools', () => {
   const prompt = remotePrompt(
     "D:\\中文 空格\\it's",
-    {
-      configPath: '/private/ssh_config',
-      powershellPath: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
-    },
+    { configPath: '/private/ssh_config' },
     '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11',
   );
-  assert.match(prompt, /%APPDATA%\\CC Desk Tunnel\\schedules\.json/);
+  assert.match(prompt, /ssh -F "\/private\/ssh_config" device /);
+  assert.match(
+    prompt,
+    /"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand/,
+  );
+  assert.match(prompt, /CC_DESK_TUNNEL_SCHEDULES/);
+  // Nothing of the device's own layout: where its programs and the client's files are is the device's to know.
+  assert.doesNotMatch(prompt, /pwsh\.exe|APPDATA/);
   assert.match(prompt, /0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11/);
   assert.match(prompt, /native Bash/);
   assert.match(prompt, /ssh -F/);
@@ -107,16 +122,15 @@ test('a session keeps one SSH path, and so one system prompt, across reconnects'
   const session = '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11';
   const prompts = ['first', 'second'].map((connection) => {
     const configPath = join(directory, 'connections', connection, 'ssh_config');
-    const ssh = sessionSsh(directory, session, { configPath, powershellPath: 'pwsh.exe' });
+    const ssh = sessionSsh(directory, session, { configPath });
     assert.equal(readFileSync(ssh.configPath, 'utf8'), `Include ${JSON.stringify(configPath)}\n`);
     return remotePrompt('D:\\work', ssh, session);
   });
   assert.equal(prompts[0], prompts[1]);
   assert.doesNotMatch(prompts[0]!, /connections/);
   assert.notEqual(
-    sessionSsh(directory, randomUUID(), { configPath: '/x', powershellPath: 'pwsh.exe' })
-      .configPath,
-    sessionSsh(directory, session, { configPath: '/x', powershellPath: 'pwsh.exe' }).configPath,
+    sessionSsh(directory, randomUUID(), { configPath: '/x' }).configPath,
+    sessionSsh(directory, session, { configPath: '/x' }).configPath,
   );
 });
 test('the tunnel offers a secret of its own and compares it without leaking its length', async (t) => {

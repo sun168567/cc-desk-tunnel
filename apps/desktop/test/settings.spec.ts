@@ -32,6 +32,7 @@ test('Claude Code settings load from the service and save each change at once', 
     const send = (value: unknown) => route.send(JSON.stringify(value));
     route.onMessage((raw) => {
       const message = JSON.parse(String(raw));
+      if (message.type === 'device') return;
       if (message.type === 'auth') {
         send({
           type: 'ready',

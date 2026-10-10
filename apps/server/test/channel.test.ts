@@ -60,6 +60,7 @@ async function fixture(t: TestContext, pairMs = 5000) {
         tunnel,
       }),
     );
+    control.send(JSON.stringify({ type: 'device', id: randomUUID() }));
     const ready = await next('ready');
     return { control, messages, next, connectionId: ready.connectionId as string };
   }
@@ -74,7 +75,6 @@ async function fixture(t: TestContext, pairMs = 5000) {
         username: 'user',
         privateKey: 'unused',
         hostPublicKey: 'ssh-ed25519 AAAA',
-        powershellPath: 'pwsh.exe',
       }),
     );
     await signed.next('tunnel.ready');
@@ -274,24 +274,25 @@ test('the tunnel ends with its control connection: channels, SSH connections, po
   // The next device is welcome once the first is gone.
   await f.device();
 });
-test('a second device is refused while one holds the tunnel', async (t) => {
+test('two devices are online at once, each with an execution channel of its own', async (t) => {
   const f = await fixture(t);
-  await f.device();
-  const control = await f.socket();
-  const messages: Message[] = [];
-  control.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
-  control.send(
-    JSON.stringify({
-      type: 'auth',
-      token,
-      protocolVersion: PROTOCOL_VERSION,
-      deviceName: '二',
-      tunnel: true,
-    }),
-  );
-  assert.equal(await f.closeCode(control), 4003);
+  const first = await f.device();
+  const second = await f.device();
+  assert.notEqual(first.port, second.port);
+  second.ssh();
+  const open = await second.next('tunnel.open');
+  assert.equal(open.connectionId, second.connectionId);
   assert.equal(
-    messages.some((message) => message.code === 'device_busy'),
-    true,
+    first.messages.some((message) => message.type === 'tunnel.open'),
+    false,
   );
+  // The secret of one opens nothing on the other.
+  assert.equal(
+    await f.closeCode(await first.attach(open.channelId, first.secret, second.connectionId)),
+    TUNNEL_CLOSE.refused,
+  );
+  // One leaving takes nothing from the other.
+  second.control.close();
+  first.ssh();
+  assert.equal((await first.next('tunnel.open')).connectionId, first.connectionId);
 });

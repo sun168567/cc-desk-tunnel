@@ -2,6 +2,7 @@ import { PROTOCOL_VERSION, serverMessageSchema } from '@cc-desk-tunnel/protocol'
 import type {
   AccountState,
   Command,
+  Device,
   NativeCapabilities,
   NativeMetrics,
   ServerMessage,
@@ -42,6 +43,8 @@ export type HistoryState = {
 export type ClientState = {
   status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
   connectionId: string | null;
+  // The computer this client signed in as; a session is worked on from the one it is on.
+  device: Device | null;
   sessions: Session[];
   events: Record<string, SessionEvent[]>;
   history: Record<string, HistoryState>;
@@ -71,6 +74,7 @@ export class ProxyClient {
   state: ClientState = {
     status: 'disconnected',
     connectionId: null,
+    device: null,
     sessions: [],
     events: {},
     history: {},
@@ -91,7 +95,7 @@ export class ProxyClient {
   listeners = new Set<() => void>();
   terminalListeners = new Set<(message: TerminalMessage) => void>();
   socket: WebSocket | null = null;
-  credentials: { url: string; token: string; reconnect: boolean } | null = null;
+  credentials: { url: string; token: string; device: Device; reconnect: boolean } | null = null;
   retryTimer: ReturnType<typeof setTimeout> | undefined;
   retryAttempt = 0;
   // Streamed events are merged in batches so a fast reply does not re-render per fragment.
@@ -118,7 +122,7 @@ export class ProxyClient {
     this.state = { ...this.state, ...values };
     for (const listener of this.listeners) listener();
   }
-  connect(url: string, token: string, reconnect = true) {
+  connect(url: string, token: string, device: Device, reconnect = true) {
     const address = new URL(url);
     if (
       !['ws:', 'wss:'].includes(address.protocol) ||
@@ -135,10 +139,11 @@ export class ProxyClient {
       throw new Error('当前离线原型仅连接本机环回服务。');
     if (token.trim().length < 24) throw new Error('服务凭据至少 24 个字符。');
     this.disconnect();
-    this.credentials = { url: address.toString(), token: token.trim(), reconnect };
+    this.credentials = { url: address.toString(), token: token.trim(), device, reconnect };
     this.cacheOrder = [];
     this.update({
       status: 'connecting',
+      device,
       error: null,
       release: null,
       service: null,
@@ -161,15 +166,17 @@ export class ProxyClient {
     const socket = new WebSocket(credentials.url);
     this.socket = socket;
     const timeout = setTimeout(() => socket.close(), 50000);
-    socket.onopen = () =>
+    socket.onopen = () => {
       socket.send(
         JSON.stringify({
           type: 'auth',
           protocolVersion: PROTOCOL_VERSION,
           token: credentials.token,
-          deviceName: 'Windows desktop',
+          deviceName: credentials.device.name,
         }),
       );
+      socket.send(JSON.stringify({ type: 'device', id: credentials.device.id }));
+    };
     socket.onmessage = ({ data }) => {
       if (this.socket !== socket) return;
       let message: ServerMessage;
@@ -222,13 +229,7 @@ export class ProxyClient {
               : null,
           });
         if (
-          [
-            'unauthorized',
-            'version_mismatch',
-            'tunnel_failed',
-            'device_busy',
-            'ssh_failed',
-          ].includes(message.code)
+          ['unauthorized', 'version_mismatch', 'tunnel_failed', 'ssh_failed'].includes(message.code)
         ) {
           this.credentials = null;
           socket.close();

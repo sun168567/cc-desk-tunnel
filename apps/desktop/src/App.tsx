@@ -14,6 +14,7 @@ import {
   FolderInput,
   FolderOpen,
   GitFork,
+  Laptop,
   LogOut,
   Pencil,
   Pin,
@@ -38,6 +39,7 @@ import type {
 import AccountPanel from './AccountPanel.tsx';
 import { ProxyClient } from './client.ts';
 import Composer from './Composer.tsx';
+import { isHere, thisDevice } from './device.ts';
 import { useDrafts } from './drafts.ts';
 import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
@@ -169,6 +171,11 @@ export function App() {
   const nativeMode = state.adapter === 'claude-code';
   const connected = state.status === 'connected';
   const selected = state.sessions.find((session) => session.id === state.selectedId);
+  // What is listed and managed here is what is on this computer. Sessions on the user's other computers are
+  // shown apart: they can be read, and taken over or forked into a directory here.
+  const sessions = state.sessions.filter((session) => isHere(session, state.device));
+  const elsewhere = state.sessions.filter((session) => !isHere(session, state.device));
+  const away = !!selected && !isHere(selected, state.device);
   const events = selected ? (state.events[selected.id] ?? []) : [];
   const history = selected ? state.history[selected.id] : undefined;
   const nativeSession = latest(events, 'native.session');
@@ -391,9 +398,9 @@ export function App() {
           fingerprint: form.fingerprint,
           waits: getPrefs().connection,
         });
-        client.connect(connection.url, form.token, false);
+        client.connect(connection.url, form.token, await thisDevice(), false);
       } else {
-        client.connect(form.url, form.token);
+        client.connect(form.url, form.token, await thisDevice());
       }
       localStorage.setItem('proxy-url', form.url);
     } catch (error) {
@@ -456,7 +463,7 @@ export function App() {
   const show = (sessionId: string) => visit({ ...place, page: 'chat', sessionId });
   const open = (page: Page, section: Section = place.section) =>
     visit({ page, section, sessionId: client.state.selectedId });
-  async function refreshStatus(sessionId = selected?.id ?? state.sessions[0]?.id) {
+  async function refreshStatus(sessionId = selected?.id ?? sessions[0]?.id) {
     if (!sessionId || refreshing) return;
     setRefreshing(true);
     try {
@@ -498,7 +505,8 @@ export function App() {
       });
       return;
     }
-    const path = selected?.projectPath ?? projects[0] ?? state.sessions[0]?.projectPath;
+    const path =
+      (away ? undefined : selected?.projectPath) ?? projects[0] ?? sessions[0]?.projectPath;
     if (path) await createInProject(path);
     else await addProject();
   }
@@ -556,14 +564,35 @@ export function App() {
         body: `${task.name}：${outcome.text}`,
       }),
   );
+  // Where a session of another computer is to be on this one; null when the user gives none.
+  async function placeHere(session: Session) {
+    const path = window.desktop
+      ? await window.desktop.chooseProject()
+      : window.prompt('这台电脑上的项目目录', session.projectPath);
+    return path?.trim() || null;
+  }
+  // Takes a session over from the computer it was on: from the next message Claude works in the directory
+  // chosen here, on this computer.
+  async function takeOver(session: Session) {
+    await act(async () => {
+      const projectPath = await placeHere(session);
+      if (!projectPath) return;
+      await client.request({ type: 'session.move', sessionId: session.id, projectPath });
+      setProjects((value) => withProject(value, projectPath));
+    });
+  }
   // A fork continues from the same context in a session of its own. Forking before a message brings that
   // message back as a draft, which is how an earlier message is edited and sent again.
   async function fork(session: Session, before?: { id: string; text: string }) {
     await act(async () => {
+      // The copy of a session that is on another computer needs a directory on this one.
+      const projectPath = isHere(session, state.device) ? undefined : await placeHere(session);
+      if (projectPath === null) return;
       const response = await client.request({
         type: 'session.fork',
         sessionId: session.id,
         ...(before ? { beforeMessageId: before.id } : {}),
+        ...(projectPath ? { projectPath } : {}),
       });
       if (!response.sessionId) return;
       if (before) setDraft(response.sessionId, before.text);
@@ -728,7 +757,7 @@ export function App() {
   // Every project the session could belong to, the one it is in marked.
   function moveMenu(session: Session): MenuItem[] {
     const paths = [...projects];
-    for (const item of state.sessions)
+    for (const item of sessions)
       if (
         !isInside(item.projectPath, workspaceRoots) &&
         !paths.some((path) => pathKey(path) === pathKey(item.projectPath))
@@ -756,7 +785,7 @@ export function App() {
     const key = pathKey(from);
     const next = pathKey(to);
     if (key === next) return;
-    const members = state.sessions.filter((item) => pathKey(item.projectPath) === key);
+    const members = sessions.filter((item) => pathKey(item.projectPath) === key);
     if (members.some((item) => item.activeRun))
       throw new Error('这个项目里有会话正在运行，结束后再更改文件夹。');
     for (const item of members)
@@ -1107,14 +1136,15 @@ export function App() {
       ) : place.page === 'schedules' ? (
         <SchedulePanel
           schedules={schedules}
-          sessions={state.sessions}
+          sessions={sessions}
           projects={projects}
           capabilities={capabilities}
         />
       ) : (
         <>
           <Sidebar
-            sessions={state.sessions}
+            sessions={sessions}
+            elsewhere={elsewhere}
             selectedId={selected?.id}
             projects={projects}
             workspaceRoots={workspaceRoots}
@@ -1189,7 +1219,7 @@ export function App() {
               }}
               loadEarlier={() => client.loadEarlier(selected!.id)}
               edit={
-                controlsDisabled
+                controlsDisabled || away
                   ? undefined
                   : (id, text) => {
                       void fork(selected!, { id, text });
@@ -1219,7 +1249,37 @@ export function App() {
                 });
               }}
             />
-            {selected && !terminalSessionId && (
+            {selected && away && (
+              <div className="elsewhere-bar" role="status">
+                <Laptop />
+                <p>
+                  这个会话在设备“{selected.device!.name}”上，项目目录是{' '}
+                  <code>{selected.projectPath}</code>
+                  。要在这台电脑上接着做，先选它在这里的项目目录；下一条消息会告诉 Claude 换了电脑。
+                </p>
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={controlsDisabled}
+                  onClick={() => {
+                    void takeOver(selected);
+                  }}
+                >
+                  在本机继续…
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={controlsDisabled}
+                  onClick={() => {
+                    void fork(selected);
+                  }}
+                >
+                  分叉到本机…
+                </button>
+              </div>
+            )}
+            {selected && !away && !terminalSessionId && (
               <Composer
                 session={selected}
                 projectName={

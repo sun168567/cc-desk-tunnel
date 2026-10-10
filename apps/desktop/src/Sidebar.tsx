@@ -1,5 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Ellipsis, Folder, FolderOpen, Pin, Plus, Search, SquarePen, X } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Ellipsis,
+  Folder,
+  FolderOpen,
+  Laptop,
+  Pin,
+  Plus,
+  Search,
+  SquarePen,
+  X,
+} from 'lucide-react';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
@@ -18,6 +28,7 @@ function activity(session: Session) {
 
 export default function Sidebar({
   sessions,
+  elsewhere,
   selectedId,
   projects,
   workspaceRoots,
@@ -35,6 +46,8 @@ export default function Sidebar({
   projectMenu,
 }: {
   sessions: Session[];
+  // Sessions on the user's other computers: listed apart, by computer, and not part of any project here.
+  elsewhere: Session[];
   selectedId: string | undefined;
   projects: string[];
   // Sessions whose directory lies under one of these belong to no project and are listed on their own.
@@ -97,6 +110,22 @@ export default function Sidebar({
         .sort((a, b) => first(a.key) - first(b.key)),
     };
   }, [sessions, search, projects, workspaceRoots, prefs.pinnedSessions, prefs.pinnedProjects]);
+
+  const others = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const devices = new Map<string, { name: string; sessions: Session[] }>();
+    for (const session of elsewhere) {
+      if (!`${session.title} ${session.projectPath}`.toLowerCase().includes(term)) continue;
+      const device = session.device!;
+      const entry = devices.get(device.id) ?? { name: device.name, sessions: [] };
+      entry.sessions.push(session);
+      devices.set(device.id, entry);
+    }
+    return [...devices.entries()];
+  }, [elsewhere, search]);
+  const othersCount = others.reduce((count, [, device]) => count + device.sessions.length, 0);
+  // A search shows what it found, folded or not.
+  const othersOpen = prefs.elsewhereOpen || !!search.trim();
 
   // A card beside the row tells what the short line cannot: the whole title, the project and the time.
   const [card, setCard] = useState<{ session: Session; top: number; left: number } | null>(null);
@@ -287,9 +316,40 @@ export default function Sidebar({
         )}
         {plain.length > 0 && <div className="list-heading">最近</div>}
         {plain.map(renderSession)}
-        {search && groups.length === 0 && plain.length === 0 && pinned.length === 0 && (
-          <p className="list-empty">没有匹配会话</p>
+        {othersCount > 0 && (
+          <section className="project-group">
+            <h2 title="这些会话的项目目录在你的其他电脑上；可以查看，也可以接到这台电脑上继续">
+              <button
+                type="button"
+                className="project-toggle"
+                aria-expanded={othersOpen}
+                aria-label={`${othersOpen ? '收起' : '展开'}其他设备的会话`}
+                onClick={() =>
+                  setPrefs((value) => ({ ...value, elsewhereOpen: !value.elsewhereOpen }))
+                }
+              >
+                <Laptop />
+                <span>其他设备</span>
+                {!othersOpen && elsewhere.some((session) => session.activeRun) && (
+                  <i className="running-dot" />
+                )}
+                {!othersOpen && <small>{othersCount}</small>}
+              </button>
+            </h2>
+            {othersOpen &&
+              others.map(([id, device]) => (
+                <Fragment key={id}>
+                  <div className="list-heading">{device.name}</div>
+                  {device.sessions.map(renderSession)}
+                </Fragment>
+              ))}
+          </section>
         )}
+        {search &&
+          groups.length === 0 &&
+          plain.length === 0 &&
+          pinned.length === 0 &&
+          othersCount === 0 && <p className="list-empty">没有匹配会话</p>}
       </nav>
       {card && (
         <div className="session-card" role="tooltip" style={{ top: card.top, left: card.left }}>

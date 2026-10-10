@@ -15,7 +15,10 @@ function fixture(t: TestContext) {
     store.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  const session = store.create(randomUUID(), '长会话', 'D:\\中文 项目');
+  const session = store.create(randomUUID(), '长会话', 'D:\\中文 项目', {
+    id: randomUUID(),
+    name: '台式机',
+  });
   return { store, directory, session };
 }
 

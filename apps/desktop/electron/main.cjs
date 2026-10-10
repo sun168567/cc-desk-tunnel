@@ -28,7 +28,8 @@ const {
 } = require('node:fs');
 const { mkdtemp, stat, writeFile } = require('node:fs/promises');
 const { gitBranch } = require('./git-branch.cjs');
-const { tmpdir } = require('node:os');
+const { hostname, tmpdir } = require('node:os');
+const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { mkdir, rmdir } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
@@ -216,6 +217,8 @@ handle('proxy:connect', async (event, config) => {
       scriptDirectory: app.isPackaged
         ? path.join(process.resourcesPath, 'app.asar.unpacked/electron')
         : undefined,
+      // Where Claude finds the scheduled tasks to edit; the service names the variable, not the path.
+      environment: { CC_DESK_TUNNEL_SCHEDULES: schedulesPath() },
       // The Windows proxy settings (manual, script or automatic detection) as Chromium reads them.
       resolveProxy: (url) => session.defaultSession.resolveProxy(url),
     },
@@ -323,6 +326,11 @@ handle('schedules:save', (_event, text) => {
   replaceFile(schedulesPath(), schedules);
 });
 handle('app:version', () => app.getVersion());
+// Which of the user's computers this is to the service: an ID made once and kept, under the computer's name.
+handle('device:get', () => ({
+  id: readSettings().deviceId ?? writeSettings({ deviceId: randomUUID() }).deviceId,
+  name: hostname(),
+}));
 handle('app:quit', () => app.quit());
 let refreshTray = () => {};
 handle('window:settings', () => ({ closeToTray: readSettings().closeToTray !== false }));

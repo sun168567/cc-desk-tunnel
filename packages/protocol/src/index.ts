@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -281,30 +281,33 @@ export const eventSchema = z.object({
   payload: eventPayloadSchema,
 });
 export type SessionEvent = z.infer<typeof eventSchema>;
+// One of the user's computers: the client there makes the ID once and keeps it.
+export const deviceSchema = z.object({ id, name: z.string().trim().min(1).max(120) });
+export type Device = z.infer<typeof deviceSchema>;
 export const sessionSchema = z.object({
   id,
   title: z.string().min(1).max(120),
   autoTitle: z.boolean().default(false),
   projectPath: z.string().min(1).max(2048),
+  // The computer the project directory is on, and so the only one to send the session messages. A session
+  // from before 0.2.11 has none until a computer sends it one.
+  device: deviceSchema.optional(),
   permissionMode: permissionModeSchema.default('auto'),
   model: z.string().trim().min(1).max(200).nullable().default(null),
   effort: effortSchema.nullable().default(null),
   // A fork keeps its native history beside the session it was forked from; this names that session.
   nativeRoot: id.optional(),
   // What the system prompt of the session's native runs says. It is kept word for word until a compaction,
-  // which loses the prompt cache anyway: a move to another project, or a PowerShell path that differs on the
-  // connection in use, is told to Claude with the user's next message instead (`toldPowershellPath` is the
-  // path it was last told that way).
+  // which loses the prompt cache anyway: a move to another project or another computer is told to Claude
+  // with the user's next message instead, and `told` is what it was last told that way.
   prompt: z
     .object({
       projectPath: z.string(),
-      powershellPath: z.string().optional(),
-      toldPowershellPath: z.string().optional(),
+      device: id.optional(),
+      told: z.object({ projectPath: z.string(), device: id.optional() }).optional(),
       compacted: z.boolean().optional(),
     })
     .optional(),
-  // The project path Claude was last told, while the move away from it has not been mentioned to it yet.
-  movedFrom: z.string().optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
   activeRun: z
@@ -416,7 +419,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       effort: effortSchema.nullable().optional(),
     })
     .strict(),
-  // Points a session at another Windows project directory.
+  // Points a session at a project directory on the computer that asks, which the session is on from then.
   z
     .object({
       type: z.literal('session.move'),
@@ -427,13 +430,15 @@ export const commandSchema = z.discriminatedUnion('type', [
     .strict(),
   z.object({ type: z.literal('session.compact'), ...request, sessionId: id }).strict(),
   // Copies a session under a new ID. With `beforeMessageId` the copy ends just before that user message,
-  // which is how an earlier message is edited and sent again without losing the original.
+  // which is how an earlier message is edited and sent again without losing the original. The copy is on the
+  // computer that asks: `projectPath` is its directory there when that is not the one of the original.
   z
     .object({
       type: z.literal('session.fork'),
       ...request,
       sessionId: id,
       beforeMessageId: id.optional(),
+      projectPath: z.string().trim().min(1).max(2048).optional(),
     })
     .strict(),
   z.object({ type: z.literal('session.status'), ...request, sessionId: id }).strict(),
@@ -537,6 +542,9 @@ export const authSchema = z
     tunnel: z.boolean().default(false),
   })
   .strict();
+// Which of the user's computers the connection is from, named by `auth.deviceName`. It follows `auth` as a
+// frame of its own because the frame of `auth` has to stay what every version reads.
+export const deviceIdentitySchema = z.object({ type: z.literal('device'), id }).strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('ready'),
@@ -633,7 +641,6 @@ export const tunnelCredentialsSchema = z
       .regex(/^[a-zA-Z0-9_.\\@-]+$/),
     privateKey: z.string().min(1).max(16384),
     hostPublicKey: z.string().regex(/^ssh-ed25519 [A-Za-z0-9+/=]+$/),
-    powershellPath: z.string().min(1).max(2048),
   })
   .strict();
 export type TunnelCredentials = z.infer<typeof tunnelCredentialsSchema>;

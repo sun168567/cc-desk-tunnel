@@ -43,6 +43,8 @@ declare global {
       zoom: (direction: number) => void;
       quit: () => Promise<void>;
       version: () => Promise<string>;
+      // This computer as the service knows it.
+      device: () => Promise<import('@cc-desk-tunnel/protocol').Device>;
       // Fetches and runs an installer: the one the connected service holds, or, given a version, that
       // version's from the release page.
       installUpdate: (version?: string) => Promise<void>;

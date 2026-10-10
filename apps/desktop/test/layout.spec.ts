@@ -281,6 +281,7 @@ test('a run that goes on only for background tasks looks finished, lists them an
     });
     route.onMessage((raw) => {
       const message = JSON.parse(String(raw));
+      if (message.type === 'device') return;
       if (message.type === 'auth') {
         reply({
           type: 'ready',
@@ -377,6 +378,7 @@ test('approval modes are described where they are chosen, and models sit behind 
     updateSession = (updated) => reply({ type: 'session.updated', session: updated });
     route.onMessage((raw) => {
       const message = JSON.parse(String(raw));
+      if (message.type === 'device') return;
       if (message.type === 'auth') {
         reply({
           type: 'ready',

@@ -29,6 +29,7 @@ test('effort drag previews continuously, saves on release and keeps the menu ope
     const send = (value: unknown) => route.send(JSON.stringify(value));
     route.onMessage((raw) => {
       const message = JSON.parse(String(raw));
+      if (message.type === 'device') return;
       if (message.type === 'auth') {
         send({
           type: 'ready',

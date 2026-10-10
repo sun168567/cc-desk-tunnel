@@ -38,6 +38,9 @@ AllowUsers $allowed
 # Commands started together each open a connection of their own; the default would drop some of them at random
 # once ten are signing in at the same time.
 MaxStartups 64
+# A service that shares one connection between its commands runs each as a session of that connection; the
+# default would refuse the eleventh running at the same time.
+MaxSessions 128
 AllowTcpForwarding no
 PermitTunnel no
 X11Forwarding no
@@ -46,7 +49,6 @@ LogLevel ERROR
 "@ | Set-Content -LiteralPath (Join-Path $Runtime 'sshd_config') -Encoding utf8NoBOM
 @{
   username = $username
-  powershellPath = [Environment]::ProcessPath
   hostPublicKey = ((Get-Content -LiteralPath (Join-Path $Runtime 'host.pub') -Raw -Encoding utf8).Trim() -split ' ')[0..1] -join ' '
   privateKey = Get-Content -LiteralPath (Join-Path $Runtime 'identity') -Raw -Encoding utf8
 } | ConvertTo-Json -Compress

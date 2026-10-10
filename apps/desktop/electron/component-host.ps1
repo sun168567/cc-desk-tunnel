@@ -152,6 +152,10 @@ $arguments = @("-D -e -f `"$(Join-Path $Runtime 'sshd_config')`"")
 # sshd detaches its session process, so each command's cmd.exe would open a visible console on the user's desktop.
 # This OpenSSH switch makes sshd create its children with CREATE_NO_WINDOW; it is set for this host's children only.
 $env:SSH_TEST_ENVIRONMENT = '1'
+# The service has Claude run PowerShell by this variable, which every command of the SSH service inherits: the
+# one this host runs in, whichever others the computer has installed. The path of a command is not inherited;
+# the SSH service makes it anew from the computer's settings.
+$env:CC_DESK_TUNNEL_PWSH = [Environment]::ProcessPath
 # OpenSSH hands the state of its descriptors to its own children in this variable. Started from inside an SSH
 # session (a command Claude runs on this computer, such as the project's own tests), sshd would take the outer
 # session's state for its own and never answer a connection once its error output is a pipe.

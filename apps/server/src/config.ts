@@ -32,6 +32,9 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
   const retention = Number(env.CLAUDE_CONTEXT_RETENTION_DAYS ?? 3650);
   if (!Number.isInteger(retention) || retention < 1)
     throw new Error('Invalid CLAUDE_CONTEXT_RETENTION_DAYS');
+  const maxRuns = env.PROXY_MAX_RUNS ? Number(env.PROXY_MAX_RUNS) : undefined;
+  if (maxRuns !== undefined && (!Number.isInteger(maxRuns) || maxRuns < 1))
+    throw new Error('Invalid PROXY_MAX_RUNS');
   if (native && !reverseProxy && (!env.PROXY_TLS_CERT || !env.PROXY_TLS_KEY))
     throw new Error('Direct mode requires PROXY_TLS_CERT and PROXY_TLS_KEY.');
   const options: ServerOptions = {
@@ -47,6 +50,7 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
           }
         : undefined,
     tunnel: native ? {} : undefined,
+    maxRuns,
     allowedOrigins: env.PROXY_ORIGINS?.split(','),
     claude: native
       ? {

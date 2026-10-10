@@ -13,10 +13,14 @@ import { SessionStore } from '../src/store.ts';
 import { serviceVersion } from '../src/updates.ts';
 
 const token = 'offline-test-' + randomUUID();
+// One computer unless a test is about several.
+const device = { id: randomUUID(), name: '测试设备' };
 class Client {
   socket: WebSocket;
   messages: ServerMessage[] = [];
-  constructor(url: string, origin?: string) {
+  computer: typeof device;
+  constructor(url: string, origin?: string, computer = device) {
+    this.computer = computer;
     this.socket = new WebSocket(url.replace('http', 'ws') + '/ws', { origin });
     this.socket.on('message', (raw) =>
       this.messages.push(serverMessageSchema.parse(JSON.parse(raw.toString()))),
@@ -28,8 +32,14 @@ class Client {
       this.socket.once('error', reject);
     });
     this.socket.send(
-      JSON.stringify({ type: 'auth', token: authToken, protocolVersion, deviceName: '测试设备' }),
+      JSON.stringify({
+        type: 'auth',
+        token: authToken,
+        protocolVersion,
+        deviceName: this.computer.name,
+      }),
     );
+    this.socket.send(JSON.stringify({ type: 'device', id: this.computer.id }));
     return this.wait((message) => message.type === 'ready' || message.type === 'connection.error');
   }
   send(command: object) {
@@ -66,8 +76,8 @@ async function fixture(t: TestContext, stepMs = 2) {
     await server.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  async function connect() {
-    const client = new Client(url);
+  async function connect(computer = device) {
+    const client = new Client(url, undefined, computer);
     clients.push(client);
     assert.equal((await client.open()).type, 'ready');
     return client;
@@ -292,6 +302,80 @@ test('another connection cannot approve or cancel a run', async (t) => {
   }
 });
 
+test('a session is worked on from its own computer; another one takes it over or forks it, with a directory there', async (t) => {
+  const f = await fixture(t);
+  const laptop = { id: randomUUID(), name: '笔记本' };
+  const desk = await f.connect();
+  const sessionId = await f.create(desk);
+  const away = new Client(f.url, undefined, laptop);
+  f.clients.push(away);
+  const ready = await away.open();
+  // Both computers are signed in at once, and each sees whose a session is.
+  assert.ok(ready.type === 'ready');
+  assert.deepEqual(ready.sessions[0]!.device, device);
+  const send = (client: Client, id = sessionId) =>
+    client.request({ type: 'message.send', sessionId: id, text: '继续', scenario: 'chat' });
+  const refused = await send(away);
+  assert.ok(refused.type === 'response' && !refused.ok && refused.code === 'other_device');
+  assert.match(refused.message ?? '', /测试设备/);
+  assert.equal(f.server.store.get(sessionId).events.length, 0);
+
+  // A fork lands on the computer that asked, in the directory it names there; the original stays put.
+  const forked = await away.request({
+    type: 'session.fork',
+    sessionId,
+    projectPath: 'E:\\笔记本\\项目',
+  });
+  assert.ok(forked.type === 'response' && forked.ok && forked.sessionId);
+  const copy = f.server.store.get(forked.sessionId).session;
+  assert.deepEqual([copy.device, copy.projectPath], [laptop, 'E:\\笔记本\\项目']);
+  assert.deepEqual(f.server.store.get(sessionId).session.device, device);
+  assert.ok((await send(away, copy.id)).type === 'response');
+
+  // Naming a directory for it on this computer takes the session over, even the same path as before.
+  const moved = await away.request({
+    type: 'session.move',
+    sessionId,
+    projectPath: 'D:\\工作\\测试',
+  });
+  assert.ok(moved.type === 'response' && moved.ok);
+  assert.deepEqual(f.server.store.get(sessionId).session.device, laptop);
+  const accepted = await send(away);
+  assert.ok(accepted.type === 'response' && accepted.ok);
+  await away.wait(
+    (message) =>
+      message.type === 'session.event' &&
+      message.event.sessionId === sessionId &&
+      message.event.payload.type === 'run.status' &&
+      message.event.payload.status === 'completed',
+  );
+  const back = await send(desk);
+  assert.ok(back.type === 'response' && !back.ok && back.code === 'other_device');
+});
+test('a connection that never said which computer it is can look but not work', async (t) => {
+  const f = await fixture(t);
+  const sessionId = await f.create(await f.connect());
+  const socket = new WebSocket(f.url.replace('http', 'ws') + '/ws');
+  t.after(() => socket.terminate());
+  const messages: ServerMessage[] = [];
+  socket.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
+  await new Promise((resolve) => socket.once('open', resolve));
+  socket.send(
+    JSON.stringify({ type: 'auth', token, protocolVersion: PROTOCOL_VERSION, deviceName: '无名' }),
+  );
+  const requestId = randomUUID();
+  socket.send(
+    JSON.stringify({ type: 'message.send', requestId, sessionId, text: '你好', scenario: 'chat' }),
+  );
+  for (let attempt = 0; !messages.some((message) => message.type === 'response'); attempt++) {
+    assert.ok(attempt < 300);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(messages[0]!.type, 'ready');
+  const response = messages.find((message) => message.type === 'response');
+  assert.ok(response?.type === 'response' && !response.ok && response.code === 'device_unknown');
+});
+
 test('busy sessions, invalid history cursor and stale approval are rejected without effects', async (t) => {
   const f = await fixture(t);
   const client = await f.connect();
@@ -392,7 +476,7 @@ test('restart recovery closes interrupted tools and does not replay side effects
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-recovery-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const store = new SessionStore(directory);
-  const session = store.create(randomUUID(), '重启', 'D:\\项目');
+  const session = store.create(randomUUID(), '重启', 'D:\\项目', device);
   const runId = randomUUID();
   const toolId = randomUUID();
   const connectionId = randomUUID();
@@ -628,7 +712,7 @@ test('restart marks pending native sends unconfirmed and never queues them again
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-input-recovery-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const store = new SessionStore(directory);
-  const session = store.create(randomUUID(), '消息恢复', 'D:\\项目');
+  const session = store.create(randomUUID(), '消息恢复', 'D:\\项目', device);
   const runId = randomUUID(),
     connectionId = randomUUID();
   const ids = [randomUUID(), randomUUID(), randomUUID()];
@@ -670,11 +754,11 @@ test('restart marks pending native sends unconfirmed and never queues them again
 test('native titles update only automatic names; a user rename remains authoritative', async (t) => {
   const f = await fixture(t);
   const requestId = randomUUID();
-  const automatic = f.server.store.create(requestId, '新会话', 'D:\\项目');
+  const automatic = f.server.store.create(requestId, '新会话', 'D:\\项目', device);
   assert.equal(automatic.autoTitle, true);
   f.server.store.renameNative(automatic.id, '原生标题');
-  assert.equal(f.server.store.create(requestId, '新会话', 'D:\\项目').id, automatic.id);
-  assert.throws(() => f.server.store.create(requestId, '不同请求', 'D:\\项目'), {
+  assert.equal(f.server.store.create(requestId, '新会话', 'D:\\项目', device).id, automatic.id);
+  assert.throws(() => f.server.store.create(requestId, '不同请求', 'D:\\项目', device), {
     code: 'request_conflict',
   });
   f.server.store.rename(automatic.id, '用户标题');

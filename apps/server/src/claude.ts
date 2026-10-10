@@ -45,21 +45,13 @@ export type ClaudeRun = {
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
 export function remotePrompt(projectPath: string, ssh: SshConnection, sessionId: string) {
   return [
-    'The user and all their projects are on the connected Windows computer, NOT on this Linux host.',
-    `Windows project cwd: ${JSON.stringify(projectPath)}. Shell: PowerShell 7. Encoding: UTF-8.`,
-    `Use your native Bash tool to run standard OpenSSH: ssh -F ${JSON.stringify(ssh.configPath)} windows '<remote command>'.`,
-    `The SSH configuration contains the loopback endpoint, identity and pinned host key. Do not print, read into conversation, or copy the private key.`,
-    `PowerShell executable on Windows: ${JSON.stringify(ssh.powershellPath)}.`,
-    'The SSH login command is parsed by cmd.exe, not PowerShell. Invoke the quoted PowerShell executable directly; do not prefix it with the PowerShell & operator.',
-    'For robust quoting, encode a PowerShell script as UTF-16LE Base64 on Linux and pass -NoLogo -NoProfile -NonInteractive -EncodedCommand to that executable over SSH.',
-    `Begin project scripts with Set-Location -LiteralPath '${projectPath.replaceAll("'", "''")}'; use UTF-8 for console and file I/O.`,
-    'Use SSH for all user project reads, edits, searches and commands. Do not operate user projects with Linux Read/Edit tools.',
-    'This Linux host only runs Claude Code, proxy state and temporary attachments. There is no copy of the Windows project here.',
-    'Never silently fall back to Linux when Windows is unavailable. Report unknown results after interruption; do not automatically retry side effects.',
-    "Each SSH command is its own session and several may run concurrently. Windows processes started by a command are terminated when that command's SSH session ends, so detaching on Windows does not keep them alive.",
-    'For a long-running Windows process such as a dev server or watcher, keep its SSH command running as a background Bash task and end that task to stop it.',
-    'A remote command that blocks holds the turn until its Bash timeout. Set a timeout sized to the work, and run anything that may wait indefinitely as a background Bash task.',
-    `The desktop client on Windows sends scheduled prompts by itself. When the user asks for a scheduled or recurring task, edit %APPDATA%\\CC Desk Tunnel\\schedules.json on Windows (UTF-8 JSON; its "说明" field documents the format; changes apply within seconds) rather than using cron tools on this host, which stop when the run ends. This session's ID for a task that continues it: ${sessionId}.`,
+    "The user's projects are on their own computer, the device, NOT on this Linux host, which only runs Claude Code and has no copy of them.",
+    `Device: Windows. Project directory: ${JSON.stringify(projectPath)}.`,
+    `Do all project reads, edits, searches and commands on the device with your native Bash tool: ssh -F ${JSON.stringify(ssh.configPath)} device '<command>'. Do not use this host's Read/Edit tools on project files, and do not print, read into conversation or copy the key the SSH configuration names.`,
+    `On Windows the command is parsed by cmd.exe. Run PowerShell 7 as: "%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand <script as UTF-16LE Base64>, quotes included, the script beginning with Set-Location -LiteralPath '${projectPath.replaceAll("'", "''")}' and using UTF-8 for console and file I/O.`,
+    'If the device is unreachable, say so; never fall back to this host. After an interruption report results as unknown; do not repeat side effects on your own.',
+    'Commands may run concurrently. One that blocks holds the turn until its Bash timeout: size the timeout to the work, and run anything long-lived, such as a dev server or watcher, as a background Bash task. Ending an ssh command does not reliably end what it started on the device; stop that process on the device.',
+    `Scheduled and recurring prompts are sent by the desktop client, not by cron on this host: edit the UTF-8 JSON file whose path is in the device's CC_DESK_TUNNEL_SCHEDULES environment variable (its "说明" field documents the format; changes apply within seconds). This session's ID for a task that continues it: ${sessionId}.`,
   ].join('\n');
 }
 

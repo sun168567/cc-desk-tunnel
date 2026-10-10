@@ -111,7 +111,7 @@ function hostArgs(directory, owner = process.pid) {
 }
 
 test(
-  'SSH preparation emits UTF-8 metadata for a bundled PowerShell path with Chinese and spaces',
+  'a command finds the PowerShell the host runs in by its variable, in a path with Chinese and spaces',
   {
     skip:
       !available ||
@@ -130,8 +130,42 @@ test(
       const powershell = join(alias, 'pwsh.exe');
       const prepared = await prepare(powershell, true);
       directory = prepared.directory;
-      assert.equal(prepared.metadata.powershellPath, powershell);
-      assert.doesNotMatch(prepared.metadata.powershellPath, /\uFFFD/);
+      const host = spawn(powershell, hostArgs(directory), { windowsHide: true, stdio: 'ignore' });
+      const stopped = new Promise((resolve) => host.once('close', resolve));
+      try {
+        await until(() => listening(prepared.port));
+        const output = await new Promise((resolve, reject) => {
+          const client = new Client();
+          client
+            .once('error', reject)
+            .once('ready', () =>
+              client.exec(
+                `"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from('[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);[Environment]::ProcessPath', 'utf16le').toString('base64')}`,
+                (error, stream) => {
+                  if (error) return reject(error);
+                  let text = '';
+                  stream
+                    .on('data', (data) => (text += data.toString('utf8')))
+                    .on('close', () => {
+                      client.end();
+                      resolve(text.trim());
+                    });
+                  stream.end();
+                },
+              ),
+            )
+            .connect({
+              host: '127.0.0.1',
+              port: prepared.port,
+              username: prepared.metadata.username,
+              privateKey: prepared.metadata.privateKey,
+            });
+        });
+        assert.equal(output, powershell);
+      } finally {
+        await writeFile(join(directory, 'stop'), '');
+        await stopped;
+      }
     } finally {
       if (directory) await rm(directory, { recursive: true, force: true });
       await rm(fixture, { recursive: true, force: true });
@@ -190,7 +224,7 @@ test(
           .once('error', reject)
           .once('ready', () =>
             client.exec(
-              `"${metadata.powershellPath}" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, 'utf16le').toString('base64')}`,
+              `"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, 'utf16le').toString('base64')}`,
               (error, stream) => {
                 if (error) return reject(error);
                 let text = '';
@@ -293,7 +327,7 @@ test(
           '-o',
           `UserKnownHostsFile=${join(directory, 'known_hosts')}`,
           `${metadata.username}@127.0.0.1`,
-          `"${metadata.powershellPath}" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, 'utf16le').toString('base64')}`,
+          `"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, 'utf16le').toString('base64')}`,
         ],
         { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] },
       );

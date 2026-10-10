@@ -2622,6 +2622,32 @@ details[open] > summary > .fold-chevron {
   border-color: #eee3c6;
   justify-content: flex-start;
 }
+.elsewhere-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 820px;
+  margin: 0 auto 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.elsewhere-bar > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.elsewhere-bar p {
+  flex: 1 1 320px;
+  margin: 0;
+}
+.elsewhere-bar code {
+  overflow-wrap: anywhere;
+}
 dialog {
   border: 1px solid var(--line);
   border-radius: var(--radius-s);
