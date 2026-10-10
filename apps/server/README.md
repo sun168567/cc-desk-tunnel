@@ -12,13 +12,13 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 原生连接
 
-`scripts/install-linux.sh` 为普通用户准备 Node 24.21.0、官方 Claude Code 2.1.293、frps 0.71.0；frps 下载 SHA256 固定在脚本中。CLI 使用官方 npm 发布包，无二进制修改。当前 frps 校验包只支持 Linux x64。
+`scripts/install-linux.sh` 为普通用户准备 Node 24.21.0、官方 Claude Code 2.1.293。CLI 使用官方 npm 发布包，无二进制修改。
 
-开发部署用 `scripts/deploy-linux.mjs`：通过可信 SSH 传输应用与私有配置，生成 IP 可用的固定自签证书，原生服务 WSS 监听 `PROXY_PORT`，frps 监听 `FRPS_PORT`（默认 7000）。生产需放行这两个端口，映射出的 Windows SSH 端口仍只监听 Linux `127.0.0.1`。
+开发部署用 `scripts/deploy-linux.mjs`：通过可信 SSH 传输应用与私有配置，生成 IP 可用的固定自签证书，原生服务 WSS 监听 `PROXY_PORT`。生产只需放行这一个端口，通往 Windows 的 SSH 端口只监听 Linux `127.0.0.1`。
 
-生产部署见[操作手册](../../deploy/README.md)。`src/config.ts` 读取配置：`PROXY_ADAPTER=claude-code`、`PROXY_TOKEN`、`PROXY_DATA_DIR`、`PROXY_PUBLIC_HOST`、`FRPS_TLS_CERT/KEY`、`FRPS_SERVER_NAME`、`FRPS_PATH/PORT`、`CLAUDE_PATH`；直连还需要 `PROXY_TLS_CERT/KEY`，反代明确设置 `PROXY_TLS_MODE=reverse-proxy`。反代原生进程默认仅回环，Compose 显式使用容器网卡并仅宿主回环发布。API 调试可用 `CLAUDE_MODEL`、`CLAUDE_SETTINGS_PATH` 指向私有提供方配置。原生保留期 `CLAUDE_CONTEXT_RETENTION_DAYS` 默认 3650（正整数）。不会自动获取或转发订阅 OAuth。
+生产部署见[操作手册](../../deploy/README.md)。`src/config.ts` 读取配置：`PROXY_ADAPTER=claude-code`、`PROXY_TOKEN`、`PROXY_DATA_DIR`、`CLAUDE_PATH`；旧部署留下的 `PROXY_PUBLIC_HOST` 与 `FRPS_*` 不再读取；直连还需要 `PROXY_TLS_CERT/KEY`，反代明确设置 `PROXY_TLS_MODE=reverse-proxy`。反代原生进程默认仅回环，Compose 显式使用容器网卡并仅宿主回环发布。API 调试可用 `CLAUDE_MODEL`、`CLAUDE_SETTINGS_PATH` 指向私有提供方配置。原生保留期 `CLAUDE_CONTEXT_RETENTION_DAYS` 默认 3650（正整数）。不会自动获取或转发订阅 OAuth。
 
-- `src/tunnel.ts`：每个在线设备独立 frps，临时 token、限定回环映射端口；注册密钥后用原生 ssh 探测。凭据在 `connections/<id>/`（目录 0700、文件 0600），断连停止 frps 并删除目录。会话的系统提示词引用的是固定的 `session-ssh/<会话>.conf`（只含指向当前连接配置的 `Include`，不含凭据），重连不改变提示词，见[原生运行时](../../docs/native-runtime.md)。
+- `src/tunnel.ts`：每个在线设备一个回环监听和一个随机通道密钥。每来一条 SSH 连接就先不读它，经控制连接要一条通道（`tunnel.open`），客户端带着密钥连上来后把两者的字节对接；十秒没有等到就关掉这条 SSH 连接。同时等待的连接和已对接的通道各有上限。注册密钥后用原生 ssh 探测。凭据在 `connections/<id>/`（目录 0700、文件 0600），断连关闭监听和全部通道并删除目录。通道连接的认领在 `server.ts`：首帧是 `tunnel.attach` 的连接不成为控制连接，密钥不对按登录失败计数。会话的系统提示词引用的是固定的 `session-ssh/<会话>.conf`（只含指向当前连接配置的 `Include`，不含凭据），重连不改变提示词，见[原生运行时](../../docs/native-runtime.md)。
 - `src/claude.ts`：官方 SDK `query` 驱动指定的原生 CLI；提示词给 Windows cwd、PowerShell 和 SSH config 路径。`canUseTool` 只转发原生权限请求，不注册新增 MCP 工具、不自行决定审批策略。
 - `src/native-input.ts`：同一运行可追加 async user message，带客户端 UUID、human origin，原生负责调度 / 合并。结果按 `user_message_uuids` 和 `queued_turn_count` 处理，不能首个 result 就丢弃后续输入；收尾同步停止接收。取消 / 断连 / 重启不重放，未送达与接收未确认分别记录。
 - `src/claude-stream.ts`：适配公开文字 / 思考 / 工具入参和结果。不解析未公开隐藏推理，不把自建结果格式塞回原生工具。
@@ -36,7 +36,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 实现与验证
 
-- 模块：`main.ts` / `config.ts` 读环境并启动；`server.ts` 是连接与命令的唯一入口；`store.ts` 持久化；`claude.ts`（SDK 运行）、`claude-stream.ts`（原生消息转协议事件）、`native-input.ts`（运行中追加输入）、`native-controls.ts`（账号 / 模型 / 额度）、`native-terminal.ts`、`native-account.ts`、`native-onboarding.ts` 组成原生适配；`tunnel.ts` 管 frps 与 SSH 配置；`usage.ts` 收集调用统计；`simulation.ts` 是离线模拟；`errors.ts` 是可回给客户端的错误。
+- 模块：`main.ts` / `config.ts` 读环境并启动；`server.ts` 是连接与命令的唯一入口；`store.ts` 持久化；`claude.ts`（SDK 运行）、`claude-stream.ts`（原生消息转协议事件）、`native-input.ts`（运行中追加输入）、`native-controls.ts`（账号 / 模型 / 额度）、`native-terminal.ts`、`native-account.ts`、`native-onboarding.ts` 组成原生适配；`tunnel.ts` 管执行通道与 SSH 配置；`usage.ts` 收集调用统计；`simulation.ts` 是离线模拟；`errors.ts` 是可回给客户端的错误。
 - `src/server.ts`：认证、请求、连接归属和广播；每类命令一个处理函数，`execute` 只做分发。模拟器在 `src/simulation.ts`。三种场景为聊天、一次 PowerShell 审批、上游错误。PowerShell 仅显示固定 `Get-Location` 和模拟结果，从不创建命令进程。
 - `src/store.ts`：Node 24 内置 SQLite / WAL，摘要与原始事件分表、每事件事务落盘，不逐 token 重写整份历史。旧 UTF-8 JSON 一次性事务导入、原文件保留作迁移备份；日后备份以 SQLite 和原生 CLI 存储为准。启动恢复未结束轮次，不重放。
 - 状态读取不改变会话的最近使用时间。升级时修正旧的活动时间和用量周期边界，原始事件与调用记录保留。提前重置的时间靠额度读数推断，历史读数缺失时不能精确恢复。

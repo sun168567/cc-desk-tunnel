@@ -265,33 +265,6 @@ test(
 );
 
 test(
-  'missing bundled frpc reclaims an already-started OpenSSH and temporary credentials',
-  { skip: !available, timeout: 30000 },
-  async () => {
-    const { directory, port } = await prepare();
-    try {
-      await assert.rejects(
-        execute('pwsh.exe', [
-          ...hostArgs(directory),
-          '-FrpcPath',
-          join(directory, 'missing-frpc.exe'),
-        ]),
-      );
-      assert.equal(await listening(port), false);
-      assert.equal(
-        await access(directory).then(
-          () => true,
-          () => false,
-        ),
-        false,
-      );
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  },
-);
-
-test(
   'closing the application component job terminates an in-flight SSH command',
   { skip: !available, timeout: 30000 },
   async () => {

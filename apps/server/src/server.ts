@@ -16,6 +16,8 @@ import {
   commandSchema,
   MAX_FRAME_BYTES,
   PROTOCOL_VERSION,
+  TUNNEL_CLOSE,
+  tunnelAttachSchema,
   tunnelCredentialsSchema,
   terminalControlSchema,
 } from '@cc-desk-tunnel/protocol';
@@ -40,7 +42,7 @@ import type { NativeTerminal } from './native-terminal.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
-import { WindowsTunnel, sessionSsh, sessionSshPath } from './tunnel.ts';
+import { Tunnel, sessionSsh, sessionSshPath } from './tunnel.ts';
 import type { TunnelOptions } from './tunnel.ts';
 import { ServiceUpdates, serviceVersion } from './updates.ts';
 import type { UpdateOptions } from './updates.ts';
@@ -51,7 +53,7 @@ type Peer = {
   id: string;
   address: string;
   authenticated: boolean;
-  tunnel?: WindowsTunnel;
+  tunnel?: Tunnel;
   registering: boolean;
   subscriptions: Set<string>;
   responses: Map<string, { command: string; response: Promise<ServerMessage> }>;
@@ -95,7 +97,7 @@ export function createProxyServer(options: ServerOptions) {
     throw new Error('PROXY_TOKEN must contain at least 24 characters.');
   if (options.claude && (!options.tunnel || (!options.tls && !options.reverseProxy)))
     throw new Error(
-      'Native mode requires TLS or explicit reverse proxy mode, and frps configuration.',
+      'Native mode requires TLS or explicit reverse proxy mode, and the execution channel.',
     );
   const store = new SessionStore(options.dataDir);
   const usage = new UsageLog(store.database);
@@ -136,11 +138,11 @@ export function createProxyServer(options: ServerOptions) {
     (options.reverseProxy && [request.headers['x-real-ip']].flat()[0]) ||
     request.socket.remoteAddress ||
     'unknown';
-  function refuse(address: string) {
+  function refuse(address: string, what = 'service token') {
     const count = throttle.fail(address);
     const wait = throttle.blocked(address);
     console.log(
-      `Sign-in refused from ${address}: wrong service token, ${count} in a row${wait ? `; blocked for ${wait}s` : ''}`,
+      `Sign-in refused from ${address}: wrong ${what}, ${count} in a row${wait ? `; blocked for ${wait}s` : ''}`,
     );
   }
 
@@ -853,7 +855,7 @@ export function createProxyServer(options: ServerOptions) {
     releases.current
       ? (({ version, size, sha256 }) => ({ version, size, sha256 }))(releases.current)
       : undefined;
-  // The first frame must authenticate; a desktop client also asks for its Windows tunnel here.
+  // The first frame must authenticate; a desktop client also asks for its execution channel here.
   function authenticate(peer: Peer, value: unknown) {
     const auth = authSchema.safeParse(value);
     // Only a wrong token counts against the address: an outdated client holding the right one is not guessing.
@@ -906,24 +908,58 @@ export function createProxyServer(options: ServerOptions) {
         return true;
       }
       tunnelOwner = peer;
-      peer.tunnel = new WindowsTunnel(options.tunnel, store.directory, peer.id, () => {
-        peer.socket.close(4003, 'Tunnel process closed');
-      });
+      peer.tunnel = new Tunnel(
+        options.tunnel,
+        store.directory,
+        peer.id,
+        (channelId) => {
+          if (peer.socket.readyState !== WebSocket.OPEN) return false;
+          send(peer, { type: 'tunnel.open', connectionId: peer.id, channelId });
+          return true;
+        },
+        () => peer.socket.close(4003, 'Tunnel closed'),
+      );
       track(
         peer.tunnel
           .start()
-          .then((config) => send(peer, config))
+          .then((offer) => send(peer, offer))
           .catch(() => {
             send(peer, {
               type: 'connection.error',
               code: 'tunnel_failed',
               message:
-                '服务端的隧道服务（frps）没能启动。\n请在服务器上检查隧道端口是否被别的程序占用，并查看服务日志。',
+                '服务端没能准备好执行通道。\n请查看服务日志；数据目录不可写或服务器资源耗尽时会出现这种情况。',
             });
             peer.socket.close(4003, 'Tunnel failed');
           }),
         tunnelTasks,
       );
+    }
+    return true;
+  }
+  // A connection whose first frame attaches it to a device's tunnel carries one SSH connection and nothing
+  // else: it is no peer, receives no message and sends none. Only a wrong secret for a live tunnel counts
+  // against the address; a channel arriving after its tunnel ended is an ordinary race of disconnecting.
+  function attachChannel(peer: Peer, value: unknown) {
+    const attach = tunnelAttachSchema.safeParse(value);
+    const tunnel = attach.success
+      ? [...peers].find((owner) => owner.authenticated && owner.id === attach.data.connectionId)
+          ?.tunnel
+      : undefined;
+    if (!attach.success || !tunnel) {
+      peer.socket.close(TUNNEL_CLOSE.unknown, 'Unknown tunnel');
+      return false;
+    }
+    if (!tunnel.matches(attach.data.secret)) {
+      refuse(peer.address, 'tunnel secret');
+      peer.socket.close(TUNNEL_CLOSE.refused, 'Unauthorized');
+      return false;
+    }
+    peers.delete(peer);
+    peer.socket.removeAllListeners('message');
+    if (!tunnel.attach(attach.data.channelId, peer.socket)) {
+      peer.socket.close(TUNNEL_CLOSE.unknown, 'Unknown channel');
+      return false;
     }
     return true;
   }
@@ -1054,6 +1090,8 @@ export function createProxyServer(options: ServerOptions) {
     // about 45 seconds of silence, end the connection.
     let missed = 0;
     let timedOut = false;
+    // Whether this connection still holds one of the places for those that have not signed in.
+    let signedIn = false;
     socket.on('pong', () => {
       missed = 0;
     });
@@ -1082,8 +1120,10 @@ export function createProxyServer(options: ServerOptions) {
         return;
       }
       if (!peer.authenticated) {
-        if (authenticate(peer, value)) {
+        const channel = (value as { type?: unknown } | null)?.type === 'tunnel.attach';
+        if (channel ? attachChannel(peer, value) : authenticate(peer, value)) {
           clearTimeout(authTimer);
+          signedIn = true;
           throttle.leave(address);
         }
         return;
@@ -1112,7 +1152,7 @@ export function createProxyServer(options: ServerOptions) {
     socket.on('close', (code) => {
       clearTimeout(authTimer);
       clearInterval(heartbeat);
-      if (!peer.authenticated) throttle.leave(address);
+      if (!signedIn) throttle.leave(address);
       // Why a connection ended is the first thing needed when a run was cut short.
       const owned = [...runs.values()].filter((run) => run.owner === peer).length;
       if (peer.authenticated && !closing)

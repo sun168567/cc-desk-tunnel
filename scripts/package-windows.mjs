@@ -15,7 +15,7 @@ const output = join(root, 'artifacts/windows');
 const unpacked = process.argv.includes('--dir');
 if (process.platform !== 'win32' || process.arch !== 'x64')
   throw new Error('Build the Windows x64 package on Windows x64.');
-for (const file of ['frpc.exe', 'openssh/sshd.exe', 'openssh/ssh-keygen.exe', 'pwsh/pwsh.exe']) {
+for (const file of ['openssh/sshd.exe', 'openssh/ssh-keygen.exe', 'pwsh/pwsh.exe']) {
   if (!existsSync(join(vendor, file)))
     throw new Error(`Missing bundled component: ${file}. Run npm run prepare:windows:package.`);
 }
@@ -104,7 +104,7 @@ const results = await electronBuild({
       {
         from: vendor,
         to: 'vendor',
-        filter: ['frpc.exe', 'frp-LICENSE', 'openssh/**', 'pwsh/**', '!**/runtime.json'],
+        filter: ['openssh/**', 'pwsh/**', '!**/runtime.json'],
       },
     ],
     win: {

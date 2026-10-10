@@ -1,22 +1,26 @@
-import { spawn, execFile } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync, renameSync, rmSync } from 'node:fs';
-import { createServer, connect } from 'node:net';
+import { execFile } from 'node:child_process';
+import { mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
+import type { AddressInfo, Server, Socket } from 'node:net';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createWebSocketStream } from 'ws';
+import type { WebSocket } from 'ws';
 import type { ServerMessage, TunnelCredentials } from '@cc-desk-tunnel/protocol';
 
 export type TunnelOptions = {
-  executable: string;
-  publicHost: string;
-  port: number;
-  certificatePath: string;
-  keyPath: string;
-  serverName: string;
-  bindHost?: string;
+  // How long an SSH connection waits for the device to open its channel before it is dropped.
+  pairMs?: number;
+  // Tells whether a command reaches the device through the SSH configuration; `sshProbe` unless a test replaces it.
+  probe?: (configPath: string, powershellPath: string) => Promise<void>;
 };
 export type SshConnection = { configPath: string; powershellPath: string };
+
+// SSH connections that may wait for their channel at once, and that may be open at once. Far above what one
+// device's commands need; they bound what a stray local process connecting to the port can make the device do.
+const MAX_WAITING = 32;
+const MAX_CHANNELS = 128;
 
 // The SSH configuration a session's system prompt names. Its path is the session's for good; each run points
 // it at the connection it runs over. A connection's own directory is new on every reconnect, and a system
@@ -34,35 +38,6 @@ export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnectio
   return { ...ssh, configPath };
 }
 
-export async function availablePort() {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No free port');
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return address.port;
-}
-async function reachable(port: number) {
-  return new Promise<boolean>((resolve) => {
-    const socket = connect(port, '127.0.0.1');
-    socket.setTimeout(300);
-    socket.once('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once('error', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-  });
-}
 export function sshProbe(configPath: string, powershellPath: string) {
   const script =
     "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); Write-Output 'CC_DESK_TUNNEL_SSH_READY'; exit 0";
@@ -72,7 +47,7 @@ export function sshProbe(configPath: string, powershellPath: string) {
     execFile(
       'ssh',
       ['-F', configPath, 'windows', command],
-      { timeout: 12000, maxBuffer: 65536 },
+      { timeout: 20000, maxBuffer: 65536 },
       (error, stdout) => {
         if (error || !stdout.includes('CC_DESK_TUNNEL_SSH_READY'))
           reject(new Error('Windows SSH / PowerShell probe failed.'));
@@ -101,7 +76,9 @@ export function sshConfig(
       '  IdentitiesOnly yes',
       '  BatchMode yes',
       '  StrictHostKeyChecking yes',
-      '  ConnectTimeout 5',
+      // The local port answers at once; this is the time the device has to open the channel behind it and
+      // its SSH service to greet, which is a few round trips to the device.
+      '  ConnectTimeout 15',
       '  ServerAliveInterval 10',
       '  ServerAliveCountMax 2',
       '  ForwardAgent no',
@@ -110,82 +87,112 @@ export function sshConfig(
     ].join('\n'),
   };
 }
-export class WindowsTunnel {
+
+// Joins one SSH connection to the channel connection opened for it. An end on either side ends the other once
+// what was already sent has been delivered; an error cuts both.
+function splice(socket: Socket, channel: WebSocket) {
+  const stream = createWebSocketStream(channel);
+  stream.on('error', () => socket.destroy());
+  socket.once('close', () => stream.destroy());
+  socket.pipe(stream);
+  stream.pipe(socket);
+}
+
+// The execution channel of one connected device. `ssh` on this machine connects to a loopback port here; for
+// each of its connections the device is asked, over the control connection, to open one more connection to
+// the service, and the two are joined byte for byte. The SSH protocol is not read: authentication, encryption
+// and flow control stay between `ssh` and the device's SSH service.
+export class Tunnel {
   directory: string;
-  options: TunnelOptions;
   id: string;
-  process?: ChildProcess;
-  remotePort = 0;
+  port = 0;
   ssh?: SshConnection;
   controller = new AbortController();
   closePromise?: Promise<void>;
-  unexpectedClose: () => void;
-  constructor(options: TunnelOptions, dataDir: string, id: string, unexpectedClose: () => void) {
-    this.options = options;
+  private secret = randomBytes(32).toString('base64url');
+  private pairMs: number;
+  private probe: NonNullable<TunnelOptions['probe']>;
+  private listener?: Server;
+  private waiting = new Map<string, { socket: Socket; timer: NodeJS.Timeout }>();
+  private channels = new Map<Socket, WebSocket>();
+  // Asks the device to open a channel; false when the control connection can no longer carry the request.
+  private request: (channelId: string) => boolean;
+  private unexpectedClose: () => void;
+  constructor(
+    options: TunnelOptions,
+    dataDir: string,
+    id: string,
+    request: (channelId: string) => boolean,
+    unexpectedClose: () => void,
+  ) {
     this.id = id;
     this.directory = join(dataDir, 'connections', id);
+    this.pairMs = options.pairMs ?? 10000;
+    this.probe = options.probe ?? sshProbe;
+    this.request = request;
     this.unexpectedClose = unexpectedClose;
   }
-  async start(): Promise<Extract<ServerMessage, { type: 'tunnel.configure' }>> {
-    const { options } = this;
+  async start(): Promise<Extract<ServerMessage, { type: 'tunnel.offer' }>> {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
-    this.remotePort = await availablePort();
-    if (this.controller.signal.aborted) throw new Error('Tunnel closed');
-    const token = randomBytes(32).toString('base64url');
-    const configPath = join(this.directory, 'frps.json');
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        bindAddr: options.bindHost ?? '0.0.0.0',
-        bindPort: options.port,
-        proxyBindAddr: '127.0.0.1',
-        auth: { method: 'token', token },
-        allowPorts: [{ single: this.remotePort }],
-        maxPortsPerClient: 1,
-        transport: {
-          tls: { force: true, certFile: options.certificatePath, keyFile: options.keyPath },
-        },
-        log: { to: 'console', level: 'error', disablePrintColor: true },
-      }),
-      { mode: 0o600 },
-    );
-    const child = spawn(options.executable, ['-c', configPath], {
-      stdio: ['ignore', 'ignore', 'pipe'],
+    // Nothing is read from an SSH connection until its channel is there to take it.
+    const listener = createServer({ pauseOnConnect: true }, (socket) => this.incoming(socket));
+    this.listener = listener;
+    await new Promise<void>((resolve, reject) => {
+      listener.once('error', reject);
+      listener.listen(0, '127.0.0.1', () => {
+        listener.off('error', reject);
+        resolve();
+      });
     });
-    this.process = child;
-    let startupError = false;
-    child.on('error', () => {
-      startupError = true;
-      this.unexpectedClose();
-    });
-    child.stderr?.resume();
-    child.once('close', () => {
+    listener.on('error', () => {
       if (!this.controller.signal.aborted) this.unexpectedClose();
     });
-    for (let attempt = 0; attempt < 50; attempt++) {
-      if (startupError || child.exitCode !== null || this.controller.signal.aborted)
-        throw new Error('frps startup failed');
-      if (await reachable(options.port))
-        return {
-          type: 'tunnel.configure',
-          connectionId: this.id,
-          serverAddr: options.publicHost,
-          serverPort: options.port,
-          remotePort: this.remotePort,
-          token,
-          certificate: readFileSync(options.certificatePath, 'utf8'),
-          serverName: options.serverName,
-        };
-      await delay(100, undefined, { signal: this.controller.signal });
+    if (this.controller.signal.aborted) throw new Error('Tunnel closed');
+    this.port = (listener.address() as AddressInfo).port;
+    return { type: 'tunnel.offer', connectionId: this.id, secret: this.secret };
+  }
+  matches(secret: string) {
+    const digest = (value: string) => createHash('sha256').update(value).digest();
+    return timingSafeEqual(digest(secret), digest(this.secret));
+  }
+  private incoming(socket: Socket) {
+    socket.on('error', () => socket.destroy());
+    if (
+      this.controller.signal.aborted ||
+      this.waiting.size >= MAX_WAITING ||
+      this.channels.size >= MAX_CHANNELS
+    ) {
+      socket.destroy();
+      return;
     }
-    throw new Error('frps startup timed out');
+    const channelId = randomUUID();
+    const timer = setTimeout(() => socket.destroy(), this.pairMs);
+    this.waiting.set(channelId, { socket, timer });
+    socket.once('close', () => {
+      clearTimeout(timer);
+      this.waiting.delete(channelId);
+    });
+    if (!this.request(channelId)) socket.destroy();
+  }
+  // Takes the connection the device opened for a waiting SSH connection. False when none waits under that
+  // name any more: it gave up, or was already served.
+  attach(channelId: string, channel: WebSocket) {
+    const entry = this.waiting.get(channelId);
+    if (!entry || this.controller.signal.aborted) return false;
+    clearTimeout(entry.timer);
+    this.waiting.delete(channelId);
+    const { socket } = entry;
+    this.channels.set(socket, channel);
+    socket.once('close', () => this.channels.delete(socket));
+    splice(socket, channel);
+    return true;
   }
   async accept(credentials: TunnelCredentials) {
     if (this.ssh || credentials.connectionId !== this.id || this.controller.signal.aborted)
       throw new Error('Inactive SSH registration');
     const files = sshConfig(
       this.directory,
-      this.remotePort,
+      this.port,
       credentials.username,
       credentials.hostPublicKey,
     );
@@ -196,7 +203,7 @@ export class WindowsTunnel {
     for (let attempt = 0; attempt < 20; attempt++) {
       if (this.controller.signal.aborted) throw new Error('Tunnel closed');
       try {
-        await sshProbe(configPath, credentials.powershellPath);
+        await this.probe(configPath, credentials.powershellPath);
         if (this.controller.signal.aborted) throw new Error('Tunnel closed');
         this.ssh = { configPath, powershellPath: credentials.powershellPath };
         return;
@@ -206,18 +213,21 @@ export class WindowsTunnel {
     }
     throw new Error('Windows SSH readiness timed out');
   }
+  // Every SSH connection ends with the tunnel: those still waiting and those in use.
   close() {
     if (this.closePromise) return this.closePromise;
     this.controller.abort();
     this.closePromise = (async () => {
-      const child = this.process;
-      if (child?.pid && child.exitCode === null && child.signalCode === null) {
-        const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
-        child.kill('SIGTERM');
-        const timer = setTimeout(() => child.kill('SIGKILL'), 2000);
-        await exited;
-        clearTimeout(timer);
+      const listener = this.listener;
+      const closed = listener?.listening
+        ? new Promise<void>((resolve) => listener.close(() => resolve()))
+        : undefined;
+      for (const { socket } of this.waiting.values()) socket.destroy();
+      for (const [socket, channel] of this.channels) {
+        socket.destroy();
+        channel.terminate();
       }
+      await closed;
       this.ssh = undefined;
       rmSync(this.directory, { recursive: true, force: true });
     })();

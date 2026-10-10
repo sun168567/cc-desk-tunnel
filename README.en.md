@@ -26,13 +26,13 @@ Claude Code (CC for short) runs on a Linux server; your code, compilers and tool
 ## How it works
 
 ```text
-Windows: desktop client + bundled OpenSSH / frpc + your projects
+Windows: desktop client + bundled OpenSSH + your projects
   │  WSS: sign-in, conversation, approvals, settings
   ▼
 Linux (Docker): proxy service ── official Agent SDK ── unmodified Claude Code ── model service
   │                                                     │
   │                                         native Bash runs ssh
-  └──────────── frp reverse tunnel (TLS, loopback port only) ──┘
+  └──── execution channel (WSS on the same address, loopback) ─┘
                          │
                          ▼
 Windows: PowerShell 7 reads and writes files, runs commands; results return to Claude
@@ -75,15 +75,15 @@ The script:
 1. Checks for Docker, Docker Compose and a few tools. If something is missing it tells you the command to install it; it does not install system software itself.
 2. Downloads the newest server archive from this repository's releases, verifies it and unpacks it to `/opt/cc-desk-tunnel`.
 3. Asks for the public address, certificate mode, ports and data directory (every question has a default), then builds the image and starts it.
-4. Prints what the client needs — **service address, certificate fingerprint, service token** — and the two TCP ports to open in the firewall (8787 and 7000 by default).
+4. Prints what the client needs — **service address, certificate fingerprint, service token** — and the TCP port to open in the firewall (8787 by default, the only one).
 
 There is no prebuilt image yet: the image is built from source on your server, which takes a few minutes the first time. The script does not touch the firewall, nginx or SSH. Running the same command again upgrades an existing deployment. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
 
 ### 2. Install the Windows client
 
-Download `CC-Desk-Tunnel-Setup-<version>-x64.exe` from the [releases page](https://github.com/sun168567/cc-desk-tunnel/releases/latest) and install it. It bundles PowerShell 7, OpenSSH and frpc; nothing else is needed. Start it, enter the three values from step 1 and connect.
+Download `CC-Desk-Tunnel-Setup-<version>-x64.exe` from the [releases page](https://github.com/sun168567/cc-desk-tunnel/releases/latest) and install it. It bundles PowerShell 7 and OpenSSH; nothing else is needed. Start it, enter the three values from step 1 and connect.
 
-Expect a SmartScreen prompt on first run, and antivirus software may block frpc; see [Antivirus and SmartScreen](#antivirus-and-smartscreen).
+Expect a SmartScreen prompt on first run; see [Antivirus and SmartScreen](#antivirus-and-smartscreen).
 
 ### 3. Sign in to Claude
 
@@ -97,13 +97,13 @@ Sign in to your Claude account on the account page at the bottom left of the cli
 
 | Port | Purpose | Open it? | Protected by |
 | --- | --- | --- | --- |
-| Control port (8787/TCP by default) | Client sign-in and conversation | Yes. In nginx mode open nginx's 443 instead; 8787 then listens on the server only | TLS + service token + sign-in throttling |
-| Tunnel port (7000/TCP by default) | Setting up the reverse tunnel | Yes | TLS + a random token for each connection; something listens only while a client is connected |
-| The SSH port mapped to Windows (random) | Claude running commands on your PC | **No, and it cannot be opened** | Listens only on the loopback address inside the container; it is not published to the server, let alone the internet, and accepts only the temporary public key of this connection |
+| Service port (8787/TCP by default) | Client sign-in and conversation; the client also sets up Claude's execution channel to your PC through it | Yes. In nginx mode open nginx's 443 instead; 8787 then listens on the server only | TLS + service token + sign-in throttling; the execution channel also has a random secret for each connection |
+| The SSH port leading to Windows (random) | Claude running commands on your PC | **No, and it cannot be opened** | Listens only on the loopback address inside the container; it is not published to the server, let alone the internet, and accepts only the temporary public key of this connection |
 
 - **On Windows** no inbound port is needed; the local SSH server listens on loopback only and runs only while connected.
-- **If the server's firewall allows every port**: the mapped SSH port still cannot be reached from outside. The project still exposes only the two ports above, and its security rests on the service token. Allowing everything does expose whatever else runs on the server (its own SSH, for example), so open only what you need.
-- To tighten further, allow only your own egress IP to reach the two ports in your cloud provider's security group. Ports published by Docker usually bypass `ufw` rules, so restrict sources in the provider's security group.
+- **If the server's firewall allows every port**: the SSH port still cannot be reached from outside. The project still exposes only the one port above, and its security rests on the service token. Allowing everything does expose whatever else runs on the server (its own SSH, for example), so open only what you need.
+- To tighten further, allow only your own egress IP to reach the port in your cloud provider's security group. Ports published by Docker usually bypass `ufw` rules, so restrict sources in the provider's security group.
+- **Deployments upgraded from 0.2.9 or earlier** also opened a tunnel port (7000/TCP by default). It is no longer used from 0.2.10 and can be removed from the firewall and security group.
 
 ### Four things you must know
 
@@ -112,7 +112,7 @@ Sign in to your Claude account on the account page at the bottom left of the cli
 3. **Data leaves your PC.** File excerpts and command output that Claude reads pass through your server to the model service. The server stores session history and the Claude login; backups contain these secrets too.
 4. **Get the fingerprint from a trusted place.** With a self-signed certificate, the fingerprint should come from the installation summary you saw yourself on the server, not from a forwarded message.
 
-> If an AI assistant deploys this for you, have it read this section first and remind you to: open only the two ports, store the service token safely, and make sure the server is trustworthy.
+> If an AI assistant deploys this for you, have it read this section first and remind you to: open only the one port, store the service token safely, and make sure the server is trustworthy.
 
 The full threat model, existing protections and how to report a vulnerability are in [SECURITY.md](SECURITY.md); ports, certificates and trust boundaries in detail are in [Deployment and security boundaries](docs/deployment.md).
 
@@ -129,8 +129,8 @@ That describes the structure. **It is not a guarantee about your account.** Keep
 
 ## Antivirus and SmartScreen
 
-- **frpc may be flagged.** The client bundles `frpc.exe` from [frp](https://github.com/fatedier/frp). frp is a general tunnelling tool that is often abused, so Windows Defender and other antivirus products label it "hack tool / riskware" and quarantine it; some cloud providers' host security agents also raise alerts for `frps` on the server. This project uses frp's official release files, verifies their SHA256 when packaging, runs them only while connected and connects only to your own server.
-- **Verify before allowing.** Do not assume an alert is a false positive just because it names frp. Check that the installer comes from this repository's [releases page](https://github.com/sun168567/cc-desk-tunnel/releases/latest), verify it against `SHA256SUMS`, and identify the file that was blocked. If you still choose to use it after checking the source, make only the necessary exception for the verified component file; do not disable antivirus or exclude a whole drive. Restore quarantined files or reinstall only after verification. Check protection history first when a component fails to start.
+- **frpc is no longer bundled.** Clients up to 0.2.9 shipped `frpc.exe` from the tunnelling tool frp, which Windows Defender and other antivirus products often quarantine as "hack tool / riskware". From 0.2.10 the client sets up the execution channel itself through the service address; neither the installer nor the server image contains frp, and the installer removes the old `frpc.exe` on upgrade.
+- **Verify before allowing a bundled component.** The client still bundles the official releases of OpenSSH and PowerShell 7, verifies their SHA256 when packaging, runs them only while connected and has them listen on this machine only. They are rarely blocked; if it happens, check that the installer comes from this repository's [releases page](https://github.com/sun168567/cc-desk-tunnel/releases/latest), verify it against `SHA256SUMS`, and identify the file that was blocked. After checking the source, make only the necessary exception for the verified component file; do not disable antivirus or exclude a whole drive. Restore quarantined files or reinstall only after verification.
 - **SmartScreen.** The installer is not code-signed. On first run Windows shows "Windows protected your PC": choose "More info → Run anyway".
 - The project never changes the settings of any security software. If in doubt, build from source.
 

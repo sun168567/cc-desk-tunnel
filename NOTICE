@@ -14,7 +14,6 @@ software, which stays under its own terms:
 The Windows installer and the server image redistribute these unmodified
 third-party components, each under its own license:
 
-- frp (https://github.com/fatedier/frp), Apache License 2.0.
 - Win32-OpenSSH (https://github.com/PowerShell/Win32-OpenSSH), BSD-style
   licenses of OpenSSH and its Windows port.
 - PowerShell (https://github.com/PowerShell/PowerShell), MIT License.

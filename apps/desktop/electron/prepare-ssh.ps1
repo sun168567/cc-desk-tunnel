@@ -35,6 +35,9 @@ PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 AllowUsers $allowed
+# Commands started together each open a connection of their own; the default would drop some of them at random
+# once ten are signing in at the same time.
+MaxStartups 64
 AllowTcpForwarding no
 PermitTunnel no
 X11Forwarding no

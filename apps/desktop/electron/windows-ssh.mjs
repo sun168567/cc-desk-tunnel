@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { connect, createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import { httpProxy } from './system-proxy.mjs';
 import { componentFailure, missingComponent } from './connect-errors.mjs';
 
 function execute(file, args, timeout) {
@@ -68,14 +67,9 @@ function probe(port) {
     });
   });
 }
-// `readyMs` is how long the local SSH service may take to start listening.
-export async function startWindowsTunnel(
-  configuration,
-  binaries,
-  signal,
-  onFailure,
-  readyMs = 10000,
-) {
+// Starts the SSH service of this connection: the bundled OpenSSH on a loopback port, with a host key and a
+// login key made for this connection alone. `readyMs` is how long it may take to start listening.
+export async function startWindowsSsh(connectionId, binaries, signal, onFailure, readyMs = 10000) {
   if (process.platform !== 'win32') throw new Error('Windows OpenSSH requires Windows.');
   const directory = await mkdtemp(join(tmpdir(), 'cc-desk-tunnel-ssh-'));
   const powershell = binaries.powershell ?? 'pwsh.exe';
@@ -99,7 +93,6 @@ export async function startWindowsTunnel(
   const check = () => {
     if (signal.aborted || closed) throw new Error('Tunnel cancelled');
   };
-  const tunnel = `${configuration.serverAddr}:${configuration.serverPort}`;
   function launch(file, args) {
     check();
     // The host and its components print why they stop; the end of that is kept to explain a failure.
@@ -115,20 +108,15 @@ export async function startWindowsTunnel(
       if (!closed) onFailure(missingComponent('PowerShell（pwsh.exe）'));
     });
     child.once('close', () => {
-      if (!closed) onFailure(componentFailure(output, tunnel, Date.now() - started < 30000));
+      if (!closed) onFailure(componentFailure(output, Date.now() - started < 30000));
     });
     return child;
   }
   try {
     check();
-    for (const [name, file] of [
-      ['sshd.exe', join(binaries.openssh, 'sshd.exe')],
-      ['frpc.exe', binaries.frpc],
-    ])
-      if (file)
-        await access(file).catch(() => {
-          throw new Error(missingComponent(name));
-        });
+    await access(join(binaries.openssh, 'sshd.exe')).catch(() => {
+      throw new Error(missingComponent('sshd.exe'));
+    });
     const port = await availablePort();
     const metadata = JSON.parse(
       await execute(
@@ -149,40 +137,6 @@ export async function startWindowsTunnel(
         Math.max(30000, readyMs),
       ),
     );
-    const proxy = httpProxy(
-      await binaries.resolveProxy?.(
-        `https://${configuration.serverAddr}:${configuration.serverPort}`,
-      ),
-    );
-    check();
-    const caPath = join(directory, 'server.crt');
-    await writeFile(caPath, configuration.certificate, 'utf8');
-    const configPath = join(directory, 'frpc.json');
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        serverAddr: configuration.serverAddr,
-        serverPort: configuration.serverPort,
-        loginFailExit: true,
-        auth: { method: 'token', token: configuration.token },
-        transport: {
-          // The execution channel takes the same system proxy as the control connection.
-          ...(proxy && { proxyURL: `http://${proxy.host}:${proxy.port}` }),
-          tls: { enable: true, trustedCaFile: caPath, serverName: configuration.serverName },
-        },
-        proxies: [
-          {
-            name: configuration.connectionId,
-            type: 'tcp',
-            localIP: '127.0.0.1',
-            localPort: port,
-            remotePort: configuration.remotePort,
-          },
-        ],
-        log: { to: 'console', level: 'error', disablePrintColor: true },
-      }),
-      'utf8',
-    );
     check();
     launch(powershell, [
       '-NoLogo',
@@ -196,8 +150,6 @@ export async function startWindowsTunnel(
       binaries.openssh,
       '-OwnerProcessId',
       String(process.pid),
-      '-FrpcPath',
-      binaries.frpc,
     ]);
     let ready = false;
     for (const started = Date.now(); Date.now() - started < readyMs;) {
@@ -213,9 +165,10 @@ export async function startWindowsTunnel(
         `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。这台电脑启动较慢时，可在“设置 → 常规”里调大等待时间。`,
       );
     return {
+      port,
       credentials: {
         type: 'tunnel.credentials',
-        connectionId: configuration.connectionId,
+        connectionId,
         username: metadata.username,
         powershellPath: metadata.powershellPath,
         privateKey: metadata.privateKey,

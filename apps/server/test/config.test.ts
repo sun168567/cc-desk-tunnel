@@ -8,33 +8,44 @@ const native = {
   PROXY_TOKEN: 'a'.repeat(32),
   PROXY_PUBLIC_HOST: 'proxy.example.com',
   PROXY_TLS_MODE: 'reverse-proxy',
+};
+// What a deployment made before 0.2.10 still has in its configuration file.
+const legacy = {
   FRPS_TLS_CERT: '/private/frp.crt',
   FRPS_TLS_KEY: '/private/frp.key',
   FRPS_SERVER_NAME: 'cc-desk-tunnel.frp',
+  FRPS_PORT: 'NaN',
+  FRPS_PATH: '/missing/frps',
 };
-test('reverse proxy mode separates control TLS and private frp identity, defaults to loopback', () => {
+test('reverse proxy mode leaves TLS to the proxy and defaults to loopback', () => {
   const { options, port } = environmentConfig(native, '/state');
   assert.equal(options.host, '127.0.0.1');
   assert.equal(options.reverseProxy, true);
   assert.equal(options.tls, undefined);
   assert.equal(port, 8787);
-  assert.equal(options.tunnel?.certificatePath, native.FRPS_TLS_CERT);
-  assert.equal(options.tunnel?.serverName, 'cc-desk-tunnel.frp');
+  assert.deepEqual(options.tunnel, {});
 });
-test('explicit native TLS mode and complete frp identity are required', () => {
+test('the frp settings of an older deployment are ignored, as is a missing public host', () => {
+  const { options } = environmentConfig(
+    { ...native, ...legacy, PROXY_PUBLIC_HOST: undefined },
+    '/state',
+  );
+  assert.deepEqual(options.tunnel, {});
+  assert.equal(
+    environmentConfig({ PROXY_TOKEN: 'a'.repeat(32) }, '/state').options.tunnel,
+    undefined,
+  );
+});
+test('explicit native TLS mode is required', () => {
   assert.throws(
     () => environmentConfig({ ...native, PROXY_TLS_MODE: undefined }, '/state'),
     /Direct mode/,
   );
   assert.throws(
-    () => environmentConfig({ ...native, FRPS_TLS_CERT: undefined }, '/state'),
-    /independent/,
-  );
-  assert.throws(
     () => environmentConfig({ ...native, PROXY_TLS_MODE: 'insecure' }, '/state'),
     /PROXY_TLS_MODE/,
   );
-  assert.throws(() => environmentConfig({ ...native, FRPS_PORT: 'NaN' }, '/state'), /FRPS_PORT/);
+
   assert.throws(() => environmentConfig({ ...native, PROXY_PORT: '0' }, '/state'), /PROXY_PORT/);
   assert.throws(
     () => environmentConfig({ ...native, CLAUDE_CONTEXT_RETENTION_DAYS: '0' }, '/state'),

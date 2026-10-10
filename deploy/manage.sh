@@ -10,7 +10,7 @@ usage() {
 Usage:
   manage.sh setup                      interactive first install: asks, builds, starts, prints a summary
   manage.sh init --host HOST [--mode fingerprint|certificate|nginx]
-    [--data ABSOLUTE_PATH] [--control-port 8787] [--frps-port 7000]
+    [--data ABSOLUTE_PATH] [--control-port 8787]
     [--cert FULLCHAIN --key PRIVATE_KEY] [--url wss://DOMAIN/ws] [--token SECRET]
   manage.sh build|up|status|logs|stop|restart|uninstall|connection|summary
   manage.sh upgrade [--from SERVER_ARCHIVE]   rebuild the image and replace the container in place
@@ -97,13 +97,13 @@ summary() {
   echo "  服务凭据   $(sed -n "s/^PROXY_TOKEN='\(.*\)'$/\1/p" "$DATA_DIR/config/service.env")"
   echo "服务器"
   echo "  入口模式   $MODE"
-  echo "  需放行端口 $([[ "$MODE" = nginx ]] && echo "nginx 的 443/TCP" || echo "$CONTROL_PORT/TCP")、$FRPS_PORT/TCP"
+  echo "  需放行端口 $([[ "$MODE" = nginx ]] && echo "nginx 的 443/TCP" || echo "$CONTROL_PORT/TCP")"
   echo "  数据目录   $DATA_DIR"
   echo "  部署配置   $CONFIG"
   id="$(dc ps -q proxy 2>/dev/null || true)"
   echo "  容器状态   $([[ -n "$id" ]] && docker inspect --format '{{.State.Health.Status}}' "$id" || echo 未启动)"
   echo "下一步"
-  echo "  1. 云防火墙只放行上面两个端口；本项目不需要其他入站端口。"
+  echo "  1. 云防火墙只放行上面“需放行端口”一项；本项目不需要其他入站端口。"
   echo "  2. Windows 客户端填入服务地址、指纹和凭据并连接。"
   echo "  3. 在客户端账号页登录 Claude 账号。"
   echo "  使用第三方 API 时编辑 $DATA_DIR/config/provider.json 后执行 manage.sh restart。"
@@ -134,7 +134,7 @@ case "$command" in
       if [[ "$mode" = nginx ]]; then
         options+=(--url "$(ask "客户端使用的 WSS 地址" "wss://$host/ws")")
       fi
-      options+=(--control-port "$(ask "控制端口" 8787)" --frps-port "$(ask "frp 隧道端口" 7000)")
+      options+=(--control-port "$(ask "控制端口" 8787)")
       default_data="${HOME}/.local/share/cc-desk-tunnel-container"
       [[ "$(id -u)" != 0 ]] || default_data=/srv/cc-desk-tunnel
       options+=(--data "$(ask "数据目录（新建，存放账号、会话与证书）" "$default_data")")
@@ -152,12 +152,14 @@ case "$command" in
   init)
     HOST='' MODE=fingerprint DATA_DIR="${HOME}/.local/share/cc-desk-tunnel-container"
     [[ "$(id -u)" != 0 ]] || DATA_DIR=/srv/cc-desk-tunnel
-    CONTROL_PORT=8787 FRPS_PORT=7000 CERT='' KEY='' URL='' TOKEN=''
+    CONTROL_PORT=8787 CERT='' KEY='' URL='' TOKEN=''
     while (($#)); do
       [[ $# -ge 2 ]] || fail "Missing value for $1"
       case "$1" in
         --host) HOST="$2" ;; --mode) MODE="$2" ;; --data) DATA_DIR="$2" ;;
-        --control-port) CONTROL_PORT="$2" ;; --frps-port) FRPS_PORT="$2" ;;
+        --control-port) CONTROL_PORT="$2" ;;
+        # Given by scripts written for 0.2.9 and earlier, when the execution channel had a port of its own.
+        --frps-port) ;;
         --cert) CERT="$2" ;; --key) KEY="$2" ;; --url) URL="$2" ;; --token) TOKEN="$2" ;;
         *) fail "Unknown option: $1" ;;
       esac
@@ -165,8 +167,7 @@ case "$command" in
     done
     [[ "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || fail "--host needs an IPv4 address or DNS name reachable by Windows (no IPv6 yet)."
     [[ "$MODE" =~ ^(fingerprint|certificate|nginx)$ ]] || fail "Invalid mode."
-    valid_port "$CONTROL_PORT" && valid_port "$FRPS_PORT" || fail "Ports must be 1024..65535."
-    [[ "$CONTROL_PORT" != "$FRPS_PORT" ]] || fail "Control and frp ports must differ."
+    valid_port "$CONTROL_PORT" || fail "The port must be 1024..65535."
     [[ "$DATA_DIR" = /* && "$DATA_DIR" != / && "$DATA_DIR" != "$HOME" ]] || fail "Choose an absolute dedicated data directory."
     DATA_DIR="$(realpath -m -- "$DATA_DIR")"
     [[ "$DATA_DIR" != / && "$DATA_DIR" != "$(realpath -- "$HOME")" ]] || fail "Choose a dedicated data directory."
@@ -188,7 +189,6 @@ case "$command" in
     [[ "$URL" =~ ^wss://[^/@?#]+/ws$ ]] || fail "--url must be a WSS /ws address."
     mkdir -p "$DATA_DIR"/{config,tls,home,state,workspace} "$(dirname -- "$CONFIG")"
     touch "$DATA_DIR/.cc-desk-tunnel-data"
-    make_cert cc-desk-tunnel.frp "$DATA_DIR/tls/frp" 3650 TRUE
     CERT_NAME=cc-desk-tunnel.local
     if [[ "$MODE" = fingerprint ]]; then
       make_cert "$CERT_NAME" "$DATA_DIR/tls/control" 365 FALSE
@@ -204,14 +204,10 @@ case "$command" in
       write_var PROXY_TOKEN "$TOKEN"
       write_var PROXY_HOST 0.0.0.0
       write_var PROXY_PORT 8787
-      write_var PROXY_PUBLIC_HOST "$HOST"
       write_var PROXY_TLS_MODE "$([[ "$MODE" = nginx ]] && echo reverse-proxy || echo direct)"
       write_var PROXY_TLS_CERT /data/tls/control.crt
       write_var PROXY_TLS_KEY /data/tls/control.key
       write_var PROXY_CERT_NAME "$CERT_NAME"
-      write_var FRPS_TLS_CERT /data/tls/frp.crt
-      write_var FRPS_TLS_KEY /data/tls/frp.key
-      write_var FRPS_SERVER_NAME cc-desk-tunnel.frp
       write_var PROXY_DATA_DIR /data/state
       write_var CLAUDE_CONTEXT_RETENTION_DAYS 3650
       write_var CLAUDE_SETTINGS_PATH /data/config/provider.json
@@ -223,7 +219,6 @@ case "$command" in
       write_var DATA_DIR "$DATA_DIR"
       write_var CONTROL_BIND "$CONTROL_BIND"
       write_var CONTROL_PORT "$CONTROL_PORT"
-      write_var FRPS_PORT "$FRPS_PORT"
       write_var MODE "$MODE"
       write_var CONNECTION_URL "$URL"
       write_var PROXY_IMAGE cc-desk-tunnel:local
@@ -348,7 +343,7 @@ case "$command" in
     install -m 600 "$temp/control.key" "$DATA_DIR/tls/control.key"
     [[ "$(id -u)" != 0 ]] || chown 1000:1000 "$DATA_DIR"/tls/control.{crt,key}
     if $was_running; then dc start; wait_healthy; fi
-    echo "Frontend certificate replaced. Fingerprint mode clients must update their pin; frp identity is unchanged."
+    echo "Frontend certificate replaced. Fingerprint mode clients must update their pin."
     ;;
   *) usage; fail "Unknown command: $command" ;;
 esac

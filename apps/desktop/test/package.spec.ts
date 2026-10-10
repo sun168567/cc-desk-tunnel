@@ -9,7 +9,7 @@ function componentProcesses(
   resources: string,
 ): Promise<{ ProcessId: number; Name: string; CommandLine: string }[]> {
   const script = `$root = '${resources.replaceAll("'", "''")}'; ConvertTo-Json -Compress -InputObject @(
-    Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe' OR Name = 'sshd.exe' OR Name = 'frpc.exe'" |
+    Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe' OR Name = 'sshd.exe'" |
     Where-Object { $_.CommandLine -and $_.CommandLine.Contains($root) } |
     Select-Object ProcessId,Name,CommandLine
   )`;
@@ -90,7 +90,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
       await page.getByRole('button', { name: '连接', exact: true }).click();
       await expect(page.locator('.connection-status')).toContainText('已连接', { timeout: 45000 });
       const components = await componentProcesses(resources);
-      expect(components.some((row) => row.Name === 'frpc.exe')).toBe(true);
+
       expect(components.some((row) => row.Name === 'sshd.exe')).toBe(true);
       expect(
         components.some(

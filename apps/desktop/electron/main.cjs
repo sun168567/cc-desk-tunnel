@@ -210,7 +210,6 @@ handle('proxy:connect', async (event, config) => {
   const connection = await openProxyBridge(
     config,
     {
-      frpc: path.join(vendor, 'frpc.exe'),
       openssh,
       powershell,
       scriptDirectory: app.isPackaged

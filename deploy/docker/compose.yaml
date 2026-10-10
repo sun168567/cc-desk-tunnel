@@ -8,11 +8,8 @@ services:
     stop_grace_period: 30s
     ports:
       - "${CONTROL_BIND:-0.0.0.0}:${CONTROL_PORT:-8787}:8787"
-      - "0.0.0.0:${FRPS_PORT:-7000}:${FRPS_PORT:-7000}"
     volumes:
       - "${DATA_DIR:?Run manage.sh init}:/data"
-    environment:
-      FRPS_PORT: "${FRPS_PORT:-7000}"
     security_opt:
       - no-new-privileges:true
     cap_drop:

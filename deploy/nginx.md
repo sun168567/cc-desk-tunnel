@@ -6,11 +6,10 @@
 
 ```text
 客户端 ── wss://proxy.example.com/ws（443）──▶ nginx ── http://127.0.0.1:8787 ──▶ 容器
-客户端 ── proxy.example.com:7000（frp，TLS）──────────────────────────────────▶ 容器
 ```
 
-- **经过 nginx 的只有控制通道**：`/ws`（登录与对话）、`/client/installer`（客户端升级下载）和可选的 `/health`。
-- **隧道端口不经过 nginx**。frp 使用自己的 TLS，客户端直接连接服务器的隧道端口（默认 7000），防火墙仍需放行它。
+- **全部流量都经过 nginx**：`/ws`（登录与对话，以及 Claude 到 Windows 的执行通道）、`/client/installer`（客户端升级下载）和可选的 `/health`。
+- **执行通道也走 `/ws`**。Claude 每执行一条命令，客户端就另开一条到 `/ws` 的连接，所以同一来源会同时有多条连接；不要用 `limit_conn` 之类的设置把它限制到一条。0.2.9 及更早版本单独使用的隧道端口（默认 7000）不再需要。
 - nginx 模式下容器的 8787 只发布在服务器的 `127.0.0.1`，公网无法直接访问。
 
 ## 第一步：以 nginx 模式安装
@@ -24,7 +23,7 @@ sudo bash deploy/manage.sh build
 sudo bash deploy/manage.sh up
 ```
 
-- `--host` 是客户端连接隧道端口时使用的地址，必须直接解析到这台服务器。
+- `--host` 是这个服务的域名。
 - `--url` 是客户端填写的服务地址。nginx 不在 443 端口时写成 `wss://proxy.example.com:8443/ws`。
 - 路径固定为域名根下的 `/ws` 和 `/client/installer`，不支持放到子路径里。
 
@@ -95,7 +94,7 @@ curl https://proxy.example.com/health
 # 应返回 HTTP/1.1 101 Switching Protocols（随后按 Ctrl+C 结束）
 curl -i -N --http1.1 https://proxy.example.com/ws \
   -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
-  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: SGVsbG8sIHdvcmxkIQ=='
+  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=='
 ```
 
 然后在客户端填写：服务地址 `wss://proxy.example.com/ws`，证书指纹**留空**，服务凭据见 `sudo bash deploy/manage.sh summary`。
@@ -105,7 +104,7 @@ curl -i -N --http1.1 https://proxy.example.com/ws \
 | 端口 | 是否放行 |
 | --- | --- |
 | nginx 的 443/TCP（或你使用的端口） | 放行 |
-| 隧道端口（默认 7000/TCP） | 放行 |
+| 7000（0.2.9 及更早版本的隧道端口） | 不再需要，可以去掉 |
 | 8787 | 不需要；它只监听服务器本机 |
 
 ## 常见问题
@@ -115,21 +114,21 @@ curl -i -N --http1.1 https://proxy.example.com/ws \
 | 客户端提示连接失败，`curl` 检查 `/ws` 返回 400 或 404 | 缺少 `Upgrade` / `Connection` 两行或 `map`，或 `location` 没有写在正确的 `server` 块里 |
 | 返回 502 | 容器没有运行，或控制端口不是 8787。用 `manage.sh status` 查看，端口见部署配置里的 `CONTROL_PORT` |
 | 证书错误 | 客户端的指纹一栏没有留空；或 nginx 用的不是完整证书链（应使用 `fullchain.pem`） |
-| 能登录，但提示 Windows SSH 连接准备超时 | 隧道端口没有放行，或域名没有直接解析到这台服务器 |
+| 能登录，但提示执行通道没有就绪 | nginx 限制了同一来源的并发连接数，或 `/ws` 的配置只对第一条连接生效 |
 | 空闲一会儿就断开 | 缺少两个超时设置 |
 | 所有设备同时被提示“登录失败次数过多” | 缺少 `X-Real-IP` |
 | 客户端升级时下载失败 | 缺少 `/client/installer` |
 
 ## 关于 CDN
 
-不建议把这个域名放到 CDN 或其他第三方代理后面：对方能看到包括服务凭据在内的全部内容，隧道端口也无法经由它转发，登录限速看到的还会是 CDN 的地址。域名直接解析到服务器即可。
+不建议把这个域名放到 CDN 或其他第三方代理后面：对方能看到包括服务凭据和命令输出在内的全部内容，登录限速看到的还会是 CDN 的地址。域名直接解析到服务器即可。
 
 ## 已有部署改用 nginx
 
 入口方式在初始化时确定，没有专门的切换命令。需要切换时先备份（`manage.sh backup`），然后修改两个文件并重建容器：
 
 - 部署配置（默认 `.local/docker.env`）：`MODE='nginx'`、`CONTROL_BIND='127.0.0.1'`、`CONNECTION_URL='wss://proxy.example.com/ws'`。
-- `<数据目录>/config/service.env`：`PROXY_TLS_MODE='reverse-proxy'`；`PROXY_PUBLIC_HOST` 改成域名或保持原来的公网 IP 均可。
+- `<数据目录>/config/service.env`：`PROXY_TLS_MODE='reverse-proxy'`。
 
 ```sh
 sudo bash deploy/manage.sh up

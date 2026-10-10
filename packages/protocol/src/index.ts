@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -526,6 +526,7 @@ export const authSchema = z
     token: z.string().min(24).max(512),
     deviceName: z.string().trim().min(1).max(120),
     tunnel: z.boolean().default(false),
+const tunnelSecret = z.string().min(32).max(128);
   })
   .strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
@@ -582,16 +583,11 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     client: installerSchema.optional(),
   }),
   z.object({ type: z.literal('service.update'), ...serviceUpdateSchema.shape }),
-  z.object({
-    type: z.literal('tunnel.configure'),
-    connectionId: id,
-    serverAddr: z.string().min(1),
-    serverPort: z.number().int().min(1).max(65535),
-    remotePort: z.number().int().min(1).max(65535),
-    token: z.string().min(24),
-    certificate: z.string().min(1),
-    serverName: z.string().min(1),
-  }),
+  // The execution channel runs over connections the device opens to this same address. `secret` signs them
+  // in; it belongs to this connection alone and ends with it.
+  z.object({ type: z.literal('tunnel.offer'), connectionId: id, secret: tunnelSecret }),
+  // An SSH connection is waiting on the service: the device opens one connection for it and attaches it.
+  z.object({ type: z.literal('tunnel.open'), connectionId: id, channelId: id }),
   z.object({ type: z.literal('tunnel.ready'), connectionId: id }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
@@ -604,6 +600,20 @@ export const tunnelCredentialsSchema = z
       .string()
       .min(1)
       .max(256)
+// The first and only text frame of a channel connection. Once the service has accepted it, every frame in
+// either direction is the bytes of one SSH connection, and closing the connection ends that one.
+export const tunnelAttachSchema = z
+  .object({
+    type: z.literal('tunnel.attach'),
+    connectionId: id,
+    channelId: id,
+    secret: tunnelSecret,
+  })
+  .strict();
+export type TunnelAttach = z.infer<typeof tunnelAttachSchema>;
+// How a channel connection is closed when it could not be attached.
+export const TUNNEL_CLOSE = { refused: 4001, unknown: 4004 } as const;
+
       .regex(/^[a-zA-Z0-9_.\\@-]+$/),
     privateKey: z.string().min(1).max(16384),
     hostPublicKey: z.string().regex(/^ssh-ed25519 [A-Za-z0-9+/=]+$/),
