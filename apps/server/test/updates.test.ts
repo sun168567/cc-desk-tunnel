@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -214,4 +222,44 @@ test('a download whose connections keep delivering nothing is given up, and one 
   t.after(() => updates.stop());
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.deepEqual(readdirSync(join(f.directory, 'client')), []);
+});
+
+test('starting clears the programs of other versions and unfinished downloads, and nothing else', async (t) => {
+  const f = await feed(t, serviceVersion());
+  const program = join(f.directory, 'program');
+  const client = join(f.directory, 'client');
+  const kept = [
+    join(program, serviceVersion(), 'apps'),
+    join(program, 'current'),
+    join(program, 'notes'),
+    join(client, 'CC-Desk-Tunnel-Setup-0.0.1-x64.exe'),
+    join(client, 'readme.txt'),
+  ];
+  const stale = [
+    join(program, '0.0.1', 'apps'),
+    join(program, '9.9.9.new', 'apps'),
+    join(program, '9.9.9.tar.gz'),
+    join(client, 'CC-Desk-Tunnel-Setup-0.0.1-x64.exe.part'),
+  ];
+  for (const path of [...kept, ...stale]) {
+    mkdirSync(join(path, '..'), { recursive: true });
+    if (path.endsWith('apps')) mkdirSync(path);
+    else writeFileSync(path, 'x');
+  }
+  const updates = f.updates({ runtimeLevel: 1 });
+  updates.start();
+  t.after(() => updates.stop());
+  // The installer of this version arrives after the clearing, which is how the end of it is told.
+  for (let attempt = 0; !existsSync(join(client, f.name)); attempt++) {
+    assert.ok(attempt < 500, 'the installer did not arrive');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.deepEqual(
+    stale.filter((path) => existsSync(path)),
+    [],
+  );
+  assert.deepEqual(
+    kept.filter((path) => !existsSync(path)),
+    [],
+  );
 });

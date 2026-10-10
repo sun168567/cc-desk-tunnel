@@ -37,6 +37,13 @@ export type UpdateOptions = {
 // tried again.
 const downloadPace = { stretch: 20_000, stall: 15_000, attempts: 5, retry: 300_000 };
 // The installer being fetched for clients, and how far it is.
+function names(directory: string) {
+  try {
+    return readdirSync(directory);
+  } catch {
+    return [];
+  }
+}
 export type InstallerProgress = { version: string; received: number; size: number };
 
 // The release version of this program; the two sides share the desktop client's number.
@@ -83,7 +90,23 @@ export class ServiceUpdates {
     this.timer.unref();
     // Clients need the installer of this version. It is fetched beside the running service, never as a step
     // of an upgrade: the service is useful without it, and a client can also get it from the release page.
-    this.prepareInstaller();
+    void this.tidy().then(() => this.prepareInstaller());
+  }
+  // Removes what earlier upgrades left behind, now that this program has started: the programs of other
+  // versions, which nothing starts any more, and downloads that never finished. Nothing else is touched.
+  private async tidy() {
+    await this.clearPrograms().catch(() => undefined);
+    for (const name of names(this.options.clientDir))
+      if (name.endsWith('.part'))
+        await rm(join(this.options.clientDir, name), { force: true }).catch(() => undefined);
+  }
+  // Every program in the store but the running one, whole or half unpacked, and the archives they came in.
+  private async clearPrograms() {
+    const root = this.options.programDir;
+    if (!root) return;
+    for (const name of names(root))
+      if (/^\d+\.\d+\.\d+(\.|$)/.test(name) && name !== this.version)
+        await rm(join(root, name), { recursive: true, force: true });
   }
   stop() {
     this.stopped = true;
@@ -289,10 +312,7 @@ export class ServiceUpdates {
     void (async () => {
       try {
         // Only the running program is kept beside the new one.
-        mkdirSync(root, { recursive: true });
-        for (const name of readdirSync(root))
-          if (/^\d+\.\d+\.\d+(\.|$)/.test(name) && name !== this.version)
-            await rm(join(root, name), { recursive: true, force: true });
+        await this.clearPrograms();
         mkdirSync(work, { recursive: true });
         const archive = join(root, `${version}.tar.gz`);
         await this.download(manifest, `cc-desk-tunnel-server-${version}.tar.gz`, archive);
