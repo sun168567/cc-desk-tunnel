@@ -61,6 +61,8 @@ sudo bash deploy/manage.sh release-token /path/token.txt   # 不带参数则移�
 
 跟踪的仓库可在 `config/service.env` 里用 `PROXY_RELEASE_REPO='所有者/仓库'` 更改，设为 `none` 则不查询也不提供升级。容器没有宿主 Docker 的控制权，替换镜像始终要在宿主上执行。
 
+同时进行的运行和终端有上限，默认按服务器内存估算（每个约占 300 MB，1 GB 内存的服务器是 2 个）。要改就在 `config/service.env` 里加 `PROXY_MAX_RUNS='数量'` 并重启服务。
+
 需要脚本化或分步执行时仍可用参数形式：
 
 ```sh

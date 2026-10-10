@@ -10,7 +10,8 @@
 - 原生运行的所属连接可继续 `message.send`，同一 run / 原生进程接入 streaming input，不要求停止。`message.delivery` 按 messageId 更新提交 / 等待处理 / 原生回执 / 未送达 / 未确认；response 不等于原生采纳。消息合并和处理时机交给 CLI，未知状态不自动重放；每运行传输等待上限 32 条。
 - 服务事件为 `session.event`，包含会话 ID、运行 ID、时间和从 1 起的会话内递增 `sequence`。每个事件落盘后才广播。实时与历史可按 sequence 去重。
 - `session.subscribe` 只订阅当前会话，游标为 0 时取最近一页，非零游标补齐小差量，大差量回最近页。`session.history.beforeSequence` 加载更早完整轮次，不改变订阅。`session.snapshot` 有 `requestId`、replace/prepend/append 模式、原始 first/lastSequence 游标和 hasEarlier；历史连续增量批量合并，不逐 token 重播。合并事件 sequence 为该段末事件，分页游标由独立字段提供。`session.updated/deleted` 更新目录。
-- 原生桌面 `auth.tunnel=true`，服务发送 `tunnel.offer`（本次连接的通道密钥）；主进程返回绑定 connection ID 的 `tunnel.credentials`（SSH identity / host key / 用户 / PowerShell 路径），服务实际探测后发送 `tunnel.ready`。服务端每收到一条 SSH 连接就发一条 `tunnel.open`，主进程为它另开一条到同一地址的连接，首帧发 `tunnel.attach`（连接 ID、通道 ID、通道密钥），此后这条连接只转发 SSH 的字节。这些消息不进入 GUI 历史，所有秘密经加密且验证身份的控制连接传递。
+- `auth` 之后客户端紧接着发一帧 `device`，给出这台电脑的标识（客户端生成一次并保存）；名字取 `auth.deviceName`。`auth` 这一帧的形状各版本都要能读，版本不一致的客户端靠它得知服务端版本，所以新字段不加在它上面。没有发过 `device` 的连接可以查看，不能创建会话或发消息。
+- 原生桌面 `auth.tunnel=true`，服务发送 `tunnel.offer`（本次连接的通道密钥）；主进程返回绑定 connection ID 的 `tunnel.credentials`（SSH identity / host key / 用户），服务实际探测后发送 `tunnel.ready`。服务端每收到一条 SSH 连接就发一条 `tunnel.open`，主进程为它另开一条到同一地址的连接，首帧发 `tunnel.attach`（连接 ID、通道 ID、通道密钥），此后这条连接只转发 SSH 的字节。这些消息不进入 GUI 历史，所有秘密经加密且验证身份的控制连接传递。
 - 不含 `execution.*` 请求、远程执行能力标志或执行 MCP。原生审批仍用 `approval.requested/reply/resolved`，只传递官方引擎发出的请求 / 用户决定。
 - `session.configure` 保存原生 `auto/default/plan/acceptEdits`、model / effort 偏好，新会话默认 auto，运行中不可更改。`native.session` 分别回传请求 / 实际模式与 effort；`native.capabilities` 传原生模型目录、命名账号字段及命令名；`native.metrics` 分开当前上下文摘要、累计用量估算和订阅额度，不可用为 null / unavailable。`native.compact` 是实际压缩边界，不是代理摘要。
 - `native.context` 报告官方原生会话存储检查结果，不传输私有 JSONL 或将镜像作为模型输入。改名 / 删除先更新官方原生记录，失败保留代理镜像；禁止与运行并发管理。
