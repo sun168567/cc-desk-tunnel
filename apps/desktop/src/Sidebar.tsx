@@ -36,7 +36,6 @@ export default function Sidebar({
   busy,
   refreshing,
   terminalOpen,
-  terminalActive,
   notifications,
   select,
   newSession,
@@ -55,9 +54,8 @@ export default function Sidebar({
   connected: boolean;
   busy: boolean;
   refreshing: boolean;
-  // `terminalOpen` is this window's terminal; `terminalActive` also covers one held by another connection.
+  // This window's native terminal is open: it has the window until it is closed.
   terminalOpen: boolean;
-  terminalActive: boolean;
   notifications: Notifications;
   select: (sessionId: string) => void;
   newSession: () => void;
@@ -166,7 +164,7 @@ export default function Sidebar({
         <button
           type="button"
           className="session-select"
-          disabled={terminalOpen || terminalActive}
+          disabled={terminalOpen}
           onClick={() => select(session.id)}
         >
           <strong>{session.title}</strong>
@@ -235,7 +233,7 @@ export default function Sidebar({
       <button
         type="button"
         className="side-action new-session"
-        disabled={!connected || busy || refreshing || terminalOpen || terminalActive}
+        disabled={!connected || busy || refreshing || terminalOpen}
         onClick={newSession}
       >
         <SquarePen />
@@ -248,7 +246,7 @@ export default function Sidebar({
           项目
           <IconButton
             title="添加项目"
-            disabled={!connected || busy || terminalActive}
+            disabled={!connected || busy || terminalOpen}
             onClick={addProject}
           >
             <Plus />
@@ -300,7 +298,7 @@ export default function Sidebar({
                 <IconButton
                   title={`新建会话 · ${path}`}
                   className="row-action"
-                  disabled={!connected || busy || refreshing || terminalActive}
+                  disabled={!connected || busy || refreshing || terminalOpen}
                   onClick={() => createInProject(path)}
                 >
                   <Plus />

@@ -192,17 +192,15 @@ export function App() {
       ? { ...(metrics ?? state.metrics)!, rateLimits: quota.rateLimits }
       : (metrics ?? state.metrics);
   const canCompact = !!latest(events, 'native.context')?.persisted;
-  // The native terminal takes over the CLI state, whichever connection opened it.
-  const terminalActive = state.sessions.some(
-    (session) => session.activeRun?.surface === 'terminal',
-  );
+  // A native terminal anywhere keeps what the CLI holds for all sessions, the account and its status, from
+  // being read or changed; this window's own terminal, `terminalSessionId`, also takes the window.
+  const anyTerminal = state.sessions.some((session) => session.activeRun?.surface === 'terminal');
   const controlsDisabled =
     !connected ||
     busy ||
     refreshing ||
     !!selected?.activeRun ||
     !!history?.loading ||
-    terminalActive ||
     !!terminalSessionId;
   const ownsRun = !!selected?.activeRun && selected.activeRun.connectionId === state.connectionId;
   // A native run accepts follow-up messages from the connection that owns it.
@@ -210,7 +208,6 @@ export function App() {
     !connected ||
     busy ||
     !!history?.loading ||
-    terminalActive ||
     (!!selected?.activeRun && (!nativeMode || !ownsRun)) ||
     refreshing;
   const draft = selected ? (drafts[selected.id] ?? '') : '';
@@ -352,13 +349,13 @@ export function App() {
       !connected ||
       history?.loading ||
       selected.activeRun ||
-      terminalActive ||
+      anyTerminal ||
       refreshed.current.has(selected.id)
     )
       return;
     refreshed.current.add(selected.id);
     void refreshStatus(selected.id);
-  }, [nativeMode, selected?.id, connected, history?.loading, selected?.activeRun, terminalActive]);
+  }, [nativeMode, selected?.id, connected, history?.loading, selected?.activeRun, anyTerminal]);
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
@@ -511,15 +508,21 @@ export function App() {
     else await addProject();
   }
   // A due task is an ordinary message: to its session once that is idle, or to a session made for it. It is
-  // never queued into a run, and waits while the native terminal holds the CLI.
+  // never queued into a run, and waits while this window's native terminal is open.
   const notifications = useNotifications(client, () =>
     place.page === 'chat' ? client.state.selectedId : null,
   );
   useEffect(() => window.desktop?.onNotifyClicked((sessionId) => sessionId && show(sessionId)));
   const schedules = useSchedules(
     async (task, due) => {
-      const { status, sessions, selectedId } = client.state;
-      if (status !== 'connected' || sessions.some((item) => item.activeRun?.surface === 'terminal'))
+      const { status, sessions, selectedId, connectionId } = client.state;
+      if (
+        status !== 'connected' ||
+        sessions.some(
+          ({ activeRun }) =>
+            activeRun?.surface === 'terminal' && activeRun.connectionId === connectionId,
+        )
+      )
         return false;
       let session: Session | undefined;
       if (task.target.type === 'session') {
@@ -632,7 +635,7 @@ export function App() {
     });
   }
   function sessionMenu(session: Session): MenuItem[] {
-    const idle = connected && !busy && !terminalSessionId && !terminalActive;
+    const idle = connected && !busy && !terminalSessionId;
     const anyRun = state.sessions.some((item) => !!item.activeRun);
     const pinned = prefs.pinnedSessions.includes(session.id);
     return [
@@ -666,7 +669,7 @@ export function App() {
       {
         label: '导出为 Markdown',
         icon: <FileDown />,
-        disabled: !connected || !!terminalSessionId || terminalActive,
+        disabled: !connected || !!terminalSessionId,
         run: () => {
           void act(async () => {
             await exportSession(client, session);
@@ -699,7 +702,7 @@ export function App() {
         icon: <Trash2 />,
         danger: true,
         separated: true,
-        disabled: !connected || !!session.activeRun || !!terminalSessionId || terminalActive,
+        disabled: !connected || !!session.activeRun || !!terminalSessionId,
         run: () => {
           setError(null);
           closeSide();
@@ -715,7 +718,7 @@ export function App() {
       {
         label: '新建会话',
         icon: <Plus />,
-        disabled: !connected || busy || refreshing || terminalActive,
+        disabled: !connected || busy || refreshing || !!terminalSessionId,
         run: () => {
           void createInProject(path);
         },
@@ -730,7 +733,7 @@ export function App() {
       {
         label: '更改文件夹…',
         icon: <FolderInput />,
-        disabled: !connected || busy || !!terminalSessionId || terminalActive,
+        disabled: !connected || busy || !!terminalSessionId,
         run: () => {
           if (!window.desktop) return setRepointProject(path);
           void act(async () => {
@@ -859,7 +862,7 @@ export function App() {
     { label: '断开连接', icon: <LogOut />, separated: true, run: disconnect },
   ];
   const toggleSide = () => setSideOpen((value) => !value);
-  const canCreate = connected && !busy && !refreshing && !terminalSessionId && !terminalActive;
+  const canCreate = connected && !busy && !refreshing && !terminalSessionId;
   const barMenus: BarMenu[] = [
     {
       label: '文件',
@@ -874,14 +877,14 @@ export function App() {
         },
         {
           label: '添加项目…',
-          disabled: !connected || busy || terminalActive,
+          disabled: !connected || busy || !!terminalSessionId,
           run: () => {
             void addProject();
           },
         },
         {
           label: '导出当前会话…',
-          disabled: !selected || !connected || !!terminalSessionId || terminalActive,
+          disabled: !selected || !connected || !!terminalSessionId,
           separated: true,
           run: () => {
             void act(async () => {
@@ -1125,7 +1128,7 @@ export function App() {
               capabilities={signedOut ? null : capabilities}
               metrics={signedOut ? null : accountMetrics}
               refreshing={refreshing}
-              disabled={!state.sessions.length || !connected || refreshing || terminalActive}
+              disabled={!state.sessions.length || !connected || refreshing || anyTerminal}
               error={currentError}
               refresh={() => {
                 void refreshStatus();
@@ -1152,7 +1155,6 @@ export function App() {
             busy={busy}
             refreshing={refreshing}
             terminalOpen={!!terminalSessionId}
-            terminalActive={terminalActive}
             notifications={notifications}
             select={show}
             newSession={() => {

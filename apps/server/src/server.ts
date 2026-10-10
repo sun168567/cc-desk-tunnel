@@ -112,11 +112,12 @@ export function createProxyServer(options: ServerOptions) {
   const usage = new UsageLog(store.database);
   const usageReceiver = options.claude ? createUsageReceiver(usage) : undefined;
   const peers = new Set<Peer>();
-  // One run per session; the native CLI state is shared, so native work is further limited to one thing at a time:
-  // a run, a status read or session change (`mutations`), the terminal, or an account change.
+  // One run or one terminal per session, each a CLI process of its own in the session's directory. What reads
+  // or changes the state the CLI keeps for all of them — a status read or session change (`mutations`), an
+  // account change — waits until none is going.
   const runs = new Map<string, Run>();
   const mutations = new Set<string>();
-  let terminal: Terminal | undefined;
+  const terminals = new Map<string, Terminal>();
   let login: Login | undefined;
   // Each run or terminal is a CLI process that keeps some 250 MB; more of them than the memory holds would
   // take the machine down, and every one of them with it.
@@ -234,7 +235,7 @@ export function createProxyServer(options: ServerOptions) {
       );
   }
   function room() {
-    if (options.claude && runs.size + (terminal ? 1 : 0) >= capacity)
+    if (options.claude && runs.size + terminals.size >= capacity)
       throw new DomainError(
         'capacity',
         `服务端同时最多进行 ${capacity} 个运行或终端（按服务器内存估算，可用 PROXY_MAX_RUNS 调整）。请等其他任务结束后再试。`,
@@ -380,7 +381,7 @@ export function createProxyServer(options: ServerOptions) {
       login?.process.cancel();
       return;
     }
-    if (terminal || runs.size || mutations.size)
+    if (terminals.size || runs.size || mutations.size)
       throw new DomainError('native_busy', '请先结束原生运行或终端，再管理账号。');
     const { NativeLogin, accountLogout } = await import('./native-account.ts');
     if (command.type === 'account.logout') {
@@ -433,11 +434,11 @@ export function createProxyServer(options: ServerOptions) {
     // During a run its own CLI answers, so quota can be reread without waiting for the turn to end.
     const active =
       runs.get(command.sessionId) ?? [...runs.values()].find((run) => run.controls.refresh);
-    if (active?.controls.refresh && !terminal && !mutations.size) {
+    if (active?.controls.refresh && !mutations.size) {
       await active.controls.refresh();
       return;
     }
-    if (terminal || runs.size || mutations.size)
+    if (terminals.size || runs.size || mutations.size)
       throw new DomainError('native_busy', '运行结束后再刷新原生状态。');
     mutations.add(command.sessionId);
     const controller = new AbortController();
@@ -463,7 +464,8 @@ export function createProxyServer(options: ServerOptions) {
     }
   }
   async function closeTerminal(peer: Peer, command: CommandOf<'terminal.close'>) {
-    if (!terminal || terminal.id !== command.terminalId || terminal.sessionId !== command.sessionId)
+    const terminal = terminals.get(command.sessionId);
+    if (!terminal || terminal.id !== command.terminalId)
       throw new DomainError('terminal_inactive', '原生终端已结束。');
     if (terminal.owner !== peer) throw new DomainError('not_owner', '原生终端属于另一连接。');
     await terminal.process?.close();
@@ -471,13 +473,13 @@ export function createProxyServer(options: ServerOptions) {
   // The terminal occupies its session like a run does, so other connections see it as busy.
   async function openTerminal(peer: Peer, command: CommandOf<'terminal.open'>, session: Session) {
     if (!options.claude) throw new DomainError('native_unavailable', '离线模拟不启动原生终端。');
-    if (terminal || runs.size || mutations.size)
-      throw new DomainError('native_busy', '请先结束原生运行或会话管理，再打开终端。');
+    if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
+      throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
     if (!peer.tunnel?.ssh) throw new DomainError('execution_offline', 'Windows SSH 尚未就绪。');
     onDevice(peer, session);
     room();
     const current: Terminal = { id: randomUUID(), sessionId: command.sessionId, owner: peer };
-    terminal = current;
+    terminals.set(current.sessionId, current);
     try {
       const { NativeTerminal, terminalArguments, terminalEnvironment } =
         await import('./native-terminal.ts');
@@ -506,7 +508,7 @@ export function createProxyServer(options: ServerOptions) {
             bytes,
           }),
         (exitCode) => {
-          if (terminal !== current) return;
+          if (terminals.get(current.sessionId) !== current) return;
           store.append(current.sessionId, current.id, {
             type: 'run.status',
             status: 'completed',
@@ -520,7 +522,7 @@ export function createProxyServer(options: ServerOptions) {
             terminalId: current.id,
             exitCode,
           });
-          terminal = undefined;
+          terminals.delete(current.sessionId);
         },
       );
       store.append(command.sessionId, current.id, {
@@ -533,7 +535,7 @@ export function createProxyServer(options: ServerOptions) {
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();
-      if (terminal === current) terminal = undefined;
+      if (terminals.get(current.sessionId) === current) terminals.delete(current.sessionId);
       throw new DomainError('terminal_failed', '原生终端启动失败，请检查 Linux PTY 组件与 CLI。');
     }
   }
@@ -785,7 +787,7 @@ export function createProxyServer(options: ServerOptions) {
       case 'service.update.install':
         if (!updates) throw new DomainError('updates_unavailable', '此服务未启用版本跟踪。');
         // The restart at the end would cut these off.
-        if (terminal || runs.size || mutations.size || login)
+        if (terminals.size || runs.size || mutations.size || login)
           throw new DomainError('native_busy', '请先结束运行、终端或登录流程，再升级服务端。');
         try {
           updates.install(command.version);
@@ -848,8 +850,8 @@ export function createProxyServer(options: ServerOptions) {
         controlRun(peer, command);
         return command.sessionId;
     }
-    if (terminal)
-      throw new DomainError('native_busy', '原生终端打开期间，请先关闭终端再操作图形会话。');
+    if (terminals.has(command.sessionId))
+      throw new DomainError('native_busy', '这个会话的原生终端开着，请先关闭终端再操作它。');
     if (
       updates?.installing &&
       (command.type === 'message.send' || command.type === 'session.compact')
@@ -1023,13 +1025,8 @@ export function createProxyServer(options: ServerOptions) {
   }
   // Keystrokes, resizes and flow-control acknowledgments carry no request ID and get no response.
   function controlTerminal(peer: Peer, control: TerminalControl) {
-    const current = terminal;
-    if (
-      !current ||
-      current.owner !== peer ||
-      current.id !== control.terminalId ||
-      current.sessionId !== control.sessionId
-    ) {
+    const current = terminals.get(control.sessionId);
+    if (!current || current.owner !== peer || current.id !== control.terminalId) {
       send(peer, {
         type: 'connection.error',
         code: 'terminal_inactive',
@@ -1086,10 +1083,11 @@ export function createProxyServer(options: ServerOptions) {
   function release(peer: Peer) {
     peers.delete(peer);
     if (login?.owner === peer) login.process.cancel();
-    if (terminal?.owner === peer) {
-      const task = terminal.process?.close();
-      if (task) track(task);
-    }
+    for (const terminal of terminals.values())
+      if (terminal.owner === peer) {
+        const task = terminal.process?.close();
+        if (task) track(task);
+      }
     for (const run of runs.values())
       if (run.owner === peer)
         cancel(
@@ -1224,7 +1222,9 @@ export function createProxyServer(options: ServerOptions) {
       closing = true;
       updates?.stop();
       login?.process.cancel();
-      const terminalCleanup = terminal?.process?.close();
+      const terminalCleanup = Promise.all(
+        [...terminals.values()].map((terminal) => terminal.process?.close()),
+      );
       for (const run of runs.values()) cancel(run, '服务停止，运行未重放。');
       const cleanup = [...peers].map((peer) => peer.tunnel?.close());
       for (const peer of peers) peer.socket.terminate();
