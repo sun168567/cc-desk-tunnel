@@ -35,7 +35,7 @@ Windows 上的 shell 命令与脚本使用 `pwsh.exe`（PowerShell 7）。终端
 2. 在 Windows x64 上检出最新的 `main`，准备好打包组件（`npm run prepare:windows:package`）、`gh` 和环境变量 `GH_TOKEN`。
 3. `npm run release` 构建安装包与服务端程序包，生成 `release.json`（版本、协议版本、提交、各文件的大小与 SHA256）和 `SHA256SUMS`，上传为草稿发布；核对无误后在发布页点发布，或直接用 `npm run release -- --publish`。`--dry-run` 只构建到 `artifacts/release/`，不上传。
 
-`release.json` 里的 `runtime` 是该版本所需的镜像级别，取自 `deploy/docker/runtime-level`。改动 Dockerfile、镜像入口脚本或 Node.js / frps 的版本时把这个数字加一：旧镜像上的服务端会提示在服务器上升级，而不是自行安装。只更换 Claude Code 的版本不需要加，升级时会把所需版本装进数据目录。
+`release.json` 里的 `runtime` 是该版本所需的镜像级别，取自 `deploy/docker/runtime-level`。改动 Dockerfile、镜像入口脚本或 Node.js 的版本时把这个数字加一：旧镜像上的服务端会提示在服务器上升级，而不是自行安装。只更换 Claude Code 的版本不需要加，升级时会把所需版本装进数据目录。
 
 发布在此时才打上 `v<版本>` 标签。已发布的版本不改文件，有问题就递增版本重新发布。
 

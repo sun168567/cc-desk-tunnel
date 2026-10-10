@@ -14,13 +14,14 @@
 ## 组成
 
 ```text
-Windows：桌面客户端 + frpc + 回环 OpenSSH + PowerShell 7 + 项目
+Windows：桌面客户端 + 回环 OpenSSH + PowerShell 7 + 项目
   │ 主动 WSS：认证、对话、审批、设置
+  │ 主动 WSS：执行通道，每条 SSH 连接一条
   ▼
 Linux：代理服务 ── 官方 Agent SDK ── 未修改的 Claude Code ── 模型服务
   │                                   │
   │                        原生 Bash 调用 ssh -F <配置>
-  └──── frps 回环映射 / TLS ────────────┘
+  └──── 回环端口，与执行通道逐字节对接 ──┘
                     │
                     ▼
 Windows：读写文件 / PowerShell 命令 → 结果回到 Claude → 事件回到界面
@@ -30,10 +31,10 @@ Windows：读写文件 / PowerShell 命令 → 结果回到 Claude → 事件回
 | --- | --- | --- |
 | 工程 | Node.js 24 + TypeScript，npm workspaces | 服务端由 Node 直接运行 TypeScript，无构建步骤；两端共享 Zod 契约 |
 | 客户端 | Electron + React + Vite | 渲染页无 Node 权限；主进程只管连接、本机组件和少量本机文件 |
-| 服务端 | Node.js + ws | 一条 WSS 承载全部控制消息；没有 REST 会话接口或网页界面 |
+| 服务端 | Node.js + ws | 一条 WSS 承载全部控制消息，同一个地址另接执行通道的连接；没有 REST 会话接口或网页界面 |
 | 原生集成 | 官方 Agent SDK `query` + 指定的 CLI 可执行文件 | 输入、事件、审批、取消都走官方接口；不解析终端画面 |
-| 执行通道 | frp + OpenSSH | 成熟组件各管一段：frp 做反向映射，OpenSSH 做认证与命令传输 |
-| 部署 | Docker / Compose | CLI、frps、PTY 与服务同容器；数据在宿主机目录 |
+| 执行通道 | WSS 隧道转发 + OpenSSH | 转发只把字节对接起来；认证、加密与流量控制都是 OpenSSH 自己的 |
+| 部署 | Docker / Compose | CLI、PTY 与服务同容器；数据在宿主机目录 |
 
 控制通道负责身份、会话、输入输出和审批；执行通道只负责模型发起的 Windows 操作。客户端不直接调用模型，模型请求都发生在 Linux。
 
@@ -41,23 +42,32 @@ Windows：读写文件 / PowerShell 命令 → 结果回到 Claude → 事件回
 
 ```text
 客户端 ── 校验证书后的 WSS，首帧携带服务凭据 ──▶ 服务
-       ◀── 本次连接专用的 frp 参数与隧道证书 ──
+       ◀── 本次连接专用的通道密钥（tunnel.offer）──
 客户端：生成临时 SSH 主机密钥与登录密钥，启动回环 sshd
-客户端 ── frpc / TLS ──▶ 本次连接专用的 frps
 客户端 ── 登录私钥 + 主机公钥（经 WSS）──▶ 服务
 服务：写入私有连接目录，用 ssh -F <配置> windows 探测
        ── tunnel.ready ──▶ 客户端，界面此时才允许发起任务
 Claude Code：原生 Bash ──▶ ssh -F <配置> windows ──▶ PowerShell 7
 ```
 
+`ssh` 连的是服务进程在回环上为这台设备开的端口。每来一条 SSH 连接：
+
+```text
+ssh ── TCP ──▶ 服务的回环端口
+服务 ── tunnel.open（通道编号，经控制连接）──▶ 客户端
+客户端 ── 新的 WSS，校验同一张证书，首帧是通道编号 + 通道密钥 ──▶ 服务
+客户端 ── TCP ──▶ 本机回环 sshd
+服务：把 ssh 的连接与这条 WSS 对接，此后两个方向都只是 SSH 的字节
+```
+
 几个要点：
 
-1. 先建立对服务端的信任，再下发隧道秘密。支持“IP + 固定自签证书指纹”，不强制域名，但没有跳过验证的模式。
-2. frp 的默认 TLS 不验证服务端证书，这里显式配置 `trustedCaFile` 与 `serverName`；frps 强制 TLS，映射端口只绑定回环。
-3. 每个连接一个 frps 进程、一个随机令牌、一个允许的端口。断开即停止进程，凭据随之作废，不需要实现 frp 的鉴权插件。
+1. 先建立对服务端的信任，再下发秘密。支持“IP + 固定自签证书指纹”，不强制域名，但没有跳过验证的模式。执行通道的每条连接与控制连接走同一个地址、做同样的证书校验，通过后才发出通道密钥。
+2. 通道按需建立，用完即关：没有预先保持的空闲连接，也就没有悄悄失效的连接要处理。每条 SSH 连接独占一条 WSS，转发不解析 SSH，也不自己做多路复用。选型过程见[评估记录](research/linux-client-and-tunnel.md)。
+3. 通道密钥每个连接随机生成，随连接结束作废。它只能把一条连接接到正在等待的 SSH 连接上；SSH 客户端固定校验主机密钥，拿到通道密钥的人完成不了 SSH 握手。
 4. 临时私钥不进入会话文本、事件或提示词。提示词只告诉 Claude SSH 配置文件的路径和主机别名。
-5. Windows 侧密钥授权的是当前普通用户；sshd 与 frpc 由一个 Job Object 归属，客户端退出时一并结束。
-6. SSH 中断不保证 Windows 上的子进程全部结束；界面只报告实际观察到的结果。
+5. Windows 侧密钥授权的是当前普通用户；sshd 由一个 Job Object 归属，客户端退出时一并结束。
+6. 一条通道中断只影响它承载的那条 SSH 连接，下一条命令会建立新的通道。通道不再送达数据却没有断开时，两端各自发现：服务端的 `ssh` 每 10 秒询问一次，连续两次没有应答就退出；客户端对每条通道每 15 秒发一次 WebSocket ping，连续两次没有应答就放弃它和本机的那条 SSH 连接。SSH 中断不保证 Windows 上的子进程全部结束；界面只报告实际观察到的结果。
 
 模块细节见 [Linux 服务](../apps/server/README.md) 与 [Windows 客户端](../apps/desktop/README.md)，端口与证书见[部署与安全边界](deployment.md)。
 
@@ -68,7 +78,8 @@ Claude Code：原生 Bash ──▶ ssh -F <配置> windows ──▶ PowerShell
 - **审批交给原生。** 新会话默认原生自动审批，可切换手动、计划、接受编辑。代理只把 CLI 实际发出的权限请求转给界面，并把用户的决定按官方结构返回，不自建风险判断。
 - **上下文只有一个权威。** 每个代理会话绑定一个原生会话 ID，首轮创建、之后恢复。代理的 SQLite 只是界面事件的镜像；原生记录缺失时明确报错，不用界面历史冒充。详见[原生运行与会话存储](native-runtime.md)。
 - **运行中追加输入。** 补充消息进入同一个原生进程的输入流，由 Claude Code 决定何时采纳；不另开会话代替。
-- **Windows 不留常驻组件。** 随包的 OpenSSH 与 frpc 只在连接期间运行，不安装系统服务，不动用户已有的 SSH 配置。命令执行不弹出控制台窗口，原因与做法见[调研记录](research/windows-shell-windows.md)。
+- **Windows 不留常驻组件。** 随包的 OpenSSH 只在连接期间运行，不安装系统服务，不动用户已有的 SSH 配置。命令执行不弹出控制台窗口，原因与做法见[调研记录](research/windows-shell-windows.md)。
+- **执行通道不带第三方隧道程序。** 0.2.9 及更早用 frp 做反向映射，需要客户端带 `frpc.exe`、服务器多开一个端口、每个连接多起一个进程；`frpc.exe` 还经常被安全软件隔离。同类的独立隧道程序都有这些代价，而需要的只是把两条连接的字节对接起来，两端已有的 WebSocket 库足够。
 
 ## 取舍原则
 
@@ -78,4 +89,4 @@ Claude Code：原生 Bash ──▶ ssh -F <配置> windows ──▶ PowerShell
 
 - [Claude Code 程序化使用](https://code.claude.com/docs/en/headless)、[Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)、[SDK 权限接口](https://platform.claude.com/docs/en/agent-sdk/permissions)
 - [Claude Code 法律与合规说明](https://code.claude.com/docs/en/legal-and-compliance)
-- [frp TLS](https://gofrp.org/zh-cn/docs/features/common/network/network-tls/)、[frps 配置](https://gofrp.org/zh-cn/docs/reference/server-configures/)、[frpc 配置](https://gofrp.org/zh-cn/docs/reference/client-configures/)
+- [frp 的连接池与多路复用](https://gofrp.org/zh-cn/docs/features/common/network/network/)：执行通道“按需建立工作连接”的做法取自它

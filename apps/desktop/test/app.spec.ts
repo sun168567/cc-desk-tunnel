@@ -404,6 +404,33 @@ test('unsent text stays with its session across switching and a restart', async 
   await expect(box).toHaveValue('乙的草稿');
 });
 
+test('a project folds its sessions away, remembers it, and a search still finds them', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await login(page);
+  const title = await createSession(page, '折叠');
+  const rows = page
+    .locator('.project-group')
+    .filter({ hasText: '中文项目' })
+    .locator('.session-row');
+  await expect(rows.filter({ hasText: title })).toHaveCount(1);
+  await page.getByRole('button', { name: '收起项目 · 中文项目', exact: true }).click();
+  await expect(rows).toHaveCount(0);
+  const expand = page.getByRole('button', { name: '展开项目 · 中文项目', exact: true });
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  await page.reload();
+  await login(page);
+  await expect(expand).toBeVisible();
+  await expect(rows).toHaveCount(0);
+  await search(page, title);
+  await expect(rows.filter({ hasText: title })).toHaveCount(1);
+  await search(page, '');
+  await expect(rows).toHaveCount(0);
+  await expand.click();
+  await expect(rows.filter({ hasText: title })).toHaveCount(1);
+});
+
 test('usage log: period-independent totals, chart hover, model filter and table', async ({
   page,
 }) => {
@@ -429,14 +456,63 @@ test('usage log: period-independent totals, chart hover, model filter and table'
   await expect(tiles).toContainText('请求数3');
   await expect(tiles).toContainText('$1.26');
   await expect(tiles).toContainText('100.0 tok/s');
-  await expect(page.locator('.usage-table tbody tr')).toHaveCount(3);
+  // 60,000 of the 64,800 prompt tokens were read from the cache.
+  await expect(tiles).toContainText('缓存命中率92.6%');
+  await expect(page.locator('.usage-log tbody tr')).toHaveCount(3);
+  await expect(page.locator('.usage-models tbody tr')).toHaveCount(2);
+  await expect(page.locator('.usage-models tbody tr').first()).toContainText('claude-opus-5-5');
+  await expect(page.locator('.usage-models tbody tr').first()).toContainText('99.0%');
+  await expect(page.getByRole('navigation', { name: '调用记录翻页' })).toHaveCount(0);
   await page.locator('.usage-bars > div').last().hover();
   await expect(page.getByRole('tooltip')).toContainText('3 次请求');
+  const trend = page.locator('.usage-trend .usage-canvas').first();
+  const box = (await trend.boundingBox())!;
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
+  await expect(page.getByRole('tooltip')).toContainText('缓存读取 6万');
+  await expect(page.getByRole('tooltip')).toContainText('缓存命中率 92.6%');
   await noOverflowX(page);
+  // Tall enough to show the whole page in one picture.
+  await page.setViewportSize({ width: 1280, height: 1700 });
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
   await page.screenshot({ path: resolve(screenshots, 'usage.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByLabel('模型').selectOption('claude-haiku-4-5');
-  await expect(page.locator('.usage-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.usage-log tbody tr')).toHaveCount(1);
   await expect(tiles).toContainText('请求数1');
+  // The breakdown keeps every model of the range.
+  await expect(page.locator('.usage-models tbody tr')).toHaveCount(2);
+  await page.getByLabel('模型').selectOption('');
+
+  // More records than one page holds: the pager walks them from the newest and jumps by number.
+  const more = new DatabaseSync(resolve('.local/ui-test/sessions/sessions.sqlite'));
+  try {
+    const insert = more.prepare(`INSERT INTO api_requests
+      (at, session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, ttft_ms, source, request_id)
+      VALUES (?, NULL, 'claude-opus-5-5', ?, 10, 0, 0, 0.01, 2000, 500, 'sdk', ?)`);
+    for (let number = 1; number <= 120; number++)
+      insert.run(Date.now() - 3600_000 - number * 1000, number, `ui-${Date.now()}-page-${number}`);
+  } finally {
+    more.close();
+  }
+  await page.getByRole('button', { name: '刷新调用日志', exact: true }).click();
+  const pager = page.getByRole('navigation', { name: '调用记录翻页' });
+  await expect(pager).toContainText('/ 3 页');
+  await expect(pager).toContainText('共 123 条');
+  await expect(page.locator('.usage-log tbody tr')).toHaveCount(50);
+  await expect(pager.getByRole('button', { name: '上一页' })).toBeDisabled();
+  await pager.getByRole('button', { name: '下一页' }).click();
+  await expect(pager.getByLabel('页码')).toHaveValue('2');
+  await expect(page.locator('.usage-log tbody tr')).toHaveCount(50);
+  await pager.getByLabel('页码').fill('3');
+  await pager.getByLabel('页码').press('Enter');
+  await expect(page.locator('.usage-log tbody tr')).toHaveCount(23);
+  // The record stored first is the last row of the last page.
+  await expect(page.locator('.usage-log tbody tr').last()).toContainText('$0.75');
+  await expect(pager.getByRole('button', { name: '下一页' })).toBeDisabled();
+  await pager.getByLabel('页码').fill('9');
+  await pager.getByLabel('页码').press('Enter');
+  await expect(pager.getByLabel('页码')).toHaveValue('3');
+  await page.screenshot({ path: resolve(screenshots, 'usage-pages.png'), fullPage: true });
   await page.getByRole('button', { name: '返回账号', exact: true }).click();
   await expect(page.getByRole('heading', { name: '账号', exact: true })).toBeVisible();
 });

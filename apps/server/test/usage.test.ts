@@ -121,6 +121,28 @@ test('filters, buckets in the viewer time zone, and retention limits', () => {
   assert.equal(haiku.totals.requests, 1);
   assert.equal(haiku.totals.outputPerSecond, null);
   assert.deepEqual(haiku.models, daily.models);
+  // The breakdown by model covers the range whatever the filter; each bucket splits its tokens by kind.
+  assert.deepEqual(daily.byModel.map((item) => [item.model, item.requests]).sort(), [
+    ['claude-haiku-4-5', 1],
+    ['claude-opus-5-5', 2],
+  ]);
+  assert.deepEqual(haiku.byModel, daily.byModel);
+  const [day] = daily.series;
+  assert.equal(
+    day.inputTokens + day.outputTokens + day.cacheReadTokens + day.cacheCreationTokens,
+    day.tokens,
+  );
+  assert.ok(day.cacheReadTokens > 0);
+  // Pages are counted from the newest record.
+  const first = log.query({ ...range, bucketMinutes: 60, limit: 2 }, () => null);
+  const second = log.query({ ...range, bucketMinutes: 60, limit: 2, offset: 2 }, () => null);
+  assert.equal(first.hasMore, true);
+  assert.equal(second.hasMore, false);
+  assert.deepEqual(
+    [...first.rows, ...second.rows].map((row) => row.id),
+    daily.rows.map((row) => row.id),
+  );
+  assert.equal(second.totals.requests, 3);
   log.prune(base + 3 * hour);
   assert.equal(
     log.query({ limit: 100, bucketMinutes: 60, offsetMinutes: 0 }, () => null).totals.requests,

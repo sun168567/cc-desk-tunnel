@@ -13,6 +13,7 @@ export type UsageQuery = {
   to?: string;
   model?: string;
   beforeId?: number;
+  offset?: number;
   limit: number;
   bucketMinutes: number;
   offsetMinutes: number;
@@ -298,12 +299,14 @@ export class UsageLog {
       .prepare(
         `SELECT id, at, session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
         cost_usd, duration_ms, ttft_ms, source FROM api_requests
-      WHERE ${filtered}${query.beforeId ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
+      WHERE ${filtered}${query.beforeId ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ? OFFSET ?`,
       )
-      .all(...values, ...(query.beforeId ? [query.beforeId] : []), query.limit + 1) as Record<
-      string,
-      number | string | null
-    >[];
+      .all(
+        ...values,
+        ...(query.beforeId ? [query.beforeId] : []),
+        query.limit + 1,
+        query.offset ?? 0,
+      ) as Record<string, number | string | null>[];
     const total = this.database
       .prepare(
         `SELECT ${totals}, COALESCE(SUM(duration_ms), 0) AS durationMs, AVG(ttft_ms) AS ttftMs,
@@ -317,15 +320,22 @@ export class UsageLog {
     const series = this.database
       .prepare(
         `SELECT CAST((at + ?) / ? AS INTEGER) AS bucket, COUNT(*) AS requests, SUM(cost_usd) AS costUsd,
-        SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens) AS tokens
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens) AS tokens,
+        SUM(input_tokens) AS inputTokens, SUM(output_tokens) AS outputTokens,
+        SUM(cache_read_tokens) AS cacheReadTokens, SUM(cache_creation_tokens) AS cacheCreationTokens
       FROM api_requests WHERE ${filtered} GROUP BY bucket ORDER BY bucket`,
       )
-      .all(offset, bucket, ...values) as {
+      .all(offset, bucket, ...values) as ({
       bucket: number;
-      requests: number;
-      costUsd: number;
       tokens: number;
-    }[];
+    } & Page['series'][number])[];
+    // Like the model list, the breakdown covers every model of the range, whichever one is being looked at.
+    const byModel = this.database
+      .prepare(
+        `SELECT model, ${totals} FROM api_requests WHERE ${conditions.join(' AND ')}
+        GROUP BY model ORDER BY costUsd DESC, requests DESC, model`,
+      )
+      .all(...range) as Page['byModel'];
     const { streamedTokens, streamedMs, ...sums } = total;
     return {
       rows: rows.slice(0, query.limit).map((row) => ({
@@ -349,18 +359,11 @@ export class UsageLog {
         outputPerSecond: streamedTokens && streamedMs ? streamedTokens / (streamedMs / 1000) : null,
       },
       // The model list ignores the model filter so the filter can be changed from any selection.
-      models: (
-        this.database
-          .prepare(
-            `SELECT DISTINCT model FROM api_requests WHERE ${conditions.join(' AND ')} ORDER BY model`,
-          )
-          .all(...range) as { model: string }[]
-      ).map((row) => row.model),
-      series: series.map((item) => ({
-        at: new Date(item.bucket * bucket - offset).toISOString(),
-        requests: item.requests,
-        tokens: item.tokens,
-        costUsd: item.costUsd,
+      models: byModel.map((row) => row.model).sort(),
+      byModel,
+      series: series.map(({ bucket: index, ...item }) => ({
+        ...item,
+        at: new Date(index * bucket - offset).toISOString(),
       })),
     };
   }

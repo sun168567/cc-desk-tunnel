@@ -662,17 +662,38 @@ button.chip:hover:not(:disabled) {
 .project-group > h2:hover {
   background: var(--hover);
 }
-.project-group > h2 > span {
+.project-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  align-self: stretch;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.project-toggle > span {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.project-group > h2 > svg {
+.project-toggle > svg {
+  flex: none;
   width: 16px;
   height: 16px;
   color: var(--muted);
+}
+.project-toggle > small {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
 }
 .project-group > h2 > .pin-mark {
   width: 12px;
@@ -2230,7 +2251,7 @@ details[open] > summary > .fold-chevron {
 }
 .usage-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
@@ -2376,6 +2397,196 @@ details[open] > summary > .fold-chevron {
 }
 .usage-table .muted {
   margin-top: 14px;
+}
+.usage-trend {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-rate: #4a3aa7;
+}
+.usage-trend i.series-1,
+.usage-trend .usage-point.series-1 {
+  background: var(--series-1);
+}
+.usage-trend i.series-2,
+.usage-trend .usage-point.series-2 {
+  background: var(--series-2);
+}
+.usage-trend i.series-3,
+.usage-trend .usage-point.series-3 {
+  background: var(--series-3);
+}
+.usage-trend i.series-4,
+.usage-trend .usage-point.series-4 {
+  background: var(--series-4);
+}
+.usage-trend i.series-rate,
+.usage-trend .usage-point.series-rate {
+  background: var(--series-rate);
+}
+.usage-trend path {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.usage-trend path.series-1 {
+  stroke: var(--series-1);
+}
+.usage-trend path.series-2 {
+  stroke: var(--series-2);
+}
+.usage-trend path.series-3 {
+  stroke: var(--series-3);
+}
+.usage-trend path.series-4 {
+  stroke: var(--series-4);
+}
+.usage-trend path.series-rate {
+  stroke: var(--series-rate);
+}
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.usage-legend li,
+.usage-tip span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.usage-legend i,
+.usage-tip i {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.usage-lines {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  height: 150px;
+}
+.usage-lines.usage-rate {
+  height: 80px;
+}
+.usage-scale {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 46px;
+  margin: -6px 0;
+  font-size: 11px;
+  color: var(--faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.usage-canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(var(--line-soft), var(--line-soft)) 0 50% / 100% 1px no-repeat;
+  border-top: 1px dashed var(--line-soft);
+}
+.usage-canvas svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.usage-point {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+.usage-cross {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+  pointer-events: none;
+}
+.usage-chart figcaption.usage-second {
+  margin-top: 14px;
+}
+.usage-second small {
+  color: var(--faint);
+}
+.usage-trend .usage-axis {
+  margin-left: 54px;
+}
+.usage-section {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.usage-models {
+  margin-bottom: 22px;
+}
+.usage-share {
+  display: inline-block;
+  width: 72px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 3px;
+  background: var(--line-soft);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.usage-share i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.usage-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.usage-pager label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0;
+  white-space: nowrap;
+}
+.usage-pager input {
+  width: 48px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+.usage-pager > span {
+  margin-left: auto;
+}
+.usage-models th:nth-child(3),
+.usage-models td:nth-child(3) {
+  text-align: right;
 }
 .spinning {
   animation: spin 1s linear infinite;

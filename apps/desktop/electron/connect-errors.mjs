@@ -54,9 +54,19 @@ export function controlFailure(error, target, proxy) {
 // The Windows error codes with which the system, or security software through it, refuses to start a program.
 const blocked = new Set(['2', '5', '225', '1260', '4551']);
 
+// The execution channel did not get ready within `seconds`, although the service accepted the sign-in and the
+// local SSH service started. `error` is why the last channel connection to `target` could not be opened, if
+// that is what stood in the way; `proxy` the system proxy in use.
+export function channelFailure(seconds, error, target, proxy) {
+  const head = `执行通道在 ${seconds} 秒内没有就绪。`;
+  if (error)
+    return `${head}\n服务凭据已通过，但为执行通道再连接服务端时失败：${controlFailure(error, target, proxy).split('\n')[0]}\n执行通道与控制连接走同一个地址，每条 SSH 连接另占一条连接：请确认反向代理、系统代理或防火墙没有限制同一地址的并发连接数。`;
+  return `${head}\n服务凭据已通过，本机的 SSH 服务也已启动，但服务端经执行通道发来的探测命令没有得到应答：请检查安全软件是否拦截了内置的 sshd.exe 或 PowerShell，网络较慢时可在“设置 → 常规”里调大等待时间。`;
+}
+
 // The component host ended while the connection was wanted. `output` is what it and its components printed,
-// `tunnel` the service's tunnel endpoint (host:port), `early` whether this was while the connection was being set up.
-export function componentFailure(output, tunnel, early) {
+// `early` whether this was while the connection was being set up.
+export function componentFailure(output, early) {
   const refused = /cc-desk-tunnel: cannot start (\S+) error (\d+)/.exec(output);
   if (refused) {
     const [, name, code] = refused;
@@ -69,27 +79,9 @@ export function componentFailure(output, tunnel, early) {
   const code = exited ? `（退出代码 ${exited[2]}）` : '';
   if (/^sshd/i.test(name))
     return `内置的 OpenSSH 服务（sshd.exe）已退出${code}。\n请重新连接；反复出现时检查安全软件是否拦截了它，或重新安装本应用。`;
-  if (/^frpc/i.test(name)) {
-    // frpc says why it gave up before it exits.
-    if (/i\/o timeout|did not properly respond|timed out|deadline exceeded/i.test(output))
-      return `连接服务器的隧道端口 ${tunnel} 超时。\n服务凭据已通过，但本机连不上隧道端口：请在服务器防火墙和云安全组里放行该端口（TCP），并确认它没有被本地网络屏蔽。`;
-    if (/actively refused|connection refused/i.test(output))
-      return `服务器的隧道端口 ${tunnel} 拒绝了连接。\n请确认对外开放的隧道端口与服务端配置的一致（端口映射、云安全组），然后重新连接。`;
-    if (/no such host|lookup /i.test(output))
-      return `无法解析隧道地址 ${tunnel}。\n这是服务端部署时填写的公网地址，请在服务器上核对它是否正确、能否从本机解析。`;
-    if (/x509|certificate|tls:/i.test(output))
-      return `隧道 ${tunnel} 的证书校验失败。\n隧道端口上应答的不是本服务，或服务端的公网地址、证书配置与实际不符；请在服务器上核对。`;
-    if (/port already used|port not allowed|already exists|already in use/i.test(output))
-      return '服务端为本次连接分配的端口不可用。\n请稍等几秒重新连接；反复出现时重启服务端。';
-    if (/token|authoriz|authenticat/i.test(output))
-      return '隧道认证没有通过。\n请重新连接；反复出现时确认隧道端口没有指向另一套部署。';
-    return early
-      ? `隧道组件 frpc.exe 启动后随即退出${code}。\n最常见的原因是它被杀毒软件或 Windows 安全中心拦截。${securityHint}\n如果没有拦截记录，再检查服务器防火墙 / 云安全组是否放行了隧道端口 ${tunnel}（TCP）。`
-      : `隧道组件 frpc.exe 在连接建立后退出${code}。\n可能是被安全软件结束，或服务端重启、网络长时间中断；重新连接即可，反复出现时检查安全软件的保护记录。`;
-  }
   return early
-    ? `本机的隧道组件没能启动。\n常见原因是内置的 PowerShell、OpenSSH 或 frpc 被安全软件拦截。${securityHint}`
-    : '本机的隧道组件已退出。\n请重新连接；反复出现时检查安全软件的保护记录。';
+    ? `本机的 SSH 服务没能启动。\n常见原因是内置的 PowerShell 或 OpenSSH 被安全软件拦截。${securityHint}`
+    : '本机的 SSH 服务已退出。\n请重新连接；反复出现时检查安全软件的保护记录。';
 }
 
 // A bundled program is not where it was installed, which is what a quarantine leaves behind.

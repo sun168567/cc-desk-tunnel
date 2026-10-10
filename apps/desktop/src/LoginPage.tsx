@@ -42,9 +42,7 @@ export default function LoginPage({
         </div>
         <div className="login-title">
           <h1>连接代理服务</h1>
-          <span className="badge simulation">
-            {form.mode === 'remote' ? '原生 SSH' : '离线模拟'}
-          </span>
+          {form.mode === 'local' && <span className="badge simulation">离线模拟</span>}
         </div>
         <form
           onSubmit={(event) => {
@@ -53,7 +51,7 @@ export default function LoginPage({
           }}
           className="connection-form"
         >
-          {window.desktop && (
+          {window.desktop?.dev && (
             <div className="connection-modes" role="group" aria-label="连接方式">
               <button
                 type="button"

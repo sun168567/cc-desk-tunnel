@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -142,11 +142,17 @@ export const usagePageSchema = z.object({
     outputPerSecond: z.number().nonnegative().nullable(),
   }),
   models: z.array(z.string()),
+  // Every model of the time range, whatever the model filter, the costliest first.
+  byModel: z.array(z.object({ model: z.string(), ...usageTotals })),
   series: z.array(
     z.object({
       at: timestamp,
       requests: z.number().int().nonnegative(),
       tokens: z.number().nonnegative(),
+      inputTokens: z.number().nonnegative(),
+      outputTokens: z.number().nonnegative(),
+      cacheReadTokens: z.number().nonnegative(),
+      cacheCreationTokens: z.number().nonnegative(),
       costUsd: z.number().nonnegative(),
     }),
   ),
@@ -383,6 +389,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       to: timestamp.optional(),
       model: z.string().min(1).max(200).optional(),
       beforeId: z.number().int().positive().optional(),
+      // Rows to skip from the newest, for a page of a range whose end is fixed.
+      offset: z.number().int().min(0).max(10_000_000).optional(),
       limit: z.number().int().min(1).max(200).default(100),
       bucketMinutes: z.number().int().min(5).max(1440).default(60),
       // Minutes east of UTC, so day buckets follow the viewer's calendar.
@@ -518,6 +526,7 @@ export const terminalControlSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 export type TerminalControl = z.infer<typeof terminalControlSchema>;
+const tunnelSecret = z.string().min(32).max(128);
 export const authSchema = z
   .object({
     type: z.literal('auth'),
@@ -582,19 +591,28 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     client: installerSchema.optional(),
   }),
   z.object({ type: z.literal('service.update'), ...serviceUpdateSchema.shape }),
-  z.object({
-    type: z.literal('tunnel.configure'),
-    connectionId: id,
-    serverAddr: z.string().min(1),
-    serverPort: z.number().int().min(1).max(65535),
-    remotePort: z.number().int().min(1).max(65535),
-    token: z.string().min(24),
-    certificate: z.string().min(1),
-    serverName: z.string().min(1),
-  }),
+  // The execution channel runs over connections the device opens to this same address. `secret` signs them
+  // in; it belongs to this connection alone and ends with it.
+  z.object({ type: z.literal('tunnel.offer'), connectionId: id, secret: tunnelSecret }),
+  // An SSH connection is waiting on the service: the device opens one connection for it and attaches it.
+  z.object({ type: z.literal('tunnel.open'), connectionId: id, channelId: id }),
   z.object({ type: z.literal('tunnel.ready'), connectionId: id }),
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
+
+// The first and only text frame of a channel connection. Once the service has accepted it, every frame in
+// either direction is the bytes of one SSH connection, and closing the connection ends that one.
+export const tunnelAttachSchema = z
+  .object({
+    type: z.literal('tunnel.attach'),
+    connectionId: id,
+    channelId: id,
+    secret: tunnelSecret,
+  })
+  .strict();
+export type TunnelAttach = z.infer<typeof tunnelAttachSchema>;
+// How a channel connection is closed when it could not be attached.
+export const TUNNEL_CLOSE = { refused: 4001, unknown: 4004 } as const;
 
 export const tunnelCredentialsSchema = z
   .object({

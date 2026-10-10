@@ -7,9 +7,10 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { WebSocket, WebSocketServer } from 'ws';
 import { serverMessageSchema, MAX_FRAME_BYTES } from '@cc-desk-tunnel/protocol';
-import { startWindowsTunnel } from './windows-tunnel.mjs';
+import { startWindowsSsh } from './windows-ssh.mjs';
+import { openChannels } from './tunnel-channels.mjs';
 import { httpProxy, openSocket } from './system-proxy.mjs';
-import { controlFailure } from './connect-errors.mjs';
+import { channelFailure, controlFailure } from './connect-errors.mjs';
 
 export function certificateMatches(observed, trusted) {
   if (typeof trusted !== 'string' || typeof observed !== 'string') return false;
@@ -128,21 +129,69 @@ export async function openProxyBridge(
         );
       },
     });
-    pair = { local, remote, controller: new AbortController(), tunnel: null, preparing: null };
+    pair = {
+      local,
+      remote,
+      controller: new AbortController(),
+      ssh: null,
+      channels: null,
+      preparing: null,
+    };
     const current = pair;
     const queue = [];
     let verified = false;
     let nativeReady;
-    let configurationReceived = false;
+    let offerReceived = false;
+    const target = `${address.hostname}:${address.port || 443}`;
     const timer = setTimeout(
       () =>
         fail(
-          configurationReceived
-            ? `执行通道在 ${waits.ready / 1000} 秒内没有就绪。\n服务凭据已通过，本机的隧道组件也已启动，但服务端经隧道连不回本机：请检查服务器防火墙 / 云安全组是否放行了隧道端口，以及安全软件是否拦截了内置的 frpc.exe 或 sshd.exe。`
+          offerReceived
+            ? channelFailure(waits.ready / 1000, current.channels?.lastError, target, route.proxy)
             : `服务端在 ${waits.ready / 1000} 秒内没有完成应答。\n请检查网络是否稳定，或稍后重试；反复出现时查看服务端日志。`,
         ),
       waits.ready,
     );
+    // One more connection to the service, for one SSH connection. It is checked like the control connection
+    // before anything is sent on it.
+    function dialChannel() {
+      return new Promise((resolve, reject) => {
+        const channel = new WebSocket(address, {
+          handshakeTimeout: waits.connect,
+          // SSH traffic is already encrypted and does not compress.
+          perMessageDeflate: false,
+          createConnection: (_options, created) => {
+            connectService(address, config, binaries.resolveProxy).then(
+              (socket) => created(null, socket),
+              created,
+            );
+          },
+        });
+        channel.once('error', (error) => {
+          channel.terminate();
+          reject(error);
+        });
+        channel.once('open', () => {
+          if (
+            config.fingerprint &&
+            !certificateMatches(
+              channel._socket.getPeerCertificate().fingerprint256,
+              config.fingerprint,
+            )
+          ) {
+            channel.terminate();
+            reject(
+              Object.assign(
+                new Error(
+                  '执行通道连到的服务证书指纹不匹配；未发送任何凭据。\n控制连接校验通过之后，同一地址应答了另一张证书：请确认服务地址没有被劫持或指向多台服务器。',
+                ),
+                { fatal: true },
+              ),
+            );
+          } else resolve(channel);
+        });
+      });
+    }
     function fail(message) {
       if (local.readyState === WebSocket.OPEN)
         local.send(JSON.stringify({ type: 'connection.error', code: 'tunnel_failed', message }));
@@ -187,34 +236,35 @@ export async function openProxyBridge(
       }
       // A service of another version refuses the connection but may still offer the installer for its own.
       if (message.type === 'connection.error' && message.client) release = message.client;
-      if (message.type === 'tunnel.configure') {
-        if (
-          configurationReceived ||
-          !nativeReady ||
-          nativeReady.connectionId !== message.connectionId
-        ) {
+      if (message.type === 'tunnel.offer') {
+        if (offerReceived || !nativeReady || nativeReady.connectionId !== message.connectionId) {
           fail('隧道连接标识不匹配。');
           return;
         }
-        configurationReceived = true;
-        current.preparing = startWindowsTunnel(
-          message,
+        offerReceived = true;
+        current.preparing = startWindowsSsh(
+          message.connectionId,
           binaries,
           current.controller.signal,
           fail,
           waits.ssh,
         )
-          .then((tunnel) => {
-            current.tunnel = tunnel;
-            if (!closed && remote.readyState === WebSocket.OPEN)
-              remote.send(JSON.stringify(tunnel.credentials));
+          .then((ssh) => {
+            current.ssh = ssh;
+            if (closed || remote.readyState !== WebSocket.OPEN) return;
+            current.channels = openChannels(message, ssh.port, dialChannel, fail);
+            remote.send(JSON.stringify(ssh.credentials));
           })
           .catch((error) => fail(error.message));
+      } else if (message.type === 'tunnel.open') {
+        // Only ever follows the credentials, which are sent once the channels can be opened.
+        if (message.connectionId === nativeReady?.connectionId)
+          current.channels?.open(message.channelId);
       } else if (message.type === 'ready' && message.adapter === 'claude-code') {
         nativeReady = message;
         release = message.client;
       } else if (message.type === 'tunnel.ready') {
-        if (!configurationReceived || message.connectionId !== nativeReady?.connectionId) {
+        if (!offerReceived || message.connectionId !== nativeReady?.connectionId) {
           fail('隧道就绪标识不匹配。');
           return;
         }
@@ -249,7 +299,8 @@ export async function openProxyBridge(
       pair?.local.close();
       pair?.remote.terminate();
       await pair?.preparing;
-      await pair?.tunnel?.close();
+      pair?.channels?.close();
+      await pair?.ssh?.close();
       for (const socket of wss.clients) socket.terminate();
       await new Promise((resolve) => wss.close(resolve));
       await new Promise((resolve) => server.close(resolve));

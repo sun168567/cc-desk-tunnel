@@ -8,7 +8,8 @@ function port(value: string | undefined, fallback: number, name: string) {
   return number;
 }
 
-// The proxy's own settings must not leak into the native CLI, its shells or frps: they inherit this process environment.
+// The proxy's own settings must not leak into the native CLI or its shells: they inherit this process environment.
+// FRPS_* is what deployments made before 0.2.10 still carry in their configuration; nothing reads it any more.
 export function clearServiceVariables(env: NodeJS.ProcessEnv) {
   for (const name of Object.keys(env))
     if (
@@ -31,12 +32,6 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
   const retention = Number(env.CLAUDE_CONTEXT_RETENTION_DAYS ?? 3650);
   if (!Number.isInteger(retention) || retention < 1)
     throw new Error('Invalid CLAUDE_CONTEXT_RETENTION_DAYS');
-  const cert = env.FRPS_TLS_CERT;
-  const key = env.FRPS_TLS_KEY;
-  if (native && (!cert || !key || !env.PROXY_PUBLIC_HOST || !env.FRPS_SERVER_NAME))
-    throw new Error(
-      'Native mode requires PROXY_PUBLIC_HOST and independent FRPS_TLS_CERT / KEY / SERVER_NAME.',
-    );
   if (native && !reverseProxy && (!env.PROXY_TLS_CERT || !env.PROXY_TLS_KEY))
     throw new Error('Direct mode requires PROXY_TLS_CERT and PROXY_TLS_KEY.');
   const options: ServerOptions = {
@@ -51,16 +46,7 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
             key: readFileSync(env.PROXY_TLS_KEY!),
           }
         : undefined,
-    tunnel: native
-      ? {
-          executable: env.FRPS_PATH ?? 'frps',
-          publicHost: env.PROXY_PUBLIC_HOST!,
-          port: port(env.FRPS_PORT, 7000, 'FRPS_PORT'),
-          certificatePath: cert!,
-          keyPath: key!,
-          serverName: env.FRPS_SERVER_NAME!,
-        }
-      : undefined,
+    tunnel: native ? {} : undefined,
     allowedOrigins: env.PROXY_ORIGINS?.split(','),
     claude: native
       ? {

@@ -3,12 +3,14 @@ import { fileURLToPath } from 'node:url';
 import { createProxyServer } from './server.ts';
 import { rmSync } from 'node:fs';
 import { clearServiceVariables, environmentConfig } from './config.ts';
+import { removeFrpLeftovers } from './legacy.ts';
 
 const { options, native, port } = environmentConfig(
   process.env,
   fileURLToPath(new URL('../../../.local/sessions', import.meta.url)),
 );
 const programDir = process.env.PROXY_PROGRAM_DIR;
+if (native) removeFrpLeftovers();
 clearServiceVariables(process.env);
 if (native) rmSync(join(options.dataDir, 'connections'), { recursive: true, force: true });
 const server = createProxyServer(options);

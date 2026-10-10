@@ -34,19 +34,5 @@ if [ ! -x "$RUNTIME/cli/bin/claude" ] || [ "$("$RUNTIME/cli/bin/claude" --versio
   npm install --global --prefix "$RUNTIME/cli" "@anthropic-ai/claude-code@$CLAUDE_VERSION"
 fi
 "$RUNTIME/cli/bin/claude" --version
-if [ "$ARCH" != x64 ]; then
-  echo "frps distribution is currently verified for Linux x64 only." >&2
-  exit 1
-fi
-if [ ! -x "$RUNTIME/frp/frps" ] || [ "$("$RUNTIME/frp/frps" --version)" != 0.71.0 ]; then
-  FRP_ARCHIVE=frp_0.71.0_linux_amd64.tar.gz
-  curl --connect-timeout 20 --max-time 300 -fsSL "https://github.com/fatedier/frp/releases/download/v0.71.0/$FRP_ARCHIVE" -o "$TEMP/$FRP_ARCHIVE"
-  printf '84f27e39f11169f7adcef8e8b70c9329de17747b1f14dad9fb95eef5682ea716  %s\n' "$TEMP/$FRP_ARCHIVE" | sha256sum -c -
-  tar -xzf "$TEMP/$FRP_ARCHIVE" -C "$TEMP"
-  mkdir -p "$RUNTIME/frp"
-  install -m 755 "$TEMP/frp_0.71.0_linux_amd64/frps" "$RUNTIME/frp/frps"
-  install -m 644 "$TEMP/frp_0.71.0_linux_amd64/LICENSE" "$RUNTIME/frp/LICENSE"
-fi
-"$RUNTIME/frp/frps" --version
 printf 'Runtime installed for user %s at %s\n' "$(id -un)" "$RUNTIME"
 printf 'No account login or model call has been performed.\n'

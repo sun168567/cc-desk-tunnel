@@ -33,11 +33,11 @@ COPY deploy/docker/healthcheck.mjs /app/healthcheck.mjs
 # What a release needs from this image; a program installed from the client must not ask for more.
 COPY deploy/docker/runtime-level /opt/runtime/level
 RUN chmod 755 /usr/local/bin/proxy-entrypoint && mkdir /data && chown ccdesktunnel:ccdesktunnel /data
-ENV PATH=/opt/runtime/node/bin:/opt/runtime/cli/bin:/opt/runtime/frp:$PATH \
+ENV PATH=/opt/runtime/node/bin:/opt/runtime/cli/bin:$PATH \
     HOME=/data/home
 USER ccdesktunnel
 WORKDIR /data/workspace
-EXPOSE 8787 7000
+EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD ["node", "--env-file=/data/config/service.env", "/app/healthcheck.mjs"]
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/proxy-entrypoint"]

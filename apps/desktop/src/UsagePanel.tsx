@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import type { UsagePage, UsageSummary } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import { IconButton } from './ui.tsx';
+import { ModelBreakdown, TokenTrend, cacheHitRate, percent } from './UsageCharts.tsx';
 
+const pageSize = 50;
 const quotaNames: Record<string, string | undefined> = {
   five_hour: '5 小时额度',
   seven_day: '每周额度',
@@ -57,6 +59,8 @@ export default function UsagePanel({
   const [model, setModel] = useState('');
   const [measure, setMeasure] = useState<Measure>('costUsd');
   const [page, setPage] = useState<UsagePage | null>(null);
+  // Which page of the records is shown, from the newest.
+  const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -86,24 +90,25 @@ export default function UsagePanel({
       bounded: preset === 'custom',
     };
   }, [preset, customFrom, customTo, summary, loadedAt]);
+  // The range ends where it was last read, so records arriving meanwhile do not shift the pages; refreshing
+  // moves the end.
   const load = useCallback(
-    async (beforeId?: number) => {
+    async (index: number) => {
       setLoading(true);
       setError(null);
       try {
         const result = await client.fetch({
           type: 'usage.query',
           from: new Date(range.from).toISOString(),
-          ...(range.bounded && { to: new Date(range.to).toISOString() }),
+          to: new Date(range.to).toISOString(),
           ...(model && { model }),
-          ...(beforeId && { beforeId }),
-          limit: 100,
+          offset: index * pageSize,
+          limit: pageSize,
           bucketMinutes: range.bucketMinutes,
           offsetMinutes: -new Date().getTimezoneOffset(),
         });
-        setPage((previous) =>
-          beforeId && previous ? { ...result, rows: [...previous.rows, ...result.rows] } : result,
-        );
+        setPage(result);
+        setIndex(index);
       } catch (error) {
         setError(error instanceof Error ? error.message : '读取失败。');
       } finally {
@@ -113,7 +118,7 @@ export default function UsagePanel({
     [client, range, model],
   );
   useEffect(() => {
-    void load();
+    void load(0);
   }, [load]);
   // Empty buckets are drawn too, so the time axis stays even.
   const bars = useMemo(() => {
@@ -124,7 +129,16 @@ export default function UsagePanel({
     const result = [];
     for (let at = align(range.from); at <= range.to && result.length < 400; at += step)
       result.push(
-        values.get(at) ?? { at: new Date(at).toISOString(), requests: 0, tokens: 0, costUsd: 0 },
+        values.get(at) ?? {
+          at: new Date(at).toISOString(),
+          requests: 0,
+          tokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          costUsd: 0,
+        },
       );
     return result;
   }, [page?.series, range]);
@@ -143,6 +157,7 @@ export default function UsagePanel({
         : { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' },
     );
   const totals = page?.totals;
+  const pages = Math.max(Math.ceil((totals?.requests ?? 0) / pageSize), 1);
   return (
     <section className="account-page" aria-label="调用日志">
       <header className="account-heading">
@@ -233,6 +248,11 @@ export default function UsagePanel({
                 : ''}
             </small>
           </div>
+          <div title="缓存读取 ÷（输入 + 缓存读取 + 缓存写入）">
+            <span>缓存命中率</span>
+            <strong>{percent(totals ? cacheHitRate(totals) : null)}</strong>
+            <small>{totals ? `读取 ${tokens(totals.cacheReadTokens)}` : ''}</small>
+          </div>
           <div>
             <span>等价 API 费用</span>
             <strong>{totals ? dollars(totals.costUsd) : '—'}</strong>
@@ -312,7 +332,12 @@ export default function UsagePanel({
             <span>{bars.length > 1 && bucketLabel(bars.at(-1)!.at)}</span>
           </div>
         </figure>
-        <div className="usage-table">
+        <TokenTrend buckets={bars} label={bucketLabel} format={tokens} />
+        {page && page.byModel.length > 0 && (
+          <ModelBreakdown models={page.byModel} tokens={tokens} dollars={dollars} />
+        )}
+        <div className="usage-table usage-log">
+          <h2 className="usage-section">调用记录</h2>
           <table>
             <thead>
               <tr>
@@ -368,17 +393,50 @@ export default function UsagePanel({
             </tbody>
           </table>
           {page && !page.rows.length && <p className="muted">这个范围内没有调用记录。</p>}
-          {page?.hasMore && (
-            <button
-              type="button"
-              className="button secondary"
-              disabled={loading}
-              onClick={() => {
-                void load(page.rows.at(-1)!.id);
-              }}
-            >
-              加载更多
-            </button>
+          {page && pages > 1 && (
+            <nav className="usage-pager" aria-label="调用记录翻页">
+              <IconButton
+                title="上一页"
+                disabled={loading || index === 0}
+                onClick={() => {
+                  void load(index - 1);
+                }}
+              >
+                <ChevronLeft />
+              </IconButton>
+              <label>
+                第
+                <input
+                  key={index}
+                  aria-label="页码"
+                  inputMode="numeric"
+                  defaultValue={index + 1}
+                  disabled={loading}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    const wanted = Math.round(Number(event.currentTarget.value));
+                    if (wanted >= 1 && wanted <= pages) void load(wanted - 1);
+                    else event.currentTarget.value = String(index + 1);
+                  }}
+                  onBlur={(event) => {
+                    event.currentTarget.value = String(index + 1);
+                  }}
+                />
+                / {pages} 页
+              </label>
+              <IconButton
+                title="下一页"
+                disabled={loading || !page.hasMore}
+                onClick={() => {
+                  void load(index + 1);
+                }}
+              >
+                <ChevronRight />
+              </IconButton>
+              <span>
+                共 {totals!.requests.toLocaleString('zh-CN')} 条，每页 {pageSize} 条
+              </span>
+            </nav>
           )}
         </div>
         {summary && (

@@ -1,6 +1,6 @@
 # Linux Docker 部署
 
-Ubuntu amd64 优先。官方 Claude Code、Agent SDK、frps、PTY 同容器；不改 Claude 本体、不加入执行 MCP。容器有可写层和较完整工具环境，不是只读沙箱；以 uid 1000 普通用户运行，无宿主 Docker socket、特权模式或宿主项目挂载。
+Ubuntu amd64 优先。官方 Claude Code、Agent SDK、PTY 同容器；不改 Claude 本体、不加入执行 MCP。容器有可写层和较完整工具环境，不是只读沙箱；以 uid 1000 普通用户运行，无宿主 Docker socket、特权模式或宿主项目挂载。
 
 ## 准备
 
@@ -10,7 +10,7 @@ Ubuntu amd64 优先。官方 Claude Code、Agent SDK、frps、PTY 同容器；�
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
 ```
 
-目前不提供现成镜像：镜像在你的服务器上从程序包构建，首次需要几分钟，期间联网下载系统包、Node.js、Claude Code、frps 和 npm 依赖。
+目前不提供现成镜像：镜像在你的服务器上从程序包构建，首次需要几分钟，期间联网下载系统包、Node.js、Claude Code 和 npm 依赖。
 
 也可以手动准备：从项目的 GitHub 发布页取同一版本的三个文件：服务端程序包 `cc-desk-tunnel-server-X.Y.Z.tar.gz`、Windows 安装包 `CC-Desk-Tunnel-Setup-X.Y.Z-x64.exe` 和 `SHA256SUMS`。放到 VPS 的同一目录后先校验，再把程序包解压到专用程序目录：
 
@@ -49,7 +49,7 @@ nginx 模式需按示例配置反代 `/client/installer`，客户端自升级才
 服务端每 6 小时查询一次项目的 GitHub 发布页，客户端连接菜单里的“检查更新”立即查询一次。有新版本时：
 
 - 菜单出现“升级服务端到 x.y.z”：确认后服务端下载程序包并按清单校验、安装依赖、取回同版本的客户端安装包，然后重启，全程几分钟；重启后重新连接，客户端按提示升级自己。运行中的任务、原生终端或账号登录未结束时不能开始升级。
-- 菜单显示“服务端 x.y.z 需在服务器上升级”：新版本需要更新的镜像（Node.js、frps 或系统组件有变化），仍用上面的 `manage.sh upgrade --from`。
+- 菜单显示“服务端 x.y.z 需在服务器上升级”：新版本需要更新的镜像（Node.js 或系统组件有变化），仍用上面的 `manage.sh upgrade --from`。
 
 升级后的程序放在数据目录的 `program/` 下，镜像不变。容器启动时比较两处的版本，运行较新的一个：重建或替换容器不会回到旧版本，用更新的程序包重建镜像后则以镜像为准。升级后的程序连续三次启动失败时退回镜像里的版本，日志里有一行说明。失败的升级不改动正在运行的程序，原因显示在客户端。
 
@@ -72,11 +72,11 @@ sudo bash deploy/manage.sh up
 sudo bash deploy/manage.sh connection
 ```
 
-`install.sh` 只检查 Docker / Compose 等依赖，缺少或 Docker 未运行时给出安装命令后退出；不安装系统软件，不修改 nginx、防火墙、SSH 或账号。首次构建联网下载系统包、固定 Node / CLI / frps 和锁定 npm 依赖；非 JS 编译安装，node-pty 在镜像构建阶段准备。Node 24 原生执行 TypeScript；发行检查仍必须 typecheck。
+`install.sh` 只检查 Docker / Compose 等依赖，缺少或 Docker 未运行时给出安装命令后退出；不安装系统软件，不修改 nginx、防火墙、SSH 或账号。首次构建联网下载系统包、固定 Node / CLI 和锁定 npm 依赖；非 JS 编译安装，node-pty 在镜像构建阶段准备。Node 24 原生执行 TypeScript；发行检查仍必须 typecheck。
 
-默认两个公网 TCP 端口：WSS / HTTPS `8787`、强制 TLS frp `7000`。运维 SSH 遵循服务器已有端口。云防火墙与主机策略自行放行，**不需要 UDP 或公开 Windows / Linux 随机 SSH 映射端口**。Docker 发布端口可能绕过 UFW 的常规 INPUT 规则，应采用云安全组或 Docker 对应防火墙策略，不把启用 UFW 当成已限制发布端口。
+默认一个公网 TCP 端口：WSS / HTTPS `8787`，登录、对话和执行通道都经它。运维 SSH 遵循服务器已有端口。云防火墙与主机策略自行放行，**不需要 UDP 或公开 Windows / Linux 随机 SSH 端口**。从 0.2.9 及更早版本升级的部署原先还放行了 `7000`，不再使用，可以去掉；用 `manage.sh upgrade` 升级时容器也不再发布它。Docker 发布端口可能绕过 UFW 的常规 INPUT 规则，应采用云安全组或 Docker 对应防火墙策略，不把启用 UFW 当成已限制发布端口。
 
-部分云厂商的主机安全组件会对容器里的 `frps` 告警；它是 frp 官方发布的原版文件（构建镜像时校验 SHA256），只在有客户端连接时运行。nginx 模式下服务按 `X-Real-IP` 区分来源地址做登录限速，请保留示例里的这一行。
+nginx 模式下服务按 `X-Real-IP` 区分来源地址做登录限速，请保留示例里的这一行。
 
 ## 三种 TLS 入口
 
@@ -99,7 +99,7 @@ nginx 的配置步骤、检查方法和常见问题见[用 nginx 反代](nginx.m
 
 客户端填 `connection` 输出的 URL / token。自签模式填指纹；真实可信 CA 或 nginx 域名证书将指纹留空，使用 CA、有效期和主机名校验。私有 CA 可选择明确指纹；指纹模式不额外验证有效期 / 域名，首次信任应由可信 SSH 渠道获得。没有任何关闭验证且不校验指纹的模式。
 
-frp 使用独立私有证书及每连接随机 token，经已验证的 WSS 下发信任；不受 nginx / 公网证书续期影响，仍需公网 `7000/TCP`。私有 frp 证书默认十年，仅用于本应用隧道，不加入系统 CA；到期前备份后重新生成并重启服务。控制端自签证书默认一年。
+执行通道与控制连接用同一个地址和同一张证书，没有单独的隧道证书；每次连接另有随机生成的通道密钥，经已验证的 WSS 下发。自签证书默认一年。
 
 ## 模型与可写空间
 
@@ -145,6 +145,6 @@ sudo bash deploy/manage.sh up
 
 恢复只接受自己可信的备份，不执行未知归档。卸载仅删除容器与网络，保留数据、配置、镜像和宿主 Docker；要永久删除数据必须由用户确认准确目录后单独删除，不自动卸载其他程序依赖的 Docker。
 
-自签续期：`manage.sh renew`，重启后重新交付客户端指纹。真实证书续期：`manage.sh certificate FULLCHAIN KEY`；可在既有 ACME deploy hook 中调用。nginx 的证书由既有 ACME / nginx 续期流程处理，无需重建容器。替换会断开在途会话，先结束任务；frp 身份保持不变。
+自签续期：`manage.sh renew`，重启后重新交付客户端指纹。真实证书续期：`manage.sh certificate FULLCHAIN KEY`；可在既有 ACME deploy hook 中调用。nginx 的证书由既有 ACME / nginx 续期流程处理，无需重建容器。替换会断开在途会话，先结束任务。
 
 原生开发部署仍有 `scripts/install-linux.sh` 与 `scripts/deploy-linux.mjs`，目前为普通用户 nohup 调试方式，不是生产部署方案。

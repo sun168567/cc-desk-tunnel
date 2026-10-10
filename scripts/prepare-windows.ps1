@@ -17,11 +17,6 @@ function Get-VerifiedArchive([string]$Name, [string]$Url, [string]$Sha256) {
   }
   return $path
 }
-$frp = Get-VerifiedArchive 'frp_0.71.0_windows_amd64.zip' 'https://github.com/fatedier/frp/releases/download/v0.71.0/frp_0.71.0_windows_amd64.zip' '9e5062e3e5cf07e67144a3a4acf175ef6a2486f3605dd6cf288bae34ab39819f'
-$frpExtract = Join-Path $cache 'frp'
-Expand-Archive -LiteralPath $frp -DestinationPath $frpExtract -Force
-Copy-Item -LiteralPath (Join-Path $frpExtract 'frp_0.71.0_windows_amd64/frpc.exe') -Destination $VendorDirectory -Force
-Copy-Item -LiteralPath (Join-Path $frpExtract 'frp_0.71.0_windows_amd64/LICENSE') -Destination (Join-Path $VendorDirectory 'frp-LICENSE') -Force
 $archive = Get-VerifiedArchive 'OpenSSH-Win64.zip' 'https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.0.0.0p2-Preview/OpenSSH-Win64.zip' '23f50f3458c4c5d0b12217c6a5ddfde0137210a30fa870e98b29827f7b43aba5'
 $extract = Join-Path $cache 'openssh'
 Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
@@ -35,8 +30,6 @@ if ($IncludePowerShell) {
   & (Join-Path $pwshDirectory 'pwsh.exe') -NoLogo -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
   if ($LASTEXITCODE) { throw 'Bundled PowerShell verification failed.' }
 }
-& (Join-Path $VendorDirectory 'frpc.exe') --version
-if ($LASTEXITCODE) { throw 'frpc failed; check antivirus protection history.' }
 & (Join-Path $openssh 'sshd.exe') -V
 if ($LASTEXITCODE) { throw 'OpenSSH verification failed.' }
 Write-Output "Windows components ready. PowerShell $($PSVersionTable.PSVersion); no existing sshd service or registry configuration modified."
