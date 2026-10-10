@@ -247,6 +247,8 @@ case "$command" in
       tar -xzf "$2" -C "$ROOT" --no-same-owner
       exec bash "$ROOT/deploy/manage.sh" upgrade
     fi
+    # The port frp had before 0.2.10 is no longer published; its setting goes with it.
+    if grep -q '^FRPS_PORT=' "$CONFIG"; then sed -i '/^FRPS_PORT=/d' "$CONFIG"; fi
     dc build --pull; dc up -d; wait_healthy; summary ;;
   summary) summary ;;
   client)
