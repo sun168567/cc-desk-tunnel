@@ -1,14 +1,14 @@
 # Windows 客户端
 
-Electron + React 的 Windows 桌面客户端：界面、到服务端的连接桥，以及随连接启停的本机 OpenSSH / frpc。登录页和“帮助”菜单里的项目链接由 `src/project.tsx` 配置，地址为空时不显示。
+Electron + React 的 Windows 桌面客户端：界面、到服务端的连接桥，以及随连接启停的本机 OpenSSH。登录页和“帮助”菜单里的项目链接由 `src/project.tsx` 配置，地址为空时不显示。
 
 ## 启动
 
 用户双击 `CC Desk Tunnel.exe` 或快捷方式启动，不需要终端、源码仓库、Node / npm。标准安装包为 `CC-Desk-Tunnel-Setup-<版本>-x64.exe`（构建产物在 `artifacts/windows/`），支持当前用户安装、选择目录、开始菜单 / 桌面快捷方式、覆盖升级和卸载；卸载默认保留客户端项目 / 地址偏好，不删除 Windows 项目或 Linux Claude 登录 / 会话。服务凭据默认只在内存里；勾选“记住凭据”后经 DPAPI 加密保存。
 
-不安装时，直接运行 `artifacts/windows/win-unpacked/CC Desk Tunnel.exe`；必须保留同目录全部资源。应用单实例，重复启动聚焦已有窗口。发行包为 Windows x64，未签名；SmartScreen 与杀毒软件对 frpc 的提示及处理见[根目录说明](../../README.md#杀毒软件与-smartscreen)，应用不自动修改安全软件设置。
+不安装时，直接运行 `artifacts/windows/win-unpacked/CC Desk Tunnel.exe`；必须保留同目录全部资源。应用单实例，重复启动聚焦已有窗口。发行包为 Windows x64，未签名；SmartScreen 与杀毒软件的提示及处理见[根目录说明](../../README.md#杀毒软件与-smartscreen)，应用不自动修改安全软件设置。
 
-开发时根目录执行 `npm ci`；浏览器开发用 `npm run dev`。模拟登录信息位于 `.local/dev-connection.json`；浏览器仅支持环回模拟，原生连接由 Electron 主进程管理。桌面默认选择远程模式，离线测试需选择本地模拟。
+开发时根目录执行 `npm ci`；浏览器开发用 `npm run dev`。模拟登录信息位于 `.local/dev-connection.json`；浏览器仅支持环回模拟，原生连接由 Electron 主进程管理。从源码运行的桌面端默认选择远程模式，离线测试需选择本地模拟；安装版不提供本地模拟，登录页也不显示这个切换。
 
 Electron 44.5.1 的 npm 包将二进制安装改为显式步骤：先运行 `npm run setup:desktop`（该包的官方 `install-electron`，从 Electron 发布源下载并用其内置 checksums 校验），再执行 `npm run build` / `npm run desktop`。桌面窗口加载同一份生产渲染页，不自动开启另一个代理服务；可连接 `npm run dev` 已启动的模拟服务。
 
@@ -27,19 +27,19 @@ npm.cmd run package:windows
 
 每次打包（包括 `--dir`）完成后，自动对实际 exe 运行 `test/package.spec.ts` 的离线冒烟检查：独立新 profile、移除开发工具 PATH，验证登录页、预加载接口、Git 分支读取和单实例。检查失败使打包命令失败，发布流程不会上传产物；不会使用调用者的真实连接配置。真实连接验证仍需显式启用，不能由离线检查替代。
 
-自带官方 PowerShell 7.6.6 便携包、OpenSSH 10.0p2 与 frpc 0.71.0，SHA256 固定在准备脚本中，保留许可证。无需修改系统 PATH、注册表 shell、系统 sshd / 防火墙，不需要管理员权限正常连接。需要写入受保护的安装目录时由标准安装器处理提权。构建目录是生成物；若测试 exe 正在运行或安全软件占用文件，先关闭该副本再重建，不在应用代码加入重试兼容层。
+自带官方 PowerShell 7.6.6 便携包与 OpenSSH 10.0p2，SHA256 固定在准备脚本中，保留许可证。无需修改系统 PATH、注册表 shell、系统 sshd / 防火墙，不需要管理员权限正常连接。需要写入受保护的安装目录时由标准安装器处理提权。构建目录是生成物；若测试 exe 正在运行或安全软件占用文件，先关闭该副本再重建，不在应用代码加入重试兼容层。
 
 ## 自动远程连接
 
-源码调试用 `npm run prepare:windows` 下载校验官方组件到被忽略的 `vendor/`：frpc 0.71.0、独立官方 OpenSSH 10.0.0.0p2-Preview（当前已测试用户模式的固定版本，并非声称最新稳定）。正式发行包自带独立 PowerShell，不依赖系统 sshd 服务，不更改用户原有 OpenSSH；SHA256 与来源在脚本中，保留组件许可证。
+源码调试用 `npm run prepare:windows` 下载校验官方组件到被忽略的 `vendor/`：独立官方 OpenSSH 10.0.0.0p2-Preview（当前已测试用户模式的固定版本，并非声称最新稳定）。正式发行包自带独立 PowerShell，不依赖系统 sshd 服务，不更改用户原有 OpenSSH；SHA256 与来源在脚本中，保留组件许可证。
 
-Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自签证书填写 SHA256 指纹，可信域名证书将指纹留空使用 CA / 有效期 / 主机名验证。不需要 Ubuntu SSH 账号。主进程完成 TLS 身份验证后才发送 token，接收独立 frp 证书与配置后生成临时 SSH key / host key，启动环回 sshd / frpc，Linux 探测成功才进入工作区。
+Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自签证书填写 SHA256 指纹，可信域名证书将指纹留空使用 CA / 有效期 / 主机名验证。不需要 Ubuntu SSH 账号。主进程完成 TLS 身份验证后才发送 token，收到本次连接的通道密钥后生成临时 SSH key / host key，启动环回 sshd；服务端每要一条执行通道，主进程就另开一条到同一地址的连接并接到本机 sshd 上，Linux 探测成功才进入工作区。
 
-连接跟随 Windows 的系统代理设置（手动、脚本或自动检测，由 Electron 按目标地址解析）：设置里给出 HTTP 代理时，控制连接、安装包下载和 frpc 都经它的 CONNECT 隧道到达服务端，证书校验与直连时相同，代理只转发密文；没有代理、目标被设置排除或只给出 SOCKS 代理时直接连接。不支持需要账号密码的代理。
+连接跟随 Windows 的系统代理设置（手动、脚本或自动检测，由 Electron 按目标地址解析）：设置里给出 HTTP 代理时，控制连接、执行通道和安装包下载都经它的 CONNECT 隧道到达服务端，证书校验与直连时相同，代理只转发密文；没有代理、目标被设置排除或只给出 SOCKS 代理时直接连接。不支持需要账号密码的代理。
 
 `prepare-ssh.ps1` 显式以 UTF-8 输出连接 JSON，与主进程的解码方式一致，不受 Windows 当前控制台代码页影响；安装路径含中文、空格时也保留完整的 PowerShell 路径。
 
-`component-host.ps1` 用 Windows 原生 Job Object 管理 sshd、frpc 及子进程。每次连接使用随机回环端口和独立临时配置 / 主机与登录密钥。正常断连、关闭应用、组件启动失败会结束进程并删除临时目录；客户端异常退出也会回收监听。操作系统强杀整棵进程树可能绕过文件清理，留下不可再用于登录的临时文件，崩溃残留清理待后续处理。不安装、保留任何项目系统服务，不修改注册表、默认 shell / 终端或防火墙。
+`component-host.ps1` 用 Windows 原生 Job Object 管理 sshd 及子进程。每次连接使用随机回环端口和独立临时配置 / 主机与登录密钥。正常断连、关闭应用、组件启动失败会结束进程并删除临时目录；客户端异常退出也会回收监听。操作系统强杀整棵进程树可能绕过文件清理，留下不可再用于登录的临时文件，崩溃残留清理待后续处理。不安装、保留任何项目系统服务，不修改注册表、默认 shell / 终端或防火墙。
 
 已实测关闭项目组件会终止在途 SSH 命令及其子进程；已经发生的副作用不能撤销。停止单个 Claude 轮次不关闭整个连接，仍不能承诺该轮已发出的 SSH 命令都立即终止。
 
@@ -67,9 +67,9 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `electron/main.cjs`、`preload.cjs` | 窗口、托盘、系统通知、IPC（选目录与文件、保存导出、普通会话目录、打开授权页、连接）和暴露给页面的 `window.desktop` |
 | `electron/connect-errors.mjs` | 连接失败时给用户的说明：按系统错误码、TLS 错误和组件的输出区分原因，第一行是原因，其后是该检查的地方 |
 | `electron/git-branch.cjs` | 从仓库文件读出项目当前所在的分支，不依赖本机安装 git |
-| `electron/proxy-bridge.mjs`、`windows-tunnel.mjs` | 主进程连接桥：校验服务证书后转发 WSS，并按服务端下发的配置启动本机隧道 |
+| `electron/proxy-bridge.mjs`、`windows-ssh.mjs`、`tunnel-channels.mjs` | 主进程连接桥：校验服务证书后转发 WSS；启动本机 sshd；按服务端的要求另开到同一地址的连接作为执行通道，接到本机 sshd 上 |
 | `electron/system-proxy.mjs` | 读出系统代理中的 HTTP 代理，并经它建立到服务端的 TCP 连接 |
-| `electron/prepare-ssh.ps1`、`component-host.ps1` | 生成临时 SSH 配置；用 Job Object 托管 sshd / frpc |
+| `electron/prepare-ssh.ps1`、`component-host.ps1` | 生成临时 SSH 配置；用 Job Object 托管 sshd |
 
 `test/` 是 Playwright 界面测试，`test-main/` 是主进程模块与 `client.ts` 的 Node 测试。新增界面状态先看能否放进所属区域的组件，跨区域才上提到 `App.tsx`。
 
