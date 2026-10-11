@@ -212,6 +212,44 @@ const groups = (values: NativeSettings): { name: string; fields: Field[] }[] => 
       },
     ],
   },
+  {
+    name: '提示词翻译',
+    fields: [
+      {
+        key: 'translationEnabled',
+        kind: 'toggle',
+        title: '启用提示词翻译',
+        detail: '中文提示词在进入 Claude Code 前自动译为英文（Claude 全程只见英文），每轮回复结束后自动附加中文翻译气泡',
+      },
+      {
+        key: 'translationBaseUrl',
+        kind: 'text',
+        title: '翻译接口地址',
+        detail: 'OpenAI 兼容接口的 chat-completions 完整地址；自建网关、中转站、本地模型均可',
+        placeholder: 'https://api.example.com/v1/chat/completions',
+        write: (value) => (typeof value === 'string' ? value : ''),
+        read: (text) => text.trim() || null,
+      },
+      {
+        key: 'translationApiKey',
+        kind: 'text',
+        title: '翻译接口 Key',
+        detail: '该接口的 API Key；只存在服务器端',
+        placeholder: '',
+        write: (value) => (typeof value === 'string' ? value : ''),
+        read: (text) => text.trim() || null,
+      },
+      {
+        key: 'translationModel',
+        kind: 'text',
+        title: '翻译模型',
+        detail: '留空则自动从接口的 /v1/models 发现，优先轻量快速型号；翻译质量要求不高、速度优先',
+        placeholder: '留空自动发现',
+        write: (value) => (typeof value === 'string' ? value : ''),
+        read: (text) => text.trim() || null,
+      },
+    ],
+  },
 ];
 
 // Edits the official CLI's user settings on the cloud host. Each change is saved at once; "默认" removes the

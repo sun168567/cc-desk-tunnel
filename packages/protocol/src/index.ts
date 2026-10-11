@@ -51,6 +51,12 @@ export const nativeSettingsSchema = z.object({
   fileCheckpointingEnabled: toggle,
   promptCacheTtl: z.enum(['5m', '1h']).nullable(),
   language: z.string().trim().min(1).max(60).nullable(),
+  // Prompt translation: CJK user prompts are translated to English via an OpenAI-compatible
+  // endpoint before entering Claude Code; the final response is translated back for the user.
+  translationEnabled: toggle,
+  translationBaseUrl: z.string().trim().max(500).nullable(),
+  translationApiKey: z.string().trim().max(500).nullable(),
+  translationModel: z.string().trim().max(200).nullable(),
   precomputeCompactionEnabled: toggle,
   autoDreamEnabled: toggle,
   subagentPromptCacheTtl: z.enum(['5m', '1h']).nullable(),

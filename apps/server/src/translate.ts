@@ -6,6 +6,7 @@
 // PROXY_TRANSLATE_API_KEY, PROXY_TRANSLATE_MODEL (optional; discovered from /v1/models),
 // PROXY_TRANSLATE_ENABLED (default true when URL and key are set).
 import https from 'node:https';
+import { readNativeSettings } from './native-settings.ts';
 
 type TranslateConfig = {
   url: string; // full chat-completions URL, e.g. https://api.example.com/v1/chat/completions
@@ -13,10 +14,18 @@ type TranslateConfig = {
   model: string; // resolved model id; discovered from /v1/models when PROXY_TRANSLATE_MODEL is unset
 };
 
-let cached: TranslateConfig | null = null;
-let cachedAt = 0;
-let discovered: string | null = null;
-let discoveredAt = 0;
+// Model discovery cache is keyed by endpoint, so switching endpoints does not reuse a stale id.
+const discoveredByEndpoint = new Map<string, { model: string; at: number }>();
+
+function settingsConfig(): TranslateConfig | null {
+  try {
+    const t = readNativeSettings();
+    if (t.translationEnabled !== true || !t.translationBaseUrl || !t.translationApiKey) return null;
+    return { url: t.translationBaseUrl, apiKey: t.translationApiKey, model: t.translationModel ?? '' };
+  } catch {
+    return null; // unreadable settings file: fall back to environment
+  }
+}
 
 function envConfig(): TranslateConfig | null {
   const url = (process.env.PROXY_TRANSLATE_URL ?? '').trim();
@@ -30,12 +39,10 @@ function envConfig(): TranslateConfig | null {
   };
 }
 
-// The config is re-read once per minute so docker.env edits apply without a restart.
-function config(): TranslateConfig | null {
-  if (Date.now() - cachedAt < 60_000) return cached;
-  cached = envConfig();
-  cachedAt = Date.now();
-  return cached;
+// The client settings page (native settings file) wins; environment variables remain the
+// headless fallback for deployments without the desktop client.
+function currentConfig(): TranslateConfig | null {
+  return settingsConfig() ?? envConfig();
 }
 
 function hasCJK(text: string): boolean {
@@ -92,7 +99,8 @@ async function resolveModel(config: TranslateConfig): Promise<string | null> {
   if (config.model) return config.model;
   // No model configured: discover once per hour from the endpoint's own model list and prefer a
   // cheap fast variant when the provider exposes one.
-  if (discovered && Date.now() - discoveredAt < 3_600_000) return discovered;
+  const cachedModel = discoveredByEndpoint.get(config.url);
+  if (cachedModel && Date.now() - cachedModel.at < 3_600_000) return cachedModel.model;
   const listUrl = new URL(config.url);
   listUrl.pathname = listUrl.pathname.replace(/\/chat\/completions$/, '/models');
   const list = await new Promise<string | null>((resolve) => {
@@ -129,10 +137,12 @@ async function resolveModel(config: TranslateConfig): Promise<string | null> {
   });
   if (!list) return null;
   const ids = list.split('\n');
-  discovered = ids.find((id) => /flash|mini|fast|lite|turbo/i.test(id)) ?? ids[0] ?? null;
-  discoveredAt = Date.now();
-  console.log(`[translate] model discovered: ${String(discovered)}`);
-  return discovered;
+  const model = ids.find((id) => /flash|mini|fast|lite|turbo/i.test(id)) ?? ids[0] ?? null;
+  if (model) {
+    discoveredByEndpoint.set(config.url, { model, at: Date.now() });
+    console.log(`[translate] model discovered for ${config.url}: ${model}`);
+  }
+  return model;
 }
 
 async function complete(
@@ -158,8 +168,8 @@ async function complete(
 
 /** CJK user prompt -> English for the model. Returns null to pass through unchanged. */
 export async function translatePrompt(text: string): Promise<string | null> {
-  const config = config();
-  if (!config?.enabled) return null;
+  const config = currentConfig();
+  if (!config) return null;
   if (!hasCJK(text)) return null;
   return complete(
     config,
@@ -172,8 +182,8 @@ export async function translatePrompt(text: string): Promise<string | null> {
 
 /** English final response -> Chinese for the user. Returns null to pass through unchanged. */
 export async function translateResponse(text: string): Promise<string | null> {
-  const config = config();
-  if (!config?.enabled) return null;
+  const config = currentConfig();
+  if (!config) return null;
   if (hasCJK(text)) return null; // already contains Chinese; nothing to add
   return complete(
     config,
@@ -194,7 +204,7 @@ export async function translateAnswers(
     if (typeof value === 'string' && hasCJK(value)) {
       out[key] =
         (await complete(
-          config()!,
+          currentConfig()!,
           'Translate this short Chinese answer into concise English. Keep file paths and commands unchanged. Output ONLY the English.',
           value,
           30000,
