@@ -184,3 +184,24 @@ export async function translateResponse(text: string): Promise<string | null> {
     60000,
   );
 }
+
+/** Translate any CJK free-text answers inside an AskUserQuestion result. Never throws. */
+export async function translateAnswers(
+  answers: Record<string, string>,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(answers)) {
+    if (typeof value === 'string' && hasCJK(value)) {
+      out[key] =
+        (await complete(
+          config()!,
+          'Translate this short Chinese answer into concise English. Keep file paths and commands unchanged. Output ONLY the English.',
+          value,
+          30000,
+        )) ?? value;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}

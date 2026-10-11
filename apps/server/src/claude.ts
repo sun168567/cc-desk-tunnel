@@ -2,7 +2,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { query, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
-import { translateResponse } from './translate.ts';
+import { translateAnswers, translateResponse } from './translate.ts';
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Effort, EventPayload, NativeMetrics, PermissionMode } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream } from './claude-stream.ts';
@@ -159,9 +159,18 @@ export async function runClaude(
                 : 'The Windows user denied or cancelled this request.',
             };
           // The official tool takes the user's choices as `answers`, keyed by question text.
+          let finalInput = input;
+          if (question && answers) {
+            try {
+              // Free-text answers may be Chinese; the model only sees English.
+              finalInput = { ...input, answers: await translateAnswers(answers) };
+            } catch {
+              finalInput = { ...input, answers };
+            }
+          }
           return {
             behavior: 'allow',
-            updatedInput: question && answers ? { ...input, answers } : input,
+            updatedInput: finalInput,
           };
         },
       },
