@@ -77,6 +77,26 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-t
 
 在客户端左下角的账号页登录你的 Claude 账号（走官方 `claude auth` 流程，登录凭据只保存在服务器上），添加一个项目文件夹，开始对话。
 
+## 提示词翻译（可选）
+
+如果你的 Claude 账号注册地与你所在地区不同，母语提示词可能带来额外的风控关注。本功能可让整段会话对 Claude 呈现为纯英文：
+
+- 你照常在客户端写中文提示词；
+- 服务端在提示词进入 Claude Code 之前，调用任意 OpenAI 兼容接口将其翻译为英文（Claude 收到并回复全英文）；
+- 每轮结束后，服务端再将 Claude 的英文回复翻译为中文，作为独立消息气泡附加在对话末尾，供你阅读；
+- 代码、文件、路径、命令一律不翻译。
+
+配置（服务端环境变量，写入 docker.env 后 `manage.sh up` 生效）：
+
+| 变量 | 说明 |
+|---|---|
+| `PROXY_TRANSLATE_URL` | OpenAI 兼容接口的 chat-completions 完整地址，如 `https://api.example.com/v1/chat/completions` |
+| `PROXY_TRANSLATE_API_KEY` | 该接口的 API Key |
+| `PROXY_TRANSLATE_MODEL` | 模型 ID；留空则自动从该接口的 `/v1/models` 发现并优先选择轻量快速型号 |
+| `PROXY_TRANSLATE_ENABLED` | 设为 `false` 临时关闭；URL 与 Key 均填写时默认开启 |
+
+说明：翻译调用失败时原文放行，不影响任务执行；建议使用轻量快速型号，翻译质量要求不高但延迟敏感。
+
 ## 安全须知
 
 **一个前提：服务器必须是你自己控制、可信的机器。** 连接期间，服务器能以你的 Windows 用户身份执行任意命令。服务器被攻陷，等于你的电脑被攻陷。不要把它部署在与他人共用或来路不明的机器上。

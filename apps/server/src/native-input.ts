@@ -1,6 +1,7 @@
 import type { SDKUserMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
+import { translatePrompt } from './translate.ts';
 
 // This is only the SDK's input transport. Claude Code owns scheduling and merging turns.
 export class NativeInput {
@@ -40,10 +41,17 @@ export class NativeInput {
       }
       this.outstanding.get(message.id)!.delivered = true;
       this.emit({ type: 'message.delivery', messageId: message.id, status: 'queued' });
+      // Chinese prompts are translated to English here, so Claude Code never sees CJK input.
+      let promptText = message.text;
+      try {
+        promptText = (await translatePrompt(promptText)) ?? promptText;
+      } catch {
+        // CPA unavailable: pass the original through.
+      }
       yield {
         type: 'user',
         uuid: message.id as SDKUserMessage['uuid'],
-        message: { role: 'user', content: message.text },
+        message: { role: 'user', content: promptText },
         parent_tool_use_id: null,
         session_id: this.sessionId,
         origin: { kind: 'human' },

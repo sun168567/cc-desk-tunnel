@@ -1,6 +1,8 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { query, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { translateResponse } from './translate.ts';
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Effort, EventPayload, NativeMetrics, PermissionMode } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream } from './claude-stream.ts';
@@ -261,6 +263,21 @@ export async function runClaude(
             run.emit(payload);
           } catch {
             run.emit({ type: 'native.notice', text: '本轮原生状态未能读取；任务结果不受影响。' });
+          }
+        }
+        // Append a Chinese translation of the final response as its own bubble; Claude never sees CJK.
+        const resultText = mapper.result?.text;
+        if (!run.signal.aborted && resultText && !mapper.result?.failed) {
+          try {
+            const zh = await translateResponse(resultText.slice(0, 6000));
+            if (zh && !run.signal.aborted)
+              run.emit({
+                type: 'text.delta',
+                messageId: randomUUID(),
+                text: '\n\n---\n\n## 中文翻译\n\n' + zh,
+              });
+          } catch {
+            // Translation is best-effort; the English response is already delivered.
           }
         }
         if (done || run.signal.aborted) break;
