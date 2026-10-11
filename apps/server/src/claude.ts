@@ -1,7 +1,7 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { query, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { randomUUID } from 'node:crypto';
 import { translateAnswers, translateResponse } from './translate.ts';
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Effort, EventPayload, NativeMetrics, PermissionMode } from '@cc-desk-tunnel/protocol';
@@ -159,18 +159,11 @@ export async function runClaude(
                 : 'The Windows user denied or cancelled this request.',
             };
           // The official tool takes the user's choices as `answers`, keyed by question text.
-          let finalInput = input;
-          if (question && answers) {
-            try {
-              // Free-text answers may be Chinese; the model only sees English.
-              finalInput = { ...input, answers: await translateAnswers(answers) };
-            } catch {
-              finalInput = { ...input, answers };
-            }
-          }
           return {
             behavior: 'allow',
-            updatedInput: finalInput,
+            updatedInput: question && answers
+              ? { ...input, answers: await translateAnswers(answers) }
+              : input,
           };
         },
       },
@@ -283,7 +276,13 @@ export async function runClaude(
               run.emit({
                 type: 'text.delta',
                 messageId: randomUUID(),
-                text: '\n\n---\n\n## 中文翻译\n\n' + zh,
+                text: `
+
+---
+
+## 中文翻译
+
+` + zh,
               });
           } catch {
             // Translation is best-effort; the English response is already delivered.
