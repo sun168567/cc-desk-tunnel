@@ -30,14 +30,14 @@ export default function TitleBar({
 }) {
   return (
     <header className="titlebar">
+      <IconButton title={sideOpen ? '收起侧栏' : '展开会话列表'} onClick={toggleSide}>
+        <PanelLeft />
+      </IconButton>
       <IconButton title="后退" disabled={!back} onClick={back}>
         <ArrowLeft />
       </IconButton>
       <IconButton title="前进" disabled={!forward} onClick={forward}>
         <ArrowRight />
-      </IconButton>
-      <IconButton title={sideOpen ? '收起侧栏' : '展开会话列表'} onClick={toggleSide}>
-        <PanelLeft />
       </IconButton>
       <nav className="titlebar-menus" aria-label="菜单">
         {menus.map((menu) => (
@@ -58,7 +58,7 @@ export default function TitleBar({
       <span className="connection-status" title={adapterName}>
         <span className={`connection-dot ${connected ? 'online' : ''}`} />
         <span>{connected ? '已连接' : '重连中'}</span>
-        <small>{adapterName}</small>
+        {adapterName === 'Simulation' && <span className="badge simulation">Simulation</span>}
       </span>
     </header>
   );

@@ -28,6 +28,7 @@ const {
 } = require('node:fs');
 const { mkdtemp, stat, writeFile } = require('node:fs/promises');
 const { gitBranch } = require('./git-branch.cjs');
+const { previewFile, searchFiles, readTextFile } = require('./local-files.cjs');
 const { asOnDisk } = require('./disk-path.cjs');
 const { openLog } = require('./client-log.cjs');
 const { hostname, tmpdir } = require('node:os');
@@ -103,6 +104,9 @@ handle('project:choose', async (event) => {
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
 handle('project:spelling', (_event, written) => asOnDisk(String(written)));
+handle('attachment:preview', (_event, file) => previewFile(file));
+handle('file:read-text', (_event, file) => readTextFile(file));
+handle('attachment:search', (_event, directory, query) => searchFiles(directory, query));
 // Files the user wants to mention in a message: only their paths go to the page.
 handle('files:choose', async (event) => {
   const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
@@ -154,6 +158,16 @@ handle('folder:open', async (_event, directory) => {
   if (!(await stat(target)).isDirectory()) throw new Error('不是文件夹。');
   const failure = await shell.openPath(target);
   if (failure) throw new Error(failure);
+});
+handle('changed-file:open', async (_event, file, reveal) => {
+  if (typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0')) throw new Error('文件路径无效。');
+  const target = path.resolve(file);
+  if (!(await stat(target)).isFile()) throw new Error('不是文件。');
+  if (reveal === true) shell.showItemInFolder(target);
+  else {
+    const failure = await shell.openPath(target);
+    if (failure) throw new Error(failure);
+  }
 });
 handle('log:open', async () => {
   const failure = await shell.openPath(log('The log folder was opened.'));
@@ -346,6 +360,103 @@ handle('drafts:load', () => {
   }
 });
 handle('drafts:save', (_event, drafts) => replaceFile(draftsPath(), JSON.stringify(drafts)));
+const recordId = /^[a-zA-Z0-9-]{1,100}$/;
+const imageData = /^data:image\/(?:png|jpeg|gif|webp|bmp);base64,[a-z0-9+/=\s]+$/i;
+function requireRecordId(value, label) {
+  if (typeof value !== 'string' || !recordId.test(value)) throw new Error(`${label}无效。`);
+  return value;
+}
+function attachmentsDir() {
+  return path.join(app.getPath('userData'), 'attachments');
+}
+function attachmentPath(messageId) {
+  return path.join(attachmentsDir(), `${requireRecordId(messageId, '消息编号')}.json`);
+}
+function attachmentIndexPath() {
+  return path.join(attachmentsDir(), 'sessions.json');
+}
+function readAttachmentIndex() {
+  try {
+    const value = JSON.parse(readFileSync(attachmentIndexPath(), 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+function writeAttachmentIndex(index) {
+  replaceFile(attachmentIndexPath(), JSON.stringify(index));
+}
+function rememberAttachment(sessionId, messageId) {
+  const index = readAttachmentIndex();
+  const list = Array.isArray(index[sessionId]) ? index[sessionId].filter((id) => recordId.test(id)) : [];
+  if (!list.includes(messageId)) list.push(messageId);
+  index[sessionId] = list;
+  writeAttachmentIndex(index);
+}
+function forgetAttachment(messageId) {
+  const index = readAttachmentIndex();
+  let changed = false;
+  for (const [sessionId, list] of Object.entries(index)) {
+    if (!Array.isArray(list) || !list.includes(messageId)) continue;
+    changed = true;
+    const next = list.filter((id) => id !== messageId);
+    if (next.length) index[sessionId] = next;
+    else delete index[sessionId];
+  }
+  if (changed) writeAttachmentIndex(index);
+}
+function previewOf(value) {
+  if (!value || typeof value !== 'object') return undefined;
+  if (value.kind === 'text' && typeof value.text === 'string')
+    return { kind: 'text', text: value.text, truncated: value.truncated === true };
+  if (value.kind === 'image' && typeof value.data === 'string' && imageData.test(value.data))
+    return { kind: 'image', data: value.data };
+  if (value.kind === 'unavailable' && typeof value.reason === 'string')
+    return { kind: 'unavailable', reason: value.reason.slice(0, 80) };
+  return undefined;
+}
+function attachmentsOf(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item.path === 'string' && item.path.length > 0 && item.path.length < 4000)
+    .slice(0, 40)
+    .map((item) => {
+      const preview = previewOf(item.preview);
+      return preview ? { path: item.path, preview } : { path: item.path };
+    });
+}
+handle('attachments:load', (_event, messageId) => {
+  try {
+    return attachmentsOf(JSON.parse(readFileSync(attachmentPath(messageId), 'utf8')));
+  } catch {
+    return [];
+  }
+});
+handle('attachments:save', async (_event, messageId, attachments, sessionId) => {
+  const id = requireRecordId(messageId, '消息编号');
+  if (!Array.isArray(attachments) || attachments.length > 40) throw new Error('附件过多。');
+  const content = JSON.stringify(attachmentsOf(attachments));
+  if (Buffer.byteLength(content) > 48 * 1024 * 1024) throw new Error('附件预览总量超过 48 MB。');
+  await mkdir(attachmentsDir(), { recursive: true });
+  replaceFile(attachmentPath(id), content);
+  if (typeof sessionId === 'string' && recordId.test(sessionId)) rememberAttachment(sessionId, id);
+});
+handle('attachments:delete', async (_event, messageId) => {
+  await unlink(attachmentPath(messageId)).catch((error) => {
+    if (error?.code !== 'ENOENT') throw error;
+  });
+  forgetAttachment(messageId);
+});
+handle('attachments:delete-session', async (_event, sessionId) => {
+  const id = requireRecordId(sessionId, '会话编号');
+  const dir = attachmentsDir();
+  if (!existsSync(dir)) return;
+  const index = readAttachmentIndex();
+  const list = Array.isArray(index[id]) ? index[id].filter((item) => recordId.test(item)) : [];
+  await Promise.all(list.map((messageId) => unlink(path.join(dir, `${messageId}.json`)).catch(() => {})));
+  delete index[id];
+  writeAttachmentIndex(index);
+});
 // Scheduled tasks are one JSON file that the window, the user and Claude over SSH may all edit. The window
 // decides what the text means; here it is only read, written and watched. An editor's byte-order mark is
 // dropped.
@@ -391,6 +502,17 @@ handle('window:settings', () => ({ closeToTray: readSettings().closeToTray !== f
 handle('window:settings:set', (_event, values) => {
   writeSettings({ closeToTray: values?.closeToTray !== false });
   refreshTray();
+});
+handle('window:theme', (event, mode) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  const dark = mode === 'dark';
+  const color = dark ? '#121211' : '#f6f5f2';
+  const symbolColor = dark ? '#f0eee6' : '#141413';
+  win.setBackgroundColor(color);
+  if (typeof win.setTitleBarOverlay === 'function') {
+    win.setTitleBarOverlay({ color, symbolColor, height: 40 });
+  }
 });
 // What the user should know while the window is not in front goes through the system's own notifications.
 // A notification is kept until it closes, or it could be collected before it is clicked.
@@ -518,12 +640,12 @@ app.whenReady().then(() => {
     height: 850,
     minWidth: 380,
     minHeight: 560,
-    backgroundColor: '#edf0f6',
+    backgroundColor: '#f6f5f2',
     title: 'CC Desk Tunnel',
     // The page draws the title bar; the system adds only its window buttons: over the bar's right end on
     // Windows, at its left end on macOS, where the page leaves them room (see `.titlebar` in style.css).
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#edf0f6', symbolColor: '#22262e', height: 40 },
+    titleBarOverlay: { color: '#f6f5f2', symbolColor: '#141413', height: 40 },
     trafficLightPosition: { x: 14, y: 13 },
     icon: path.join(__dirname, 'icon.png'),
     autoHideMenuBar: true,

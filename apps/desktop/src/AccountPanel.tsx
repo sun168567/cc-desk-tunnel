@@ -17,10 +17,80 @@ import type {
   NativeMetrics,
   UsageSummary,
 } from '@cc-desk-tunnel/protocol';
+import { quotaGateError, validQuotaGate, type QuotaGate, type QuotaLimits } from './quota.ts';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
 import { IconButton } from './ui.tsx';
 import { copyText } from './copy.tsx';
+
+function QuotaBounds({
+  title,
+  gate,
+  save,
+}: {
+  title: string;
+  gate: QuotaGate;
+  save: (gate: QuotaGate) => void;
+}) {
+  const [warn, setWarn] = useState(String(gate.warn));
+  const [stop, setStop] = useState(String(gate.stop));
+  const [problem, setProblem] = useState('');
+  useEffect(() => {
+    setWarn(String(gate.warn));
+    setStop(String(gate.stop));
+  }, [gate.warn, gate.stop]);
+  const commit = () => {
+    const next = { warn: Number(warn), stop: Number(stop) };
+    if (!validQuotaGate(next.warn, next.stop)) {
+      setProblem(quotaGateError);
+      setWarn(String(gate.warn));
+      setStop(String(gate.stop));
+      return;
+    }
+    setProblem('');
+    if (next.warn === gate.warn && next.stop === gate.stop) return;
+    save(next);
+  };
+  return (
+    <div className="card quota-bound-card">
+      <h3 className="quota-bound-title">{title}</h3>
+      {(
+        [
+          ['提醒', warn, setWarn, '达到后在输入框上方提醒一次；窗口不在前台时再发一条系统通知'],
+          ['停发', stop, setStop, '达到后不能发送、不能继续，定时任务也不发出。正在跑的一轮会做完'],
+        ] as const
+      ).map(([label, value, change, detail]) => (
+        <div className="setting-row" key={label}>
+          <span>
+            <strong>{label}</strong>
+            <small>{detail}</small>
+          </span>
+          <span className="setting-actions quota-percent">
+            <input
+              className="setting-number"
+              type="number"
+              min={1}
+              max={100}
+              aria-label={`${title}${label}百分比`}
+              value={value}
+              onChange={(event) => change(event.target.value)}
+              onBlur={commit}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commit();
+              }}
+            />
+            <span>%</span>
+          </span>
+        </div>
+      ))}
+      {problem && (
+        <p className="error-text" role="alert">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function AccountPanel({
   client,
@@ -31,6 +101,8 @@ export default function AccountPanel({
   disabled,
   error,
   refresh,
+  gate,
+  saveGate,
 }: {
   client: ProxyClient;
   account: AccountState | null;
@@ -40,6 +112,8 @@ export default function AccountPanel({
   disabled: boolean;
   error: string | null;
   refresh: () => void;
+  gate: QuotaLimits;
+  saveGate: (gate: QuotaLimits) => void;
 }) {
   const account = capabilities?.account;
   const [working, setWorking] = useState(false);
@@ -315,6 +389,14 @@ export default function AccountPanel({
               (metrics?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
           </p>
         )}
+        <h2 className="account-section-title">发送门槛</h2>
+        <p className="muted">
+          按官方已用比例分别设置。默认都是提醒 90%、停发 95%。任一档达到停发就暂停发送。不另算用量，也不改变官方的「额度用尽后自动继续」。
+        </p>
+        <div className="quota-bounds">
+          <QuotaBounds title="5 小时额度" gate={gate.fiveHour} save={(fiveHour) => saveGate({ ...gate, fiveHour })} />
+          <QuotaBounds title="每周额度" gate={gate.week} save={(week) => saveGate({ ...gate, week })} />
+        </div>
         <h2 className="account-section-title">
           <ShieldCheck />
           当前会话

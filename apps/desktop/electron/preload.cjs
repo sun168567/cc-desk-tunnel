@@ -5,10 +5,14 @@ contextBridge.exposeInMainWorld('desktop', {
   chooseProject: () => ipcRenderer.invoke('project:choose'),
   asOnDisk: (path) => ipcRenderer.invoke('project:spelling', path),
   chooseFiles: () => ipcRenderer.invoke('files:choose'),
+  previewFile: (path) => ipcRenderer.invoke('attachment:preview', path),
+  readTextFile: (path) => ipcRenderer.invoke('file:read-text', path),
+  searchFiles: (directory, query) => ipcRenderer.invoke('attachment:search', directory, query),
   pathForFile: (file) => webUtils.getPathForFile(file),
   saveFile: (name, text) => ipcRenderer.invoke('file:save', name, text),
   saveImage: (type, bytes) => ipcRenderer.invoke('image:save', type, bytes),
   openFolder: (directory) => ipcRenderer.invoke('folder:open', directory),
+  openChangedFile: (path, reveal) => ipcRenderer.invoke('changed-file:open', path, reveal),
   openLogs: () => ipcRenderer.invoke('log:open'),
   openDevTools: () => ipcRenderer.invoke('devtools:open'),
   gitBranch: (directory) => ipcRenderer.invoke('git:branch', directory),
@@ -22,6 +26,11 @@ contextBridge.exposeInMainWorld('desktop', {
   saveLogin: (login) => ipcRenderer.invoke('login:save', login),
   loadDrafts: () => ipcRenderer.invoke('drafts:load'),
   saveDrafts: (drafts) => ipcRenderer.invoke('drafts:save', drafts),
+  loadAttachments: (messageId) => ipcRenderer.invoke('attachments:load', messageId),
+  saveAttachments: (messageId, attachments, sessionId) =>
+    ipcRenderer.invoke('attachments:save', messageId, attachments, sessionId),
+  deleteAttachments: (messageId) => ipcRenderer.invoke('attachments:delete', messageId),
+  deleteSessionAttachments: (sessionId) => ipcRenderer.invoke('attachments:delete-session', sessionId),
   loadSchedules: (initial) => ipcRenderer.invoke('schedules:load', initial),
   saveSchedules: (text) => ipcRenderer.invoke('schedules:save', text),
   onSchedulesChanged: (callback) => {
@@ -31,6 +40,7 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   windowSettings: () => ipcRenderer.invoke('window:settings'),
   setWindowSettings: (values) => ipcRenderer.invoke('window:settings:set', values),
+  setTheme: (mode) => ipcRenderer.invoke('window:theme', mode),
   notify: (notice) => ipcRenderer.invoke('notify:show', notice),
   onNotifyClicked: (callback) => {
     const listener = (_event, sessionId) => callback(sessionId);

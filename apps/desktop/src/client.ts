@@ -648,10 +648,9 @@ export class ProxyClient {
     if (!result) throw new Error('服务没有返回数据。');
     return result as Extract<ServerMessage, { type: Replies[T] }>;
   }
-  async request(command: NewCommand): Promise<Response> {
+  async request(command: NewCommand, requestId = crypto.randomUUID()): Promise<Response> {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
       throw new Error('服务未连接。');
-    const requestId = crypto.randomUUID();
     return new Promise<Response>((resolve, reject) => {
       const timer = setTimeout(
         () => {

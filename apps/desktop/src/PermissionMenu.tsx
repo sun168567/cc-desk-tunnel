@@ -66,7 +66,7 @@ export default function PermissionMenu({
       setConfirming(false);
     };
   }, [open]);
-  const current = offered.find((item) => item.value === mode)!;
+  const current = offered.find((item) => item.value === mode) ?? modes[0];
   return (
     <div className="permission-control" ref={container}>
       <button

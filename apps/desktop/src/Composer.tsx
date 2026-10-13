@@ -1,5 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUp, Folder, GitBranch, Play, Plus, RefreshCw, Shrink, Square } from 'lucide-react';
+import {
+  CornerDownLeft,
+  FileCode2,
+  FileImage,
+  FileText,
+  Folder,
+  GitBranch,
+  ImagePlus,
+  Laptop,
+  Play,
+  Plus,
+  RefreshCw,
+  Shrink,
+  Square,
+} from 'lucide-react';
 import type {
   Effort,
   NativeCapabilities,
@@ -12,11 +26,37 @@ import ComposerControls from './ComposerControls.tsx';
 import PermissionMenu from './PermissionMenu.tsx';
 import { IconButton } from './ui.tsx';
 import type { MenuPosition } from './ui.tsx';
+import { AttachmentCards } from './AttachmentCards.tsx';
+import type { Attachment } from './attachments.ts';
 
 export type Scenario = 'chat' | 'tool' | 'question' | 'error';
 // A draft that is only a slash and an optional command name opens the command menu.
 const slashDraft = /^[/\\][^ \n]*$/;
 const compactDraft = /^[/\\](compact)?$/;
+
+function formatMatchPath(fullPath: string, projectRoot: string) {
+  const name = fullPath.split(/[\\/]/).at(-1) ?? fullPath;
+  const normFull = fullPath.replace(/\\/g, '/');
+  const normRoot = projectRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+  let rel = normFull;
+  if (normRoot && normFull.toLowerCase().startsWith(normRoot.toLowerCase() + '/')) {
+    rel = normFull.slice(normRoot.length + 1);
+  }
+  const slash = rel.lastIndexOf('/');
+  const dir = slash > 0 ? rel.slice(0, slash) : '';
+  return { name, dir };
+}
+
+function matchFileIcon(filePath: string) {
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filePath)) return <FileImage size={15} />;
+  if (
+    /\.(ts|tsx|js|jsx|mjs|cjs|py|rs|go|c|cc|cpp|h|hpp|cs|java|json|ya?ml|toml|sh|ps1|bat|css|html|sql|vue|svelte)$/i.test(
+      filePath,
+    )
+  )
+    return <FileCode2 size={15} />;
+  return <FileText size={15} />;
+}
 
 // The branch the project's working tree is on, read from the project by the desktop; it is looked at again
 // whenever the window comes back to the front or a run ends, the moments it may have changed.
@@ -46,6 +86,8 @@ export default function Composer({
   chooseProject,
   draft,
   setDraft,
+  attachments,
+  setAttachments,
   native,
   connected,
   busy,
@@ -62,6 +104,7 @@ export default function Composer({
   capabilities,
   nativeSession,
   metrics,
+  quota,
   send,
   resume,
   compact,
@@ -76,6 +119,8 @@ export default function Composer({
   chooseProject?: (position: MenuPosition) => void;
   draft: string;
   setDraft: (text: string) => void;
+  attachments: Attachment[];
+  setAttachments: (items: Attachment[], text?: string) => void;
   native: boolean;
   connected: boolean;
   busy: boolean;
@@ -92,6 +137,8 @@ export default function Composer({
   capabilities: NativeCapabilities | null;
   nativeSession: NativeSession | null;
   metrics: NativeMetrics | null;
+  // Set while the 5-hour window is at the reminder line, or past the line that pauses sending.
+  quota: { level: 'warn' | 'stop'; text: string } | null;
   send: () => void;
   // Present when the session's last turn was stopped or cut off: takes it up again without a message.
   resume?: () => void;
@@ -107,6 +154,48 @@ export default function Composer({
   const input = useRef<HTMLTextAreaElement>(null);
   const branch = useBranch(session.projectPath, !!session.activeRun);
   const [dropping, setDropping] = useState(false);
+  const [matches, setMatches] = useState<string[]>([]);
+  const [matchIndex, setMatchIndex] = useState(0);
+  const matchList = useRef<HTMLDivElement>(null);
+  const [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null);
+  useEffect(() => {
+    setMention(null);
+    setMatches([]);
+  }, [session.id]);
+  useEffect(() => {
+    if (!window.desktop || !mention) {
+      setMatches([]);
+      return;
+    }
+    let current = true;
+    const timer = setTimeout(
+      () =>
+        void window.desktop!.searchFiles(session.projectPath, mention.query)
+          .then((items) => {
+            if (current) setMatches(items);
+          })
+          .catch(() => {
+            if (current) setMatches([]);
+          }),
+      180,
+    );
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [mention, session.projectPath]);
+  useEffect(() => {
+    setMatchIndex(0);
+  }, [matches]);
+  useEffect(() => {
+    const list = matchList.current;
+    const selected = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!list || !selected) return;
+    const top = selected.offsetTop;
+    const bottom = top + selected.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  }, [matchIndex, matches]);
   useLayoutEffect(() => {
     // Grow with the draft; the stylesheet's max-height decides when scrolling takes over.
     if (!input.current) return;
@@ -115,17 +204,20 @@ export default function Composer({
   }, [draft, session.id]);
   // A file reaches Claude as its Windows path in the message: Claude reads it through the execution channel,
   // the same way it reads the project.
-  function attach(paths: string[]) {
+  function attach(paths: string[], text?: string) {
     if (!paths.length) return;
-    const box = input.current;
-    // The box holds what is typed right now; a picture is attached a moment after it was pasted.
-    const current = box ? box.value : draft;
-    const at = box ? box.selectionStart : current.length;
-    const before = current.slice(0, at);
-    const text = paths.map((path) => `"${path}"`).join(' ');
-    const lead = before && !/\s$/.test(before) ? ' ' : '';
-    setDraft(`${before}${lead}${text} ${current.slice(at)}`);
-    box?.focus();
+    const unique = [...new Set([...latestAttachments.current.map((item) => item.path), ...paths])].slice(0, 40);
+    setAttachments(unique.map((path) => ({ path })), text);
+    input.current?.focus();
+  }
+  const latestAttachments = useRef(attachments);
+  latestAttachments.current = attachments;
+  function chooseMatch(path: string) {
+    if (!mention) return;
+    const nextText = draft.slice(0, mention.start) + draft.slice(mention.end);
+    attach([path], nextText);
+    setMention(null);
+    setMatches([]);
   }
   const shown = useRef(session.id);
   shown.current = session.id;
@@ -148,6 +240,12 @@ export default function Composer({
     }
     if (shown.current === pasted) attach(found);
   }
+  const openFilePicker = () => {
+    const id = session.id;
+    void window.desktop!.chooseFiles().then((paths) => {
+      if (shown.current === id) attach(paths);
+    });
+  };
   return (
     <div className="composer-area">
       {native && slashOpen && (
@@ -208,6 +306,11 @@ export default function Composer({
           </span>
         )}
       </div>
+      {quota && (
+        <p className={`quota-notice ${quota.level}`} role={quota.level === 'stop' ? 'alert' : 'status'}>
+          {quota.text}
+        </p>
+      )}
       <form
         className={`composer ${dropping ? 'dropping' : ''}`}
         onSubmit={(event) => {
@@ -228,50 +331,125 @@ export default function Composer({
           void paste([...event.dataTransfer.files]);
         }}
       >
-        <textarea
-          ref={input}
-          aria-label="消息"
-          placeholder="随心输入…"
-          value={draft}
-          disabled={inputDisabled}
-          maxLength={16000}
-          rows={2}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setSlashOpen(native && slashDraft.test(event.target.value));
-          }}
-          onPaste={(event) => {
-            // Pasted text is left to the browser, also when a program put a picture of it beside the text.
-            if (!window.desktop || !event.clipboardData.files.length) return;
-            const files = [...event.clipboardData.files];
-            const text = event.clipboardData.getData('text/plain');
-            const usable = files.filter(
-              (file) =>
-                window.desktop!.pathForFile(file) || (!text && file.type.startsWith('image/')),
-            );
-            if (!usable.length) return;
-            event.preventDefault();
-            void paste(usable);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              setSlashOpen(false);
-              return;
-            }
-            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              if (slashOpen && compactDraft.test(draft)) compact();
-              else send();
-            }
-          }}
+        <AttachmentCards
+          items={attachments}
+          remove={(path) => setAttachments(attachments.filter((item) => item.path !== path))}
         />
+        {window.desktop && mention && matches.length > 0 && (
+          <div className="attachment-matches" role="listbox" aria-label="项目文件" ref={matchList}>
+            {matches.map((path, index) => {
+              const { name, dir } = formatMatchPath(path, session.projectPath);
+              const selected = index === Math.min(matchIndex, matches.length - 1);
+              return (
+                <button
+                  type="button"
+                  key={path}
+                  role="option"
+                  aria-selected={selected}
+                  title={path}
+                  onMouseEnter={() => setMatchIndex(index)}
+                  onClick={() => chooseMatch(path)}
+                >
+                  <span className="attachment-match-icon" aria-hidden="true">
+                    {matchFileIcon(path)}
+                  </span>
+                  <span className="attachment-match-name">{name}</span>
+                  {dir && <small className="attachment-match-dir">{dir}</small>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="composer-input-box">
+          <textarea
+            ref={input}
+            aria-label="消息"
+            placeholder="输入任务或问题…"
+            value={draft}
+            disabled={inputDisabled}
+            maxLength={16000}
+            rows={1}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setSlashOpen(native && slashDraft.test(event.target.value));
+              const before = event.target.value.slice(0, event.target.selectionStart);
+              const match = /(?:^|\s)@([^\s@]*)$/.exec(before);
+              setMention(match ? { start: before.lastIndexOf('@'), end: before.length, query: match[1] } : null);
+            }}
+            onPaste={(event) => {
+              // Pasted text is left to the browser, also when a program put a picture of it beside the text.
+              if (!window.desktop || !event.clipboardData.files.length) return;
+              const files = [...event.clipboardData.files];
+              const text = event.clipboardData.getData('text/plain');
+              const usable = files.filter(
+                (file) =>
+                  window.desktop!.pathForFile(file) || (!text && file.type.startsWith('image/')),
+              );
+              if (!usable.length) return;
+              event.preventDefault();
+              void paste(usable);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setMention(null);
+                setMatches([]);
+                setSlashOpen(false);
+                return;
+              }
+              if (mention && matches.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                event.preventDefault();
+                const direction = event.key === 'ArrowDown' ? 1 : -1;
+                setMatchIndex((current) => (current + direction + matches.length) % matches.length);
+                return;
+              }
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                if (mention && matches.length > 0) {
+                  chooseMatch(matches[Math.min(matchIndex, matches.length - 1)]);
+                  return;
+                }
+                if (slashOpen && compactDraft.test(draft)) compact();
+                else send();
+              }
+            }}
+          />
+          <div className="composer-box-actions">
+            {session.activeRun && session.activeRun.waiting !== 'background' && (
+              <IconButton
+                title="停止运行"
+                className="stop-button"
+                disabled={!connected || !ownsRun || busy}
+                onClick={stop}
+              >
+                <Square />
+              </IconButton>
+            )}
+            {resume && !draft.trim() && !attachments.length ? (
+              <IconButton title="接着上一轮继续" className="send-button" onClick={resume}>
+                <Play />
+              </IconButton>
+            ) : (
+              (!session.activeRun || native) && (
+                <button
+                  type="submit"
+                  className="icon-button send-button"
+                  aria-label="发送消息"
+                  title={quota?.level === 'stop' ? quota.text : '发送消息'}
+                  disabled={(!draft.trim() && !attachments.length) || inputDisabled || quota?.level === 'stop'}
+                >
+                  <CornerDownLeft />
+                </button>
+              )
+            )}
+          </div>
+        </div>
         <div className="composer-toolbar">
           {window.desktop && (
             <IconButton
-              title="添加文件：把文件的路径放进消息"
+              title="添加文件卡片：发送时附上本机路径"
               className="attach-button"
               disabled={inputDisabled}
-              onClick={() => void window.desktop!.chooseFiles().then(attach)}
+              onClick={openFilePicker}
             >
               <Plus />
             </IconButton>
@@ -313,33 +491,6 @@ export default function Composer({
               refreshing={refreshing}
               canRefreshModels={canRefreshModels}
             />
-          )}
-          {session.activeRun && session.activeRun.waiting !== 'background' && (
-            <IconButton
-              title="停止运行"
-              className="stop-button"
-              disabled={!connected || !ownsRun || busy}
-              onClick={stop}
-            >
-              <Square />
-            </IconButton>
-          )}
-          {resume && !draft.trim() ? (
-            <IconButton title="接着上一轮继续" className="send-button" onClick={resume}>
-              <Play />
-            </IconButton>
-          ) : (
-            (!session.activeRun || native) && (
-              <button
-                type="submit"
-                className="icon-button send-button"
-                aria-label="发送消息"
-                title="发送消息"
-                disabled={!draft.trim() || inputDisabled}
-              >
-                <ArrowUp />
-              </button>
-            )
           )}
         </div>
       </form>

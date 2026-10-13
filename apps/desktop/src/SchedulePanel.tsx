@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarClock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import type { Effort, NativeCapabilities, Session } from '@cc-desk-tunnel/protocol';
 import { folderName } from './paths.ts';
 import { describeSchedule, parseTasks, stamp } from './schedules.ts';
@@ -313,11 +313,16 @@ export default function SchedulePanel({
   sessions,
   projects,
   capabilities,
+  paused,
+  leave,
 }: {
   schedules: Schedules;
   sessions: Session[];
   projects: string[];
   capabilities: NativeCapabilities | null;
+  // Set while the 5-hour window is past the stop line: due tasks are not sent.
+  paused: string | null;
+  leave?: () => void;
 }) {
   // `null` is a new task; `undefined` shows the overview.
   const [editing, setEditing] = useState<Task | null | undefined>(undefined);
@@ -335,8 +340,18 @@ export default function SchedulePanel({
     <>
       <aside className="sidebar">
         <div className="sidebar-brand">
+          {leave && (
+            <IconButton title="返回会话" onClick={leave}>
+              <ArrowLeft />
+            </IconButton>
+          )}
           <span className="brand">定时任务</span>
         </div>
+        {paused && (
+          <p className="quota-notice stop" role="alert">
+            {paused}
+          </p>
+        )}
         <button type="button" className="side-action" onClick={() => setEditing(null)}>
           <Plus />
           新建任务
@@ -375,7 +390,8 @@ export default function SchedulePanel({
                   </small>
                   <span className="schedule-row-actions">
                     <IconButton
-                      title={`立即运行 ${task.name}`}
+                      title={paused ?? `立即运行 ${task.name}`}
+                      disabled={!!paused}
                       onClick={() => void schedules.runNow(task)}
                     >
                       <Play />

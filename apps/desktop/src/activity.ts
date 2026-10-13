@@ -1,4 +1,5 @@
 import type { TranscriptItem, Work } from './transcript.ts';
+import { countChanges, parseEditInput } from './edit-input.ts';
 
 type Tool = Extract<TranscriptItem, { kind: 'tool' }>;
 export type Category = 'command' | 'edit' | 'read' | 'search' | 'web' | 'agent' | 'other';
@@ -45,7 +46,6 @@ function fields(input: string): Record<string, unknown> {
   }
 }
 const text = (value: unknown) => (typeof value === 'string' ? value : '');
-const lineCount = (value: unknown) => (text(value) ? text(value).split('\n').length : 0);
 const fileName = (value: unknown) => text(value).split(/[\\/]/).at(-1) ?? '';
 
 export const categoryOf = (tool: Tool): Category => categories[tool.name] ?? 'other';
@@ -62,12 +62,11 @@ export function describe(tool: Tool, active: boolean) {
   if (category === 'command')
     subject = text(input.description) || (text(input.command) || tool.input).trim().split('\n')[0];
   else if (category === 'edit') {
-    subject = fileName(input.file_path ?? input.notebook_path);
-    const edits = Array.isArray(input.edits) ? (input.edits as Record<string, unknown>[]) : [input];
-    for (const edit of edits) {
-      added += lineCount(edit.new_string ?? edit.content ?? edit.new_source);
-      removed += lineCount(edit.old_string);
-    }
+    const parsed = parseEditInput(tool.name, tool.input);
+    subject = fileName(parsed?.path || input.file_path || input.notebook_path);
+    const counts = countChanges(parsed);
+    added = counts.added;
+    removed = counts.removed;
   } else if (category === 'read') subject = fileName(input.file_path);
   else if (category === 'search') subject = text(input.pattern) || text(input.query);
   else if (category === 'web') subject = text(input.url) || text(input.query);

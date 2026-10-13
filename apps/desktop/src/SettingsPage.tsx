@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   ArrowLeft,
   Bell,
+  ChevronDown,
   CircleHelp,
   Info,
   Keyboard,
@@ -32,7 +33,7 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     name: '账号与额度',
     group: 'Claude Code',
     icon: UserRound,
-    words: '登录 退出 订阅 用量 调用日志 重置',
+    words: '登录 退出 订阅 用量 调用日志 重置 提醒 停发 每周',
   },
   {
     id: 'claude',
@@ -47,7 +48,7 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     group: '客户端',
     icon: SlidersHorizontal,
     words:
-      '托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 用量 首字 速度 缓存',
+      '托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 用量 首字 速度 缓存 字体 字号 宽度 代码 主题 外观',
   },
   {
     id: 'notifications',
@@ -198,6 +199,43 @@ function Seconds({
   );
 }
 
+function CodePreview({ variant, label }: { variant: 'light' | 'dark'; label: string }) {
+  return (
+    <div className={`code-preview-card ${variant}`}>
+      <div className="code-preview-select">
+        <span>{label}</span>
+        <ChevronDown size={14} aria-hidden="true" />
+      </div>
+      <div className="code-preview-box" aria-hidden="true">
+        <span className="code-preview-line">
+          <i>1</i>
+          <b> </b>
+          <span className="syn-kw">function</span> <span className="syn-fn">greet</span>(name:{' '}
+          <span className="syn-ty">string</span>) {'{'}
+        </span>
+        <span className="code-preview-line remove">
+          <i>2</i>
+          <b>−</b>
+          {'  '}
+          <span className="syn-kw">return</span> <span className="syn-str">"Hello, "</span> + name;
+        </span>
+        <span className="code-preview-line add">
+          <i>2</i>
+          <b>+</b>
+          {'  '}
+          <span className="syn-kw">return</span>{' '}
+          <span className="syn-str">{'`Hello, ${name}!`'}</span>;
+        </span>
+        <span className="code-preview-line">
+          <i>3</i>
+          <b> </b>
+          {'}'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function General({
   form,
   changeForm,
@@ -210,7 +248,15 @@ function General({
   chooseWorkspace: (reset: boolean) => void;
 }) {
   const [closeToTray, setCloseToTray] = useState<boolean | null>(null);
-  const { connection, bypassPermissions } = usePrefs();
+  const {
+    connection,
+    bypassPermissions,
+    theme,
+    interfaceFont,
+    codeFont,
+    textSize,
+    transcriptWidth,
+  } = usePrefs();
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
   }, []);
@@ -218,6 +264,121 @@ function General({
     <section className="page" aria-label="常规">
       <div className="page-body">
         <h1 className="page-title">常规</h1>
+        <h2 className="page-heading">代码外观</h2>
+        <div className="code-appearance-grid">
+          <CodePreview variant="light" label="Claude Light" />
+          <CodePreview variant="dark" label="Claude Dark" />
+        </div>
+        <div className="card">
+          <Row title="代码字体" detail="为代码块、文件改动对比与内嵌终端设置自定义等宽字体">
+            <input
+              className="setting-input"
+              aria-label="代码字体"
+              placeholder="e.g. JetBrains Mono"
+              value={codeFont}
+              spellCheck={false}
+              onChange={(event) =>
+                setPrefs((prefs) => ({ ...prefs, codeFont: event.target.value }))
+              }
+            />
+          </Row>
+        </div>
+        <h2 className="page-heading">外观</h2>
+        <div className="card">
+          <Row title="色彩主题" detail="切换深色模式或浅色模式，也可跟随系统自动切换">
+            <div className="segmented" role="group" aria-label="色彩主题">
+              <button
+                type="button"
+                aria-pressed={theme === 'system'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, theme: 'system' }))}
+              >
+                跟随系统
+              </button>
+              <button
+                type="button"
+                aria-pressed={theme === 'dark'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, theme: 'dark' }))}
+              >
+                深色模式
+              </button>
+              <button
+                type="button"
+                aria-pressed={theme === 'light'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, theme: 'light' }))}
+              >
+                浅色模式
+              </button>
+            </div>
+          </Row>
+          <Row title="界面字体" detail="整个界面的排版字体 —— 菜单、侧栏与设置面板">
+            <div className="segmented" role="group" aria-label="界面字体">
+              <button
+                type="button"
+                aria-pressed={interfaceFont === 'system'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, interfaceFont: 'system' }))}
+              >
+                系统
+              </button>
+              <button
+                type="button"
+                aria-pressed={interfaceFont === 'serif'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, interfaceFont: 'serif' }))}
+              >
+                衬线
+              </button>
+            </div>
+          </Row>
+          <Row title="对话字号" detail="对话正文与消息气泡的文字大小">
+            <div className="segmented" role="group" aria-label="对话字号">
+              <button
+                type="button"
+                aria-pressed={textSize === 'small'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, textSize: 'small' }))}
+              >
+                小
+              </button>
+              <button
+                type="button"
+                aria-pressed={textSize === 'medium'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, textSize: 'medium' }))}
+              >
+                标准
+              </button>
+              <button
+                type="button"
+                aria-pressed={textSize === 'large'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, textSize: 'large' }))}
+              >
+                大
+              </button>
+            </div>
+          </Row>
+          <Row title="对话宽度" detail="对话正文与输入框所在列的最大宽度">
+            <div className="segmented" role="group" aria-label="对话宽度">
+              <button
+                type="button"
+                aria-pressed={transcriptWidth === 'narrow'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, transcriptWidth: 'narrow' }))}
+              >
+                紧凑
+              </button>
+              <button
+                type="button"
+                aria-pressed={transcriptWidth === 'medium'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, transcriptWidth: 'medium' }))}
+              >
+                标准
+              </button>
+              <button
+                type="button"
+                aria-pressed={transcriptWidth === 'wide'}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, transcriptWidth: 'wide' }))}
+              >
+                宽敞
+              </button>
+            </div>
+          </Row>
+        </div>
         {!window.desktop && <p className="muted">窗口、会话和连接的设置只在桌面客户端里有。</p>}
         {window.desktop && (
           <>
@@ -499,9 +660,12 @@ export default function SettingsPage({
   adapterName,
   updates,
   back,
+  leave,
 }: {
   // Given before a connection exists: only this computer's own settings are shown, and this leaves them.
   back?: () => void;
+  // Returns to the main chat workspace when opened inside the connected app.
+  leave?: () => void;
   client: ProxyClient;
   section: Section;
   go: (section: Section) => void;
@@ -528,8 +692,8 @@ export default function SettingsPage({
     <>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          {back && (
-            <IconButton title="返回登录" onClick={back}>
+          {(back || leave) && (
+            <IconButton title={back ? '返回登录' : '返回会话'} onClick={back ?? leave}>
               <ArrowLeft />
             </IconButton>
           )}

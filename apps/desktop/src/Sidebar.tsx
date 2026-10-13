@@ -1,5 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CalendarClock,
+  ChevronUp,
+  Download,
   Ellipsis,
   Folder,
   FolderOpen,
@@ -7,6 +10,7 @@ import {
   Pin,
   Plus,
   Search,
+  Settings,
   SquarePen,
   X,
 } from 'lucide-react';
@@ -17,6 +21,7 @@ import { ago, folderName, isInside, pathKey } from './paths.ts';
 import { setPrefs, toggled, usePrefs } from './prefs.ts';
 import { IconButton } from './ui.tsx';
 import type { MenuPosition } from './ui.tsx';
+import type { Page } from './Rail.tsx';
 
 function activity(session: Session) {
   if (!session.activeRun) return ago(Date.parse(session.updatedAt));
@@ -37,6 +42,13 @@ export default function Sidebar({
   refreshing,
   terminalOpen,
   notifications,
+  page = 'chat',
+  go,
+  accountName = '账号',
+  adapterName = 'Claude Code',
+  update = null,
+  openUpdate,
+  openSettings,
   select,
   newSession,
   addProject,
@@ -57,6 +69,13 @@ export default function Sidebar({
   // This window's native terminal is open: it has the window until it is closed.
   terminalOpen: boolean;
   notifications: Notifications;
+  page?: Page;
+  go?: (page: Page) => void;
+  accountName?: string;
+  adapterName?: string;
+  update?: string | null;
+  openUpdate?: (position: MenuPosition) => void;
+  openSettings?: (position: MenuPosition) => void;
   select: (sessionId: string) => void;
   newSession: () => void;
   addProject: () => void;
@@ -167,6 +186,10 @@ export default function Sidebar({
           disabled={terminalOpen}
           onClick={() => select(session.id)}
         >
+          <span
+            className={`session-bullet ${session.activeRun ? 'running' : ''}`}
+            aria-hidden="true"
+          />
           <strong>{session.title}</strong>
           {session.activeRun && <span className="running-dot" />}
           <small>{activity(session)}</small>
@@ -230,20 +253,31 @@ export default function Sidebar({
           />
         </label>
       )}
-      <button
-        type="button"
-        className="side-action new-session"
-        disabled={!connected || busy || refreshing || terminalOpen}
-        onClick={newSession}
-      >
-        <SquarePen />
-        新建会话
-      </button>
+      <div className="sidebar-nav-actions">
+        <button
+          type="button"
+          className="side-action new-session"
+          disabled={!connected || busy || refreshing || terminalOpen}
+          onClick={newSession}
+        >
+          <SquarePen />
+          <span>新建会话</span>
+        </button>
+        <button
+          type="button"
+          className="side-action"
+          aria-current={page === 'schedules' ? 'page' : undefined}
+          onClick={() => go?.('schedules')}
+        >
+          <CalendarClock />
+          <span>定时任务</span>
+        </button>
+      </div>
       <nav className="session-list" aria-label="会话列表">
         {pinned.length > 0 && <div className="list-heading">置顶</div>}
         {pinned.map(renderSession)}
         <div className="list-heading">
-          项目
+          <span>项目</span>
           <IconButton
             title="添加项目"
             disabled={!connected || busy || terminalOpen}
@@ -349,6 +383,41 @@ export default function Sidebar({
           pinned.length === 0 &&
           othersCount === 0 && <p className="list-empty">没有匹配会话</p>}
       </nav>
+      <div className="sidebar-footer">
+        {update && openUpdate && (
+          <button
+            type="button"
+            className="sidebar-update-btn"
+            title={update}
+            aria-label="更新"
+            aria-haspopup="menu"
+            onClick={(event) => {
+              const box = event.currentTarget.getBoundingClientRect();
+              openUpdate({ x: box.left, y: box.top - 6, above: true });
+            }}
+          >
+            <Download />
+            <span>{update}</span>
+          </button>
+        )}
+        <button
+          type="button"
+          className="sidebar-account-btn"
+          title="设置与账号"
+          aria-label="设置与账号"
+          aria-haspopup="menu"
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            openSettings?.({ x: box.left, y: box.top - 6, above: true });
+          }}
+        >
+          <Settings className="sidebar-account-icon" />
+          <span className="sidebar-account-label">
+            {accountName.split('@')[0]} · {adapterName === 'Simulation' ? '离线模拟' : adapterName}
+          </span>
+          <ChevronUp className="sidebar-account-chevron" />
+        </button>
+      </div>
       {card && (
         <div className="session-card" role="tooltip" style={{ top: card.top, left: card.left }}>
           <strong>{card.session.title}</strong>
@@ -359,10 +428,14 @@ export default function Sidebar({
               : card.session.projectPath}
           </span>
           <small>
-            {activity(card.session)} · {new Date(card.session.updatedAt).toLocaleString('zh-CN')}
+            {activity(sessionCard(card.session))} · {new Date(card.session.updatedAt).toLocaleString('zh-CN')}
           </small>
         </div>
       )}
     </aside>
   );
+}
+
+function sessionCard(session: Session) {
+  return session;
 }

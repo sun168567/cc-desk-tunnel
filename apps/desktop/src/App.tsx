@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
   CircleHelp,
@@ -41,6 +42,7 @@ import type {
 import AccountPanel from './AccountPanel.tsx';
 import { ProxyClient, RequestInterruptedError } from './client.ts';
 import Composer from './Composer.tsx';
+import { attachmentText, splitUserMessage } from './attachments.ts';
 import { isHere, thisDevice } from './device.ts';
 import { isMac, selfUpdating } from './platform.ts';
 import { useDrafts } from './drafts.ts';
@@ -48,12 +50,14 @@ import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
+import { OpenDocument, type DocumentPreview } from './file-preview.ts';
 import LoginPage from './LoginPage.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
 import { exportSession } from './exportSession.ts';
 import { useNotifications } from './notifications.ts';
 import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
 import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
+import { quotaViewOf } from './quota.ts';
 import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
 import Rail from './Rail.tsx';
@@ -73,6 +77,7 @@ import { IconButton, Menu } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 
 const NativeTerminal = lazy(() => import('./NativeTerminal.tsx'));
+const FileDrawer = lazy(() => import('./FileDrawer.tsx'));
 
 // The newest event of a kind is the session's current native state.
 function latest<T extends EventPayload['type']>(events: SessionEvent[], type: T) {
@@ -127,6 +132,12 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [findRequest, setFindRequest] = useState(0);
+  const [preview, setPreview] = useState<DocumentPreview | null>(null);
+  const [paneWidth, setPaneWidth] = useState<number | null>(null);
+  const splitRef = useRef<HTMLDivElement>(null);
+  const openDocument = useCallback((next: DocumentPreview) => {
+    setPreview((current) => (current?.path === next.path ? null : next));
+  }, []);
   // Which of this computer's settings is open on the login page.
   const [localSettings, setLocalSettings] = useState<Section | null>(null);
   useEffect(() => {
@@ -157,6 +168,36 @@ export function App() {
   const [, setTrailAt] = useState(0);
   const accountOpen = place.page === 'settings' && place.section === 'account';
   const prefs = usePrefs();
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyTheme = () => {
+      const mode = prefs.theme === 'system' ? (query.matches ? 'dark' : 'light') : prefs.theme;
+      document.documentElement.dataset.theme = mode;
+      document.documentElement.style.colorScheme = mode;
+      void window.desktop?.setTheme?.(mode);
+    };
+    applyTheme();
+    query.addEventListener('change', applyTheme);
+    return () => query.removeEventListener('change', applyTheme);
+  }, [prefs.theme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.font = prefs.interfaceFont;
+    root.dataset.textSize = prefs.textSize;
+    root.dataset.transcriptWidth = prefs.transcriptWidth;
+    const mono = prefs.codeFont.trim();
+    if (mono) {
+      root.style.setProperty(
+        '--font-mono',
+        `${JSON.stringify(mono)}, 'JetBrains Mono', 'Cascadia Code', 'Fira Code', ui-monospace, Menlo, Monaco, Consolas, monospace`,
+      );
+    } else {
+      root.style.removeProperty('--font-mono');
+    }
+  }, [prefs.interfaceFont, prefs.codeFont, prefs.textSize, prefs.transcriptWidth]);
+
   const [version, setVersion] = useState('');
   useEffect(() => {
     void window.desktop?.version().then(setVersion);
@@ -174,6 +215,36 @@ export function App() {
   const nativeMode = state.adapter === 'claude-code';
   const connected = state.status === 'connected';
   const selected = state.sessions.find((session) => session.id === state.selectedId);
+  useEffect(() => {
+    setPreview(null);
+  }, [selected?.id]);
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreview(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [preview]);
+  const dragPane = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const host = splitRef.current;
+    if (!host) return;
+    event.preventDefault();
+    const previousSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    const move = (next: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      const width = rect.right - next.clientX;
+      setPaneWidth(Math.min(Math.max(width, 280), Math.max(280, rect.width - 280)));
+    };
+    const end = () => {
+      document.body.style.userSelect = previousSelect;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+  };
   // What is listed and managed here is what is on this computer. Sessions on the user's other computers are
   // shown apart: they can be read, and taken over or forked into a directory here.
   const sessions = state.sessions.filter((session) => isHere(session, state.device));
@@ -201,6 +272,38 @@ export function App() {
       ? { ...(metrics ?? state.metrics)!, rateLimits: quota.rateLimits }
       : (metrics ?? state.metrics);
   const canCompact = !!latest(events, 'native.context')?.persisted;
+  const quotaView = useMemo(
+    () => quotaViewOf(prefs.quota, accountMetrics),
+    [prefs.quota, accountMetrics],
+  );
+  // The banner stays while a line is crossed. Each window's system notification fires once per crossing,
+  // and again only after that reading falls back under its reminder line.
+  useEffect(() => {
+    if (quotaView.level === 'unknown') return;
+    const remindKey = 'quota-reminded';
+    if (quotaView.level === 'clear') {
+      if (localStorage.getItem(remindKey)) localStorage.removeItem(remindKey);
+      return;
+    }
+    let previous: string[] = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem(remindKey) ?? '[]');
+      if (Array.isArray(saved)) previous = saved.filter((item) => typeof item === 'string');
+    } catch {
+      previous = [];
+    }
+    const keys = quotaView.alerts.map((alert) => alert.key);
+    const fresh = quotaView.alerts.filter((alert) => !previous.includes(alert.key));
+    if (fresh.length === 0 && previous.length === keys.length) return;
+    localStorage.setItem(remindKey, JSON.stringify(keys));
+    if (fresh.length === 0 || (document.hasFocus() && document.visibilityState !== 'hidden')) return;
+    void window.desktop?.notify({
+      title: '额度提醒',
+      body: fresh.map((alert) => alert.text).join(''),
+      sessionId: null,
+      silent: !getPrefs().notify.sound,
+    });
+  }, [quotaView]);
   // A native terminal anywhere keeps what the CLI holds for all sessions, the account and its status, from
   // being read or changed; this window's own terminal, `terminalSessionId`, also takes the window.
   const anyTerminal = state.sessions.some((session) => session.activeRun?.surface === 'terminal');
@@ -220,7 +323,8 @@ export function App() {
     !!history?.loading ||
     (!!selected?.activeRun && (!nativeMode || !ownsRun)) ||
     refreshing;
-  const draft = selected ? (drafts[selected.id] ?? '') : '';
+  const draft = selected ? (drafts[selected.id]?.text ?? '') : '';
+  const attachments = selected && window.desktop ? (drafts[selected.id]?.attachments ?? []) : [];
   // The last turn of the session did not reach its end: it can be taken up again from the message box.
   const lastStatus = selected
     ? state.events[selected.id]?.findLast((event) => event.payload.type === 'run.status')?.payload
@@ -577,6 +681,8 @@ export function App() {
   useEffect(() => window.desktop?.onNotifyClicked((sessionId) => sessionId && show(sessionId)));
   const schedules = useSchedules(
     async (task, due) => {
+      // Pausing here waits, as a busy session does: the task is tried again until its grace runs out.
+      if (quotaView.level === 'stop') return false;
       const { status, sessions, selectedId, device } = client.state;
       if (
         status !== 'connected' ||
@@ -659,22 +765,53 @@ export function App() {
         ...(projectPath ? { projectPath } : {}),
       });
       if (!response.sessionId) return;
-      if (before) setDraft(response.sessionId, before.text);
+      if (before) {
+        if (window.desktop) {
+          const stored = await window.desktop.loadAttachments(before.id).catch(() => []);
+          const { bodyText, attachments: restored } = splitUserMessage(before.text, stored);
+          setDraft(response.sessionId, { text: bodyText, attachments: restored });
+        } else {
+          setDraft(response.sessionId, before.text);
+        }
+      }
       show(response.sessionId);
     });
   }
   async function send() {
-    if (!selected || !draft.trim() || inputDisabled) return;
+    if (!selected || (!draft.trim() && !attachments.length) || inputDisabled || quotaView.level === 'stop')
+      return;
     const sessionId = selected.id;
     setSlashOpen(false);
     await act(async () => {
-      await client.request({ type: 'message.send', sessionId, text: draft, scenario });
-      setDraft(sessionId, '');
+      const text = attachmentText(draft, attachments);
+      if (text.length > 16000) throw new Error('消息与附件路径合计不能超过 16000 个字符。');
+      const requestId = crypto.randomUUID();
+      let stored = false;
+      try {
+        if (window.desktop && attachments.length) {
+          const snapshot = await Promise.all(
+            attachments.map(async (item) => ({
+              ...item,
+              preview: await window.desktop!.previewFile(item.path).catch(() => ({
+                kind: 'unavailable' as const,
+                reason: '无法预览',
+              })),
+            })),
+          );
+          await window.desktop.saveAttachments(requestId, snapshot, sessionId);
+          stored = true;
+        }
+        await client.request({ type: 'message.send', sessionId, text, scenario }, requestId);
+        setDraft(sessionId, { text: '', attachments: [] });
+      } catch (error) {
+        if (stored) await window.desktop?.deleteAttachments(requestId).catch(() => {});
+        throw error;
+      }
     });
   }
   // Takes up the last turn, which was stopped or cut off, without the user writing anything.
   function resume() {
-    if (!selected) return;
+    if (!selected || quotaView.level === 'stop') return;
     const sessionId = selected.id;
     void act(async () => {
       await client.request({ type: 'run.continue', sessionId });
@@ -1213,6 +1350,7 @@ export function App() {
           client={client}
           section={place.section}
           go={(section) => open('settings', section)}
+          leave={() => open('chat')}
           native={nativeMode}
           form={form}
           changeForm={changeForm}
@@ -1238,6 +1376,8 @@ export function App() {
               refresh={() => {
                 void refreshStatus();
               }}
+              gate={prefs.quota}
+              saveGate={(next) => setPrefs((current) => ({ ...current, quota: next }))}
             />
           }
         />
@@ -1247,6 +1387,8 @@ export function App() {
           sessions={sessions}
           projects={projects}
           capabilities={capabilities}
+          paused={quotaView.level === 'stop' ? quotaView.text : null}
+          leave={() => open('chat')}
         />
       ) : (
         <>
@@ -1261,6 +1403,13 @@ export function App() {
             refreshing={refreshing}
             terminalOpen={!!terminalSessionId}
             notifications={notifications}
+            page={place.page}
+            go={(page) => open(page)}
+            accountName={accountName}
+            adapterName={adapterName}
+            update={pendingUpdate}
+            openUpdate={(position) => setMenu({ kind: 'update', ...position })}
+            openSettings={(position) => setMenu({ kind: 'settings', ...position })}
             select={show}
             newSession={() => {
               void newSession();
@@ -1312,6 +1461,13 @@ export function App() {
                 连接中断，等待恢复
               </div>
             )}
+            <OpenDocument.Provider value={openDocument}>
+            <div
+              className="workspace-split"
+              ref={splitRef}
+              style={paneWidth ? { ['--drawer-width' as string]: `${paneWidth}px` } : undefined}
+            >
+            <div className="workspace-main">
             <Conversation
               findRequest={findRequest}
               session={selected}
@@ -1321,6 +1477,9 @@ export function App() {
               native={nativeMode}
               ownsRun={ownsRun}
               busy={busy}
+              client={client}
+              accountName={accountName}
+              allSessions={sessions}
               newSession={() => {
                 void newSession();
               }}
@@ -1421,6 +1580,8 @@ export function App() {
                     : (position) => setMenu({ kind: 'move', sessionId: selected.id, ...position })
                 }
                 draft={draft}
+                attachments={attachments}
+                setAttachments={(items, text) => setDraft(selected.id, (previous) => ({ text: text ?? previous.text, attachments: items }))}
                 setDraft={(text) => setDraft(selected.id, text)}
                 native={nativeMode}
                 connected={connected}
@@ -1438,10 +1599,11 @@ export function App() {
                 capabilities={capabilities}
                 nativeSession={nativeSession}
                 metrics={metrics}
+                quota={quotaView.level === 'warn' || quotaView.level === 'stop' ? quotaView : null}
                 send={() => {
                   void send();
                 }}
-                resume={stopped && !inputDisabled ? resume : undefined}
+                resume={stopped && !inputDisabled && quotaView.level !== 'stop' ? resume : undefined}
                 compact={() => {
                   void compact();
                 }}
@@ -1452,6 +1614,23 @@ export function App() {
                 stop={stopRun}
               />
             )}
+            </div>
+            {preview && (
+              <>
+                <div
+                  className="split-handle"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="拖动调整预览宽度"
+                  onPointerDown={dragPane}
+                />
+                <Suspense fallback={<aside className="file-drawer" role="status">正在打开预览</aside>}>
+                  <FileDrawer path={preview.path} fallback={preview.fallback} onClose={() => setPreview(null)} />
+                </Suspense>
+              </>
+            )}
+            </div>
+            </OpenDocument.Provider>
           </main>
         </>
       )}
@@ -1513,7 +1692,8 @@ export function App() {
           confirm={() => {
             void act(async () => {
               await client.request({ type: 'session.delete', sessionId: deleteSession.id });
-              setDraft(deleteSession.id, '');
+              await window.desktop?.deleteSessionAttachments(deleteSession.id).catch(() => {});
+              setDraft(deleteSession.id, { text: '', attachments: [] });
               // A plain session's directory goes with it when the session left nothing there.
               if (isInside(deleteSession.projectPath, workspaceRoots))
                 void window.desktop?.removeWorkspace(deleteSession.projectPath);

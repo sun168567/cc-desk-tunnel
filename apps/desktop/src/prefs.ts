@@ -1,8 +1,14 @@
 import { useSyncExternalStore } from 'react';
+import { defaultQuotaLimits, readQuotaLimits } from './quota.ts';
+import type { QuotaLimits } from './quota.ts';
 
 // Choices that belong to this computer's window and never reach the service: what is pinned, what a project is
 // called here, which events raise a notification, and the keyboard shortcuts.
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
+export type ThemeMode = 'system' | 'dark' | 'light';
+export type InterfaceFont = 'system' | 'serif';
+export type TextSize = 'small' | 'medium' | 'large';
+export type TranscriptWidth = 'narrow' | 'medium' | 'wide';
 // How many seconds each step of connecting may take. The defaults suit most computers; a domain account whose
 // domain controller is out of reach, or slow security software, can need more.
 export type ConnectionWaits = { connect: number; ssh: number; ready: number };
@@ -23,9 +29,17 @@ export type Prefs = {
   connection: ConnectionWaits;
   // Whether the approval modes include the one that asks about nothing.
   bypassPermissions: boolean;
+  // Theme appearance: follow operating system, or force dark or light.
+  theme: ThemeMode;
+  interfaceFont: InterfaceFont;
+  codeFont: string;
+  textSize: TextSize;
+  transcriptWidth: TranscriptWidth;
   // The line under each reply. `summary` holds only the figures the user switched on or off, by key, so a figure
   // added later follows its own default.
   stats: { enabled: boolean; summary: Record<string, boolean> };
+  // Percents of the official 5-hour and weekly windows. This computer stops sending; it does not ask the service.
+  quota: QuotaLimits;
 };
 
 const storageKey = 'proxy-prefs';
@@ -48,7 +62,13 @@ const defaults: Prefs = {
   shortcuts: { enabled: true, keys: {} },
   connection: connectionWaits,
   bypassPermissions: false,
+  theme: 'system',
+  interfaceFont: 'system',
+  codeFont: '',
+  textSize: 'medium',
+  transcriptWidth: 'medium',
   stats: { enabled: false, summary: {} },
+  quota: defaultQuotaLimits,
 };
 
 function read(): Prefs {
@@ -84,6 +104,16 @@ function read(): Prefs {
         }),
       ) as ConnectionWaits,
       bypassPermissions: saved.bypassPermissions === true,
+      theme: saved.theme === 'dark' || saved.theme === 'light' ? saved.theme : 'system',
+      interfaceFont: saved.interfaceFont === 'serif' ? 'serif' : 'system',
+      codeFont: typeof saved.codeFont === 'string' ? saved.codeFont : '',
+      textSize:
+        saved.textSize === 'small' || saved.textSize === 'large' ? saved.textSize : 'medium',
+      transcriptWidth:
+        saved.transcriptWidth === 'narrow' || saved.transcriptWidth === 'wide'
+          ? saved.transcriptWidth
+          : 'medium',
+      quota: readQuotaLimits(saved.quota),
       stats: {
         enabled: saved.stats?.enabled === true,
         summary: Object.fromEntries(

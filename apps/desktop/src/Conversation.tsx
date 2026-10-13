@@ -1,4 +1,5 @@
 import {
+  createContext,
   lazy,
   Suspense,
   useContext,
@@ -20,7 +21,6 @@ import {
   LoaderCircle,
   MessageSquare,
   Pencil,
-  Plus,
   Search,
   SquareTerminal,
   Wrench,
@@ -34,13 +34,22 @@ import QuestionCard, { questionsOf } from './QuestionCard.tsx';
 import { conversation } from './transcript.ts';
 import type { TranscriptItem, Turn, Work } from './transcript.ts';
 import { CopyButton, copyText } from './copy.tsx';
+import { AttachmentCards, useMessageAttachments } from './AttachmentCards.tsx';
+import { splitUserMessage } from './attachments.ts';
 import { messageTime } from './messageTime.ts';
 import TurnStats from './TurnStats.tsx';
 import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
 import { IconButton, Menu } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
+import { countChanges, parseEditInput } from './edit-input.ts';
+import { documentKind, OpenDocument } from './file-preview.ts';
+import type { ProxyClient } from './client.ts';
+import WelcomeHero from './WelcomeHero.tsx';
+
+const CodeDiff = lazy(() => import('./CodeDiff.tsx'));
 
 const RichText = lazy(() => import('./RichText.tsx'));
+const ExpandFiles = createContext(0);
 const Rich = ({ text }: { text: string }) => (
   <Suspense fallback={<p>{text}</p>}>
     <RichText text={text} />
@@ -72,15 +81,19 @@ const icons: Record<Category, typeof Wrench> = {
 function Fold({
   className,
   forced = false,
+  initialOpen = false,
   summary,
   children,
 }: {
   className: string;
   forced?: boolean;
+  initialOpen?: boolean;
   summary: React.ReactNode;
   children: () => React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
+  const expandFiles = useContext(ExpandFiles);
+  useEffect(() => { if (expandFiles) setOpen(true); }, [expandFiles]);
   const searching = useContext(SearchExpanded);
   const shown = open || forced || searching;
   return (
@@ -100,11 +113,13 @@ function Fold({
 }
 
 function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Live }) {
+  const openDocument = useContext(OpenDocument);
   const { category, verb, subject, added, removed, running, failed } = describe(tool, active);
   const Icon = icons[category];
   const approval = live.canApprove(tool);
   // A question Claude asks is answered, not allowed or denied.
   const questions = tool.name === 'AskUserQuestion' ? questionsOf(tool.input) : null;
+  const editInput = category === 'edit' ? parseEditInput(tool.name, tool.input) : null;
   if (approval && questions)
     return (
       <QuestionCard
@@ -118,13 +133,32 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
     <Fold
       className={`tool ${failed ? 'failed' : ''}`}
       forced={approval}
+      initialOpen={category === 'edit'}
       summary={
         <span className="tool-heading">
           {running ? <LoaderCircle className="spinning" /> : <Icon />}
           <span className="tool-verb">{verb}</span>
-          <span className="tool-subject" title={subject}>
-            {subject}
-          </span>
+          {editInput && documentKind(editInput.path) ? (
+            <button
+              type="button"
+              className="tool-subject"
+              title={`${editInput.path}\n在右侧预览`}
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                openDocument({
+                  path: editInput.path,
+                  fallback: editInput.changes.map((change) => change.newText).join('\n'),
+                });
+              }}
+            >
+              {subject}
+            </button>
+          ) : (
+            <span className="tool-subject" title={subject}>
+              {subject}
+            </span>
+          )}
           {(added > 0 || removed > 0) && (
             <span className="tool-diff">
               <ins>+{added}</ins>
@@ -142,10 +176,24 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
     >
       {() => (
         <div className="tool-detail">
-          <CopyButton text={tool.input} label="复制工具输入" />
-          <pre className="tool-input" data-search-content>
-            {tool.input}
-          </pre>
+          {editInput ? (
+            <Suspense
+              fallback={
+                <pre data-search-content>
+                  {editInput.changes.map((change) => change.newText).join('\n')}
+                </pre>
+              }
+            >
+              <CodeDiff input={editInput} />
+            </Suspense>
+          ) : (
+            <>
+              <CopyButton text={tool.input} label="复制工具输入" />
+              <pre className="tool-input" data-search-content>
+                {tool.input}
+              </pre>
+            </>
+          )}
           {tool.liveOutput && !tool.output && (
             <pre className="tool-output" data-search-content>
               {tool.liveOutput}
@@ -242,6 +290,51 @@ function WorkGroup({
   );
 }
 
+function UserMessage({ item, edit }: { item: Text; edit?: (item: Text) => void }) {
+  const time = messageTime(item.at);
+  const stored = useMessageAttachments(item.id);
+  const { bodyText, attachments } = splitUserMessage(item.text, stored);
+  const showAttachments = !!window.desktop && attachments.length > 0;
+  const visibleText = showAttachments ? bodyText : item.text;
+
+  return (
+    <article className="message user">
+      <div className="user-message-container">
+        {showAttachments && <AttachmentCards items={attachments} stored />}
+        {visibleText && (
+          <div className="user-message-bubble" data-search-content data-copy-text={item.text}>
+            <p>{visibleText}</p>
+          </div>
+        )}
+        <div
+          className="message-toolbar user-toolbar"
+          data-search-content={!visibleText ? true : undefined}
+          data-copy-text={!visibleText ? item.text : undefined}
+        >
+          {time && (
+            <time className="message-time" dateTime={item.at} title={time.full}>
+              {time.short}
+            </time>
+          )}
+          {item.delivery && <span className="message-delivery">{item.delivery}</span>}
+          {edit && (
+            <button
+              type="button"
+              className="message-action"
+              aria-label="编辑重发"
+              title="编辑重发：从这条消息之前分叉出新会话，原会话保留"
+              onClick={() => edit(item)}
+            >
+              <Pencil />
+            </button>
+          )}
+          <CopyButton text={item.text} label="复制" />
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function Message({
   item,
   native,
@@ -251,39 +344,65 @@ function Message({
   native: boolean;
   edit?: (item: Text) => void;
 }) {
+  if (item.kind === 'user') {
+    return <UserMessage item={item} edit={edit} />;
+  }
+
   const time = messageTime(item.at);
+
   return (
     <article className={`message ${item.kind}`}>
-      <div className="message-label">
-        {edit && (
-          <button
-            type="button"
-            className="message-action"
-            aria-label="编辑重发"
-            title="编辑重发：从这条消息之前分叉出新会话，原会话保留"
-            onClick={() => edit(item)}
-          >
-            <Pencil />
-          </button>
-        )}
-        {item.kind === 'user' ? '你' : native ? 'Claude Code' : 'CC Desk Tunnel'}
-        {item.kind === 'assistant' && !native && <span>模拟</span>}
-        {item.kind === 'user' && item.delivery && <span>{item.delivery}</span>}
+      <div className="message-content" data-search-content data-copy-text={item.text}>
+        {item.kind === 'thinking' ? <p>{item.text}</p> : <Rich text={item.text} />}
+      </div>
+      <div className="message-toolbar assistant-toolbar">
+        {item.kind === 'assistant' && !native && <span className="chip quiet">模拟</span>}
         {time && (
           <time className="message-time" dateTime={item.at} title={time.full}>
             {time.short}
           </time>
         )}
-        <CopyButton text={item.text} />
-      </div>
-      <div className="message-content" data-search-content data-copy-text={item.text}>
-        {item.kind === 'user' ? <p>{item.text}</p> : <Rich text={item.text} />}
+        <CopyButton text={item.text} label="复制" />
       </div>
     </article>
   );
 }
 
 function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: Live }) {
+  const [jump, setJump] = useState({ path: '', request: 0 });
+  const root = useRef<HTMLDivElement>(null);
+  const openDocument = useContext(OpenDocument);
+  const files = new Map<string, { added: number; removed: number; fallback: string }>();
+  for (const step of turn.steps) {
+    if (step.kind !== 'work') continue;
+    for (const tool of step.items) {
+      if (tool.kind !== 'tool') continue;
+      const parsed = parseEditInput(tool.name, tool.input);
+      if (!parsed) continue;
+      const count = countChanges(parsed);
+      const previous = files.get(parsed.path);
+      const written = parsed.changes.map((change) => change.newText).filter(Boolean).join('\n');
+      files.set(parsed.path, {
+        added: count.added + (previous?.added ?? 0),
+        removed: count.removed + (previous?.removed ?? 0),
+        fallback: written || previous?.fallback || '',
+      });
+    }
+  }
+  useEffect(() => {
+    const host = root.current;
+    if (!host || !jump.path) return;
+    const locate = () => {
+      const panel = [...host.querySelectorAll<HTMLElement>('[data-file-path]')].find((el) => el.dataset.filePath === jump.path);
+      if (!panel) return false;
+      panel.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return true;
+    };
+    if (locate()) return;
+    const observer = new MutationObserver(() => { if (locate()) observer.disconnect(); });
+    observer.observe(host, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [jump]);
   const active = !turn.endedAt;
   const notes = turn.steps.filter((step) => step.kind === 'assistant').length;
   const steps = () =>
@@ -301,7 +420,7 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
       ),
     );
   return (
-    <>
+    <ExpandFiles.Provider value={jump.request}><div ref={root} className="conversation-turn">
       {turn.question?.continued ? (
         <div className="run-notice" role="status">
           {turn.question.text}
@@ -332,6 +451,26 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
             </Fold>
           )}
       {turn.answer && <Message item={turn.answer} native={native} />}
+      {files.size > 0 && (
+        <div className="changed-files" aria-label="本轮文件改动">
+          <span>本轮文件改动</span>
+          {[...files].map(([path, count]) => (
+            <button
+              type="button"
+              key={path}
+              title={documentKind(path) ? `${path}\n在右侧预览` : path}
+              onClick={() => {
+                setJump((current) => ({ path, request: current.request + 1 }));
+                if (documentKind(path)) openDocument({ path, fallback: count.fallback });
+              }}
+            >
+              <span>{path}</span>
+              <ins>+{count.added}</ins>
+              <del>−{count.removed}</del>
+            </button>
+          ))}
+        </div>
+      )}
       {turn.stats && <TurnStats stats={turn.stats} />}
       {turn.notices.map((item) => (
         <div
@@ -343,7 +482,7 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
           {item.text}
         </div>
       ))}
-    </>
+    </div></ExpandFiles.Provider>
   );
 }
 
@@ -362,6 +501,9 @@ export default function Conversation({
   stop,
   edit,
   findRequest,
+  client,
+  accountName = '',
+  allSessions = [],
 }: {
   session: Session | undefined;
   events: SessionEvent[];
@@ -373,6 +515,9 @@ export default function Conversation({
   newSession: () => void;
   loadEarlier: () => Promise<void>;
   findRequest: number;
+  client?: ProxyClient;
+  accountName?: string;
+  allSessions?: Session[];
   // Ends one background task of the run, or the run with all of them.
   stopTask: (taskId: string) => void;
   stop: () => void;
@@ -561,19 +706,7 @@ export default function Conversation({
         }}
       >
         {!session ? (
-          <div className="empty-state">
-            <MessageSquare />
-            <h2>新会话</h2>
-            <button
-              type="button"
-              className="button primary"
-              disabled={!connected}
-              onClick={newSession}
-            >
-              <Plus />
-              新建会话
-            </button>
-          </div>
+          <WelcomeHero connected={connected} onNewSession={newSession} />
         ) : (
           <div className="transcript" ref={transcriptRoot}>
             {loadError && (
@@ -598,11 +731,10 @@ export default function Conversation({
               </div>
             )}
             {turns.length === 0 && !history?.loading && (
-              <div className="empty-state">
-                <MessageSquare />
-                <h2>{session.title}</h2>
-                <span className="empty-project">{session.projectPath}</span>
-              </div>
+              <WelcomeHero
+                sessionTitle={session.title}
+                projectPath={session.projectPath}
+              />
             )}
             {turns.map((turn) => (
               <TurnView key={turn.id} turn={turn} native={native} live={live} />

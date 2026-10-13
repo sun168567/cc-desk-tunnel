@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Attachment } from './attachments.ts';
 
 // Unsent text is the user's work: it is kept per session and written to disk shortly after every edit,
 // so switching sessions, closing the window or a crash does not lose it.
-export type Drafts = Record<string, string>;
+export type Draft = { text: string; attachments: Attachment[] };
+export type Drafts = Record<string, Draft>;
 const storageKey = 'proxy-drafts';
 const delay = 300;
 
 function clean(value: unknown): Drafts {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => {
-      return typeof entry[1] === 'string' && entry[1] !== '';
+    Object.entries(value).flatMap(([id, raw]) => {
+      const draft = typeof raw === 'string' ? { text: raw, attachments: [] } : raw;
+      if (!draft || typeof draft !== 'object' || typeof draft.text !== 'string') return [];
+      const attachments = Array.isArray(draft.attachments) ? draft.attachments.filter((item: Attachment) => item && typeof item.path === 'string').slice(0, 40).map((item: Attachment) => ({ path: item.path })) : [];
+      return draft.text || attachments.length ? [[id, { text: draft.text, attachments }]] : [];
     }),
   );
 }
@@ -65,7 +70,7 @@ export function useDrafts() {
     };
   }, [change, flush]);
   const setDraft = useCallback(
-    (sessionId: string, text: string) => change((current) => ({ ...current, [sessionId]: text })),
+    (sessionId: string, value: string | Draft | ((previous: Draft) => Draft)) => change((current) => ({ ...current, [sessionId]: typeof value === 'function' ? value(current[sessionId] ?? { text: '', attachments: [] }) : typeof value === 'string' ? { text: value, attachments: current[sessionId]?.attachments ?? [] } : value })),
     [change],
   );
   return [drafts, setDraft] as const;
