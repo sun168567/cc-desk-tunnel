@@ -105,6 +105,7 @@ export default function Composer({
   nativeSession,
   metrics,
   quota,
+  openAccount,
   send,
   resume,
   compact,
@@ -137,8 +138,9 @@ export default function Composer({
   capabilities: NativeCapabilities | null;
   nativeSession: NativeSession | null;
   metrics: NativeMetrics | null;
-  // Set while the 5-hour window is at the reminder line, or past the line that pauses sending.
+  // Set while a quota window is at the reminder line, or past the line that pauses sending.
   quota: { level: 'warn' | 'stop'; text: string } | null;
+  openAccount: () => void;
   send: () => void;
   // Present when the session's last turn was stopped or cut off: takes it up again without a message.
   resume?: () => void;
@@ -157,7 +159,9 @@ export default function Composer({
   const [matches, setMatches] = useState<string[]>([]);
   const [matchIndex, setMatchIndex] = useState(0);
   const matchList = useRef<HTMLDivElement>(null);
-  const [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(null);
+  const [mention, setMention] = useState<{ start: number; end: number; query: string } | null>(
+    null,
+  );
   useEffect(() => {
     setMention(null);
     setMatches([]);
@@ -170,7 +174,8 @@ export default function Composer({
     let current = true;
     const timer = setTimeout(
       () =>
-        void window.desktop!.searchFiles(session.projectPath, mention.query)
+        void window
+          .desktop!.searchFiles(session.projectPath, mention.query)
           .then((items) => {
             if (current) setMatches(items);
           })
@@ -194,7 +199,8 @@ export default function Composer({
     const top = selected.offsetTop;
     const bottom = top + selected.offsetHeight;
     if (top < list.scrollTop) list.scrollTop = top;
-    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+    else if (bottom > list.scrollTop + list.clientHeight)
+      list.scrollTop = bottom - list.clientHeight;
   }, [matchIndex, matches]);
   useLayoutEffect(() => {
     // Grow with the draft; the stylesheet's max-height decides when scrolling takes over.
@@ -206,8 +212,13 @@ export default function Composer({
   // the same way it reads the project.
   function attach(paths: string[], text?: string) {
     if (!paths.length) return;
-    const unique = [...new Set([...latestAttachments.current.map((item) => item.path), ...paths])].slice(0, 40);
-    setAttachments(unique.map((path) => ({ path })), text);
+    const unique = [
+      ...new Set([...latestAttachments.current.map((item) => item.path), ...paths]),
+    ].slice(0, 40);
+    setAttachments(
+      unique.map((path) => ({ path })),
+      text,
+    );
     input.current?.focus();
   }
   const latestAttachments = useRef(attachments);
@@ -307,7 +318,10 @@ export default function Composer({
         )}
       </div>
       {quota && (
-        <p className={`quota-notice ${quota.level}`} role={quota.level === 'stop' ? 'alert' : 'status'}>
+        <p
+          className={`quota-notice ${quota.level}`}
+          role={quota.level === 'stop' ? 'alert' : 'status'}
+        >
           {quota.text}
         </p>
       )}
@@ -374,7 +388,11 @@ export default function Composer({
               setSlashOpen(native && slashDraft.test(event.target.value));
               const before = event.target.value.slice(0, event.target.selectionStart);
               const match = /(?:^|\s)@([^\s@]*)$/.exec(before);
-              setMention(match ? { start: before.lastIndexOf('@'), end: before.length, query: match[1] } : null);
+              setMention(
+                match
+                  ? { start: before.lastIndexOf('@'), end: before.length, query: match[1] }
+                  : null,
+              );
             }}
             onPaste={(event) => {
               // Pasted text is left to the browser, also when a program put a picture of it beside the text.
@@ -396,7 +414,11 @@ export default function Composer({
                 setSlashOpen(false);
                 return;
               }
-              if (mention && matches.length > 0 && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+              if (
+                mention &&
+                matches.length > 0 &&
+                (event.key === 'ArrowDown' || event.key === 'ArrowUp')
+              ) {
                 event.preventDefault();
                 const direction = event.key === 'ArrowDown' ? 1 : -1;
                 setMatchIndex((current) => (current + direction + matches.length) % matches.length);
@@ -435,7 +457,11 @@ export default function Composer({
                   className="icon-button send-button"
                   aria-label="发送消息"
                   title={quota?.level === 'stop' ? quota.text : '发送消息'}
-                  disabled={(!draft.trim() && !attachments.length) || inputDisabled || quota?.level === 'stop'}
+                  disabled={
+                    (!draft.trim() && !attachments.length) ||
+                    inputDisabled ||
+                    quota?.level === 'stop'
+                  }
                 >
                   <CornerDownLeft />
                 </button>
@@ -485,6 +511,7 @@ export default function Composer({
               capabilities={capabilities}
               nativeSession={nativeSession}
               metrics={metrics}
+              openAccount={openAccount}
               disabled={controlsDisabled}
               configure={configure}
               refresh={refresh}

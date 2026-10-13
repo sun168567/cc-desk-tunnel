@@ -40,7 +40,19 @@ let bridge;
 // The last connection, kept for its installer download after a service refused this client's version.
 let lastBridge;
 let connectionGeneration = 0;
-const ownsInstance = app.requestSingleInstanceLock();
+const connections = require('./connections.cjs');
+// See connections.cjs. The profile is chosen before anything is read from it, the instance lock included:
+// each connection is then a single instance of its own.
+const base = app.getPath('userData');
+const connectionId = connections.requested(process.argv, base);
+if (connectionId) {
+  app.setPath('userData', connections.directory(base, connectionId));
+  app.setPath('sessionData', connections.directory(base, connectionId));
+}
+// `--quit-connection` asks a connection's window to go the way the user's own "退出" does. Where that
+// connection has no window, there is nothing to do.
+const leaving = process.argv.includes('--quit-connection');
+const ownsInstance = app.requestSingleInstanceLock({ leaving }) && !leaving;
 if (!ownsInstance) app.quit();
 function showWindow() {
   const window = BrowserWindow.getAllWindows()[0];
@@ -49,24 +61,31 @@ function showWindow() {
   window.show();
   window.focus();
 }
-app.on('second-instance', showWindow);
+app.on('second-instance', (_event, _argv, _directory, asked) =>
+  asked?.leaving ? app.quit() : showWindow(),
+);
 // macOS: a click on the Dock icon while the window is hidden.
 app.on('activate', showWindow);
 
 // Window preferences and the optional saved sign-in live in the user's profile, outside the install directory.
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
-function readSettings() {
+function readSettings(file = settingsPath()) {
   try {
-    return JSON.parse(readFileSync(settingsPath(), 'utf8'));
+    return JSON.parse(readFileSync(file, 'utf8'));
   } catch {
     return {};
   }
 }
-function writeSettings(values) {
-  const settings = { ...readSettings(), ...values };
-  writeFileSync(settingsPath(), JSON.stringify(settings, null, 2));
+function writeSettings(values, file = settingsPath()) {
+  const settings = { ...readSettings(file), ...values };
+  writeFileSync(file, JSON.stringify(settings, null, 2));
   return settings;
 }
+// What is the computer's and not a connection's stays with the first connection's settings, where it was
+// before there were several: which computer this is, the folders of plain sessions, how the window closes.
+const computerPath = path.join(base, 'settings.json');
+const readComputer = () => readSettings(computerPath);
+const writeComputer = (values) => writeSettings(values, computerPath);
 
 // See client-log.cjs. Opened on first use, once the profile directory is known.
 let record;
@@ -107,6 +126,17 @@ handle('project:spelling', (_event, written) => asOnDisk(String(written)));
 handle('attachment:preview', (_event, file) => previewFile(file));
 handle('file:read-text', (_event, file) => readTextFile(file));
 handle('attachment:search', (_event, directory, query) => searchFiles(directory, query));
+// Which of these folders are on this computer: a session that names no computer is here when its folder is.
+handle('folders:exist', (_event, folders) =>
+  Promise.all(
+    (Array.isArray(folders) ? folders : []).slice(0, 500).map((folder) =>
+      stat(String(folder)).then(
+        (found) => found.isDirectory(),
+        () => false,
+      ),
+    ),
+  ),
+);
 // Files the user wants to mention in a message: only their paths go to the page.
 handle('files:choose', async (event) => {
   const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
@@ -160,7 +190,8 @@ handle('folder:open', async (_event, directory) => {
   if (failure) throw new Error(failure);
 });
 handle('changed-file:open', async (_event, file, reveal) => {
-  if (typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0')) throw new Error('文件路径无效。');
+  if (typeof file !== 'string' || !path.isAbsolute(file) || file.includes('\0'))
+    throw new Error('文件路径无效。');
   const target = path.resolve(file);
   if (!(await stat(target)).isFile()) throw new Error('不是文件。');
   if (reveal === true) shell.showItemInFolder(target);
@@ -200,7 +231,7 @@ handle('external:open', async (event, target) => {
 // sessions without a project.
 const defaultRoot = () => path.join(app.getPath('documents'), 'CC Desk Tunnel');
 function workspaceRoots() {
-  const saved = readSettings().workspaceRoots;
+  const saved = readComputer().workspaceRoots;
   const roots = [...(Array.isArray(saved) ? saved : []), defaultRoot()].filter(
     (root) => typeof root === 'string' && root,
   );
@@ -221,7 +252,7 @@ handle('workspace:choose', async (event, reset) => {
     if (result.canceled || !result.filePaths[0]) return workspaceRoots();
     chosen = result.filePaths[0];
   }
-  writeSettings({ workspaceRoots: [chosen, ...workspaceRoots()] });
+  writeComputer({ workspaceRoots: [chosen, ...workspaceRoots()] });
   return workspaceRoots();
 });
 handle('workspace:create', async (event) => {
@@ -388,7 +419,9 @@ function writeAttachmentIndex(index) {
 }
 function rememberAttachment(sessionId, messageId) {
   const index = readAttachmentIndex();
-  const list = Array.isArray(index[sessionId]) ? index[sessionId].filter((id) => recordId.test(id)) : [];
+  const list = Array.isArray(index[sessionId])
+    ? index[sessionId].filter((id) => recordId.test(id))
+    : [];
   if (!list.includes(messageId)) list.push(messageId);
   index[sessionId] = list;
   writeAttachmentIndex(index);
@@ -418,7 +451,10 @@ function previewOf(value) {
 function attachmentsOf(value) {
   if (!Array.isArray(value)) return [];
   return value
-    .filter((item) => item && typeof item.path === 'string' && item.path.length > 0 && item.path.length < 4000)
+    .filter(
+      (item) =>
+        item && typeof item.path === 'string' && item.path.length > 0 && item.path.length < 4000,
+    )
     .slice(0, 40)
     .map((item) => {
       const preview = previewOf(item.preview);
@@ -453,7 +489,9 @@ handle('attachments:delete-session', async (_event, sessionId) => {
   if (!existsSync(dir)) return;
   const index = readAttachmentIndex();
   const list = Array.isArray(index[id]) ? index[id].filter((item) => recordId.test(item)) : [];
-  await Promise.all(list.map((messageId) => unlink(path.join(dir, `${messageId}.json`)).catch(() => {})));
+  await Promise.all(
+    list.map((messageId) => unlink(path.join(dir, `${messageId}.json`)).catch(() => {})),
+  );
   delete index[id];
   writeAttachmentIndex(index);
 });
@@ -491,16 +529,137 @@ handle('schedules:save', (_event, text) => {
   replaceFile(schedulesPath(), schedules);
 });
 handle('app:version', () => app.getVersion());
+// The notes of a release as its page on GitHub has them, for a version newer than this program, whose notes
+// it cannot carry itself.
+handle('release:notes', async (_event, version) => {
+  if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw new Error('Unexpected version');
+  const response = await net.fetch(
+    `https://api.github.com/repos/sun168567/cc-desk-tunnel/releases/tags/v${version}`,
+    { headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000) },
+  );
+  if (!response.ok) throw new Error(`GitHub ${response.status}`);
+  return String((await response.json()).body ?? '').slice(0, 100_000);
+});
 // Which of the user's computers this is to the service: an ID made once and kept, under the computer's name.
 handle('device:get', () => ({
-  id: readSettings().deviceId ?? writeSettings({ deviceId: randomUUID() }).deviceId,
+  id: readComputer().deviceId ?? writeComputer({ deviceId: randomUUID() }).deviceId,
   name: hostname(),
 }));
-handle('app:quit', () => app.quit());
+// A connection is named in its window, on its tray icon and in its notifications once there are several.
+function label() {
+  const entries = connections.list(base);
+  return entries.length > 1 ? (entries.find((entry) => entry.id === connectionId)?.name ?? '') : '';
+}
+const titled = () => (label() ? `CC Desk Tunnel · ${label()}` : 'CC Desk Tunnel');
+const others = () => connections.list(base).filter((entry) => entry.id !== connectionId);
+const listed = () =>
+  connections.list(base).map((entry) => ({
+    ...entry,
+    current: entry.id === connectionId,
+    open: entry.id === connectionId || connections.running(base, entry.id),
+  }));
+// Starts a connection's process. One that is open already shows its window instead: see `second-instance`.
+function launch(id, ...flags) {
+  spawn(
+    process.execPath,
+    [
+      ...(app.isPackaged ? [] : [app.getAppPath()]),
+      ...process.argv.filter(
+        (item) =>
+          item.startsWith('--user-data-dir=') || item === '--smoke-test' || item === '--no-sandbox',
+      ),
+      ...(id ? [`--connection=${id}`] : []),
+      ...flags,
+    ],
+    { detached: true, stdio: 'ignore' },
+  ).unref();
+}
+function dismissOthers() {
+  for (const entry of others())
+    if (connections.running(base, entry.id)) launch(entry.id, '--quit-connection');
+}
+// The page's choices that are the computer's (see prefs.ts) and the list of connections, as last read. Every
+// connection's window looks at the files every two seconds and takes what another one wrote.
+const sharedKeys = ['prefs', 'projects'];
+const snapshot = (key) =>
+  key === 'connections'
+    ? connections.list(base)
+    : key === 'busy'
+      ? connections.busy(base, connectionId)
+      : connections.readShared(base, key);
+const seen = Object.fromEntries(
+  [...sharedKeys, 'connections', 'busy'].map((key) => [key, JSON.stringify(snapshot(key))]),
+);
+let renamed = () => {};
+function takeShared() {
+  for (const key of Object.keys(seen)) {
+    const value = snapshot(key);
+    const text = JSON.stringify(value);
+    if (text === seen[key]) continue;
+    seen[key] = text;
+    if (key === 'connections') renamed();
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send('shared:changed', key, value);
+  }
+}
+// What the page needs before it draws anything.
+ipcMain.on('boot', (event) => {
+  event.returnValue = event.senderFrame.url.startsWith('file://')
+    ? {
+        connection: connectionId,
+        shared: Object.fromEntries(Object.keys(seen).map((key) => [key, snapshot(key)])),
+      }
+    : null;
+});
+handle('shared:save', (_event, key, value) => {
+  if (!sharedKeys.includes(key)) throw new Error('Unexpected shared value');
+  const text = JSON.stringify(value);
+  if (text === seen[key]) return;
+  if (text.length > 1 << 20) throw new Error('Shared value too large');
+  connections.writeShared(base, key, value);
+  seen[key] = text;
+});
+// The sessions this connection has running, with their folders: see `busy` in connections.cjs.
+handle('busy:set', (_event, runs) => {
+  connections.mark(
+    base,
+    connectionId,
+    true,
+    (Array.isArray(runs) ? runs : [])
+      .slice(0, 200)
+      .map((run) => ({ id: String(run?.id), folder: String(run?.folder) })),
+  );
+});
+handle('connections:list', listed);
+handle('connections:create', (_event, name) => {
+  launch(connections.create(base, name).id);
+  takeShared();
+  return listed();
+});
+handle('connections:open', (_event, id) => {
+  if (!connections.list(base).some((entry) => entry.id === id))
+    throw new Error('这个连接已不存在。');
+  launch(id);
+});
+handle('connections:rename', (_event, id, name) => {
+  connections.rename(base, String(id), name);
+  takeShared();
+  return listed();
+});
+handle('connections:remove', (_event, id) => {
+  if (id === connectionId) throw new Error('不能删除正在使用的连接。');
+  connections.remove(base, String(id));
+  takeShared();
+  return listed();
+});
+handle('app:quit', (_event, all) => {
+  if (all === true) dismissOthers();
+  app.quit();
+});
 let refreshTray = () => {};
-handle('window:settings', () => ({ closeToTray: readSettings().closeToTray !== false }));
+handle('window:settings', () => ({ closeToTray: readComputer().closeToTray !== false }));
 handle('window:settings:set', (_event, values) => {
-  writeSettings({ closeToTray: values?.closeToTray !== false });
+  writeComputer({ closeToTray: values?.closeToTray !== false });
   refreshTray();
 });
 handle('window:theme', (event, mode) => {
@@ -523,7 +682,7 @@ handle('notify:show', (event, notice) => {
   const inFront = window.isVisible() && window.isFocused() && !window.isMinimized();
   if (inFront && notice?.always !== true) return;
   const toast = new Notification({
-    title: String(notice?.title ?? '').slice(0, 80),
+    title: `${label() ? `${label()} · ` : ''}${String(notice?.title ?? '')}`.slice(0, 80),
     body: String(notice?.body ?? '').slice(0, 300),
     silent: notice?.silent === true,
     icon: path.join(__dirname, 'icon.png'),
@@ -573,6 +732,16 @@ handle('update:install', async (event, version) => {
       },
     });
   }
+  // The installer replaces the program under every connection's window, so the others go first.
+  dismissOthers();
+  for (
+    let waited = 0;
+    others().some((entry) => connections.running(base, entry.id));
+    waited += 250
+  ) {
+    if (waited >= 15000) throw new Error('其他连接的窗口没有退出，请先退出它们再升级。');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
   spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
   app.quit();
 });
@@ -588,9 +757,11 @@ ipcMain.handle('proxy:disconnect', async () => {
 if (process.platform === 'win32')
   app.setAppUserModelId(app.isPackaged ? 'io.github.ccdesktunnel.desktop' : process.execPath);
 app.whenReady().then(() => {
-  log(`Client ${app.getVersion()} started.`);
-  void clearPastedPictures();
   if (!ownsInstance) return;
+  log(`Client ${app.getVersion()} started${connectionId ? ` as connection ${connectionId}` : ''}.`);
+  void clearPastedPictures();
+  connections.mark(base, connectionId, true);
+  setInterval(takeShared, 2000);
   // Shortcuts are the page's, where the user can change them or turn them off; Electron's default menu would
   // add its own on top (zoom, reload, close). A run from source keeps reload and the developer tools.
   // macOS has one menu bar for every program and takes the keys of copying, pasting, hiding and quitting from
@@ -641,7 +812,7 @@ app.whenReady().then(() => {
     minWidth: 380,
     minHeight: 560,
     backgroundColor: '#f6f5f2',
-    title: 'CC Desk Tunnel',
+    title: titled(),
     // The page draws the title bar; the system adds only its window buttons: over the bar's right end on
     // Windows, at its left end on macOS, where the page leaves them room (see `.titlebar` in style.css).
     titleBarStyle: 'hidden',
@@ -680,7 +851,7 @@ app.whenReady().then(() => {
   window.loadFile(path.join(__dirname, '../dist/index.html'));
 
   // Long tasks keep running with the window closed: closing hides it, and the tray icon brings it back or quits.
-  const closeToTray = () => readSettings().closeToTray !== false;
+  const closeToTray = () => readComputer().closeToTray !== false;
   // The macOS menu bar takes a small shape in one colour, which it tints itself for light and dark.
   const tray = new Tray(
     process.platform === 'darwin'
@@ -693,29 +864,50 @@ app.whenReady().then(() => {
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: '显示窗口', click: showWindow },
+        ...others().map((entry) => ({
+          label: `打开“${entry.name}”`,
+          click: () => launch(entry.id),
+        })),
         {
           label: '关闭窗口时留在后台',
           type: 'checkbox',
           checked: closeToTray(),
           click: (item) => {
-            writeSettings({ closeToTray: item.checked });
+            writeComputer({ closeToTray: item.checked });
             buildMenu();
           },
         },
         { type: 'separator' },
         { label: '退出', click: () => app.quit() },
+        ...(others().length
+          ? [
+              {
+                label: '退出全部连接',
+                click: () => {
+                  dismissOthers();
+                  app.quit();
+                },
+              },
+            ]
+          : []),
       ]),
     );
-  tray.setToolTip('CC Desk Tunnel');
   tray.on('click', showWindow);
-  buildMenu();
+  // The page has a title of its own, which would replace the connection's name.
+  window.on('page-title-updated', (event) => event.preventDefault());
+  renamed = () => {
+    window.setTitle(titled());
+    tray.setToolTip(titled());
+    buildMenu();
+  };
+  renamed();
   refreshTray = buildMenu;
   window.on('close', (event) => {
     if (quitting || !closeToTray()) return;
     event.preventDefault();
     window.hide();
-    if (!readSettings().trayHintShown) {
-      writeSettings({ trayHintShown: true });
+    if (!readComputer().trayHintShown) {
+      writeComputer({ trayHintShown: true });
       // Balloons are a thing of the Windows tray.
       if (process.platform === 'win32')
         tray.displayBalloon({
@@ -735,3 +927,6 @@ app.on('before-quit', (event) => {
   bridge.close().finally(() => app.quit());
 });
 app.on('window-all-closed', () => app.quit());
+app.on('quit', () => {
+  if (ownsInstance) connections.mark(base, connectionId, false);
+});

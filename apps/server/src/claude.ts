@@ -236,10 +236,31 @@ export async function runClaude(
     let idle = false;
     let told = false;
     let turnStartedAt = Date.now();
+    // What each background task last said of itself, and when it was passed on.
+    const progress = new Map<string, { said: string; at: number }>();
     for await (const message of session) {
+      if (message.type === 'system' && message.subtype === 'task_progress' && !run.signal.aborted) {
+        const tool = message.last_tool_name?.slice(0, 100);
+        const summary = message.summary?.slice(0, 300);
+        const said = `${tool}\n${summary}`;
+        const last = progress.get(message.task_id);
+        // A task reports every few moments; the same word again is passed on at most every two seconds.
+        if (!last || last.said !== said || Date.now() - last.at >= 2000) {
+          progress.set(message.task_id, { said, at: Date.now() });
+          run.emit({
+            type: 'native.progress',
+            taskId: message.task_id,
+            tool,
+            toolUses: message.usage.tool_uses,
+            summary,
+          });
+        }
+      }
       if (message.type === 'system' && message.subtype === 'background_tasks_changed') {
         const tasks = message.tasks.filter((task) => !task.ambient);
         background = tasks.length;
+        for (const id of progress.keys())
+          if (!tasks.some((task) => task.task_id === id)) progress.delete(id);
         if (!run.signal.aborted)
           run.emit({
             type: 'native.tasks',

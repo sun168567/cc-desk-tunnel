@@ -305,6 +305,14 @@ export function createProxyServer(options: ServerOptions) {
     record(run.sessionId, run.id, open);
   }
   function emit(run: Run, payload: EventPayload) {
+    // A background task's word of itself is for whoever is watching now.
+    if (payload.type === 'native.progress') {
+      broadcast(
+        { type: 'session.fragment', sessionId: run.sessionId, runId: run.id, payload },
+        run.sessionId,
+      );
+      return;
+    }
     if (isFragment(payload)) {
       if (run.open && !continues(run.open, payload)) settle(run);
       run.open = run.open ? { ...run.open, text: run.open.text + payload.text } : payload;

@@ -411,6 +411,19 @@ button.chip.danger:hover:not(:disabled) {
   font-size: 20px;
   white-space: nowrap;
 }
+.brand-connection {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.setting-name {
+  width: 150px;
+}
 .brand > svg {
   width: 24px;
   height: 24px;
@@ -648,6 +661,63 @@ html[data-platform='darwin'] .titlebar {
   border-radius: 50%;
   background: var(--warn);
 }
+/* A run that is alive breathes; one that waits for the user, or of which there is no word, rests. */
+.running-dot.breathing {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .running-dot.breathing,
+  .background-tasks li {
+    animation: none;
+  }
+}
+.quota-note {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.quota-note:hover {
+  background: var(--hover);
+  color: var(--muted);
+}
+.quota-note.warn {
+  color: var(--warn);
+}
+.quota-note.danger {
+  color: var(--danger);
+}
+@media (max-width: 700px) {
+  .quota-note {
+    display: none;
+  }
+}
+/* A version's notes are read, not answered: their dialog is wider than the ones that ask a question. */
+dialog:has(.release-notes) {
+  width: min(720px, calc(100vw - 32px));
+}
+.release-notes {
+  max-height: 62vh;
+  margin-bottom: 14px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+}
 .connection-dot.online {
   background: var(--ok);
 }
@@ -827,6 +897,24 @@ html[data-platform='darwin'] .titlebar {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+.elsewhere-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 2px 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.elsewhere-project > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.elsewhere-project > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .list-heading .icon-button {
   width: 22px;
@@ -2747,6 +2835,15 @@ button.code-diff-path {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-s);
   font-size: 13px;
+}
+.background-tasks li {
+  animation: appear 0.2s ease-out;
+}
+.background-tasks li small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .background-tasks li span {
   flex: 1;

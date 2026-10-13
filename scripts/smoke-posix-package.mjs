@@ -27,9 +27,14 @@ const env = Object.fromEntries(
   ),
 );
 env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+const args = [
+  ...process.argv.slice(3),
+  '--smoke-test',
+  `--user-data-dir=${join(directory, 'profile')}`,
+];
 const application = await _electron.launch({
   executablePath: executable,
-  args: [...process.argv.slice(3), '--smoke-test', `--user-data-dir=${join(directory, 'profile')}`],
+  args,
   cwd: directory,
   env,
   timeout: 30_000,
@@ -95,6 +100,32 @@ try {
       },
     },
   );
+  // A second connection is a process of its own: the packaged program has to start itself once more under
+  // another profile, tell that it runs, and go when a command line asks it to.
+  const { id } = (await page.evaluate(() => window.desktop.createConnection('另一个'))).find(
+    (entry) => entry.id,
+  );
+  const until = async (open) => {
+    for (let waited = 0; ; waited += 500) {
+      const listed = await page.evaluate(() => window.desktop.connections());
+      if (listed.find((entry) => entry.id === id).open === open) return;
+      assert.ok(waited < 30_000, `The second connection is ${open ? 'not open' : 'still open'}.`);
+      await delay(500);
+    }
+  };
+  const dismiss = () =>
+    execFileSync(executable, [...args, `--connection=${id}`, '--quit-connection'], {
+      cwd: directory,
+      env,
+      timeout: 30_000,
+    });
+  try {
+    await until(true);
+  } finally {
+    dismiss();
+  }
+  await until(false);
+  await page.evaluate((connection) => window.desktop.removeConnection(connection), id);
   assert.deepEqual(errors, []);
   // A picture of the window as the system draws it, for whoever reviews a build without a Mac at hand.
   if (process.env.SMOKE_SCREENSHOT) {
@@ -121,7 +152,9 @@ try {
       path: resolve(process.env.SMOKE_SCREENSHOT).replace(/\.png$/, '-page.png'),
     });
   }
-  console.log('PASS: the packaged client starts offline and its SSH service runs a script.');
+  console.log(
+    'PASS: the packaged client starts offline, its SSH service runs a script and a second connection opens.',
+  );
 } finally {
   await application.close();
   rmSync(directory, { recursive: true, force: true });

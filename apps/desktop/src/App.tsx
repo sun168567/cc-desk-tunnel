@@ -24,6 +24,7 @@ import {
   PinOff,
   Plus,
   RefreshCw,
+  ScrollText,
   Settings,
   SquareTerminal,
   Trash2,
@@ -54,6 +55,7 @@ import { OpenDocument, type DocumentPreview } from './file-preview.ts';
 import LoginPage from './LoginPage.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
 import { exportSession } from './exportSession.ts';
+import { onSharedChange, saveShared, shared, useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
 import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
 import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
@@ -78,6 +80,8 @@ import type { MenuItem, MenuPosition } from './ui.tsx';
 
 const NativeTerminal = lazy(() => import('./NativeTerminal.tsx'));
 const FileDrawer = lazy(() => import('./FileDrawer.tsx'));
+// The notes of every version so far are read only when asked for, and stay out of what the window starts with.
+const ReleaseNotes = lazy(() => import('./ReleaseNotes.tsx'));
 
 // The newest event of a kind is the session's current native state.
 function latest<T extends EventPayload['type']>(events: SessionEvent[], type: T) {
@@ -99,9 +103,10 @@ type OpenMenu = MenuPosition &
     | { kind: 'bar'; label: string }
   );
 const narrow = () => matchMedia('(max-width: 700px)').matches;
-function savedProjects(): string[] {
+// The computer's projects, which the windows of its connections share (see shared.ts).
+function savedProjects(value: unknown = shared('projects')): string[] {
   try {
-    const value = JSON.parse(localStorage.getItem('proxy-projects') ?? '[]');
+    value ??= JSON.parse(localStorage.getItem('proxy-projects') ?? '[]');
     return Array.isArray(value)
       ? value.filter((item): item is string => typeof item === 'string')
       : [];
@@ -113,6 +118,14 @@ function savedProjects(): string[] {
 // Owns the connection, the selection and every request; the components below render and report user intent.
 export function App() {
   const [client] = useState(() => new ProxyClient());
+  const [clock] = useState(() => ({ now: client.serviceNow, activityAt: client.activityAt }));
+  // The version whose notes are shown, over whichever page is up.
+  const [notes, setNotes] = useState<string | null>(null);
+  const notesDialog = notes && (
+    <Suspense fallback={null}>
+      <ReleaseNotes version={notes} onClose={() => setNotes(null)} />
+    </Suspense>
+  );
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [form, setForm] = useState<ConnectionForm>(() => ({
     url: localStorage.getItem('proxy-url') ?? 'ws://127.0.0.1:8787/ws',
@@ -214,6 +227,7 @@ export function App() {
 
   const nativeMode = state.adapter === 'claude-code';
   const connected = state.status === 'connected';
+  const othersBusy = useShared('busy');
   const selected = state.sessions.find((session) => session.id === state.selectedId);
   useEffect(() => {
     setPreview(null);
@@ -247,9 +261,59 @@ export function App() {
   };
   // What is listed and managed here is what is on this computer. Sessions on the user's other computers are
   // shown apart: they can be read, and taken over or forked into a directory here.
-  const sessions = state.sessions.filter((session) => isHere(session, state.device));
-  const elsewhere = state.sessions.filter((session) => !isHere(session, state.device));
-  const away = !!selected && !isHere(selected, state.device);
+  // Sessions from before computers were told apart name none, and would be listed on every one of the user's
+  // computers. Their folders are looked for here; a session whose folder is not here goes with the other
+  // computers' sessions, from where it can be taken over like any of them.
+  const [absent, setAbsent] = useState<ReadonlySet<string>>(new Set());
+  const unplaced = JSON.stringify(
+    [
+      ...new Set(
+        state.sessions.filter((session) => !session.device).map((session) => session.projectPath),
+      ),
+    ].sort(),
+  );
+  useEffect(() => {
+    const folders: string[] = JSON.parse(unplaced);
+    if (!window.desktop || !folders.length) return;
+    let current = true;
+    void window.desktop.foldersExist(folders).then((found) => {
+      if (current) setAbsent(new Set(folders.filter((_, index) => !found[index]).map(pathKey)));
+    });
+    return () => {
+      current = false;
+    };
+  }, [unplaced]);
+  const onThis = (session: Session) => isHere(session, state.device, absent);
+  const sessions = state.sessions.filter((session) => onThis(session));
+  const elsewhere = state.sessions.filter((session) => !onThis(session));
+  const away = !!selected && !onThis(selected);
+  // Two connections may have Claude working in one folder at once, each unaware of the other. A window tells
+  // the others what it has running, and says so when another's session works where the shown one does. A
+  // session this window lists too is the same service's and no other.
+  const running = JSON.stringify(
+    connected
+      ? sessions
+          .filter((session) => session.activeRun)
+          .map((session) => ({ id: session.id, folder: session.projectPath }))
+      : [],
+  );
+  useEffect(() => {
+    void window.desktop?.setBusy(JSON.parse(running));
+  }, [running]);
+  const overlaps = (one: string, other: string) =>
+    pathKey(one) === pathKey(other) || isInside(one, [other]) || isInside(other, [one]);
+  const beside =
+    selected && !away
+      ? othersBusy
+          .filter((entry) =>
+            entry.runs.some(
+              (run) =>
+                !state.sessions.some((session) => session.id === run.id) &&
+                overlaps(run.folder, selected.projectPath),
+            ),
+          )
+          .map((entry) => `“${entry.name}”`)
+      : [];
   const recorded = selected ? state.events[selected.id] : undefined;
   const unfinished = selected ? state.live[selected.id] : undefined;
   const events = useMemo(
@@ -273,8 +337,8 @@ export function App() {
       : (metrics ?? state.metrics);
   const canCompact = !!latest(events, 'native.context')?.persisted;
   const quotaView = useMemo(
-    () => quotaViewOf(prefs.quota, accountMetrics),
-    [prefs.quota, accountMetrics],
+    () => quotaViewOf(prefs.quotaLimits, accountMetrics),
+    [prefs.quotaLimits, accountMetrics],
   );
   // The banner stays while a line is crossed. Each window's system notification fires once per crossing,
   // and again only after that reading falls back under its reminder line.
@@ -296,7 +360,8 @@ export function App() {
     const fresh = quotaView.alerts.filter((alert) => !previous.includes(alert.key));
     if (fresh.length === 0 && previous.length === keys.length) return;
     localStorage.setItem(remindKey, JSON.stringify(keys));
-    if (fresh.length === 0 || (document.hasFocus() && document.visibilityState !== 'hidden')) return;
+    if (fresh.length === 0 || (document.hasFocus() && document.visibilityState !== 'hidden'))
+      return;
     void window.desktop?.notify({
       title: '额度提醒',
       body: fresh.map((alert) => alert.text).join(''),
@@ -315,7 +380,7 @@ export function App() {
     !!history?.loading ||
     !!terminalSessionId;
   // A run is that of the computer its session is on, whichever connection of it started the run.
-  const ownsRun = !!selected?.activeRun && isHere(selected, state.device);
+  const ownsRun = !!selected?.activeRun && onThis(selected);
   // A native run accepts follow-up messages from the computer it runs for.
   const inputDisabled =
     !connected ||
@@ -353,6 +418,12 @@ export function App() {
     version &&
     state.service &&
     isNewer(state.service, version)
+      ? state.service
+      : null;
+  // A service of a newer version: what that version changed can be read here, whether or not this system's
+  // client upgrades itself.
+  const ahead =
+    state.mismatch && version && state.service && isNewer(state.service, version)
       ? state.service
       : null;
   // How far an installer being fetched from the release page is, from 0 to 1.
@@ -485,7 +556,18 @@ export function App() {
   }, [connected]);
   useEffect(() => {
     localStorage.setItem('proxy-projects', JSON.stringify(projects));
+    saveShared('projects', projects);
   }, [projects]);
+  useEffect(
+    () =>
+      onSharedChange('projects', (value) => {
+        const next = savedProjects(value);
+        setProjects((current) =>
+          JSON.stringify(current) === JSON.stringify(next) ? current : next,
+        );
+      }),
+    [],
+  );
   // Each session's native state is read once when it is first shown idle.
   useEffect(() => {
     if (
@@ -756,7 +838,7 @@ export function App() {
   async function fork(session: Session, before?: { id: string; text: string }) {
     await act(async () => {
       // The copy of a session that is on another computer needs a directory on this one.
-      const projectPath = isHere(session, state.device) ? undefined : await placeHere(session);
+      const projectPath = onThis(session) ? undefined : await placeHere(session);
       if (projectPath === null) return;
       const response = await client.request({
         type: 'session.fork',
@@ -778,7 +860,12 @@ export function App() {
     });
   }
   async function send() {
-    if (!selected || (!draft.trim() && !attachments.length) || inputDisabled || quotaView.level === 'stop')
+    if (
+      !selected ||
+      (!draft.trim() && !attachments.length) ||
+      inputDisabled ||
+      quotaView.level === 'stop'
+    )
       return;
     const sessionId = selected.id;
     setSlashOpen(false);
@@ -883,7 +970,7 @@ export function App() {
         },
       },
       // A session on another computer is taken over first, with a directory here.
-      ...(isHere(session, state.device)
+      ...(onThis(session)
         ? [
             {
               label: '移到其他项目…',
@@ -991,7 +1078,7 @@ export function App() {
   // Every project the session could belong to, the one it is in marked. A session of another computer is in
   // none of them, also when a folder here has the same path: moving it into one takes it over.
   function moveMenu(session: Session): MenuItem[] {
-    const here = isHere(session, state.device);
+    const here = onThis(session);
     return [
       ...herePaths().map((path) => ({
         label: projectLabel(path),
@@ -1064,7 +1151,21 @@ export function App() {
         },
       }
     : null;
+  // What an upgrade would bring is read where the upgrade is offered, before it is taken.
+  const newer =
+    upgrade ??
+    ahead ??
+    (update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null);
   const updates = [
+    ...(newer
+      ? [
+          {
+            label: `查看 ${newer} 的更新内容`,
+            icon: <ScrollText />,
+            run: () => setNotes(newer),
+          },
+        ]
+      : []),
     ...(upgradeItem ? [upgradeItem] : []),
     ...(serviceUpdate ? [serviceUpdate] : []),
   ];
@@ -1245,41 +1346,48 @@ export function App() {
           service={null}
           adapterName=""
           updates={[]}
+          showNotes={setNotes}
         />
+        {notesDialog}
       </div>
     ) : (
-      <LoginPage
-        openSettings={() => setLocalSettings('general')}
-        form={form}
-        change={changeForm}
-        error={
-          currentError && state.mismatch && !upgrade && state.service && version
-            ? `${currentError}${
-                isNewer(version, state.service)
-                  ? '此客户端较新，请先升级服务端。'
-                  : !selfUpdating
-                    ? '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。'
-                    : state.preparing !== null
-                      ? `服务端正在下载这一版的安装包（${Math.floor(state.preparing * 100)}%），稍后重新连接就能从服务端升级；也可以现在直接从 GitHub 发布页下载。`
-                      : '服务端还没有这一版的安装包，它会继续尝试下载；可以直接从 GitHub 发布页下载，或稍后重试。'
-              }`
-            : currentError
-        }
-        upgrade={state.mismatch && window.desktop ? upgrade : null}
-        direct={direct}
-        downloaded={downloaded}
-        install={install}
-        connecting={state.status === 'connecting' || proxyConnecting || busy}
-        submit={() => {
-          void login(form);
-        }}
-      />
+      <>
+        {notesDialog}
+        <LoginPage
+          showNotes={setNotes}
+          newer={upgrade ?? ahead}
+          openSettings={() => setLocalSettings('general')}
+          form={form}
+          change={changeForm}
+          error={
+            currentError && state.mismatch && !upgrade && state.service && version
+              ? `${currentError}${
+                  isNewer(version, state.service)
+                    ? '此客户端较新，请先升级服务端。'
+                    : !selfUpdating
+                      ? '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。'
+                      : state.preparing !== null
+                        ? `服务端正在下载这一版的安装包（${Math.floor(state.preparing * 100)}%），稍后重新连接就能从服务端升级；也可以现在直接从 GitHub 发布页下载。`
+                        : '服务端还没有这一版的安装包，它会继续尝试下载；可以直接从 GitHub 发布页下载，或稍后重试。'
+                }`
+              : currentError
+          }
+          upgrade={state.mismatch && window.desktop ? upgrade : null}
+          direct={direct}
+          downloaded={downloaded}
+          install={install}
+          connecting={state.status === 'connecting' || proxyConnecting || busy}
+          submit={() => {
+            void login(form);
+          }}
+        />
+      </>
     );
   const menuSession =
     menu?.kind === 'session' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
   const moved =
     menu?.kind === 'move' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
-  const menuAway = !!moved && !isHere(moved, state.device);
+  const menuAway = !!moved && !onThis(moved);
   const openMenu =
     !menu || (menu.kind === 'session' && !menuSession)
       ? null
@@ -1364,6 +1472,7 @@ export function App() {
           service={state.service}
           adapterName={adapterName}
           updates={updates}
+          showNotes={setNotes}
           account={
             <AccountPanel
               client={client}
@@ -1376,8 +1485,8 @@ export function App() {
               refresh={() => {
                 void refreshStatus();
               }}
-              gate={prefs.quota}
-              saveGate={(next) => setPrefs((current) => ({ ...current, quota: next }))}
+              gate={prefs.quotaLimits}
+              saveGate={(next) => setPrefs((current) => ({ ...current, quotaLimits: next }))}
             />
           }
         />
@@ -1462,174 +1571,207 @@ export function App() {
               </div>
             )}
             <OpenDocument.Provider value={openDocument}>
-            <div
-              className="workspace-split"
-              ref={splitRef}
-              style={paneWidth ? { ['--drawer-width' as string]: `${paneWidth}px` } : undefined}
-            >
-            <div className="workspace-main">
-            <Conversation
-              findRequest={findRequest}
-              session={selected}
-              events={events}
-              history={history}
-              connected={connected}
-              native={nativeMode}
-              ownsRun={ownsRun}
-              busy={busy}
-              client={client}
-              accountName={accountName}
-              allSessions={sessions}
-              newSession={() => {
-                void newSession();
-              }}
-              loadEarlier={() => client.loadEarlier(selected!.id)}
-              edit={
-                controlsDisabled || away
-                  ? undefined
-                  : (id, text) => {
-                      void fork(selected!, { id, text });
+              <div
+                className="workspace-split"
+                ref={splitRef}
+                style={paneWidth ? { ['--drawer-width' as string]: `${paneWidth}px` } : undefined}
+              >
+                <div className="workspace-main">
+                  <Conversation
+                    findRequest={findRequest}
+                    session={selected}
+                    events={events}
+                    history={history}
+                    connected={connected}
+                    native={nativeMode}
+                    ownsRun={ownsRun}
+                    clock={clock}
+                    progress={selected ? state.progress[selected.id] : undefined}
+                    busy={busy}
+                    client={client}
+                    accountName={accountName}
+                    allSessions={sessions}
+                    newSession={() => {
+                      void newSession();
+                    }}
+                    loadEarlier={() => client.loadEarlier(selected!.id)}
+                    edit={
+                      controlsDisabled || away
+                        ? undefined
+                        : (id, text) => {
+                            void fork(selected!, { id, text });
+                          }
                     }
-              }
-              stopTask={(taskId) => {
-                void act(async () => {
-                  await client.request({
-                    type: 'run.task.stop',
-                    sessionId: selected!.id,
-                    runId: selected!.activeRun!.id,
-                    taskId,
-                  });
-                });
-              }}
-              stop={stopRun}
-              replyApproval={(runId, approvalId, allowed, answers) => {
-                void act(async () => {
-                  await client.request({
-                    type: 'approval.reply',
-                    sessionId: selected!.id,
-                    runId,
-                    approvalId,
-                    allowed,
-                    ...(answers ? { answers } : {}),
-                  });
-                });
-              }}
-            />
-            {state.status === 'reconnecting' && (
-              <div className="elsewhere-bar" role="status">
-                <Unplug />
-                <p>
-                  与服务端的连接断开了，正在重新连接。运行中的任务仍在服务端继续，连上之后这里会补上期间的内容；
-                  {state.error ? `原因：${state.error.split('\n')[0]}` : '不需要做什么。'}
-                </p>
-                <button type="button" className="button" onClick={disconnect}>
-                  断开并回到登录页
-                </button>
+                    stopTask={(taskId) => {
+                      void act(async () => {
+                        await client.request({
+                          type: 'run.task.stop',
+                          sessionId: selected!.id,
+                          runId: selected!.activeRun!.id,
+                          taskId,
+                        });
+                      });
+                    }}
+                    stop={stopRun}
+                    replyApproval={(runId, approvalId, allowed, answers) => {
+                      void act(async () => {
+                        await client.request({
+                          type: 'approval.reply',
+                          sessionId: selected!.id,
+                          runId,
+                          approvalId,
+                          allowed,
+                          ...(answers ? { answers } : {}),
+                        });
+                      });
+                    }}
+                  />
+                  {state.status === 'reconnecting' && (
+                    <div className="elsewhere-bar" role="status">
+                      <Unplug />
+                      <p>
+                        与服务端的连接断开了，正在重新连接。运行中的任务仍在服务端继续，连上之后这里会补上期间的内容；
+                        {state.error ? `原因：${state.error.split('\n')[0]}` : '不需要做什么。'}
+                      </p>
+                      <button type="button" className="button" onClick={disconnect}>
+                        断开并回到登录页
+                      </button>
+                    </div>
+                  )}
+                  {beside.length > 0 && (
+                    <div className="elsewhere-bar" role="status">
+                      <Laptop />
+                      <p>
+                        连接{beside.join('、')}
+                        里有会话正在这个文件夹里运行。两边同时改动文件可能互相覆盖，建议等一边做完，或让它们在不同的文件夹里工作。
+                      </p>
+                    </div>
+                  )}
+                  {selected && away && (
+                    <div className="elsewhere-bar" role="status">
+                      <Laptop />
+                      <p>
+                        这个会话在设备“{selected.device?.name ?? '未知设备'}”上，项目目录是{' '}
+                        <code>{selected.projectPath}</code>
+                        。要在这台电脑上接着做，先选它在这里的项目目录；下一条消息会告诉 Claude
+                        换了电脑。
+                      </p>
+                      <button
+                        type="button"
+                        className="button primary"
+                        disabled={controlsDisabled}
+                        onClick={(event) => {
+                          // With projects here the session goes into one of them, or into a folder chosen there.
+                          if (!herePaths().length) return void takeOver(selected);
+                          const box = event.currentTarget.getBoundingClientRect();
+                          setMenu({
+                            kind: 'move',
+                            sessionId: selected.id,
+                            x: box.left,
+                            y: box.top - 6,
+                            above: true,
+                          });
+                        }}
+                      >
+                        在本机继续…
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={controlsDisabled}
+                        onClick={() => {
+                          void fork(selected);
+                        }}
+                      >
+                        分叉到本机…
+                      </button>
+                    </div>
+                  )}
+                  {selected && !away && !terminalSessionId && (
+                    <Composer
+                      openAccount={() => open('settings', 'account')}
+                      session={selected}
+                      projectName={
+                        isInside(selected.projectPath, workspaceRoots)
+                          ? null
+                          : projectLabel(selected.projectPath)
+                      }
+                      chooseProject={
+                        controlsDisabled
+                          ? undefined
+                          : (position) =>
+                              setMenu({ kind: 'move', sessionId: selected.id, ...position })
+                      }
+                      draft={draft}
+                      attachments={attachments}
+                      setAttachments={(items, text) =>
+                        setDraft(selected.id, (previous) => ({
+                          text: text ?? previous.text,
+                          attachments: items,
+                        }))
+                      }
+                      setDraft={(text) => setDraft(selected.id, text)}
+                      native={nativeMode}
+                      connected={connected}
+                      busy={busy}
+                      refreshing={refreshing}
+                      canRefreshModels={!state.sessions.some((session) => session.activeRun)}
+                      ownsRun={ownsRun}
+                      inputDisabled={inputDisabled}
+                      controlsDisabled={controlsDisabled}
+                      slashOpen={slashOpen}
+                      setSlashOpen={setSlashOpen}
+                      canCompact={canCompact}
+                      scenario={scenario}
+                      setScenario={setScenario}
+                      capabilities={capabilities}
+                      nativeSession={nativeSession}
+                      metrics={metrics}
+                      quota={
+                        quotaView.level === 'warn' || quotaView.level === 'stop' ? quotaView : null
+                      }
+                      send={() => {
+                        void send();
+                      }}
+                      resume={
+                        stopped && !inputDisabled && quotaView.level !== 'stop' ? resume : undefined
+                      }
+                      compact={() => {
+                        void compact();
+                      }}
+                      refresh={() => {
+                        void refreshStatus();
+                      }}
+                      configure={configure}
+                      stop={stopRun}
+                    />
+                  )}
+                </div>
+                {preview && (
+                  <>
+                    <div
+                      className="split-handle"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="拖动调整预览宽度"
+                      onPointerDown={dragPane}
+                    />
+                    <Suspense
+                      fallback={
+                        <aside className="file-drawer" role="status">
+                          正在打开预览
+                        </aside>
+                      }
+                    >
+                      <FileDrawer
+                        path={preview.path}
+                        fallback={preview.fallback}
+                        onClose={() => setPreview(null)}
+                      />
+                    </Suspense>
+                  </>
+                )}
               </div>
-            )}
-            {selected && away && (
-              <div className="elsewhere-bar" role="status">
-                <Laptop />
-                <p>
-                  这个会话在设备“{selected.device!.name}”上，项目目录是{' '}
-                  <code>{selected.projectPath}</code>
-                  。要在这台电脑上接着做，先选它在这里的项目目录；下一条消息会告诉 Claude 换了电脑。
-                </p>
-                <button
-                  type="button"
-                  className="button primary"
-                  disabled={controlsDisabled}
-                  onClick={(event) => {
-                    // With projects here the session goes into one of them, or into a folder chosen there.
-                    if (!herePaths().length) return void takeOver(selected);
-                    const box = event.currentTarget.getBoundingClientRect();
-                    setMenu({
-                      kind: 'move',
-                      sessionId: selected.id,
-                      x: box.left,
-                      y: box.top - 6,
-                      above: true,
-                    });
-                  }}
-                >
-                  在本机继续…
-                </button>
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={controlsDisabled}
-                  onClick={() => {
-                    void fork(selected);
-                  }}
-                >
-                  分叉到本机…
-                </button>
-              </div>
-            )}
-            {selected && !away && !terminalSessionId && (
-              <Composer
-                session={selected}
-                projectName={
-                  isInside(selected.projectPath, workspaceRoots)
-                    ? null
-                    : projectLabel(selected.projectPath)
-                }
-                chooseProject={
-                  controlsDisabled
-                    ? undefined
-                    : (position) => setMenu({ kind: 'move', sessionId: selected.id, ...position })
-                }
-                draft={draft}
-                attachments={attachments}
-                setAttachments={(items, text) => setDraft(selected.id, (previous) => ({ text: text ?? previous.text, attachments: items }))}
-                setDraft={(text) => setDraft(selected.id, text)}
-                native={nativeMode}
-                connected={connected}
-                busy={busy}
-                refreshing={refreshing}
-                canRefreshModels={!state.sessions.some((session) => session.activeRun)}
-                ownsRun={ownsRun}
-                inputDisabled={inputDisabled}
-                controlsDisabled={controlsDisabled}
-                slashOpen={slashOpen}
-                setSlashOpen={setSlashOpen}
-                canCompact={canCompact}
-                scenario={scenario}
-                setScenario={setScenario}
-                capabilities={capabilities}
-                nativeSession={nativeSession}
-                metrics={metrics}
-                quota={quotaView.level === 'warn' || quotaView.level === 'stop' ? quotaView : null}
-                send={() => {
-                  void send();
-                }}
-                resume={stopped && !inputDisabled && quotaView.level !== 'stop' ? resume : undefined}
-                compact={() => {
-                  void compact();
-                }}
-                refresh={() => {
-                  void refreshStatus();
-                }}
-                configure={configure}
-                stop={stopRun}
-              />
-            )}
-            </div>
-            {preview && (
-              <>
-                <div
-                  className="split-handle"
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="拖动调整预览宽度"
-                  onPointerDown={dragPane}
-                />
-                <Suspense fallback={<aside className="file-drawer" role="status">正在打开预览</aside>}>
-                  <FileDrawer path={preview.path} fallback={preview.fallback} onClose={() => setPreview(null)} />
-                </Suspense>
-              </>
-            )}
-            </div>
             </OpenDocument.Provider>
           </main>
         </>
@@ -1733,6 +1875,7 @@ export function App() {
           }}
         />
       )}
+      {notesDialog}
     </div>
   );
 }

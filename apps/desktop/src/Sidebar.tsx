@@ -19,6 +19,7 @@ import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
 import { ago, folderName, isInside, pathKey } from './paths.ts';
 import { setPrefs, toggled, usePrefs } from './prefs.ts';
+import { useConnectionName } from './shared.ts';
 import { IconButton } from './ui.tsx';
 import type { MenuPosition } from './ui.tsx';
 import type { Page } from './Rail.tsx';
@@ -30,6 +31,13 @@ function activity(session: Session) {
   if (session.activeRun.status !== 'awaiting_approval') return '运行中';
   return session.activeRun.waiting === 'question' ? '等待回答' : '等待审批';
 }
+
+// Another computer's sessions: by project folder, and those without a project.
+type Elsewhere = {
+  name: string;
+  projects: Map<string, { path: string; sessions: Session[] }>;
+  plain: Session[];
+};
 
 export default function Sidebar({
   sessions,
@@ -57,7 +65,8 @@ export default function Sidebar({
   projectMenu,
 }: {
   sessions: Session[];
-  // Sessions on the user's other computers: listed apart, by computer, and not part of any project here.
+  // Sessions on the user's other computers: listed apart, by computer and under it by project folder, and not
+  // part of any project here.
   elsewhere: Session[];
   selectedId: string | undefined;
   projects: string[];
@@ -84,6 +93,7 @@ export default function Sidebar({
   projectMenu: (path: string, position: MenuPosition) => void;
 }) {
   const prefs = usePrefs();
+  const connectionName = useConnectionName();
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const { pinned, plain, groups } = useMemo(() => {
@@ -130,17 +140,37 @@ export default function Sidebar({
 
   const others = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const devices = new Map<string, { name: string; sessions: Session[] }>();
+    const devices = new Map<string, Elsewhere>();
     for (const session of elsewhere) {
       if (!`${session.title} ${session.projectPath}`.toLowerCase().includes(term)) continue;
-      const device = session.device!;
-      const entry = devices.get(device.id) ?? { name: device.name, sessions: [] };
-      entry.sessions.push(session);
+      // A session from before computers were told apart, whose folder is not on this one.
+      const device = session.device ?? { id: '', name: '未知设备' };
+      const entry: Elsewhere = devices.get(device.id) ?? {
+        name: device.name,
+        projects: new Map(),
+        plain: [],
+      };
       devices.set(device.id, entry);
+      // Which folders hold another computer's sessions without a project is not known here; the ones this
+      // program makes are told by their shape, a day and under it a time.
+      if (/[\\/]\d{4}-\d{2}-\d{2}[\\/]\d{6}(-\d+)?[\\/]?$/.test(session.projectPath)) {
+        entry.plain.push(session);
+        continue;
+      }
+      const key = pathKey(session.projectPath);
+      const project = entry.projects.get(key) ?? { path: session.projectPath, sessions: [] };
+      project.sessions.push(session);
+      entry.projects.set(key, project);
     }
     return [...devices.entries()];
   }, [elsewhere, search]);
-  const othersCount = others.reduce((count, [, device]) => count + device.sessions.length, 0);
+  const othersCount = others.reduce(
+    (count, [, device]) =>
+      count +
+      device.plain.length +
+      [...device.projects.values()].reduce((sum, project) => sum + project.sessions.length, 0),
+    0,
+  );
   // A search shows what it found, folded or not.
   const othersOpen = prefs.elsewhereOpen || !!search.trim();
 
@@ -191,7 +221,11 @@ export default function Sidebar({
             aria-hidden="true"
           />
           <strong>{session.title}</strong>
-          {session.activeRun && <span className="running-dot" />}
+          {session.activeRun && (
+            <span
+              className={`running-dot${session.activeRun.status === 'awaiting_approval' ? '' : ' breathing'}`}
+            />
+          )}
           <small>{activity(session)}</small>
         </button>
         <IconButton
@@ -223,7 +257,10 @@ export default function Sidebar({
   return (
     <aside className="sidebar" ref={aside}>
       <div className="sidebar-brand">
-        <span className="brand">CC Desk Tunnel</span>
+        <span className="brand">
+          CC Desk Tunnel
+          {connectionName && <span className="brand-connection">{connectionName}</span>}
+        </span>
         <NoticeBell notifications={notifications} open={select} />
         <IconButton
           title={searching ? '关闭搜索' : '搜索'}
@@ -372,7 +409,21 @@ export default function Sidebar({
               others.map(([id, device]) => (
                 <Fragment key={id}>
                   <div className="list-heading">{device.name}</div>
-                  {device.sessions.map(renderSession)}
+                  {[...device.projects.entries()].map(([key, project]) => (
+                    <Fragment key={key}>
+                      <div className="elsewhere-project" title={project.path}>
+                        <Folder />
+                        <span>{folderName(project.path)}</span>
+                      </div>
+                      {project.sessions.map(renderSession)}
+                    </Fragment>
+                  ))}
+                  {device.plain.length > 0 && device.projects.size > 0 && (
+                    <div className="elsewhere-project">
+                      <span>普通会话</span>
+                    </div>
+                  )}
+                  {device.plain.map(renderSession)}
                 </Fragment>
               ))}
           </section>

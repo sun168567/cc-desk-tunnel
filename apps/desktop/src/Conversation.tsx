@@ -29,7 +29,9 @@ import {
 import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
-import type { HistoryState } from './client.ts';
+import type { HistoryState, TaskProgress } from './client.ts';
+import { RunStatus, TaskLine } from './RunStatus.tsx';
+import type { Clock } from './RunStatus.tsx';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
 import { conversation } from './transcript.ts';
 import type { TranscriptItem, Turn, Work } from './transcript.ts';
@@ -493,6 +495,8 @@ export default function Conversation({
   connected,
   native,
   ownsRun,
+  clock,
+  progress,
   busy,
   newSession,
   loadEarlier,
@@ -528,8 +532,25 @@ export default function Conversation({
     answers?: Record<string, string>,
   ) => void;
   edit?: (messageId: string, text: string) => void;
+  clock: Clock;
+  // What the session's background tasks last said of themselves, by task.
+  progress: Record<string, TaskProgress> | undefined;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
+  const toolAtWork = !!turns
+    .at(-1)
+    ?.steps.flatMap((step) => (step.kind === 'work' ? step.items : []))
+    .some((item) => item.kind === 'tool' && item.state === 'running');
+  // A task has been waited for since the run first listed it.
+  const listedAt = (taskId: string) =>
+    Date.parse(
+      events.find(
+        (event) =>
+          event.runId === session?.activeRun?.id &&
+          event.payload.type === 'native.tasks' &&
+          event.payload.tasks.some((task) => task.id === taskId),
+      )?.createdAt ?? '',
+    ) || clock.now();
   const background = session?.activeRun?.waiting === 'background';
   const tasks = useMemo(() => {
     const last = events.findLast(
@@ -742,7 +763,7 @@ export default function Conversation({
             {session.activeRun && background && (
               <div className="background-tasks">
                 <div className="run-indicator" role="status">
-                  <span className="running-dot" />
+                  <span className={`running-dot${connected ? ' breathing' : ''}`} />
                   后台任务{tasks.length ? ` ${tasks.length} 个` : ''} · Claude
                   已答完，任务结束后会接着处理
                   {!ownsRun && ' · 另一连接'}
@@ -750,7 +771,15 @@ export default function Conversation({
                 <ul>
                   {tasks.map((task) => (
                     <li key={task.id}>
-                      <span>{task.description || task.kind}</span>
+                      <span>
+                        {task.description || task.kind}
+                        <TaskLine
+                          since={listedAt(task.id)}
+                          progress={progress?.[task.id]}
+                          clock={clock}
+                          connected={connected}
+                        />
+                      </span>
                       <button
                         type="button"
                         className="button"
@@ -774,17 +803,26 @@ export default function Conversation({
                 )}
               </div>
             )}
-            {session.activeRun && !background && (
-              <div className="run-indicator" role="status">
-                <span className="running-dot" />
-                {session.activeRun.status !== 'awaiting_approval'
-                  ? '运行中'
-                  : session.activeRun.waiting === 'question'
-                    ? '等待回答'
-                    : '等待审批'}
-                {!ownsRun && ' · 另一连接'}
-              </div>
-            )}
+            {session.activeRun &&
+              !background &&
+              (session.activeRun.status !== 'awaiting_approval' ? (
+                <RunStatus
+                  tool={toolAtWork}
+                  since={Math.max(
+                    clock.activityAt(session.id),
+                    Date.parse(events.at(-1)?.createdAt ?? '') || 0,
+                  )}
+                  clock={clock}
+                  connected={connected}
+                  suffix={ownsRun ? '' : ' · 另一连接'}
+                />
+              ) : (
+                <div className="run-indicator" role="status">
+                  <span className="running-dot" />
+                  {session.activeRun.waiting === 'question' ? '等待回答' : '等待审批'}
+                  {!ownsRun && ' · 另一连接'}
+                </div>
+              ))}
           </div>
         )}
       </div>

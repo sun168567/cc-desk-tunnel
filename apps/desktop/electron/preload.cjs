@@ -2,8 +2,23 @@ const { contextBridge, ipcRenderer, webFrame, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   dev: process.argv.includes('--cc-desk-tunnel-dev'),
   platform: process.platform,
+  // Read once, before the page draws: see `boot` in main.cjs.
+  boot: ipcRenderer.sendSync('boot'),
+  saveShared: (key, value) => ipcRenderer.invoke('shared:save', key, value),
+  onSharedChanged: (callback) => {
+    const listener = (_event, key, value) => callback(key, value);
+    ipcRenderer.on('shared:changed', listener);
+    return () => ipcRenderer.removeListener('shared:changed', listener);
+  },
+  setBusy: (runs) => ipcRenderer.invoke('busy:set', runs),
+  connections: () => ipcRenderer.invoke('connections:list'),
+  createConnection: (name) => ipcRenderer.invoke('connections:create', name),
+  openConnection: (id) => ipcRenderer.invoke('connections:open', id),
+  renameConnection: (id, name) => ipcRenderer.invoke('connections:rename', id, name),
+  removeConnection: (id) => ipcRenderer.invoke('connections:remove', id),
   chooseProject: () => ipcRenderer.invoke('project:choose'),
   asOnDisk: (path) => ipcRenderer.invoke('project:spelling', path),
+  foldersExist: (folders) => ipcRenderer.invoke('folders:exist', folders),
   chooseFiles: () => ipcRenderer.invoke('files:choose'),
   previewFile: (path) => ipcRenderer.invoke('attachment:preview', path),
   readTextFile: (path) => ipcRenderer.invoke('file:read-text', path),
@@ -49,8 +64,9 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   zoom: (direction) =>
     webFrame.setZoomLevel(direction ? webFrame.getZoomLevel() + Math.sign(direction) * 0.5 : 0),
-  quit: () => ipcRenderer.invoke('app:quit'),
+  quit: (all) => ipcRenderer.invoke('app:quit', all),
   version: () => ipcRenderer.invoke('app:version'),
+  releaseNotes: (version) => ipcRenderer.invoke('release:notes', version),
   device: () => ipcRenderer.invoke('device:get'),
   installUpdate: (version) => ipcRenderer.invoke('update:install', version),
   onUpdateProgress: (callback) => {

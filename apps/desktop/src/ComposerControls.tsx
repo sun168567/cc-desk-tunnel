@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Check, RotateCcw } from 'lucide-react';
+import { usePrefs } from './prefs.ts';
+import { quotaFigures } from './quota.ts';
 import type {
   Effort,
   NativeCapabilities,
@@ -22,6 +24,7 @@ export default function ComposerControls({
   capabilities,
   nativeSession,
   metrics,
+  openAccount,
   disabled,
   configure,
   refresh,
@@ -33,6 +36,7 @@ export default function ComposerControls({
   capabilities: NativeCapabilities | null;
   nativeSession: NativeSession | null;
   metrics: NativeMetrics | null;
+  openAccount: () => void;
   disabled: boolean;
   configure: (values: { model?: string | null; effort?: Effort | null }) => Promise<void>;
   refresh: () => void;
@@ -100,8 +104,31 @@ export default function ComposerControls({
     commitPending.current = false;
     dragging.current = false;
   }, [model]);
+  const quota = usePrefs().quota ? quotaFigures(metrics?.rateLimits) : [];
+  const fullest = Math.max(0, ...quota.map((figure) => figure.used));
   return (
     <div className="composer-controls" ref={container}>
+      {quota.length > 0 && (
+        <button
+          type="button"
+          className={`quota-note ${fullest >= 90 ? 'danger' : fullest >= 70 ? 'warn' : ''}`}
+          aria-label="额度已用"
+          title={[
+            ...quota.map(
+              (figure) =>
+                `${figure.label}额度已用 ${figure.used}%${
+                  figure.resetsAt
+                    ? `，${new Date(figure.resetsAt).toLocaleString('zh-CN')} 重置`
+                    : ''
+                }`,
+            ),
+            '点击查看账号与额度',
+          ].join('\n')}
+          onClick={openAccount}
+        >
+          {quota.map((figure) => `${figure.label} ${figure.used}%`).join(' · ')}
+        </button>
+      )}
       <div
         className="context-control"
         onMouseEnter={() => setContextOpen(true)}

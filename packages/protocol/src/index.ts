@@ -282,6 +282,15 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     toolId: z.string().min(1),
     elapsedSeconds: z.number().nonnegative(),
   }),
+  // What a background task says of itself while it runs. It is worth something only until the task ends, so
+  // it reaches the windows as a fragment and is never recorded.
+  z.object({
+    type: z.literal('native.progress'),
+    taskId: z.string().min(1),
+    tool: z.string().max(100).optional(),
+    toolUses: z.number().int().nonnegative().optional(),
+    summary: z.string().max(300).optional(),
+  }),
   z.object({ type: z.literal('approval.requested'), approvalId: id, toolId: z.string().min(1) }),
   z.object({ type: z.literal('approval.resolved'), approvalId: id, allowed: z.boolean() }),
   z.object({

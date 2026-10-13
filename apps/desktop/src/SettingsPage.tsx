@@ -20,6 +20,8 @@ import type { ConnectionWaits, NotifyKind } from './prefs.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
+import { useShared } from './shared.ts';
+import type { ListedConnection } from './shared.ts';
 import ShortcutSettings from './ShortcutSettings.tsx';
 import { IconButton, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
@@ -48,7 +50,7 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     group: '客户端',
     icon: SlidersHorizontal,
     words:
-      '托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 用量 首字 速度 缓存 字体 字号 宽度 代码 主题 外观',
+      '额度 输入框 托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 用量 首字 速度 缓存 字体 字号 宽度 代码 主题 外观 多开 多个连接 窗口 服务端',
   },
   {
     id: 'notifications',
@@ -236,6 +238,144 @@ function CodePreview({ variant, label }: { variant: 'light' | 'dark'; label: str
   );
 }
 
+// The computer's connections, each a window of its own to a service of its own: see electron/connections.cjs.
+function Connections() {
+  const [list, setList] = useState<ListedConnection[]>([]);
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [error, setError] = useState('');
+  const names = useShared('connections');
+  // Whether a window is open is its process's to tell, so it is asked again while the page is shown.
+  useEffect(() => {
+    const read = () => void window.desktop!.connections().then(setList);
+    read();
+    const timer = setInterval(read, 2000);
+    return () => clearInterval(timer);
+  }, [names]);
+  const act = (work: Promise<ListedConnection[] | void>) =>
+    work.then(
+      (next) => {
+        setError('');
+        if (next) setList(next);
+        return true;
+      },
+      (failure) => {
+        setError(
+          String(failure?.message ?? failure).replace(/^.*?'connections:\w+': (Error: )?/, ''),
+        );
+        return false;
+      },
+    );
+  return (
+    <>
+      <h2 className="page-heading">多个连接</h2>
+      <div className="card">
+        {list.map((entry) => (
+          <Row
+            key={entry.id}
+            title={entry.name}
+            detail={entry.current ? '当前窗口' : entry.open ? '已打开' : '未打开'}
+          >
+            {editing?.id === entry.id ? (
+              <form
+                className="setting-actions"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void act(window.desktop!.renameConnection(entry.id, editing.name)).then(
+                    (done) => done && setEditing(null),
+                  );
+                }}
+              >
+                <input
+                  className="setting-name"
+                  aria-label="连接的名称"
+                  maxLength={24}
+                  autoFocus
+                  value={editing.name}
+                  onChange={(event) => setEditing({ id: entry.id, name: event.target.value })}
+                />
+                <button type="submit" className="button" disabled={!editing.name.trim()}>
+                  保存
+                </button>
+                <button type="button" className="button" onClick={() => setEditing(null)}>
+                  取消
+                </button>
+              </form>
+            ) : (
+              <span className="setting-actions">
+                {!entry.current && (
+                  <button
+                    type="button"
+                    className="button"
+                    aria-label={`打开 ${entry.name}`}
+                    onClick={() => void act(window.desktop!.openConnection(entry.id))}
+                  >
+                    {entry.open ? '切换到' : '打开'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="button"
+                  aria-label={`改名 ${entry.name}`}
+                  onClick={() => setEditing({ id: entry.id, name: entry.name })}
+                >
+                  改名
+                </button>
+                {entry.id && !entry.current && (
+                  <button
+                    type="button"
+                    className="button danger"
+                    aria-label={`删除 ${entry.name}`}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `删除连接“${entry.name}”？它在这台电脑上保存的服务地址、凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+                        )
+                      )
+                        void act(window.desktop!.removeConnection(entry.id));
+                    }}
+                  >
+                    删除
+                  </button>
+                )}
+              </span>
+            )}
+          </Row>
+        ))}
+        <Row
+          title="新建连接"
+          detail="再开一个窗口去连另一台服务端。每个连接各有自己的服务地址、凭据、草稿和定时任务；项目列表、通知、快捷键等本机设置是共用的"
+        >
+          <form
+            className="setting-actions"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(window.desktop!.createConnection(name)).then((done) => done && setName(''));
+            }}
+          >
+            <input
+              className="setting-name"
+              aria-label="新连接的名称"
+              placeholder="例如：工作"
+              maxLength={24}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <button type="submit" className="button" disabled={!name.trim()}>
+              新建并打开
+            </button>
+          </form>
+        </Row>
+      </div>
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
 function General({
   form,
   changeForm,
@@ -256,6 +396,7 @@ function General({
     codeFont,
     textSize,
     transcriptWidth,
+    quota,
   } = usePrefs();
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
@@ -416,6 +557,19 @@ function General({
                 </span>
               </Row>
             </div>
+            <h2 className="page-heading">输入框</h2>
+            <div className="card">
+              <Row
+                title="在输入框旁显示额度"
+                detail="5 小时和每周额度的已用比例，取自最近一次读数；点它打开“账号与额度”"
+              >
+                <Switch
+                  label="在输入框旁显示额度"
+                  checked={quota}
+                  onChange={(value) => setPrefs((prefs) => ({ ...prefs, quota: value }))}
+                />
+              </Row>
+            </div>
             <h2 className="page-heading">连接</h2>
             <div className="card">
               <Row title="记住凭据" detail="服务凭据经当前系统账户加密后保存在本机">
@@ -437,6 +591,7 @@ function General({
                 />
               </Row>
             </div>
+            <Connections />
             <h2 className="page-heading">连接等待时间</h2>
             <div className="card">
               {waits.map(({ step, title, detail }) => (
@@ -557,11 +712,13 @@ function About({
   service,
   adapterName,
   updates,
+  showNotes,
 }: {
   version: string;
   service: string | null;
   adapterName: string;
   updates: MenuItem[];
+  showNotes: (version: string) => void;
 }) {
   return (
     <section className="page" aria-label="关于与更新">
@@ -569,7 +726,14 @@ function About({
         <h1 className="page-title">关于与更新</h1>
         <div className="card">
           <Row title="客户端版本">
-            <span className="setting-value">{version || '浏览器开发入口'}</span>
+            <span className="setting-actions">
+              <span className="setting-value">{version || '浏览器开发入口'}</span>
+              {version && (
+                <button type="button" className="button" onClick={() => showNotes(version)}>
+                  这一版的更新内容
+                </button>
+              )}
+            </span>
           </Row>
           <Row title="服务端版本">
             <span className="setting-value">{service ?? '未知'}</span>
@@ -659,6 +823,7 @@ export default function SettingsPage({
   service,
   adapterName,
   updates,
+  showNotes,
   back,
   leave,
 }: {
@@ -680,6 +845,7 @@ export default function SettingsPage({
   service: string | null;
   adapterName: string;
   updates: MenuItem[];
+  showNotes: (version: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
@@ -756,7 +922,13 @@ export default function SettingsPage({
         ) : section === 'help' ? (
           <Help />
         ) : (
-          <About version={version} service={service} adapterName={adapterName} updates={updates} />
+          <About
+            version={version}
+            service={service}
+            adapterName={adapterName}
+            updates={updates}
+            showNotes={showNotes}
+          />
         )}
       </main>
     </>

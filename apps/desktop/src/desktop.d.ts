@@ -5,8 +5,27 @@ declare global {
       // Run from the source tree, not installed: the login page then also offers the simulation service.
       dev: boolean;
       platform: 'win32' | 'darwin' | 'linux';
+      // Which of this computer's connections the window is ('' the first), and what they all share.
+      boot: { connection: string; shared: import('./shared.ts').Shared };
+      saveShared: (key: 'prefs' | 'projects', value: unknown) => Promise<void>;
+      onSharedChanged: (
+        callback: (key: keyof import('./shared.ts').Shared, value: unknown) => void,
+      ) => () => void;
+      // The sessions running in this window, for the other connections' windows to warn about.
+      setBusy: (runs: import('./shared.ts').Run[]) => Promise<void>;
+      // Each connection is a window of its own; `open` tells whether it is running now.
+      connections: () => Promise<import('./shared.ts').ListedConnection[]>;
+      createConnection: (name: string) => Promise<import('./shared.ts').ListedConnection[]>;
+      openConnection: (id: string) => Promise<void>;
+      renameConnection: (
+        id: string,
+        name: string,
+      ) => Promise<import('./shared.ts').ListedConnection[]>;
+      removeConnection: (id: string) => Promise<import('./shared.ts').ListedConnection[]>;
       chooseProject: () => Promise<string | null>;
       asOnDisk: (path: string) => Promise<string>;
+      // Whether each folder is on this computer, in the order given.
+      foldersExist: (folders: string[]) => Promise<boolean[]>;
       // Files to mention in a message; the paths of the ones chosen.
       chooseFiles: () => Promise<string[]>;
       previewFile: (path: string) => Promise<import('./attachments.ts').Preview>;
@@ -61,8 +80,11 @@ declare global {
       onNotifyClicked: (callback: (sessionId: string | null) => void) => () => void;
       // 1 and -1 step the interface size, 0 restores it.
       zoom: (direction: number) => void;
-      quit: () => Promise<void>;
+      // `all` also closes the windows of the other connections.
+      quit: (all?: boolean) => Promise<void>;
       version: () => Promise<string>;
+      // The notes of a released version, read from its page on GitHub.
+      releaseNotes: (version: string) => Promise<string>;
       // This computer as the service knows it.
       device: () => Promise<import('@cc-desk-tunnel/protocol').Device>;
       // Fetches and runs an installer: the one the connected service holds, or, given a version, that

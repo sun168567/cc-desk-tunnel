@@ -1,5 +1,6 @@
 import { Download, Settings, SquareTerminal, Unplug } from 'lucide-react';
 import { GithubMark, openProject, project } from './project.tsx';
+import { useConnectionName } from './shared.ts';
 
 export type ConnectionForm = {
   url: string;
@@ -20,6 +21,8 @@ export default function LoginPage({
   direct,
   downloaded,
   install,
+  newer,
+  showNotes,
   submit,
   openSettings,
 }: {
@@ -35,10 +38,15 @@ export default function LoginPage({
   downloaded: number | null;
   // Fetches and runs the installer the service holds, or the given version's from the release page.
   install: (version?: string) => void;
+  // The version the service is at or offers, when it is newer than this client: its notes can be read.
+  newer: string | null;
+  // Shows what a version changed.
+  showNotes: (version: string) => void;
   submit: () => void;
   // This computer's own settings, which need no connection.
   openSettings: () => void;
 }) {
+  const connectionName = useConnectionName();
   return (
     <main className="login-page">
       <div className="window-drag" />
@@ -46,6 +54,7 @@ export default function LoginPage({
         <div className="brand">
           <SquareTerminal />
           <span>CC Desk Tunnel</span>
+          {connectionName && <span className="brand-connection">{connectionName}</span>}
         </div>
         <div className="login-title">
           <h1>连接代理服务</h1>
@@ -153,6 +162,11 @@ export default function LoginPage({
             >
               <Download />
               升级客户端到 {upgrade}
+            </button>
+          )}
+          {newer && (
+            <button className="button login-submit" type="button" onClick={() => showNotes(newer)}>
+              查看 {newer} 的更新内容
             </button>
           )}
           {direct && (

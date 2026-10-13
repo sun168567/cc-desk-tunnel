@@ -1,9 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import { defaultQuotaLimits, readQuotaLimits } from './quota.ts';
 import type { QuotaLimits } from './quota.ts';
+import { onSharedChange, saveShared, shareOnce, shared } from './shared.ts';
 
-// Choices that belong to this computer's window and never reach the service: what is pinned, what a project is
-// called here, which events raise a notification, and the keyboard shortcuts.
+// Choices that belong to this computer and never reach the service: what is pinned, what a project is called
+// here, which events raise a notification, and the keyboard shortcuts. The windows of the computer's
+// connections share them (see shared.ts).
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
 export type ThemeMode = 'system' | 'dark' | 'light';
 export type InterfaceFont = 'system' | 'serif';
@@ -38,8 +40,10 @@ export type Prefs = {
   // The line under each reply. `summary` holds only the figures the user switched on or off, by key, so a figure
   // added later follows its own default.
   stats: { enabled: boolean; summary: Record<string, boolean> };
+  // Whether the quota used is shown beside the message box.
+  quota: boolean;
   // Percents of the official 5-hour and weekly windows. This computer stops sending; it does not ask the service.
-  quota: QuotaLimits;
+  quotaLimits: QuotaLimits;
 };
 
 const storageKey = 'proxy-prefs';
@@ -68,12 +72,20 @@ const defaults: Prefs = {
   textSize: 'medium',
   transcriptWidth: 'medium',
   stats: { enabled: false, summary: {} },
-  quota: defaultQuotaLimits,
+  quota: false,
+  quotaLimits: defaultQuotaLimits,
 };
 
-function read(): Prefs {
+function stored(): unknown {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+    return JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+function read(saved: any = shared('prefs') ?? stored()): Prefs {
+  try {
+    if (!saved || typeof saved !== 'object') return defaults;
     const strings = (value: unknown) =>
       Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
     return {
@@ -113,7 +125,11 @@ function read(): Prefs {
         saved.transcriptWidth === 'narrow' || saved.transcriptWidth === 'wide'
           ? saved.transcriptWidth
           : 'medium',
-      quota: readQuotaLimits(saved.quota),
+      quota: saved.quota === true,
+      quotaLimits: readQuotaLimits(
+        saved.quotaLimits ??
+          (saved.quota && typeof saved.quota === 'object' ? saved.quota : undefined),
+      ),
       stats: {
         enabled: saved.stats?.enabled === true,
         summary: Object.fromEntries(
@@ -129,13 +145,19 @@ function read(): Prefs {
 }
 
 let current = read();
+shareOnce('prefs', current);
 const listeners = new Set<() => void>();
 export const getPrefs = () => current;
-export function setPrefs(change: (prefs: Prefs) => Prefs) {
-  current = change(current);
+function keep(next: Prefs) {
+  current = next;
   localStorage.setItem(storageKey, JSON.stringify(current));
   for (const listener of listeners) listener();
 }
+export function setPrefs(change: (prefs: Prefs) => Prefs) {
+  keep(change(current));
+  saveShared('prefs', current);
+}
+onSharedChange('prefs', (value) => keep(read(value)));
 export const usePrefs = () =>
   useSyncExternalStore((listener) => {
     listeners.add(listener);
