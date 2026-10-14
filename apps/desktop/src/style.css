@@ -2344,6 +2344,7 @@ kbd {
   overflow-wrap: anywhere;
   min-width: 0;
   color: var(--prose-fg, var(--text));
+  font-variant-emoji: text;
 }
 .message-content p {
   margin: 0 0 14px;

@@ -11,6 +11,7 @@ import { FileMention } from './AttachmentCards.tsx';
 import { highlightSource, languageFromCodeBlock } from './code-highlight.ts';
 import { CopyButton } from './copy.tsx';
 import { linkFilePaths, pathFromMention } from './file-mentions.ts';
+import { plainEmoji } from './plain-emoji.ts';
 
 const MermaidDiagram = lazy(() => import('./MermaidDiagram.tsx'));
 
@@ -201,7 +202,7 @@ export default memo(function RichText({ text }: { text: string }) {
       urlTransform={urlTransform}
       components={components}
     >
-      {linkFilePaths(dollars(text))}
+      {linkFilePaths(plainEmoji(dollars(text)))}
     </Markdown>
   );
 });
