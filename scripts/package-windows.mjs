@@ -94,7 +94,7 @@ execFileSync(
   },
 );
 execFileSync(
-  'pwsh.exe',
+  join(vendor, 'pwsh/pwsh.exe'),
   [
     '-NoLogo',
     '-NoProfile',
