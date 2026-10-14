@@ -1,33 +1,52 @@
+import { useEffect, useState } from 'react';
 import { AtSign, Folder, Image, Plus, Terminal } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
 
 export default function WelcomeHero({
   sessionTitle,
   projectPath,
   connected,
+  accountName,
   onNewSession,
 }: {
   sessionTitle?: string;
   projectPath?: string;
   connected?: boolean;
+  accountName?: string;
   onNewSession?: () => void;
 }) {
+  const [osUser, setOsUser] = useState('');
+  useEffect(() => {
+    void window.desktop?.username?.().then((name) => {
+      if (name) setOsUser(name);
+      else void window.desktop?.device?.().then((dev) => setOsUser(dev.name));
+    });
+  }, []);
+
   const isDefaultTitle = !sessionTitle || sessionTitle === '新会话';
+  const rawUser = accountName ? accountName.split('@')[0].trim() : '';
+  const username =
+    (rawUser && !['未登录', '账号', '离线模拟'].includes(rawUser) ? rawUser : '') || osUser;
 
   return (
     <div className="welcome-hero">
-      <div className="welcome-brand">
-        <span className="welcome-brand-prompt" aria-hidden="true">
-          &gt;_
-        </span>
-        <span className="welcome-brand-name">CC Desk Tunnel</span>
+      <div className="brand login-brand welcome-brand-lockup" aria-hidden="true">
+        <Claude.Combine size={30} type={'color'} />
+        <span className="login-brand-divider" />
+        <span className="login-brand-sub">CC Desk Tunnel</span>
       </div>
 
       <h2 className="welcome-title">
-        {onNewSession
-          ? '开始新的编码与协作会话'
-          : isDefaultTitle
-            ? '今天想推进什么工作？'
-            : sessionTitle}
+        {onNewSession ? (
+          <>
+            {username && <span className="welcome-user-mention">@{username}</span>}
+            开始新的编码与协作会话吧！
+          </>
+        ) : isDefaultTitle ? (
+          '今天想推进什么工作？'
+        ) : (
+          sessionTitle
+        )}
       </h2>
 
       <p className="welcome-subtitle">

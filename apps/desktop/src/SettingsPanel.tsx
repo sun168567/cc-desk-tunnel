@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Claude } from '@lobehub/icons';
 import type { NativeSettings } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 
@@ -303,7 +304,10 @@ export default function SettingsPanel({ client }: { client: ProxyClient }) {
   return (
     <section className="page" aria-label="Claude Code 设置">
       <div className="page-body">
-        <h1 className="page-title">Claude Code</h1>
+        <h1 className="page-title page-title-with-icon">
+          <Claude.Color size={22} />
+          Claude Code
+        </h1>
         <p className="muted">
           这里修改的是云端官方 CLI 的用户设置文件，从下一次运行起生效；“默认”表示不写入该项，由 CLI
           自行决定。

@@ -1,4 +1,5 @@
-import { Download, Settings, SquareTerminal, Unplug } from 'lucide-react';
+import { Download, Settings, Unplug } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
 import { GithubMark, openProject, project } from './project.tsx';
 import { useConnectionName } from './shared.ts';
 
@@ -51,9 +52,10 @@ export default function LoginPage({
     <main className="login-page">
       <div className="window-drag" />
       <div className="login-content">
-        <div className="brand">
-          <SquareTerminal />
-          <span>CC Desk Tunnel</span>
+        <div className="brand login-brand">
+          <Claude.Combine size={26} type={'color'} />
+          <span className="login-brand-divider" aria-hidden="true" />
+          <span className="login-brand-sub">CC Desk Tunnel</span>
           {connectionName && <span className="brand-connection">{connectionName}</span>}
         </div>
         <div className="login-title">

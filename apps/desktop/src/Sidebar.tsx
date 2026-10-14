@@ -10,10 +10,10 @@ import {
   Pin,
   Plus,
   Search,
-  Settings,
   SquarePen,
   X,
 } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
@@ -258,7 +258,8 @@ export default function Sidebar({
     <aside className="sidebar" ref={aside}>
       <div className="sidebar-brand">
         <span className="brand">
-          CC Desk Tunnel
+          <Claude.Color size={18} />
+          <span>CC Desk Tunnel</span>
           {connectionName && <span className="brand-connection">{connectionName}</span>}
         </span>
         <NoticeBell notifications={notifications} open={select} />
@@ -462,9 +463,13 @@ export default function Sidebar({
             openSettings?.({ x: box.left, y: box.top - 6, above: true });
           }}
         >
-          <Settings className="sidebar-account-icon" />
+          <Claude.Color size={16} className="sidebar-account-icon" />
           <span className="sidebar-account-label">
-            {accountName.split('@')[0]} · {adapterName === 'Simulation' ? '离线模拟' : adapterName}
+            {(() => {
+              const short = accountName.split('@')[0];
+              const mode = adapterName === 'Simulation' ? '离线模拟' : adapterName;
+              return short === mode ? `${mode} · 本地设置` : `${short} · ${mode}`;
+            })()}
           </span>
           <ChevronUp className="sidebar-account-chevron" />
         </button>

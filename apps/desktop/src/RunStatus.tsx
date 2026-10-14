@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Claude } from '@lobehub/icons';
 import type { TaskProgress } from './client.ts';
 
 // The service's clock as this window knows it, and when something last came from a session's run.
@@ -44,6 +45,7 @@ export function RunStatus({
   const silent = !tool && quiet >= 60;
   return (
     <div className="run-indicator" role="status">
+      <Claude.Color size={14} className="run-claude-icon" />
       <span className={`running-dot${connected && !silent ? ' breathing' : ''}`} />
       {silent ? `仍在运行 · 已 ${Math.floor(quiet / 60)} 分钟没有新输出` : '运行中'}
       {suffix}

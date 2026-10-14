@@ -11,6 +11,7 @@ import {
   Check,
   ListOrdered,
 } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
 import type {
   AccountState,
   NativeCapabilities,
@@ -168,7 +169,7 @@ export default function AccountPanel({
         )}
         <div className="account-identity">
           <div className="account-avatar">
-            <UserRound />
+            <Claude.Avatar size={44} shape="square" />
           </div>
           <div>
             <h2>{signedOut ? '尚未登录' : (state?.email ?? account?.email ?? 'Claude Code')}</h2>
