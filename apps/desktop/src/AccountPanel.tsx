@@ -21,7 +21,7 @@ import type {
 import { quotaGateError, validQuotaGate, type QuotaGate, type QuotaLimits } from './quota.ts';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
-import { IconButton } from './ui.tsx';
+import { IconButton, Switch } from './ui.tsx';
 import { copyText } from './copy.tsx';
 
 function QuotaBounds({
@@ -50,11 +50,18 @@ function QuotaBounds({
     }
     setProblem('');
     if (next.warn === gate.warn && next.stop === gate.stop) return;
-    save(next);
+    save({ enabled: gate.enabled, ...next });
   };
   return (
-    <div className="card quota-bound-card">
-      <h3 className="quota-bound-title">{title}</h3>
+    <div className={`card quota-bound-card${gate.enabled ? '' : ' is-off'}`}>
+      <div className="quota-bound-heading">
+        <h3 className="quota-bound-title">{title}</h3>
+        <Switch
+          label={`启用${title}限制`}
+          checked={gate.enabled}
+          onChange={(enabled) => save({ ...gate, enabled })}
+        />
+      </div>
       {(
         [
           ['提醒', warn, setWarn, '达到后在输入框上方提醒一次；窗口不在前台时再发一条系统通知'],
@@ -74,6 +81,7 @@ function QuotaBounds({
               max={100}
               aria-label={`${title}${label}百分比`}
               value={value}
+              disabled={!gate.enabled}
               onChange={(event) => change(event.target.value)}
               onBlur={commit}
               onKeyDown={(event) => {
@@ -392,7 +400,7 @@ export default function AccountPanel({
         )}
         <h2 className="account-section-title">发送门槛</h2>
         <p className="muted">
-          按官方已用比例分别设置。默认都是提醒 90%、停发 95%。任一档达到停发就暂停发送。不另算用量，也不改变官方的「额度用尽后自动继续」。
+          两个窗口默认都开，各自提醒 90%、停发 95%。关掉的窗口不提醒，也不暂停发送。任一开着的窗口达到停发就暂停发送。不另算用量，也不改变官方的「额度用尽后自动继续」。
         </p>
         <div className="quota-bounds">
           <QuotaBounds title="5 小时额度" gate={gate.fiveHour} save={(fiveHour) => saveGate({ ...gate, fiveHour })} />

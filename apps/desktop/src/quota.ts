@@ -1,9 +1,12 @@
 import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
 
-export const defaultQuotaGate = { warn: 90, stop: 95 };
-export const defaultQuotaLimits = { fiveHour: defaultQuotaGate, week: defaultQuotaGate };
+export const defaultQuotaGate = { enabled: true, warn: 90, stop: 95 };
+export const defaultQuotaLimits = {
+  fiveHour: { ...defaultQuotaGate },
+  week: { ...defaultQuotaGate },
+};
 
-export type QuotaGate = { warn: number; stop: number };
+export type QuotaGate = { enabled: boolean; warn: number; stop: number };
 export type QuotaLimits = { fiveHour: QuotaGate; week: QuotaGate };
 // The official 5-hour window, as last reported. `available` is false for an API account, which has no
 // subscription window; a null utilization is a reading that did not include a number.
@@ -63,11 +66,18 @@ export function readQuotaLimits(saved: unknown): QuotaLimits {
   return { fiveHour: gateOf(value), week: { ...defaultQuotaGate } };
 }
 function gateOf(value: unknown): QuotaGate {
-  const warn = value && typeof value === 'object' ? (value as { warn?: unknown }).warn : undefined;
-  const stop = value && typeof value === 'object' ? (value as { stop?: unknown }).stop : undefined;
-  return typeof warn === 'number' && typeof stop === 'number' && validQuotaGate(warn, stop)
-    ? { warn, stop }
-    : { ...defaultQuotaGate };
+  const record =
+    value && typeof value === 'object'
+      ? (value as { warn?: unknown; stop?: unknown; enabled?: unknown })
+      : {};
+  const numbers =
+    typeof record.warn === 'number' &&
+    typeof record.stop === 'number' &&
+    validQuotaGate(record.warn, record.stop)
+      ? { warn: record.warn, stop: record.stop }
+      : { warn: defaultQuotaGate.warn, stop: defaultQuotaGate.stop };
+  // A setting saved before the switch existed stays on.
+  return { enabled: record.enabled !== false, ...numbers };
 }
 
 const watched = [
@@ -99,7 +109,7 @@ function crossed(
   reading: FiveHourReading,
   now: number,
 ): QuotaAlert | null {
-  if (reading.utilization == null) return null;
+  if (!gate.enabled || reading.utilization == null) return null;
   if (reading.resetsAt) {
     const at = Date.parse(reading.resetsAt);
     if (Number.isFinite(at) && at <= now) return null;
@@ -115,7 +125,8 @@ function crossed(
 
 // No reading yet stays unknown, so a reminder already given is not forgotten while the page is loading.
 // An empty number, an API account, or a window whose reset time has passed does not hold the send button.
-// Either official window can warn or stop on its own pair of percents; stopping wins over a warning.
+// Either official window can warn or stop on its own pair of percents; a window switched off does neither.
+// Stopping wins over a warning.
 export function quotaViewOf(
   limits: QuotaLimits,
   metrics: NativeMetrics | null | undefined,

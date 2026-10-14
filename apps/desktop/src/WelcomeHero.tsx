@@ -1,6 +1,62 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AtSign, Folder, Image, Plus, Terminal } from 'lucide-react';
 import { Claude } from '@lobehub/icons';
+
+const TITLE_MAX = 22;
+const TITLE_MIN = 14;
+
+// Shrink the greeting to the heading's width so a long name stays on one line. Below a readable
+// size, the name and the sentence each stay intact and the sentence moves to the next line.
+function useFittedTitle(enabled: boolean, text: string) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const lineRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const heading = headingRef.current;
+    const line = lineRef.current;
+    if (!enabled || !heading || !line) return;
+
+    let neededAtMax = 0;
+    const measureNatural = () => {
+      const previous = line.style.fontSize;
+      const wrapped = line.classList.contains('is-wrapped');
+      line.style.fontSize = `${TITLE_MAX}px`;
+      line.classList.remove('is-wrapped');
+      neededAtMax = line.scrollWidth;
+      line.style.fontSize = previous;
+      line.classList.toggle('is-wrapped', wrapped);
+    };
+    const apply = () => {
+      const available = heading.clientWidth;
+      if (available <= 0 || neededAtMax <= 0) return;
+      let next = '';
+      let wrap = false;
+      if (neededAtMax > available + 1) {
+        const size = ((available - 2) / neededAtMax) * TITLE_MAX;
+        if (size >= TITLE_MIN) next = `${Math.round(size * 10) / 10}px`;
+        else {
+          next = `${TITLE_MIN}px`;
+          wrap = true;
+        }
+      }
+      if (line.style.fontSize !== next) line.style.fontSize = next;
+      line.classList.toggle('is-wrapped', wrap);
+    };
+
+    measureNatural();
+    apply();
+    const observer = new ResizeObserver(() => apply());
+    observer.observe(heading);
+    const onFonts = () => {
+      measureNatural();
+      apply();
+    };
+    void document.fonts?.ready.then(onFonts);
+    return () => observer.disconnect();
+  }, [enabled, text]);
+
+  return { headingRef, lineRef };
+}
 
 export default function WelcomeHero({
   sessionTitle,
@@ -27,6 +83,8 @@ export default function WelcomeHero({
   const rawUser = accountName ? accountName.split('@')[0].trim() : '';
   const username =
     (rawUser && !['未登录', '账号', '离线模拟'].includes(rawUser) ? rawUser : '') || osUser;
+  const greeting = '开始新的编码与协作会话吧！';
+  const { headingRef, lineRef } = useFittedTitle(!!onNewSession, `${username}\n${greeting}`);
 
   return (
     <div className="welcome-hero">
@@ -36,12 +94,12 @@ export default function WelcomeHero({
         <span className="login-brand-sub">CC Desk Tunnel</span>
       </div>
 
-      <h2 className="welcome-title">
+      <h2 className="welcome-title" ref={onNewSession ? headingRef : undefined}>
         {onNewSession ? (
-          <>
+          <span className="welcome-title-line" ref={lineRef}>
             {username && <span className="welcome-user-mention">@{username}</span>}
-            开始新的编码与协作会话吧！
-          </>
+            <span className="welcome-title-rest">{greeting}</span>
+          </span>
         ) : isDefaultTitle ? (
           '今天想推进什么工作？'
         ) : (

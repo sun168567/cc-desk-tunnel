@@ -49,7 +49,7 @@ const sections: {
     name: '账号与额度',
     group: 'Claude Code',
     icon: UserRound,
-    words: '登录 退出 订阅 用量 调用日志 重置 提醒 停发 每周',
+    words: '登录 退出 订阅 用量 调用日志 重置 提醒 停发 每周 开关 启用',
   },
   {
     id: 'claude',

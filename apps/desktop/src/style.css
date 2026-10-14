@@ -2176,7 +2176,8 @@ kbd {
   color: var(--faint);
 }
 .welcome-hero {
-  max-width: 540px;
+  width: 100%;
+  max-width: 880px;
   min-height: 300px;
   margin: 32px auto 0;
   padding: 24px 20px;
@@ -2185,6 +2186,7 @@ kbd {
   align-items: center;
   justify-content: center;
   text-align: center;
+  box-sizing: border-box;
 }
 .welcome-brand-lockup {
   justify-content: center;
@@ -2197,6 +2199,9 @@ kbd {
   font-size: 22px;
 }
 .welcome-title {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 16px 0 8px;
   font-size: 22px;
   font-weight: 600;
@@ -2204,9 +2209,33 @@ kbd {
   line-height: 1.35;
   color: var(--text);
 }
+.welcome-title-line {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  justify-content: center;
+  width: max-content;
+  max-width: none;
+  column-gap: 0.35em;
+}
+.welcome-title-line.is-wrapped {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  row-gap: 0.12em;
+}
+.welcome-user-mention,
+.welcome-title-rest {
+  white-space: nowrap;
+}
 .welcome-user-mention {
   color: #d97757;
-  margin-right: 4px;
+}
+.welcome-title-line.is-wrapped .welcome-user-mention {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .welcome-subtitle {
   max-width: 420px;
@@ -2934,13 +2963,23 @@ button.code-diff-path {
   padding: 0;
   background: transparent;
 }
-.quota-bound-title {
+.quota-bound-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0 0 2px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line-soft);
+}
+.quota-bound-title {
+  margin: 0;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
+}
+.quota-bound-card.is-off .setting-row {
+  opacity: 0.55;
 }
 .quota-percent {
   color: var(--muted);
