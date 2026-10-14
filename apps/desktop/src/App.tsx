@@ -17,6 +17,7 @@ import {
   FolderOpen,
   FolderSymlink,
   GitFork,
+  Info,
   Laptop,
   LogOut,
   Pencil,
@@ -29,7 +30,6 @@ import {
   SquareTerminal,
   Trash2,
   Unplug,
-  UserRound,
   X,
 } from 'lucide-react';
 import { GithubMark, openProject, project } from './project.tsx';
@@ -1227,25 +1227,38 @@ export function App() {
   // What a menu shows beside an item that has a shortcut.
   const hint = (action: Action) =>
     (prefs.shortcuts.enabled && comboText(keyFor(prefs, action))) || undefined;
+  const shortAccountName = accountName.includes('@') ? accountName.split('@')[0] : accountName;
+  const rawPlan =
+    state.account?.subscriptionType ??
+    capabilities?.account.subscriptionType ??
+    (nativeMode ? '账号与额度' : '离线模拟');
+  const planLabel =
+    typeof rawPlan === 'string' && rawPlan.length > 0
+      ? rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1)
+      : rawPlan;
   const settingsMenu: MenuItem[] = [
     {
-      label: `账号 · ${accountName}`,
-      icon: <UserRound />,
-      detail: signedOut
-        ? '点击登录 Claude 账号'
-        : (state.account?.subscriptionType ??
-          capabilities?.account.subscriptionType ??
-          '账号与额度'),
+      label: shortAccountName,
+      ariaLabel: `账号 · ${accountName}`,
+      title: `${accountName}\n点击查看账号与额度`,
+      header: true,
+      detail: signedOut ? '点击登录 Claude 账号' : planLabel,
       run: () => open('settings', 'account'),
     },
     {
       label: '设置',
       icon: <Settings />,
       hint: hint('settings'),
-      separated: true,
       run: () => open('settings', nativeMode ? 'claude' : 'general'),
     },
+    {
+      label: '更新日志',
+      icon: <ScrollText />,
+      separated: true,
+      run: () => setNotes(version || '0.3.2'),
+    },
     { label: '帮助', icon: <CircleHelp />, run: () => open('settings', 'help') },
+    { label: '关于与更新', icon: <Info />, run: () => open('settings', 'about') },
     { label: '断开连接', icon: <LogOut />, separated: true, run: disconnect },
   ];
   const toggleSide = () => setSideOpen((value) => !value);
@@ -1564,6 +1577,7 @@ export function App() {
             page={place.page}
             go={(page) => open(page)}
             accountName={accountName}
+            planName={planLabel}
             adapterName={adapterName}
             update={pendingUpdate}
             openUpdate={(position) => setMenu({ kind: 'update', ...position })}

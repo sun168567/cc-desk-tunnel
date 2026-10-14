@@ -53,6 +53,7 @@ export default function Sidebar({
   page = 'chat',
   go,
   accountName = '账号',
+  planName,
   adapterName = 'Claude Code',
   update = null,
   openUpdate,
@@ -81,6 +82,7 @@ export default function Sidebar({
   page?: Page;
   go?: (page: Page) => void;
   accountName?: string;
+  planName?: string;
   adapterName?: string;
   update?: string | null;
   openUpdate?: (position: MenuPosition) => void;
@@ -467,8 +469,22 @@ export default function Sidebar({
           <span className="sidebar-account-label">
             {(() => {
               const short = accountName.split('@')[0];
-              const mode = adapterName === 'Simulation' ? '离线模拟' : adapterName;
-              return short === mode ? `${mode} · 本地设置` : `${short} · ${mode}`;
+              const sub =
+                planName && planName !== '账号与额度'
+                  ? planName
+                  : adapterName === 'Simulation'
+                    ? '离线模拟'
+                    : adapterName;
+              const duplicate = short === sub;
+              return (
+                <>
+                  <strong className="sidebar-account-name">{short}</strong>
+                  <span className="sidebar-account-sub">
+                    {' · '}
+                    {duplicate ? '本地设置' : sub}
+                  </span>
+                </>
+              );
             })()}
           </span>
           <ChevronUp className="sidebar-account-chevron" />

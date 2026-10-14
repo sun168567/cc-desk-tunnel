@@ -88,6 +88,10 @@ export function Modal({
 
 export type MenuItem = {
   label: string;
+  // Optional accessible name when `label` displays a shorter visual string.
+  ariaLabel?: string;
+  // Optional tooltip when hovering the item.
+  title?: string;
   icon?: ReactNode;
   // A line under the label saying what the choice does.
   detail?: string;
@@ -97,6 +101,8 @@ export type MenuItem = {
   checked?: boolean;
   disabled?: boolean;
   danger?: boolean;
+  // Renders as a compact header row (like Claude Desktop's account header) without a leading icon.
+  header?: boolean;
   // A rule is drawn above this item.
   separated?: boolean;
   run: () => void;
@@ -164,14 +170,15 @@ export function Menu({
     >
       {heading && <p className="menu-heading">{heading}</p>}
       {items.map((item) => (
-        <Fragment key={item.label}>
+        <Fragment key={item.ariaLabel ?? item.label}>
           {item.separated && <hr />}
           <button
             type="button"
             role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
             aria-checked={item.checked}
-            aria-label={item.label}
-            className={`${item.danger ? 'danger' : ''} ${item.detail ? 'detailed' : ''}`}
+            aria-label={item.ariaLabel ?? item.label}
+            title={item.title ?? item.label}
+            className={`${item.danger ? 'danger' : ''} ${item.detail ? 'detailed' : ''} ${item.header ? 'menu-account-header' : ''}`}
             disabled={item.disabled}
             onClick={() => {
               onClose();
@@ -180,7 +187,7 @@ export function Menu({
           >
             {item.icon}
             <span className="menu-label">
-              {item.label}
+              <span className="menu-label-text">{item.label}</span>
               {item.detail && <small>{item.detail}</small>}
             </span>
             {item.hint && <kbd>{item.hint}</kbd>}
