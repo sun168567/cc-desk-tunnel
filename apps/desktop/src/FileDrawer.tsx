@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import RichText from './RichText.tsx';
 import { highlightSource, languageOf } from './code-highlight.ts';
-import { paneKind } from './file-preview.ts';
+import { FileLookup, paneKind } from './file-preview.ts';
 import { IconButton } from './ui.tsx';
 
 // Uploaded HTML is drawn as a page fragment. Scripts and inline handlers are removed; the page
@@ -79,6 +79,11 @@ export default function FileDrawer({
   }, [path, fallback]);
   const highlighted =
     kind === 'source' ? highlightSource(text, languageOf(path)) : null;
+  const lookup = useMemo(() => {
+    const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    const projectPath = slash > 0 ? path.slice(0, slash) : '';
+    return { projectPath, knownPaths: new Map<string, string>() };
+  }, [path]);
   return (
     <aside className="file-drawer" aria-label={fileName(path)}>
       <header>
@@ -93,9 +98,11 @@ export default function FileDrawer({
       <div className="file-drawer-body">
         {notice && <p role="alert">{notice}</p>}
         {kind === 'markdown' ? (
-          <div className="message-content">
-            <RichText text={text} />
-          </div>
+          <FileLookup.Provider value={lookup}>
+            <div className="message-content">
+              <RichText text={text} />
+            </div>
+          </FileLookup.Provider>
         ) : kind === 'html' ? (
           <HtmlView html={text} />
         ) : highlighted ? (

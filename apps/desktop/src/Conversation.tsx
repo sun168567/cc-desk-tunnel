@@ -26,6 +26,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
 import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
@@ -44,7 +45,9 @@ import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
 import { IconButton, Menu } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 import { countChanges, parseEditInput } from './edit-input.ts';
-import { documentKind, OpenDocument } from './file-preview.ts';
+import LocalChanges from './LocalChanges.tsx';
+import { isFilePath } from './file-mentions.ts';
+import { documentKind, FileLookup, OpenDocument } from './file-preview.ts';
 import type { ProxyClient } from './client.ts';
 import WelcomeHero from './WelcomeHero.tsx';
 
@@ -95,7 +98,9 @@ function Fold({
 }) {
   const [open, setOpen] = useState(initialOpen);
   const expandFiles = useContext(ExpandFiles);
-  useEffect(() => { if (expandFiles) setOpen(true); }, [expandFiles]);
+  useEffect(() => {
+    if (expandFiles) setOpen(true);
+  }, [expandFiles]);
   const searching = useContext(SearchExpanded);
   const shown = open || forced || searching;
   return (
@@ -177,7 +182,7 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
       }
     >
       {() => (
-        <div className="tool-detail">
+        <div className={`tool-detail${editInput ? '' : ' plain'}`}>
           {editInput ? (
             <Suspense
               fallback={
@@ -358,6 +363,7 @@ function Message({
         {item.kind === 'thinking' ? <p>{item.text}</p> : <Rich text={item.text} />}
       </div>
       <div className="message-toolbar assistant-toolbar">
+        {item.kind === 'assistant' && <Claude.Color size={13} className="assistant-claude-mark" />}
         {item.kind === 'assistant' && !native && <span className="chip quiet">模拟</span>}
         {time && (
           <time className="message-time" dateTime={item.at} title={time.full}>
@@ -383,7 +389,10 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
       if (!parsed) continue;
       const count = countChanges(parsed);
       const previous = files.get(parsed.path);
-      const written = parsed.changes.map((change) => change.newText).filter(Boolean).join('\n');
+      const written = parsed.changes
+        .map((change) => change.newText)
+        .filter(Boolean)
+        .join('\n');
       files.set(parsed.path, {
         added: count.added + (previous?.added ?? 0),
         removed: count.removed + (previous?.removed ?? 0),
@@ -395,13 +404,17 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
     const host = root.current;
     if (!host || !jump.path) return;
     const locate = () => {
-      const panel = [...host.querySelectorAll<HTMLElement>('[data-file-path]')].find((el) => el.dataset.filePath === jump.path);
+      const panel = [...host.querySelectorAll<HTMLElement>('[data-file-path]')].find(
+        (el) => el.dataset.filePath === jump.path,
+      );
       if (!panel) return false;
       panel.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return true;
     };
     if (locate()) return;
-    const observer = new MutationObserver(() => { if (locate()) observer.disconnect(); });
+    const observer = new MutationObserver(() => {
+      if (locate()) observer.disconnect();
+    });
     observer.observe(host, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [jump]);
@@ -422,69 +435,72 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
       ),
     );
   return (
-    <ExpandFiles.Provider value={jump.request}><div ref={root} className="conversation-turn">
-      {turn.question?.continued ? (
-        <div className="run-notice" role="status">
-          {turn.question.text}
-        </div>
-      ) : (
-        turn.question && (
-          <Message
-            item={turn.question}
-            native={native}
-            edit={turn.joined ? undefined : live.edit}
-          />
-        )
-      )}
-      {active
-        ? steps()
-        : turn.steps.length > 0 && (
-            <Fold
-              className="turn-process"
-              summary={
-                <span>
-                  用时 {duration(turn.startedAt, turn.endedAt!)}
-                  {turn.tools > 0 && ` · ${turn.tools} 步`}
-                  {notes > 0 && ` · ${notes} 条说明`}
-                </span>
-              }
-            >
-              {steps}
-            </Fold>
-          )}
-      {turn.answer && <Message item={turn.answer} native={native} />}
-      {files.size > 0 && (
-        <div className="changed-files" aria-label="本轮文件改动">
-          <span>本轮文件改动</span>
-          {[...files].map(([path, count]) => (
-            <button
-              type="button"
-              key={path}
-              title={documentKind(path) ? `${path}\n在右侧预览` : path}
-              onClick={() => {
-                setJump((current) => ({ path, request: current.request + 1 }));
-                if (documentKind(path)) openDocument({ path, fallback: count.fallback });
-              }}
-            >
-              <span>{path}</span>
-              <ins>+{count.added}</ins>
-              <del>−{count.removed}</del>
-            </button>
-          ))}
-        </div>
-      )}
-      {turn.stats && <TurnStats stats={turn.stats} />}
-      {turn.notices.map((item) => (
-        <div
-          key={item.id}
-          className={`run-notice ${item.error ? 'failed' : ''}`}
-          role={item.error ? 'alert' : 'status'}
-          data-search-content
-        >
-          {item.text}
-        </div>
-      ))}
-    </div></ExpandFiles.Provider>
+    <ExpandFiles.Provider value={jump.request}>
+      <div ref={root} className="conversation-turn">
+        {turn.question?.continued ? (
+          <div className="run-notice" role="status">
+            {turn.question.text}
+          </div>
+        ) : (
+          turn.question && (
+            <Message
+              item={turn.question}
+              native={native}
+              edit={turn.joined ? undefined : live.edit}
+            />
+          )
+        )}
+        {active
+          ? steps()
+          : turn.steps.length > 0 && (
+              <Fold
+                className="turn-process"
+                summary={
+                  <span>
+                    用时 {duration(turn.startedAt, turn.endedAt!)}
+                    {turn.tools > 0 && ` · ${turn.tools} 步`}
+                    {notes > 0 && ` · ${notes} 条说明`}
+                  </span>
+                }
+              >
+                {steps}
+              </Fold>
+            )}
+        {turn.answer && <Message item={turn.answer} native={native} />}
+        {files.size > 0 && (
+          <div className="changed-files" aria-label="本轮文件改动">
+            <span>本轮文件改动</span>
+            {[...files].map(([path, count]) => (
+              <button
+                type="button"
+                key={path}
+                title={documentKind(path) ? `${path}\n在右侧预览` : path}
+                onClick={() => {
+                  setJump((current) => ({ path, request: current.request + 1 }));
+                  if (documentKind(path)) openDocument({ path, fallback: count.fallback });
+                }}
+              >
+                <span>{path}</span>
+                <ins>+{count.added}</ins>
+                <del>−{count.removed}</del>
+              </button>
+            ))}
+          </div>
+        )}
+        <LocalChanges turn={turn} omit={[...files.keys()].sort().join('\0')} />
+        {turn.stats && <TurnStats stats={turn.stats} />}
+        {turn.notices.map((item) => (
+          <div
+            key={item.id}
+            className={`run-notice ${item.error ? 'failed' : ''}`}
+            role={item.error ? 'alert' : 'status'}
+            data-search-content
+          >
+            {item.text}
+          </div>
+        ))}
+      </div>
+    </ExpandFiles.Provider>
   );
 }
 
@@ -537,6 +553,41 @@ export default function Conversation({
   progress: Record<string, TaskProgress> | undefined;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
+  const fileLookup = useMemo(() => {
+    const knownPaths = new Map<string, string>();
+    const projectPath = session?.projectPath ?? '';
+    const normRoot = projectPath.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
+    const recordPath = (candidate: unknown) => {
+      if (typeof candidate !== 'string') return;
+      const trimmed = candidate.trim();
+      if (!isFilePath(trimmed)) return;
+      const base = (trimmed.split(/[\\/]/).pop() ?? '').toLowerCase();
+      if (base) knownPaths.set(base, trimmed);
+      const norm = trimmed.replaceAll('\\', '/').toLowerCase();
+      if (normRoot && norm.startsWith(normRoot + '/')) {
+        knownPaths.set(norm.slice(normRoot.length + 1), trimmed);
+      }
+    };
+    for (const turn of turns) {
+      for (const step of turn.steps) {
+        if (step.kind !== 'work') continue;
+        for (const item of step.items) {
+          if (item.kind !== 'tool') continue;
+          const edit = parseEditInput(item.name, item.input);
+          if (edit?.path) recordPath(edit.path);
+          try {
+            const raw = JSON.parse(item.input);
+            if (raw && typeof raw === 'object') {
+              recordPath(raw.file_path);
+              recordPath(raw.notebook_path);
+              recordPath(raw.path);
+            }
+          } catch {}
+        }
+      }
+    }
+    return { projectPath, knownPaths };
+  }, [turns, session?.projectPath]);
   const toolAtWork = !!turns
     .at(-1)
     ?.steps.flatMap((step) => (step.kind === 'work' ? step.items : []))
@@ -646,7 +697,8 @@ export default function Conversation({
   }, [events, history?.loadingEarlier, session?.id]);
 
   return (
-    <SearchExpanded.Provider value={searching}>
+    <FileLookup.Provider value={fileLookup}>
+      <SearchExpanded.Provider value={searching}>
       {session && (
         <div className="conversation-tools">
           <span role="status">{copyStatus}</span>
@@ -727,7 +779,11 @@ export default function Conversation({
         }}
       >
         {!session ? (
-          <WelcomeHero connected={connected} onNewSession={newSession} />
+          <WelcomeHero
+            connected={connected}
+            accountName={accountName}
+            onNewSession={newSession}
+          />
         ) : (
           <div className="transcript" ref={transcriptRoot}>
             {loadError && (
@@ -752,10 +808,7 @@ export default function Conversation({
               </div>
             )}
             {turns.length === 0 && !history?.loading && (
-              <WelcomeHero
-                sessionTitle={session.title}
-                projectPath={session.projectPath}
-              />
+              <WelcomeHero sessionTitle={session.title} projectPath={session.projectPath} />
             )}
             {turns.map((turn) => (
               <TurnView key={turn.id} turn={turn} native={native} live={live} />
@@ -829,6 +882,7 @@ export default function Conversation({
       {contextMenu && (
         <Menu label="对话文字操作" {...contextMenu} onClose={() => setContextMenu(null)} />
       )}
-    </SearchExpanded.Provider>
+      </SearchExpanded.Provider>
+    </FileLookup.Provider>
   );
 }

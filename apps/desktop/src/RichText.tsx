@@ -1,4 +1,4 @@
-import Markdown from 'react-markdown';
+import Markdown, { defaultUrlTransform } from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -7,7 +7,9 @@ import 'katex/dist/katex.min.css';
 import { isValidElement, memo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Code, Image } from 'lucide-react';
+import { FileMention } from './AttachmentCards.tsx';
 import { CopyButton } from './copy.tsx';
+import { linkFilePaths, pathFromMention } from './file-mentions.ts';
 
 // A finished drawing in a block of `svg` is shown as the picture it is, its source one click away. As an image
 // it runs no script and loads nothing from elsewhere.
@@ -54,11 +56,15 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
 const components: Components = {
   pre: CodeBlock,
-  a: ({ children, ...props }) => (
-    <a {...props} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
+  a: ({ children, href, ...props }) => {
+    const path = pathFromMention(href);
+    if (path) return <FileMention path={path} />;
+    return (
+      <a {...props} href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  },
 };
 
 // Formulas are also written as \( … \) and \[ … \], which Markdown would read as escaped brackets; outside of
@@ -121,6 +127,9 @@ export function dollars(text: string) {
 }
 
 const remarkPlugins = [remarkGfm, remarkMath];
+function urlTransform(url: string) {
+  return url.startsWith('cc-file:') ? url : defaultUrlTransform(url);
+}
 const rehypePlugins: [typeof rehypeKatex, { strict: boolean }][] = [
   [rehypeKatex, { strict: false }],
 ];
@@ -131,9 +140,10 @@ export default memo(function RichText({ text }: { text: string }) {
       remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
       skipHtml
+      urlTransform={urlTransform}
       components={components}
     >
-      {dollars(text)}
+      {linkFilePaths(dollars(text))}
     </Markdown>
   );
 });

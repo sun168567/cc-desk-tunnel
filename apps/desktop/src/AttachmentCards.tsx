@@ -1,7 +1,8 @@
 import { useContext, useEffect, useState } from 'react';
 import { FileCode2, FileImage, FileText, X } from 'lucide-react';
 import type { Attachment, Preview } from './attachments.ts';
-import { OpenDocument, paneKind } from './file-preview.ts';
+import { isFilePath } from './file-mentions.ts';
+import { FileLookup, OpenDocument, paneKind } from './file-preview.ts';
 
 const imagePath = (path: string) => /\.(png|jpe?g|gif|webp|bmp)$/i.test(path);
 const codePath = (path: string) =>
@@ -122,41 +123,214 @@ export function AttachmentCards({
         })}
       </div>
       {openItem && (
-        <div className="attachment-lightbox" role="presentation" onClick={() => setOpened(null)}>
-          <div
-            className="attachment-preview"
-            role="dialog"
-            aria-label={fileName(openItem.path)}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="attachment-preview-header">
-              <span>{fileName(openItem.path)}</span>
-              <button type="button" aria-label="关闭预览" onClick={() => setOpened(null)}>
-                <X size={15} />
-              </button>
-            </header>
-            <div className="attachment-preview-body">
-              {openPreview?.kind === 'image' && openPreview.data.startsWith('data:image/') ? (
-                <img src={openPreview.data} alt={fileName(openItem.path)} />
-              ) : openPreview?.kind === 'text' ? (
-                <pre>
-                  {openPreview.text}
-                  {openPreview.truncated ? '\n…（已截断）' : ''}
-                </pre>
-              ) : (
-                <p className="muted">
-                  {openPreview?.kind === 'unavailable'
-                    ? openPreview.reason
-                    : error || (stored ? '无法预览' : '正在读取…')}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+        <FilePreview
+          path={openItem.path}
+          preview={openPreview}
+          empty={error || (stored ? '无法预览' : '正在读取…')}
+          close={() => setOpened(null)}
+        />
       )}
     </>
   );
 }
+function FilePreview({
+  path,
+  preview,
+  empty,
+  close,
+}: {
+  path: string;
+  preview?: Preview;
+  empty: string;
+  close: () => void;
+}) {
+  return (
+    <div className="attachment-lightbox" role="presentation" onClick={close}>
+      <div
+        className="attachment-preview"
+        role="dialog"
+        aria-label={fileName(path)}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="attachment-preview-header">
+          <span>{fileName(path)}</span>
+          <button type="button" aria-label="关闭预览" onClick={close}>
+            <X size={15} />
+          </button>
+        </header>
+        <div className="attachment-preview-body">
+          {preview?.kind === 'image' && preview.data.startsWith('data:image/') ? (
+            <img src={preview.data} alt={fileName(path)} />
+          ) : preview?.kind === 'text' ? (
+            <pre>
+              {preview.text}
+              {preview.truncated ? '\n…（已截断）' : ''}
+            </pre>
+          ) : (
+            <p className="muted">{preview?.kind === 'unavailable' ? preview.reason : empty}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A path or filename written in a reply, shown as the same card as a file attached with @. Double-click opens it.
+export function FileMention({ path }: { path: string }) {
+  const openDocument = useContext(OpenDocument);
+  const { projectPath, knownPaths } = useContext(FileLookup);
+  const [resolvedPath, setResolvedPath] = useState<string>(() => {
+    if (isFilePath(path)) return path;
+    const norm = path.replace(/^\.[\\/]/, '').replaceAll('\\', '/').toLowerCase();
+    const base = (path.split(/[\\/]/).pop() ?? path).toLowerCase();
+    return knownPaths.get(norm) ?? knownPaths.get(base) ?? path;
+  });
+  const [opened, setOpened] = useState(false);
+  const [preview, setPreview] = useState<Preview | undefined>();
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isFilePath(path)) {
+      setResolvedPath(path);
+      return;
+    }
+    const norm = path.replace(/^\.[\\/]/, '').replaceAll('\\', '/').toLowerCase();
+    const base = (path.split(/[\\/]/).pop() ?? path).toLowerCase();
+    const fromHistory = knownPaths.get(norm) ?? knownPaths.get(base);
+    if (fromHistory) {
+      setResolvedPath(fromHistory);
+      return;
+    }
+    if (!window.desktop || !projectPath) {
+      setResolvedPath(path);
+      return;
+    }
+    let live = true;
+    const query = path.split(/[\\/]/).pop() || path;
+    void window.desktop
+      .searchFiles(projectPath, query)
+      .then((matches) => {
+        if (!live || !matches.length) return;
+        const suffix = '/' + norm;
+        const exactRel = matches.find((item) =>
+          item.replaceAll('\\', '/').toLowerCase().endsWith(suffix),
+        );
+        const exactBase = matches.find(
+          (item) => (item.split(/[\\/]/).pop() ?? '').toLowerCase() === base,
+        );
+        const sep = projectPath.includes('\\') ? '\\' : '/';
+        const joined = `${projectPath.replace(/[\\/]+$/, '')}${sep}${path
+          .replace(/^\.[\\/]/, '')
+          .replaceAll('/', sep)
+          .replaceAll('\\', sep)}`;
+        setResolvedPath(exactRel ?? exactBase ?? matches[0] ?? joined);
+      })
+      .catch(() => {
+        if (!live) return;
+        const sep = projectPath.includes('\\') ? '\\' : '/';
+        setResolvedPath(
+          `${projectPath.replace(/[\\/]+$/, '')}${sep}${path
+            .replace(/^\.[\\/]/, '')
+            .replaceAll('/', sep)
+            .replaceAll('\\', sep)}`,
+        );
+      });
+    return () => {
+      live = false;
+    };
+  }, [path, projectPath, knownPaths]);
+
+  async function resolveTarget(): Promise<string> {
+    if (isFilePath(resolvedPath)) return resolvedPath;
+    const norm = path.replace(/^\.[\\/]/, '').replaceAll('\\', '/').toLowerCase();
+    const base = (path.split(/[\\/]/).pop() ?? path).toLowerCase();
+    const fromHistory = knownPaths.get(norm) ?? knownPaths.get(base);
+    if (fromHistory) {
+      setResolvedPath(fromHistory);
+      return fromHistory;
+    }
+    if (window.desktop && projectPath) {
+      try {
+        const query = path.split(/[\\/]/).pop() || path;
+        const matches = await window.desktop.searchFiles(projectPath, query);
+        const suffix = '/' + norm;
+        const exactRel = matches.find((item) =>
+          item.replaceAll('\\', '/').toLowerCase().endsWith(suffix),
+        );
+        const exactBase = matches.find(
+          (item) => (item.split(/[\\/]/).pop() ?? '').toLowerCase() === base,
+        );
+        const picked = exactRel ?? exactBase ?? matches[0];
+        if (picked) {
+          setResolvedPath(picked);
+          return picked;
+        }
+      } catch {}
+      const sep = projectPath.includes('\\') ? '\\' : '/';
+      const fallbackPath = `${projectPath.replace(/[\\/]+$/, '')}${sep}${path
+        .replace(/^\.[\\/]/, '')
+        .replaceAll('/', sep)
+        .replaceAll('\\', sep)}`;
+      setResolvedPath(fallbackPath);
+      return fallbackPath;
+    }
+    return resolvedPath;
+  }
+
+  async function enlarge() {
+    if (!window.desktop) return;
+    const target = await resolveTarget();
+    if (paneKind(target)) {
+      openDocument({ path: target, fallback: '' });
+      return;
+    }
+    setOpened(true);
+    setError('');
+    if (preview) return;
+    try {
+      setPreview(await window.desktop.previewFile(target));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法预览');
+    }
+  }
+  const isImg = imagePath(resolvedPath);
+  const badge = isImg ? 'IMG' : fileBadge(resolvedPath);
+  return (
+    <>
+      <span
+        className="file-mention"
+        title={window.desktop ? `${resolvedPath}\n双击展开` : resolvedPath}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.getSelection()?.removeAllRanges();
+          void enlarge();
+        }}
+      >
+        <span className="attachment-icon" aria-hidden="true">
+          {isImg ? (
+            <FileImage size={13} />
+          ) : codePath(resolvedPath) ? (
+            <FileCode2 size={13} />
+          ) : (
+            <FileText size={13} />
+          )}
+        </span>
+        <span className="attachment-title">{fileName(path)}</span>
+        <small className="attachment-kind">{badge}</small>
+      </span>
+      {opened && (
+        <FilePreview
+          path={resolvedPath}
+          preview={preview}
+          empty={error || '正在读取…'}
+          close={() => setOpened(false)}
+        />
+      )}
+    </>
+  );
+}
+
 export function useMessageAttachments(messageId: string) {
   const [items, setItems] = useState<Attachment[]>([]);
   useEffect(() => {

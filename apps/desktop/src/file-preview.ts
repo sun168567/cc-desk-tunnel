@@ -1,9 +1,17 @@
 import { createContext } from 'react';
 
-// A generated document the conversation can open in the side drawer. `fallback` is the text the tool
+// Agenerated document the conversation can open in the side drawer. `fallback` is the text the tool
 // wrote, used until the file on disk can be read.
 export type DocumentPreview = { path: string; fallback: string };
 export const OpenDocument = createContext<(document: DocumentPreview) => void>(() => {});
+export type FileLookupContext = {
+  projectPath: string;
+  knownPaths: ReadonlyMap<string, string>;
+};
+export const FileLookup = createContext<FileLookupContext>({
+  projectPath: '',
+  knownPaths: new Map(),
+});
 
 const images = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']);
 const sourceDocs = new Set(['xml', 'svg', 'txt']);
