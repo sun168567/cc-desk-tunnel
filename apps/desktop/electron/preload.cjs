@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('desktop', {
   openLogs: () => ipcRenderer.invoke('log:open'),
   openDevTools: () => ipcRenderer.invoke('devtools:open'),
   gitBranch: (directory) => ipcRenderer.invoke('git:branch', directory),
+  // Snapshot the project before a turn, then read what changed on disk once its commands have finished.
+  beginProjectDiff: (id, directory) => ipcRenderer.invoke('project-diff:begin', id, directory),
+  finishProjectDiff: (id) => ipcRenderer.invoke('project-diff:finish', id),
+  dropProjectDiff: (id) => ipcRenderer.invoke('project-diff:drop', id),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   workspaceRoots: () => ipcRenderer.invoke('workspace:roots'),
@@ -45,7 +49,8 @@ contextBridge.exposeInMainWorld('desktop', {
   saveAttachments: (messageId, attachments, sessionId) =>
     ipcRenderer.invoke('attachments:save', messageId, attachments, sessionId),
   deleteAttachments: (messageId) => ipcRenderer.invoke('attachments:delete', messageId),
-  deleteSessionAttachments: (sessionId) => ipcRenderer.invoke('attachments:delete-session', sessionId),
+  deleteSessionAttachments: (sessionId) =>
+    ipcRenderer.invoke('attachments:delete-session', sessionId),
   loadSchedules: (initial) => ipcRenderer.invoke('schedules:load', initial),
   saveSchedules: (text) => ipcRenderer.invoke('schedules:save', text),
   onSchedulesChanged: (callback) => {
@@ -68,6 +73,7 @@ contextBridge.exposeInMainWorld('desktop', {
   version: () => ipcRenderer.invoke('app:version'),
   releaseNotes: (version) => ipcRenderer.invoke('release:notes', version),
   device: () => ipcRenderer.invoke('device:get'),
+  username: () => ipcRenderer.invoke('os:username'),
   installUpdate: (version) => ipcRenderer.invoke('update:install', version),
   onUpdateProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);

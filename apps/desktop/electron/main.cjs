@@ -28,10 +28,11 @@ const {
 } = require('node:fs');
 const { mkdtemp, stat, writeFile } = require('node:fs/promises');
 const { gitBranch } = require('./git-branch.cjs');
+const { beginProjectDiff, finishProjectDiff, dropProjectDiff } = require('./project-diff.cjs');
 const { previewFile, searchFiles, readTextFile } = require('./local-files.cjs');
 const { asOnDisk } = require('./disk-path.cjs');
 const { openLog } = require('./client-log.cjs');
-const { hostname, tmpdir } = require('node:os');
+const { hostname, tmpdir, userInfo } = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { mkdir, readdir, rmdir, unlink } = require('node:fs/promises');
@@ -211,6 +212,9 @@ handle('devtools:open', (event) => {
   event.sender.openDevTools({ mode: 'detach' });
 });
 handle('git:branch', (_event, directory) => gitBranch(directory));
+handle('project-diff:begin', (_event, id, directory) => beginProjectDiff(id, directory));
+handle('project-diff:finish', (_event, id) => finishProjectDiff(id));
+handle('project-diff:drop', (_event, id) => dropProjectDiff(id));
 handle('clipboard:write', (_event, text) => {
   if (typeof text !== 'string') throw new Error('Expected clipboard text');
   clipboard.writeText(text);
@@ -545,6 +549,13 @@ handle('device:get', () => ({
   id: readComputer().deviceId ?? writeComputer({ deviceId: randomUUID() }).deviceId,
   name: hostname(),
 }));
+handle('os:username', () => {
+  try {
+    return userInfo().username || '';
+  } catch {
+    return '';
+  }
+});
 // A connection is named in its window, on its tray icon and in its notifications once there are several.
 function label() {
   const entries = connections.list(base);

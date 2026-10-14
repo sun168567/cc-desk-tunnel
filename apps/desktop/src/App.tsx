@@ -51,6 +51,7 @@ import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
+import { forgetProject, watchProject } from './LocalChanges.tsx';
 import { OpenDocument, type DocumentPreview } from './file-preview.ts';
 import LoginPage from './LoginPage.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
@@ -801,12 +802,26 @@ export function App() {
           model: task.model ?? session.model,
           effort: task.effort ?? session.effort,
         });
-      await client.request({
-        type: 'message.send',
-        sessionId: session.id,
-        text: taskMessage(task, due),
-        scenario: 'chat',
-      });
+      const requestId = crypto.randomUUID();
+      if (window.desktop && isHere(session, device)) {
+        await window.desktop.beginProjectDiff(requestId, session.projectPath).catch(() => {});
+        watchProject(requestId);
+      }
+      try {
+        await client.request(
+          {
+            type: 'message.send',
+            sessionId: session.id,
+            text: taskMessage(task, due),
+            scenario: 'chat',
+          },
+          requestId,
+        );
+      } catch (error) {
+        await window.desktop?.dropProjectDiff(requestId).catch(() => {});
+        forgetProject(requestId);
+        throw error;
+      }
       return true;
     },
     (task, outcome) =>
@@ -874,7 +889,13 @@ export function App() {
       if (text.length > 16000) throw new Error('消息与附件路径合计不能超过 16000 个字符。');
       const requestId = crypto.randomUUID();
       let stored = false;
+      let watching = false;
       try {
+        if (window.desktop && onThis(selected)) {
+          await window.desktop.beginProjectDiff(requestId, selected.projectPath);
+          watchProject(requestId);
+          watching = true;
+        }
         if (window.desktop && attachments.length) {
           const snapshot = await Promise.all(
             attachments.map(async (item) => ({
@@ -892,6 +913,10 @@ export function App() {
         setDraft(sessionId, { text: '', attachments: [] });
       } catch (error) {
         if (stored) await window.desktop?.deleteAttachments(requestId).catch(() => {});
+        if (watching) {
+          await window.desktop?.dropProjectDiff(requestId).catch(() => {});
+          forgetProject(requestId);
+        }
         throw error;
       }
     });
@@ -900,8 +925,19 @@ export function App() {
   function resume() {
     if (!selected || quotaView.level === 'stop') return;
     const sessionId = selected.id;
+    const requestId = crypto.randomUUID();
     void act(async () => {
-      await client.request({ type: 'run.continue', sessionId });
+      if (window.desktop && onThis(selected)) {
+        await window.desktop.beginProjectDiff(requestId, selected.projectPath).catch(() => {});
+        watchProject(requestId);
+      }
+      try {
+        await client.request({ type: 'run.continue', sessionId }, requestId);
+      } catch (error) {
+        await window.desktop?.dropProjectDiff(requestId).catch(() => {});
+        forgetProject(requestId);
+        throw error;
+      }
     });
   }
   async function compact() {

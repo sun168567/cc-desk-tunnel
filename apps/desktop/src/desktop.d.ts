@@ -41,6 +41,13 @@ declare global {
       saveImage: (type: string, bytes: Uint8Array) => Promise<string>;
       // The branch a project's working tree is on, or null outside a repository.
       gitBranch: (path: string) => Promise<string | null>;
+      // Remember the project as it is now. `finish` is the files that differ once the turn's commands are done;
+      // null when this turn was not snapshotted.
+      beginProjectDiff: (id: string, directory: string) => Promise<void>;
+      finishProjectDiff: (
+        id: string,
+      ) => Promise<{ path: string; oldText: string; newText: string }[] | null>;
+      dropProjectDiff: (id: string) => Promise<void>;
       copyText: (text: string) => Promise<void>;
       openExternal: (url: string) => Promise<void>;
       // The folders holding sessions without a project; new ones are made in the first.
@@ -87,6 +94,7 @@ declare global {
       releaseNotes: (version: string) => Promise<string>;
       // This computer as the service knows it.
       device: () => Promise<import('@cc-desk-tunnel/protocol').Device>;
+      username?: () => Promise<string>;
       // Fetches and runs an installer: the one the connected service holds, or, given a version, that
       // version's from the release page.
       installUpdate: (version?: string) => Promise<void>;
