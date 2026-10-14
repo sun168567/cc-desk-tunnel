@@ -10,7 +10,10 @@
     "erasableSyntaxOnly": true,
     "jsx": "react-jsx",
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@lobehub/icons": ["./apps/desktop/src/lobehub-icons.tsx"]
+    }
   },
   "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "playwright.config.ts"]
 }
