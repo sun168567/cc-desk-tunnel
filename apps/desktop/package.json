@@ -9,6 +9,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "setup": "install-electron",
+    "prestart": "npm run build",
     "start": "electron ."
   },
   "dependencies": {
