@@ -20,8 +20,11 @@ export default function NativeTerminal({
   const [error, setError] = useState<string | null>(null);
   const stop = useRef<() => void>(() => {});
   useEffect(() => {
+    const configuredFont =
+      getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() ||
+      "'Maple Mono NF CN Medium', 'Maple Mono NF CN', 'JetBrains Mono', 'Menlo', 'Consolas', monospace";
     const terminal = new Terminal({
-      fontFamily: "'Cascadia Mono', Consolas, monospace",
+      fontFamily: configuredFont,
       fontSize: 13,
       cursorBlink: true,
       scrollback: 2000,

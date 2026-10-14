@@ -198,15 +198,28 @@ export function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.font = prefs.interfaceFont;
+    const uiFont = prefs.interfaceFont.trim();
+    root.dataset.font = uiFont || 'system';
+    if (!uiFont || uiFont === 'system' || uiFont === 'serif') {
+      root.style.removeProperty('--font-sans');
+    } else if (uiFont === 'monospace') {
+      root.style.setProperty('--font-sans', 'monospace, var(--font-sans-system)');
+    } else if (uiFont === 'Maple Mono NF CN Medium') {
+      root.style.setProperty(
+        '--font-sans',
+        `'Maple Mono NF CN Medium', 'Maple Mono NF CN', var(--font-sans-system)`,
+      );
+    } else {
+      root.style.setProperty('--font-sans', `${JSON.stringify(uiFont)}, var(--font-sans-system)`);
+    }
     root.dataset.textSize = prefs.textSize;
     root.dataset.transcriptWidth = prefs.transcriptWidth;
     const mono = prefs.codeFont.trim();
-    if (mono) {
-      root.style.setProperty(
-        '--font-mono',
-        `${JSON.stringify(mono)}, 'JetBrains Mono', 'Cascadia Code', 'Fira Code', ui-monospace, Menlo, Monaco, Consolas, monospace`,
-      );
+    const fallbackStack = `'Maple Mono NF CN Medium', 'Maple Mono NF CN', 'JetBrains Mono', 'Menlo', 'Consolas', monospace`;
+    if (mono && mono !== 'monospace') {
+      root.style.setProperty('--font-mono', `${JSON.stringify(mono)}, ${fallbackStack}`);
+    } else if (mono === 'monospace') {
+      root.style.setProperty('--font-mono', 'monospace');
     } else {
       root.style.removeProperty('--font-mono');
     }

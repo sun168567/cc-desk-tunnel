@@ -8,14 +8,22 @@ import {
   Info,
   Keyboard,
   Search,
-  Settings2,
   SlidersHorizontal,
   UserRound,
 } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
+import type { ComponentType } from 'react';
 import type { ProxyClient } from './client.ts';
 import Help from './Help.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
-import { connectionWaits, setPrefs, usePrefs, waitRange } from './prefs.ts';
+import {
+  codeFontOptions,
+  connectionWaits,
+  interfaceFontOptions,
+  setPrefs,
+  usePrefs,
+  waitRange,
+} from './prefs.ts';
 import type { ConnectionWaits, NotifyKind } from './prefs.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
@@ -29,7 +37,13 @@ import type { MenuItem } from './ui.tsx';
 export type Section =
   'account' | 'claude' | 'general' | 'notifications' | 'shortcuts' | 'help' | 'about';
 // `words` is what the search box matches besides the name: the settings found inside.
-const sections: { id: Section; name: string; group: string; icon: typeof Bell; words: string }[] = [
+const sections: {
+  id: Section;
+  name: string;
+  group: string;
+  icon: ComponentType<{ size?: number | string }>;
+  words: string;
+}[] = [
   {
     id: 'account',
     name: '账号与额度',
@@ -41,7 +55,7 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     id: 'claude',
     name: 'Claude Code',
     group: 'Claude Code',
-    icon: Settings2,
+    icon: Claude.Color,
     words: '自动压缩 思考 快速模式 记忆 检查点 缓存 语言 额度 模型',
   },
   {
@@ -411,17 +425,23 @@ function General({
           <CodePreview variant="dark" label="Claude Dark" />
         </div>
         <div className="card">
-          <Row title="代码字体" detail="为代码块、文件改动对比与内嵌终端设置自定义等宽字体">
-            <input
-              className="setting-input"
+          <Row title="代码字体" detail="为代码块、工具输入输出、文件改动对比与内嵌终端选择等宽字体">
+            <select
+              className="setting-select"
               aria-label="代码字体"
-              placeholder="e.g. JetBrains Mono"
               value={codeFont}
-              spellCheck={false}
               onChange={(event) =>
                 setPrefs((prefs) => ({ ...prefs, codeFont: event.target.value }))
               }
-            />
+            >
+              {!codeFontOptions.includes(codeFont as (typeof codeFontOptions)[number]) &&
+                codeFont && <option value={codeFont}>{codeFont}</option>}
+              {codeFontOptions.map((font) => (
+                <option key={font} value={font}>
+                  {font}
+                </option>
+              ))}
+            </select>
           </Row>
         </div>
         <h2 className="page-heading">外观</h2>
@@ -452,22 +472,22 @@ function General({
             </div>
           </Row>
           <Row title="界面字体" detail="整个界面的排版字体 —— 菜单、侧栏与设置面板">
-            <div className="segmented" role="group" aria-label="界面字体">
-              <button
-                type="button"
-                aria-pressed={interfaceFont === 'system'}
-                onClick={() => setPrefs((prefs) => ({ ...prefs, interfaceFont: 'system' }))}
-              >
-                系统
-              </button>
-              <button
-                type="button"
-                aria-pressed={interfaceFont === 'serif'}
-                onClick={() => setPrefs((prefs) => ({ ...prefs, interfaceFont: 'serif' }))}
-              >
-                衬线
-              </button>
-            </div>
+            <select
+              className="setting-select"
+              aria-label="界面字体"
+              value={interfaceFont}
+              onChange={(event) =>
+                setPrefs((prefs) => ({ ...prefs, interfaceFont: event.target.value }))
+              }
+            >
+              {!interfaceFontOptions.some((option) => option.value === interfaceFont) &&
+                interfaceFont && <option value={interfaceFont}>{interfaceFont}</option>}
+              {interfaceFontOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </Row>
           <Row title="对话字号" detail="对话正文与消息气泡的文字大小">
             <div className="segmented" role="group" aria-label="对话字号">
@@ -739,7 +759,10 @@ function About({
             <span className="setting-value">{service ?? '未知'}</span>
           </Row>
           <Row title="运行方式">
-            <span className="setting-value">{adapterName}</span>
+            <span className="setting-actions">
+              {adapterName === 'Claude Code' && <Claude.Combine size={16} type={'color'} />}
+              <span className="setting-value">{adapterName}</span>
+            </span>
           </Row>
         </div>
         <h2 className="page-heading">更新</h2>
@@ -903,7 +926,10 @@ export default function SettingsPage({
           ) : (
             <section className="page" aria-label="Claude Code 设置">
               <div className="page-body">
-                <h1 className="page-title">Claude Code</h1>
+                <h1 className="page-title page-title-with-icon">
+                  <Claude.Color size={22} />
+                  Claude Code
+                </h1>
                 <p className="muted">离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。</p>
               </div>
             </section>

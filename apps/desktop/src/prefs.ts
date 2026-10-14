@@ -8,7 +8,6 @@ import { onSharedChange, saveShared, shareOnce, shared } from './shared.ts';
 // connections share them (see shared.ts).
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
 export type ThemeMode = 'system' | 'dark' | 'light';
-export type InterfaceFont = 'system' | 'serif';
 export type TextSize = 'small' | 'medium' | 'large';
 export type TranscriptWidth = 'narrow' | 'medium' | 'wide';
 // How many seconds each step of connecting may take. The defaults suit most computers; a domain account whose
@@ -46,6 +45,26 @@ export type Prefs = {
   quotaLimits: QuotaLimits;
 };
 
+export const codeFontOptions = [
+  'Maple Mono NF CN Medium',
+  'JetBrains Mono',
+  'Menlo',
+  'Consolas',
+  'monospace',
+] as const;
+
+export const interfaceFontOptions = [
+  { value: 'system', label: '系统默认' },
+  { value: 'serif', label: '衬线 (Serif)' },
+  { value: 'Maple Mono NF CN Medium', label: 'Maple Mono NF CN Medium' },
+  { value: 'JetBrains Mono', label: 'JetBrains Mono' },
+  { value: 'Menlo', label: 'Menlo' },
+  { value: 'Consolas', label: 'Consolas' },
+  { value: 'monospace', label: 'monospace' },
+] as const;
+
+export type InterfaceFont = (typeof interfaceFontOptions)[number]['value'] | (string & {});
+
 const storageKey = 'proxy-prefs';
 const defaults: Prefs = {
   pinnedSessions: [],
@@ -68,7 +87,7 @@ const defaults: Prefs = {
   bypassPermissions: false,
   theme: 'system',
   interfaceFont: 'system',
-  codeFont: '',
+  codeFont: 'Maple Mono NF CN Medium',
   textSize: 'medium',
   transcriptWidth: 'medium',
   stats: { enabled: false, summary: {} },
@@ -117,8 +136,14 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
       ) as ConnectionWaits,
       bypassPermissions: saved.bypassPermissions === true,
       theme: saved.theme === 'dark' || saved.theme === 'light' ? saved.theme : 'system',
-      interfaceFont: saved.interfaceFont === 'serif' ? 'serif' : 'system',
-      codeFont: typeof saved.codeFont === 'string' ? saved.codeFont : '',
+      interfaceFont:
+        typeof saved.interfaceFont === 'string' && saved.interfaceFont.trim()
+          ? saved.interfaceFont.trim()
+          : defaults.interfaceFont,
+      codeFont:
+        typeof saved.codeFont === 'string' && saved.codeFont.trim()
+          ? saved.codeFont
+          : defaults.codeFont,
       textSize:
         saved.textSize === 'small' || saved.textSize === 'large' ? saved.textSize : 'medium',
       transcriptWidth:
