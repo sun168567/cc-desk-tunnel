@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Check, RotateCcw } from 'lucide-react';
+import { Claude } from '@lobehub/icons';
 import { usePrefs } from './prefs.ts';
 import { quotaFigures } from './quota.ts';
 import type {
@@ -17,6 +18,30 @@ const effortNames: Record<Effort, string> = {
   high: '高',
   xhigh: '极高',
   max: '最高',
+};
+
+const effortThemes: Record<Effort, { color: string; gradient: string }> = {
+  low: {
+    color: '#0ea5e9',
+    gradient: 'linear-gradient(90deg, #93c5fd 0%, #38bdf8 100%)',
+  },
+  medium: {
+    color: '#2563eb',
+    gradient: 'linear-gradient(90deg, #7dd3fc 0%, #3b82f6 55%, #2563eb 100%)',
+  },
+  high: {
+    color: '#4338ca',
+    gradient: 'linear-gradient(90deg, #7dd3fc 0%, #2563eb 50%, #4338ca 100%)',
+  },
+  xhigh: {
+    color: '#7c3aed',
+    gradient: 'linear-gradient(90deg, #7dd3fc 0%, #2563eb 36%, #4f46e5 68%, #7c3aed 100%)',
+  },
+  max: {
+    color: '#9333ea',
+    gradient:
+      'linear-gradient(90deg, #7dd3fc 0%, #2563eb 28%, #4f46e5 54%, #7c3aed 78%, #9333ea 100%)',
+  },
 };
 export default function ComposerControls({
   model,
@@ -155,20 +180,25 @@ export default function ComposerControls({
               strokeDasharray={`${contextUsed} 100`}
             />
           </svg>
+          {context && <span className="context-percent">{context.percentage}%</span>}
         </button>
         {contextOpen && (
           <div className="context-tooltip" role="tooltip">
-            <strong>上下文窗口</strong>
+            <div>
+              <strong>上下文窗口</strong>
+              {context && (
+                <span>
+                  {context.percentage}% 已用 · {Math.max(0, 100 - context.percentage)}% 剩余
+                </span>
+              )}
+            </div>
             {context ? (
               <>
-                <span>
-                  {context.percentage}% 已用（剩余 {Math.max(0, 100 - context.percentage)}%）
-                </span>
-                <span>
+                <progress max={100} value={contextUsed} className={contextLevel} />
+                <small>
                   {context.usedTokens.toLocaleString()} / {context.windowTokens.toLocaleString()}{' '}
-                  tokens
-                </span>
-                <small>{new Date(context.measuredAt).toLocaleTimeString('zh-CN')} · 原生摘要</small>
+                  tokens · {new Date(context.measuredAt).toLocaleTimeString('zh-CN')}
+                </small>
               </>
             ) : (
               <span>{metrics?.errors?.context ?? '等待原生状态'}</span>
@@ -188,13 +218,33 @@ export default function ComposerControls({
             setChoosing(false);
           }}
         >
+          <Claude.Color size={13} className="model-trigger-claude" />
           <span>{label}</span>
-          <small>{effort ? effortNames[effort] : actual ? effortNames[actual] : '默认'}</small>
+          <small
+            style={
+              shownEffort
+                ? ({ color: effortThemes[shownEffort].color, fontWeight: 500 } as CSSProperties)
+                : undefined
+            }
+          >
+            {effort ? effortNames[effort] : actual ? effortNames[actual] : '默认'}
+          </small>
           <ChevronDown />
         </button>
         {open && (
           <div className="model-menu" role="dialog" aria-label="模型与推理强度">
-            <div className="effort-view" hidden={choosing}>
+            <div
+              className="effort-view"
+              hidden={choosing}
+              style={
+                shownEffort
+                  ? ({
+                      '--effort-color': effortThemes[shownEffort].color,
+                      '--effort-gradient': effortThemes[shownEffort].gradient,
+                    } as CSSProperties)
+                  : undefined
+              }
+            >
               <div className="effort-heading">
                 <strong>{shownEffort ? effortNames[shownEffort] : '原生默认'}</strong>
                 <IconButton
@@ -209,13 +259,19 @@ export default function ComposerControls({
                 </IconButton>
               </div>
               <button type="button" className="model-current" onClick={() => setChoosing(true)}>
-                {label}
+                <span className="model-current-name">
+                  <Claude.Color size={13} />
+                  {label}
+                </span>
                 <ChevronRight />
               </button>
               {levels.length > 0 && (
                 <input
                   style={
                     {
+                      '--ratio': shownEffort
+                        ? Math.max(0, levels.indexOf(shownEffort)) / Math.max(1, levels.length - 1)
+                        : 0,
                       '--fill': shownEffort
                         ? `${(Math.max(0, levels.indexOf(shownEffort)) / Math.max(1, levels.length - 1)) * 100}%`
                         : '0%',
