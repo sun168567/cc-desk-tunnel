@@ -230,6 +230,7 @@ export function App() {
     void window.desktop?.version().then(setVersion);
   }, []);
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
+  const [openaiModels, setOpenaiModels] = useState<{ id: string; displayName: string }[]>([]);
   const closeTerminal = useCallback(() => setTerminalSessionId(null), []);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -349,7 +350,10 @@ export function App() {
     (metrics ?? state.metrics) && quota
       ? { ...(metrics ?? state.metrics)!, rateLimits: quota.rateLimits }
       : (metrics ?? state.metrics);
-  const canCompact = !!latest(events, 'native.context')?.persisted;
+  const canCompact =
+    selected?.provider === 'openai'
+      ? !!selected.codexThreadId
+      : !!latest(events, 'native.context')?.persisted;
   const quotaView = useMemo(
     () => quotaViewOf(prefs.quotaLimits, accountMetrics),
     [prefs.quotaLimits, accountMetrics],
@@ -400,7 +404,8 @@ export function App() {
     !connected ||
     busy ||
     !!history?.loading ||
-    (!!selected?.activeRun && (!nativeMode || !ownsRun)) ||
+    (!!selected?.activeRun &&
+      !(ownsRun && (nativeMode || selected.provider === 'openai'))) ||
     refreshing;
   const draft = selected ? (drafts[selected.id]?.text ?? '') : '';
   const attachments = selected && window.desktop ? (drafts[selected.id]?.attachments ?? []) : [];
@@ -585,7 +590,6 @@ export function App() {
   // Each session's native state is read once when it is first shown idle.
   useEffect(() => {
     if (
-      !nativeMode ||
       !selected ||
       !connected ||
       history?.loading ||
@@ -594,12 +598,51 @@ export function App() {
       refreshed.current.has(selected.id)
     )
       return;
+    if (!nativeMode && selected.provider !== 'openai') return;
     refreshed.current.add(selected.id);
     void refreshStatus(selected.id);
-  }, [nativeMode, selected?.id, connected, history?.loading, selected?.activeRun, anyTerminal]);
+  }, [
+    nativeMode,
+    selected?.id,
+    selected?.provider,
+    connected,
+    history?.loading,
+    selected?.activeRun,
+    anyTerminal,
+  ]);
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
+    if (connected && accountOpen)
+      void client.request({ type: 'account.status', provider: 'openai' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
+  useEffect(() => {
+    if (state.status !== 'connected') return;
+    void client
+      .request({
+        type: 'quota.set',
+        fiveHour: prefs.quotaLimits.fiveHour,
+        week: prefs.quotaLimits.week,
+      })
+      .catch(() => {});
+  }, [state.status, prefs.quotaLimits]);
+  useEffect(() => {
+    if (!connected) {
+      setOpenaiModels([]);
+      return;
+    }
+    let current = true;
+    void client.fetch({ type: 'model.list', provider: 'openai' }).then(
+      (result) => {
+        if (current) setOpenaiModels(result.models);
+      },
+      () => {
+        if (current) setOpenaiModels([]);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [client, connected, state.openai?.runtime, state.openai?.executable]);
   useEffect(() => {
     if (
       !accountOpen ||
@@ -733,12 +776,17 @@ export function App() {
       setRefreshing(false);
     }
   }
-  async function createSession(projectPath: string) {
-    const response = await client.request({ type: 'session.create', title: '新会话', projectPath });
+  async function createSession(projectPath: string, provider: 'claude' | 'openai' = 'claude') {
+    const response = await client.request({
+      type: 'session.create',
+      title: '新会话',
+      projectPath,
+      ...(provider === 'openai' ? { provider } : {}),
+    });
     if (response.sessionId) show(response.sessionId);
   }
   async function createInProject(path: string) {
-    await act(() => createSession(path));
+    await act(() => createSession(path, 'claude'));
   }
   async function addProject() {
     if (!window.desktop?.chooseProject) {
@@ -766,7 +814,7 @@ export function App() {
     }
     const path =
       (away ? undefined : selected?.projectPath) ?? projects[0] ?? sessions[0]?.projectPath;
-    if (path) await createInProject(path);
+    if (path) await act(() => createSession(path));
     else await addProject();
   }
   // A due task is an ordinary message: to its session once that is idle, or to a session made for it. It is
@@ -792,12 +840,17 @@ export function App() {
         const { sessionId } = task.target;
         session = sessions.find((item) => item.id === sessionId);
         if (!session) throw new Error('目标会话已不存在');
+        if (session.provider !== task.provider)
+          throw new Error('任务的提供商与目标会话不一致，未改走另一家。');
         if (session.activeRun) return false;
       } else {
         const created = await client.request({
           type: 'session.create',
           title: task.name,
           projectPath: task.target.projectPath,
+          ...(task.provider === 'openai'
+            ? { provider: task.provider, profileId: task.profileId }
+            : {}),
         });
         session = client.state.sessions.find((item) => item.id === created.sessionId);
         if (!session) throw new Error('新会话创建失败');
@@ -805,8 +858,21 @@ export function App() {
         if (selectedId) client.select(selectedId);
       }
       if (
-        (task.model && task.model !== session.model) ||
-        (task.effort && task.effort !== session.effort)
+        task.provider !== 'openai' &&
+        ((task.model && task.model !== session.model) ||
+          (task.effort && task.effort !== session.effort))
+      )
+        await client.request({
+          type: 'session.configure',
+          sessionId: session.id,
+          permissionMode: session.permissionMode,
+          model: task.model ?? session.model,
+          effort: task.effort ?? session.effort,
+        });
+      if (
+        task.provider === 'openai' &&
+        ((task.model && task.model !== session.model) ||
+          (task.effort && task.effort !== session.effort))
       )
         await client.request({
           type: 'session.configure',
@@ -954,7 +1020,7 @@ export function App() {
     });
   }
   async function compact() {
-    if (!selected || controlsDisabled || !canCompact) return;
+    if (!selected || controlsDisabled || !canCompact || quotaView.level === 'stop') return;
     setSlashOpen(false);
     setDraft(selected.id, '');
     await act(async () => {
@@ -965,6 +1031,7 @@ export function App() {
     model?: string | null;
     effort?: Effort | null;
     permissionMode?: PermissionMode;
+    provider?: 'claude' | 'openai';
   }) {
     if (!selected) return;
     await act(async () => {
@@ -1031,13 +1098,13 @@ export function App() {
             },
           ]
         : []),
-      ...(nativeMode
+      ...(nativeMode || session.provider === 'openai'
         ? [
             {
               label: '原生终端',
               icon: <SquareTerminal />,
               // A terminal takes only its own session; others may be running.
-              disabled: !idle || !!session.activeRun,
+              disabled: !idle || !!session.activeRun || quotaView.level === 'stop',
               run: () => {
                 show(session.id);
                 setTerminalSessionId(session.id);
@@ -1409,6 +1476,7 @@ export function App() {
           adapterName=""
           updates={[]}
           showNotes={setNotes}
+          openai={null}
         />
         {notesDialog}
       </div>
@@ -1476,6 +1544,7 @@ export function App() {
   const sectionNames: Record<Section, string> = {
     account: '账号与额度',
     claude: 'Claude Code 设置',
+    openai: 'OpenAI 设置',
     general: '常规设置',
     notifications: '通知设置',
     shortcuts: '快捷键',
@@ -1535,10 +1604,12 @@ export function App() {
           adapterName={adapterName}
           updates={updates}
           showNotes={setNotes}
+          openai={state.openai}
           account={
             <AccountPanel
               client={client}
               account={nativeMode ? state.account : null}
+              openai={state.openai}
               capabilities={signedOut ? null : capabilities}
               metrics={signedOut ? null : accountMetrics}
               refreshing={refreshing}
@@ -1716,8 +1787,10 @@ export function App() {
                       <p>
                         这个会话在设备“{selected.device?.name ?? '未知设备'}”上，项目目录是{' '}
                         <code>{selected.projectPath}</code>
-                        。要在这台电脑上接着做，先选它在这里的项目目录；下一条消息会告诉 Claude
-                        换了电脑。
+                        。
+                        {selected.provider === 'openai'
+                          ? '要在这台电脑上接着聊，先把它接到这里。'
+                          : '要在这台电脑上接着做，先选它在这里的项目目录；下一条消息会告诉 Claude 换了电脑。'}
                       </p>
                       <button
                         type="button"
@@ -1793,6 +1866,16 @@ export function App() {
                       quota={
                         quotaView.level === 'warn' || quotaView.level === 'stop' ? quotaView : null
                       }
+                      projectBusy={
+                        !!selected.projectPath &&
+                        state.sessions.some(
+                          (item) =>
+                            item.id !== selected.id &&
+                            item.projectPath === selected.projectPath &&
+                            !!item.activeRun,
+                        )
+                      }
+                      openaiModels={openaiModels}
                       send={() => {
                         void send();
                       }}

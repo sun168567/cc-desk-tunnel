@@ -14,6 +14,8 @@ test('effort drag previews continuously, saves on release and keeps the menu ope
     title: '滑条回归',
     autoTitle: false,
     projectPath: 'D:\\工作\\滑条回归',
+    provider: 'claude',
+    profileId: 'default',
     permissionMode: 'auto',
     model: 'test-model',
     effort: 'high',

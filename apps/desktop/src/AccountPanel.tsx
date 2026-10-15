@@ -11,7 +11,7 @@ import {
   Check,
   ListOrdered,
 } from 'lucide-react';
-import { Claude } from '@lobehub/icons';
+import { Claude, OpenAI } from '@lobehub/icons';
 import type {
   AccountState,
   NativeCapabilities,
@@ -104,6 +104,7 @@ function QuotaBounds({
 export default function AccountPanel({
   client,
   account: state,
+  openai,
   capabilities,
   metrics,
   refreshing,
@@ -115,6 +116,7 @@ export default function AccountPanel({
 }: {
   client: ProxyClient;
   account: AccountState | null;
+  openai?: AccountState | null;
   capabilities: NativeCapabilities | null;
   metrics: NativeMetrics | null;
   refreshing: boolean;
@@ -131,8 +133,25 @@ export default function AccountPanel({
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [copied, setCopied] = useState(false);
   const signedOut = state?.loggedIn === false;
+
+  const [openaiWorking, setOpenaiWorking] = useState(false);
+  const [openaiFailure, setOpenaiFailure] = useState<string | null>(null);
+  const [openaiConfirmLogout, setOpenaiConfirmLogout] = useState(false);
+  const [openaiCopied, setOpenaiCopied] = useState(false);
+  const openaiAbsent = !openai || !openai.runtime || openai.runtime === 'absent';
+  const openaiRuntimeLabel = !openai
+    ? '未读取'
+    : openai.runtime === 'ready'
+      ? '就绪'
+      : openai.runtime === 'unavailable'
+        ? '不可用'
+        : '未配置';
+
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [log, setLog] = useState<string | null>(null);
+  useEffect(() => {
+    void client.request({ type: 'account.status', provider: 'openai' }).catch(() => {});
+  }, [client]);
   useEffect(() => {
     let current = true;
     void client.fetch({ type: 'usage.summary' }).then(
@@ -158,6 +177,20 @@ export default function AccountPanel({
       setWorking(false);
     }
   }
+  async function actOpenAI(command: Parameters<ProxyClient['request']>[0]) {
+    setOpenaiFailure(null);
+    setOpenaiWorking(true);
+    try {
+      await client.request(command);
+    } catch (error) {
+      setOpenaiFailure(error instanceof Error ? error.message : '操作失败。');
+    } finally {
+      setOpenaiWorking(false);
+    }
+  }
+
+  const todayPeriod = summary?.windows.find((item) => item.name === 'today') ?? summary?.windows[0];
+
   return (
     <section className="account-page" aria-label="账号信息">
       <header className="account-heading">
@@ -165,7 +198,14 @@ export default function AccountPanel({
           <UserRound />
           账号
         </h1>
-        <IconButton title="刷新账号信息" disabled={disabled} onClick={refresh}>
+        <IconButton
+          title="刷新账号信息"
+          disabled={disabled}
+          onClick={() => {
+            refresh();
+            void client.request({ type: 'account.status', provider: 'openai' }).catch(() => {});
+          }}
+        >
           <RefreshCw className={refreshing ? 'spinning' : ''} />
         </IconButton>
       </header>
@@ -175,267 +215,491 @@ export default function AccountPanel({
             {error}
           </p>
         )}
-        <div className="account-identity">
-          <div className="account-avatar">
-            <Claude.Avatar size={44} shape="square" />
-          </div>
-          <div>
-            <h2>{signedOut ? '尚未登录' : (state?.email ?? account?.email ?? 'Claude Code')}</h2>
-            <p>
-              {signedOut
-                ? '云端 Claude Code 还没有登录账号'
-                : (state?.subscriptionType ?? account?.subscriptionType ?? '账号信息尚未读取')}
-            </p>
-          </div>
-          {signedOut && !state.login && (
-            <button
-              type="button"
-              className="button primary"
-              disabled={working}
-              onClick={() => {
-                void act({ type: 'account.login' });
-              }}
-            >
-              <LogIn />
-              {working ? '获取链接…' : '登录'}
-            </button>
-          )}
-          {state?.loggedIn && !confirmLogout && (
-            <button
-              type="button"
-              className="button secondary"
-              disabled={working}
-              onClick={() => setConfirmLogout(true)}
-            >
-              <LogOut />
-              退出登录
-            </button>
-          )}
-        </div>
-        {(failure ?? state?.notice) && (
-          <p className="error-text" role="alert">
-            {failure ?? state?.notice}
-          </p>
-        )}
-        {state?.loggedIn && confirmLogout && (
-          <div className="account-confirm" role="group" aria-label="确认退出登录">
-            <p>退出后云端的登录凭据会被官方 CLI 清除，会话记录保留；再次使用需要重新登录。</p>
-            <button
-              type="button"
-              className="button secondary"
-              disabled={working}
-              onClick={() => setConfirmLogout(false)}
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              className="button danger"
-              disabled={working}
-              onClick={() => {
-                void act({ type: 'account.logout' }).then(() => setConfirmLogout(false));
-              }}
-            >
-              <LogOut />
-              退出登录
-            </button>
-          </div>
-        )}
-        {signedOut && state.login && (
-          <form
-            className="account-login"
-            aria-label="登录 Claude 账号"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void act({ type: 'account.code', code: code.trim() }).then(() => setCode(''));
-            }}
-          >
-            <p>
-              <strong>1</strong>在浏览器打开官方授权页并登录。
-            </p>
-            <div className="account-login-actions">
-              <button
-                type="button"
-                className="button primary"
-                onClick={() => {
-                  if (window.desktop)
-                    void window.desktop
-                      .openExternal(state.login!.url)
-                      .catch(() => setFailure('无法打开浏览器，请复制链接。'));
-                  else window.open(state.login!.url, '_blank', 'noopener');
-                }}
-              >
-                <ExternalLink />
-                打开授权页
-              </button>
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => {
-                  void copyText(state.login!.url).then(
-                    () => {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    },
-                    () => setFailure('复制失败，请重试。'),
-                  );
-                }}
-              >
-                {copied ? <Check /> : <Copy />}
-                {copied ? '已复制' : '复制链接'}
-              </button>
-            </div>
-            <p>
-              <strong>2</strong>把授权页最后显示的代码粘贴到这里。
-            </p>
-            <input
-              aria-label="授权码"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              spellCheck={false}
-              autoComplete="off"
-              required
-            />
-            <div className="account-login-actions">
-              <button
-                type="button"
-                className="button secondary"
-                disabled={working}
-                onClick={() => {
-                  void act({ type: 'account.cancel' });
-                }}
-              >
-                取消
-              </button>
-              <button className="button primary" disabled={working || !code.trim()}>
-                <Check />
-                完成登录
-              </button>
-            </div>
-          </form>
-        )}
-        <dl className="account-details">
-          <div>
-            <dt>组织</dt>
-            <dd>{account?.organization ?? '未提供'}</dd>
-          </div>
-          <div>
-            <dt>模型服务</dt>
-            <dd>
-              {account?.apiProvider === 'firstParty'
-                ? 'Anthropic'
-                : (account?.apiProvider ?? '未读取')}
-            </dd>
-          </div>
-          <div>
-            <dt>认证来源</dt>
-            <dd>{account?.tokenSource ?? account?.apiKeySource ?? '未提供'}</dd>
-          </div>
-        </dl>
-        <h2 className="account-section-title">
-          <Activity />
-          订阅用量
-          <button type="button" className="button secondary" onClick={() => setLog('today')}>
-            <ListOrdered />
-            调用日志
-          </button>
-        </h2>
-        {metrics?.rateLimits?.available ? (
-          <div className="quota-list">
-            {metrics.rateLimits.windows.map((window, index) => (
-              <div className="quota-row" key={`${window.name}:${index}`}>
-                <div>
-                  <strong>{quotaName(window.name) ?? window.name}</strong>
-                  <span>
-                    {window.utilization == null
-                      ? '使用量未提供'
-                      : `${window.utilization}% 已用 · ${Math.max(0, 100 - window.utilization)}% 剩余`}
-                  </span>
-                </div>
-                {window.utilization != null && (
-                  <progress max={100} value={Math.min(100, window.utilization)} />
-                )}
-                <small>
-                  {window.resetsAt
-                    ? `重置：${new Date(window.resetsAt).toLocaleString('zh-CN')}`
-                    : '重置时间未提供'}
-                </small>
-                {(() => {
-                  const period = summary?.windows.find((item) => item.name === window.name);
-                  return (
-                    period && (
-                      <button
-                        type="button"
-                        className="quota-period"
-                        title="查看本周期的调用日志"
-                        onClick={() => setLog(window.name)}
-                      >
-                        本周期 {period.requests.toLocaleString('zh-CN')} 次请求 ·{' '}
-                        {tokens(
-                          period.inputTokens +
-                            period.outputTokens +
-                            period.cacheReadTokens +
-                            period.cacheCreationTokens,
-                        )}{' '}
-                        tokens · 等价 {dollars(period.costUsd)}
-                      </button>
-                    )
-                  );
-                })()}
+        <div className="account-providers-grid">
+          <div className="account-provider-card" aria-label="Claude 账号">
+            <div className="account-identity">
+              <div className="account-avatar">
+                <Claude.Avatar size={44} shape="square" />
               </div>
-            ))}
-            {!metrics.rateLimits.windows.length && (
-              <p className="muted">原生接口未返回额度窗口。</p>
+              <div>
+                <h2>{signedOut ? '尚未登录' : (state?.email ?? account?.email ?? 'Claude Code')}</h2>
+                <p>
+                  {signedOut
+                    ? '云端 Claude Code 还没有登录账号'
+                    : (state?.subscriptionType ?? account?.subscriptionType ?? '账号信息尚未读取')}
+                </p>
+              </div>
+              {signedOut && !state.login && (
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={working}
+                  onClick={() => {
+                    void act({ type: 'account.login' });
+                  }}
+                >
+                  <LogIn />
+                  {working ? '获取链接…' : '登录'}
+                </button>
+              )}
+              {state?.loggedIn && !confirmLogout && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={working}
+                  onClick={() => setConfirmLogout(true)}
+                >
+                  <LogOut />
+                  退出登录
+                </button>
+              )}
+            </div>
+            {(failure ?? state?.notice) && (
+              <p className="error-text" role="alert">
+                {failure ?? state?.notice}
+              </p>
             )}
-            <p className="account-updated">
-              {metrics.rateLimits.measuredAt &&
-                `更新于 ${new Date(metrics.rateLimits.measuredAt).toLocaleTimeString('zh-CN')}`}
-            </p>
+            {state?.loggedIn && confirmLogout && (
+              <div className="account-confirm" role="group" aria-label="确认退出登录">
+                <p>退出后云端的登录凭据会被官方 CLI 清除，会话记录保留；再次使用需要重新登录。</p>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={working}
+                  onClick={() => setConfirmLogout(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="button danger"
+                  disabled={working}
+                  onClick={() => {
+                    void act({ type: 'account.logout' }).then(() => setConfirmLogout(false));
+                  }}
+                >
+                  <LogOut />
+                  退出登录
+                </button>
+              </div>
+            )}
+            {signedOut && state.login && (
+              <form
+                className="account-login"
+                aria-label="登录 Claude 账号"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void act({ type: 'account.code', code: code.trim() }).then(() => setCode(''));
+                }}
+              >
+                <p>
+                  <strong>1</strong>在浏览器打开官方授权页并登录。
+                </p>
+                <div className="account-login-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => {
+                      if (window.desktop)
+                        void window.desktop
+                          .openExternal(state.login!.url)
+                          .catch(() => setFailure('无法打开浏览器，请复制链接。'));
+                      else window.open(state.login!.url, '_blank', 'noopener');
+                    }}
+                  >
+                    <ExternalLink />
+                    打开授权页
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => {
+                      void copyText(state.login!.url).then(
+                        () => {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        },
+                        () => setFailure('复制失败，请重试。'),
+                      );
+                    }}
+                  >
+                    {copied ? <Check /> : <Copy />}
+                    {copied ? '已复制' : '复制链接'}
+                  </button>
+                </div>
+                <p>
+                  <strong>2</strong>把授权页最后显示的代码粘贴到这里。
+                </p>
+                <input
+                  aria-label="授权码"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                  required
+                />
+                <div className="account-login-actions">
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={working}
+                    onClick={() => {
+                      void act({ type: 'account.cancel' });
+                    }}
+                  >
+                    取消
+                  </button>
+                  <button className="button primary" disabled={working || !code.trim()}>
+                    <Check />
+                    完成登录
+                  </button>
+                </div>
+              </form>
+            )}
+            <dl className="account-details">
+              <div>
+                <dt>组织</dt>
+                <dd>{account?.organization ?? '未提供'}</dd>
+              </div>
+              <div>
+                <dt>模型服务</dt>
+                <dd>
+                  {account?.apiProvider === 'firstParty'
+                    ? 'Anthropic'
+                    : (account?.apiProvider ?? '未读取')}
+                </dd>
+              </div>
+              <div>
+                <dt>认证来源</dt>
+                <dd>{account?.tokenSource ?? account?.apiKeySource ?? '未提供'}</dd>
+              </div>
+            </dl>
+
+            <h2 className="account-section-title">
+              <Activity />
+              订阅用量
+              <button type="button" className="button secondary" onClick={() => setLog('today')}>
+                <ListOrdered />
+                调用日志
+              </button>
+            </h2>
+            {metrics?.rateLimits?.available ? (
+              <div className="quota-list">
+                {metrics.rateLimits.windows.map((window, index) => (
+                  <div className="quota-row" key={`${window.name}:${index}`}>
+                    <div>
+                      <strong>{quotaName(window.name) ?? window.name}</strong>
+                      <span>
+                        {window.utilization == null
+                          ? '使用量未提供'
+                          : `${window.utilization}% 已用 · ${Math.max(0, 100 - window.utilization)}% 剩余`}
+                      </span>
+                    </div>
+                    {window.utilization != null && (
+                      <progress max={100} value={Math.min(100, window.utilization)} />
+                    )}
+                    <small>
+                      {window.resetsAt
+                        ? `重置：${new Date(window.resetsAt).toLocaleString('zh-CN')}`
+                        : '重置时间未提供'}
+                    </small>
+                    {(() => {
+                      const period = summary?.windows.find((item) => item.name === window.name);
+                      return (
+                        period && (
+                          <button
+                            type="button"
+                            className="quota-period"
+                            title="查看本周期的调用日志"
+                            onClick={() => setLog(window.name)}
+                          >
+                            本周期 {period.requests.toLocaleString('zh-CN')} 次请求 ·{' '}
+                            {tokens(
+                              period.inputTokens +
+                                period.outputTokens +
+                                period.cacheReadTokens +
+                                period.cacheCreationTokens,
+                            )}{' '}
+                            tokens · 等价 {dollars(period.costUsd)}
+                          </button>
+                        )
+                      );
+                    })()}
+                  </div>
+                ))}
+                {!metrics.rateLimits.windows.length && (
+                  <p className="muted">原生接口未返回额度窗口。</p>
+                )}
+                <p className="account-updated">
+                  {metrics.rateLimits.measuredAt &&
+                    `更新于 ${new Date(metrics.rateLimits.measuredAt).toLocaleTimeString('zh-CN')}`}
+                </p>
+              </div>
+            ) : (
+              <p className="muted">
+                {metrics?.errors?.usage ??
+                  (metrics?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
+              </p>
+            )}
+
+            <h2 className="account-section-title">
+              <ShieldCheck />
+              当前会话
+            </h2>
+            <dl className="account-details">
+              <div>
+                <dt>输入 / 输出</dt>
+                <dd>
+                  {metrics?.usage
+                    ? `${metrics.usage.inputTokens.toLocaleString()} / ${metrics.usage.outputTokens.toLocaleString()} tokens`
+                    : '等待读取'}
+                </dd>
+              </div>
+              <div>
+                <dt>缓存读取 / 写入</dt>
+                <dd>
+                  {metrics?.usage
+                    ? `${metrics.usage.cacheReadTokens.toLocaleString()} / ${metrics.usage.cacheWriteTokens.toLocaleString()} tokens`
+                    : '等待读取'}
+                </dd>
+              </div>
+              <div>
+                <dt>原生费用估算</dt>
+                <dd>
+                  {metrics?.usage?.costUsd != null
+                    ? `$${metrics.usage.costUsd.toFixed(4)}（非订阅账单）`
+                    : '未提供'}
+                </dd>
+              </div>
+            </dl>
           </div>
-        ) : (
-          <p className="muted">
-            {metrics?.errors?.usage ??
-              (metrics?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
-          </p>
-        )}
+
+          <div className="account-provider-card" aria-label="ChatGPT 账号">
+            <div className="account-provider-head">
+              <div className="account-avatar">
+                <OpenAI.Avatar size={44} shape="square" />
+              </div>
+              <div>
+                <h2>
+                  {openai?.loggedIn
+                    ? (openai.email ?? 'ChatGPT')
+                    : openai?.loggedIn === false
+                      ? '尚未登录'
+                      : 'ChatGPT'}
+                </h2>
+                <p>
+                  {openai?.loggedIn
+                    ? (openai.subscriptionType ?? 'ChatGPT 账号已登录')
+                    : '云端 ChatGPT 还没有登录账号'}
+                </p>
+              </div>
+              {openai && !openai.loggedIn && !openai.login && !openaiAbsent && (
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={openaiWorking}
+                  onClick={() => {
+                    void actOpenAI({ type: 'account.login', provider: 'openai' });
+                  }}
+                >
+                  <LogIn />
+                  {openaiWorking ? '获取链接…' : '登录'}
+                </button>
+              )}
+              {openai?.loggedIn && !openaiConfirmLogout && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={openaiWorking}
+                  onClick={() => setOpenaiConfirmLogout(true)}
+                >
+                  <LogOut />
+                  退出登录
+                </button>
+              )}
+            </div>
+            {(openaiFailure ?? openai?.notice) && (
+              <p className="error-text" role="alert">
+                {openaiFailure ?? openai?.notice}
+              </p>
+            )}
+            {openai?.loggedIn && openaiConfirmLogout && (
+              <div className="account-confirm" role="group" aria-label="确认退出 ChatGPT">
+                <p>退出后云端 ChatGPT 的登录凭据会被清除；再次使用需要重新通过设备码登录。</p>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={openaiWorking}
+                  onClick={() => setOpenaiConfirmLogout(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="button danger"
+                  disabled={openaiWorking}
+                  onClick={() => {
+                    void actOpenAI({ type: 'account.logout', provider: 'openai' }).then(() =>
+                      setOpenaiConfirmLogout(false),
+                    );
+                  }}
+                >
+                  <LogOut />
+                  退出登录
+                </button>
+              </div>
+            )}
+            {openai && !openai.loggedIn && openai.login && (
+              <div className="account-login" role="region" aria-label="登录 ChatGPT 账号">
+                <p>
+                  <strong>1</strong>在浏览器打开官方设备码授权页并完成登录。
+                </p>
+                <div className="account-login-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={() => {
+                      if (window.desktop)
+                        void window.desktop
+                          .openExternal(openai.login!.url)
+                          .catch(() => setOpenaiFailure('无法打开浏览器，请复制链接。'));
+                      else window.open(openai.login!.url, '_blank', 'noopener');
+                    }}
+                  >
+                    <ExternalLink />
+                    打开登录页
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => {
+                      void copyText(openai.login!.url).then(
+                        () => {
+                          setOpenaiCopied(true);
+                          setTimeout(() => setOpenaiCopied(false), 2000);
+                        },
+                        () => setOpenaiFailure('复制失败，请重试。'),
+                      );
+                    }}
+                  >
+                    {openaiCopied ? <Check /> : <Copy />}
+                    {openaiCopied ? '已复制' : '复制链接'}
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={openaiWorking}
+                    onClick={() => {
+                      void actOpenAI({ type: 'account.cancel', provider: 'openai' });
+                    }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+            <dl className="account-details">
+              <div>
+                <dt>运行状态</dt>
+                <dd>{openaiRuntimeLabel}</dd>
+              </div>
+              <div>
+                <dt>模型服务</dt>
+                <dd>{openai?.defaultModel ?? 'OpenAI'}</dd>
+              </div>
+              <div>
+                <dt>认证来源</dt>
+                <dd>{openai?.authMethod ?? (openai?.loggedIn ? '官方设备码' : '未提供')}</dd>
+              </div>
+            </dl>
+
+            <h2 className="account-section-title">
+              <Activity />
+              订阅用量
+              <button
+                type="button"
+                className="button secondary"
+                aria-label="查看 ChatGPT 调用日志"
+                onClick={() => setLog('today')}
+              >
+                <ListOrdered />
+                调用日志
+              </button>
+            </h2>
+            {todayPeriod && todayPeriod.requests > 0 ? (
+              <div className="quota-list">
+                <div className="quota-row">
+                  <div>
+                    <strong>本周期调用</strong>
+                    <span>{todayPeriod.requests.toLocaleString('zh-CN')} 次请求</span>
+                  </div>
+                  <small>
+                    共{' '}
+                    {tokens(
+                      todayPeriod.inputTokens +
+                        todayPeriod.outputTokens +
+                        todayPeriod.cacheReadTokens +
+                        todayPeriod.cacheCreationTokens,
+                    )}{' '}
+                    tokens · 等价 {dollars(todayPeriod.costUsd)}
+                  </small>
+                </div>
+              </div>
+            ) : (
+              <p className="muted">
+                {openai?.loggedIn ? '当前账号暂未返回额度窗口' : '等待读取原生额度'}
+              </p>
+            )}
+
+            <h2 className="account-section-title">
+              <ShieldCheck />
+              当前会话
+            </h2>
+            <dl className="account-details">
+              <div>
+                <dt>输入 / 输出</dt>
+                <dd>
+                  {metrics?.usage
+                    ? `${metrics.usage.inputTokens.toLocaleString()} / ${metrics.usage.outputTokens.toLocaleString()} tokens`
+                    : '等待读取'}
+                </dd>
+              </div>
+              <div>
+                <dt>缓存读取 / 写入</dt>
+                <dd>
+                  {metrics?.usage
+                    ? `${metrics.usage.cacheReadTokens.toLocaleString()} / ${metrics.usage.cacheWriteTokens.toLocaleString()} tokens`
+                    : '等待读取'}
+                </dd>
+              </div>
+              <div>
+                <dt>原生费用估算</dt>
+                <dd>
+                  {metrics?.usage?.costUsd != null
+                    ? `$${metrics.usage.costUsd.toFixed(4)}（非订阅账单）`
+                    : '未提供'}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+
         <h2 className="account-section-title">发送门槛</h2>
         <p className="muted">
           两个窗口默认都开，各自提醒 90%、停发 95%。关掉的窗口不提醒，也不暂停发送。任一开着的窗口达到停发就暂停发送。不另算用量，也不改变官方的「额度用尽后自动继续」。
         </p>
         <div className="quota-bounds">
-          <QuotaBounds title="5 小时额度" gate={gate.fiveHour} save={(fiveHour) => saveGate({ ...gate, fiveHour })} />
-          <QuotaBounds title="每周额度" gate={gate.week} save={(week) => saveGate({ ...gate, week })} />
+          <QuotaBounds
+            title="5 小时额度"
+            gate={gate.fiveHour}
+            save={(fiveHour) => saveGate({ ...gate, fiveHour })}
+          />
+          <QuotaBounds
+            title="每周额度"
+            gate={gate.week}
+            save={(week) => saveGate({ ...gate, week })}
+          />
         </div>
-        <h2 className="account-section-title">
-          <ShieldCheck />
-          当前会话
-        </h2>
-        <dl className="account-details">
-          <div>
-            <dt>输入 / 输出</dt>
-            <dd>
-              {metrics?.usage
-                ? `${metrics.usage.inputTokens.toLocaleString()} / ${metrics.usage.outputTokens.toLocaleString()} tokens`
-                : '等待读取'}
-            </dd>
-          </div>
-          <div>
-            <dt>缓存读取 / 写入</dt>
-            <dd>
-              {metrics?.usage
-                ? `${metrics.usage.cacheReadTokens.toLocaleString()} / ${metrics.usage.cacheWriteTokens.toLocaleString()} tokens`
-                : '等待读取'}
-            </dd>
-          </div>
-          <div>
-            <dt>原生费用估算</dt>
-            <dd>
-              {metrics?.usage?.costUsd != null
-                ? `$${metrics.usage.costUsd.toFixed(4)}（非订阅账单）`
-                : '未提供'}
-            </dd>
-          </div>
-        </dl>
       </div>
     </section>
   );

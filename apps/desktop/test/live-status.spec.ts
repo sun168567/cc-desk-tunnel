@@ -23,6 +23,8 @@ test('a run tells what it is doing, background tasks tell they are alive, and th
     title,
     autoTitle: false,
     projectPath: 'D:\\工作\\状态',
+    provider: 'claude',
+    profileId: 'default',
     permissionMode: 'auto',
     model: null,
     effort: null,

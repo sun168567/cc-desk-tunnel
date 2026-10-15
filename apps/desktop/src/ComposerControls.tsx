@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Check, RotateCcw } from 'lucide-react';
-import { Claude } from '@lobehub/icons';
+import { Claude, OpenAI } from '@lobehub/icons';
 import { usePrefs } from './prefs.ts';
 import { quotaFigures } from './quota.ts';
 import type {
@@ -44,6 +44,7 @@ const effortThemes: Record<Effort, { color: string; gradient: string }> = {
   },
 };
 export default function ComposerControls({
+  provider = 'claude',
   model,
   effort,
   capabilities,
@@ -55,7 +56,9 @@ export default function ComposerControls({
   refresh,
   refreshing,
   canRefreshModels,
+  openaiModels,
 }: {
+  provider?: 'claude' | 'openai';
   model: string | null;
   effort: Effort | null;
   capabilities: NativeCapabilities | null;
@@ -63,10 +66,15 @@ export default function ComposerControls({
   metrics: NativeMetrics | null;
   openAccount: () => void;
   disabled: boolean;
-  configure: (values: { model?: string | null; effort?: Effort | null }) => Promise<void>;
+  configure: (values: {
+    model?: string | null;
+    effort?: Effort | null;
+    provider?: 'claude' | 'openai';
+  }) => Promise<void>;
   refresh: () => void;
   refreshing: boolean;
   canRefreshModels: boolean;
+  openaiModels: { id: string; displayName: string }[];
 }) {
   const [open, setOpen] = useState(false),
     [contextOpen, setContextOpen] = useState(false);
@@ -97,12 +105,23 @@ export default function ComposerControls({
   const dragging = useRef(false);
   const commitPending = useRef(false);
   const chosen =
-    capabilities?.models.find((row) => row.value === (model ?? 'default')) ??
-    capabilities?.models.find((row) => row.resolvedModel === (model ?? nativeSession?.model));
-  const levels = chosen?.supportedEffortLevels ?? [];
+    provider === 'openai'
+      ? undefined
+      : (capabilities?.models.find((row) => row.value === (model ?? 'default')) ??
+          capabilities?.models.find((row) => row.resolvedModel === (model ?? nativeSession?.model)));
+  const defaultLevels: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const levels =
+    provider === 'openai'
+      ? defaultLevels
+      : chosen?.supportedEffortLevels?.length
+        ? chosen.supportedEffortLevels
+        : defaultLevels;
   const actual = nativeSession?.effort;
   const shownEffort = preview ?? effort ?? actual;
-  const label = chosen?.displayName ?? model ?? '原生默认';
+  const label =
+    provider === 'openai'
+      ? (openaiModels.find((row) => row.id === model)?.displayName ?? model ?? 'Codex 默认')
+      : (chosen?.displayName ?? model ?? '原生默认');
   const context = metrics?.context;
   // How full the window is, drawn as a ring that changes colour as it runs out.
   const contextUsed = context ? Math.min(100, Math.max(0, context.percentage)) : 0;
@@ -218,7 +237,11 @@ export default function ComposerControls({
             setChoosing(false);
           }}
         >
-          <Claude.Color size={13} className="model-trigger-claude" />
+          {provider === 'openai' ? (
+            <OpenAI size={13} className="model-trigger-claude" />
+          ) : (
+            <Claude.Color size={13} className="model-trigger-claude" />
+          )}
           <span>{label}</span>
           <small
             style={
@@ -260,7 +283,7 @@ export default function ComposerControls({
               </div>
               <button type="button" className="model-current" onClick={() => setChoosing(true)}>
                 <span className="model-current-name">
-                  <Claude.Color size={13} />
+                  {provider === 'openai' ? <OpenAI size={13} /> : <Claude.Color size={13} />}
                   {label}
                 </span>
                 <ChevronRight />
@@ -359,14 +382,18 @@ export default function ComposerControls({
                     type="button"
                     role="option"
                     disabled={disabled}
-                    aria-selected={model === null}
+                    aria-selected={provider !== 'openai' && model === null}
                     onClick={() => {
-                      void configure({ model: null, effort: null });
+                      void configure({
+                        model: null,
+                        effort: null,
+                        ...(provider === 'openai' ? { provider: 'claude' } : {}),
+                      });
                       setOpen(false);
                     }}
                   >
                     <span>默认模型</span>
-                    {model === null && <Check />}
+                    {provider !== 'openai' && model === null && <Check />}
                   </button>
                   {capabilities?.models
                     .filter((row) => row.value !== 'default')
@@ -375,10 +402,16 @@ export default function ComposerControls({
                         type="button"
                         role="option"
                         disabled={disabled}
-                        aria-selected={model !== null && chosen?.value === row.value}
+                        aria-selected={
+                          provider !== 'openai' && model !== null && chosen?.value === row.value
+                        }
                         key={row.value}
                         onClick={() => {
-                          void configure({ model: row.value, effort: null });
+                          void configure({
+                            model: row.value,
+                            effort: null,
+                            ...(provider === 'openai' ? { provider: 'claude' } : {}),
+                          });
                           setOpen(false);
                         }}
                       >
@@ -387,9 +420,34 @@ export default function ComposerControls({
                           {row.resolvedModel && <small>{row.resolvedModel}</small>}
                           <small>{row.description}</small>
                         </span>
-                        {model !== null && chosen?.value === row.value && <Check />}
+                        {provider !== 'openai' && model !== null && chosen?.value === row.value && (
+                          <Check />
+                        )}
                       </button>
                     ))}
+                  {openaiModels.map((row) => (
+                    <button
+                      type="button"
+                      role="option"
+                      disabled={disabled}
+                      aria-selected={provider === 'openai' && model === row.id}
+                      key={`openai:${row.id}`}
+                      onClick={() => {
+                        void configure({ model: row.id, effort: null, provider: 'openai' });
+                        setOpen(false);
+                      }}
+                    >
+                      <span>
+                        {row.displayName}
+                        <small>OpenAI</small>
+                      </span>
+                      {provider === 'openai' && model === row.id ? (
+                        <Check />
+                      ) : (
+                        <OpenAI size={13} />
+                      )}
+                    </button>
+                  ))}
                 </div>
                 <button
                   type="button"

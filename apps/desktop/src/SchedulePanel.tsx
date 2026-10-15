@@ -20,6 +20,8 @@ type Form = {
   target: 'session' | 'new';
   sessionId: string;
   projectPath: string;
+  provider: 'claude' | 'openai';
+  profileId: string;
   model: string;
   effort: string;
 };
@@ -46,6 +48,22 @@ function formOf(task: Task | null, sessions: Session[], projects: string[]): For
       task?.target.type === 'new'
         ? task.target.projectPath
         : (projects[0] ?? sessions[0]?.projectPath ?? ''),
+    provider:
+      task?.provider ??
+      sessions.find(
+        (item) =>
+          item.id ===
+          (task?.target.type === 'session' ? task.target.sessionId : sessions[0]?.id),
+      )?.provider ??
+      'claude',
+    profileId:
+      task?.profileId ??
+      sessions.find(
+        (item) =>
+          item.id ===
+          (task?.target.type === 'session' ? task.target.sessionId : sessions[0]?.id),
+      )?.profileId ??
+      'default',
     model: task?.model ?? '',
     effort: task?.effort ?? '',
   };
@@ -69,8 +87,10 @@ function taskOf(form: Form) {
       form.target === 'session'
         ? { type: form.target, sessionId: form.sessionId }
         : { type: form.target, projectPath: form.projectPath.trim() },
+    provider: form.provider,
+    profileId: form.profileId,
     model: form.model || null,
-    effort: form.effort || null,
+    effort: form.provider === 'openai' ? null : form.effort || null,
   };
 }
 
@@ -216,7 +236,16 @@ function Editor({
             <select
               aria-label="目标会话"
               value={form.sessionId}
-              onChange={(event) => change({ sessionId: event.target.value })}
+              onChange={(event) => {
+                const sessionId = event.target.value;
+                const chosen = sessions.find((item) => item.id === sessionId);
+                change({
+                  sessionId,
+                  ...(chosen
+                    ? { provider: chosen.provider, profileId: chosen.profileId }
+                    : {}),
+                });
+              }}
             >
               {!session && <option value={form.sessionId}>（会话已不存在）</option>}
               {sessions.map((item) => (
@@ -244,6 +273,25 @@ function Editor({
             </datalist>
           </label>
         )}
+        {form.target === 'new' && (
+          <label>
+            提供商
+            <select
+              aria-label="任务提供商"
+              value={form.provider}
+              onChange={(event) =>
+                change({
+                  provider: event.target.value === 'openai' ? 'openai' : 'claude',
+                  profileId: 'default',
+                  ...(event.target.value === 'openai' ? { effort: '' } : {}),
+                })
+              }
+            >
+              <option value="claude">Claude</option>
+              <option value="openai">OpenAI</option>
+            </select>
+          </label>
+        )}
       </div>
       <div className="schedule-fields">
         <label>
@@ -261,21 +309,23 @@ function Editor({
             ))}
           </select>
         </label>
-        <label>
-          推理强度
-          <select
-            aria-label="任务推理强度"
-            value={form.effort}
-            onChange={(event) => change({ effort: event.target.value })}
-          >
-            <option value="">不改动</option>
-            {efforts.map((effort) => (
-              <option key={effort} value={effort}>
-                {effort}
-              </option>
-            ))}
-          </select>
-        </label>
+        {form.provider !== 'openai' && (
+          <label>
+            推理强度
+            <select
+              aria-label="任务推理强度"
+              value={form.effort}
+              onChange={(event) => change({ effort: event.target.value })}
+            >
+              <option value="">不改动</option>
+              {efforts.map((effort) => (
+                <option key={effort} value={effort}>
+                  {effort}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       {form.target === 'session' &&
         session &&
@@ -332,9 +382,11 @@ export default function SchedulePanel({
   const store = (next: Task[]) =>
     schedules.save(next).catch((error: Error) => setFailure(error.message));
   const where = (task: Task) => {
-    if (task.target.type === 'new') return `新会话 · ${folderName(task.target.projectPath)}`;
+    const who = task.provider === 'openai' ? 'OpenAI · ' : '';
+    if (task.target.type === 'new')
+      return `${who}新会话 · ${folderName(task.target.projectPath)}`;
     const { sessionId } = task.target;
-    return sessions.find((session) => session.id === sessionId)?.title ?? '会话已不存在';
+    return `${who}${sessions.find((session) => session.id === sessionId)?.title ?? '会话已不存在'}`;
   };
   return (
     <>

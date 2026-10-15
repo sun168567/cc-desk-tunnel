@@ -343,6 +343,7 @@ export default function UsagePanel({
               <tr>
                 <th>时间</th>
                 <th>会话</th>
+                <th>提供商</th>
                 <th>模型</th>
                 <th>输入</th>
                 <th>输出</th>
@@ -374,6 +375,7 @@ export default function UsagePanel({
                     <td title={row.sessionTitle ?? row.sessionId ?? undefined}>
                       {row.sessionTitle ?? (row.source && row.source !== 'sdk' ? row.source : '—')}
                     </td>
+                    <td>{row.provider === 'openai' ? 'OpenAI' : 'Claude'}</td>
                     <td>{row.model}</td>
                     <td>{row.inputTokens.toLocaleString()}</td>
                     <td>{row.outputTokens.toLocaleString()}</td>

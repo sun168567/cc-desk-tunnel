@@ -8,6 +8,7 @@ import type { EventPayload } from '@cc-desk-tunnel/protocol';
 import type {
   AccountState,
   Command,
+  CommandInput,
   Device,
   NativeCapabilities,
   NativeMetrics,
@@ -21,7 +22,7 @@ import type {
 type Response = Extract<ServerMessage, { type: 'response' }>;
 type DataMessage = Extract<
   ServerMessage,
-  { type: 'usage.summary' | 'usage.page' | 'settings.state' }
+  { type: 'usage.summary' | 'usage.page' | 'settings.state' | 'models' }
 >;
 // Commands answered with a data frame, and the frame each one gets.
 type Replies = {
@@ -29,13 +30,14 @@ type Replies = {
   'usage.query': 'usage.page';
   'settings.get': 'settings.state';
   'settings.update': 'settings.state';
+  'model.list': 'models';
 };
 type TerminalMessage = Extract<
   ServerMessage,
   { type: 'terminal.opened' | 'terminal.data' | 'terminal.closed' }
 >;
-type NewCommand = Command extends infer C
-  ? C extends Command
+type NewCommand = CommandInput extends infer C
+  ? C extends CommandInput
     ? Omit<C, 'requestId'>
     : never
   : never;
@@ -106,6 +108,8 @@ export type ClientState = {
   capabilities: NativeCapabilities | null;
   metrics: NativeMetrics | null;
   account: AccountState | null;
+  // OpenAI sign-in, kept apart so a Claude logout or a failed OpenAI login cannot clear the other.
+  openai: AccountState | null;
   // What each session's background tasks last said of themselves, by task: kept while the window is open
   // and nowhere else.
   progress: Record<string, Record<string, TaskProgress>>;
@@ -136,6 +140,7 @@ export class ProxyClient {
     capabilities: null,
     metrics: null,
     account: null,
+    openai: null,
     progress: {},
   };
   results = new Map<string, DataMessage>();
@@ -235,6 +240,7 @@ export class ProxyClient {
       capabilities: null,
       metrics: null,
       account: null,
+      openai: null,
     });
     this.open();
   }
@@ -353,7 +359,8 @@ export class ProxyClient {
       } else if (
         message.type === 'usage.summary' ||
         message.type === 'usage.page' ||
-        message.type === 'settings.state'
+        message.type === 'settings.state' ||
+        message.type === 'models'
       ) {
         if (this.pending.has(message.requestId)) this.results.set(message.requestId, message);
       } else if (message.type === 'service.update') {
@@ -365,6 +372,10 @@ export class ProxyClient {
         );
       } else if (message.type === 'account.state') {
         const { type: _type, ...account } = message;
+        if (message.provider === 'openai') {
+          this.update({ openai: account });
+          return;
+        }
         // A signed-out account must not keep showing the previous one's identity and quota.
         this.update(
           account.loggedIn ? { account } : { account, capabilities: null, metrics: null },

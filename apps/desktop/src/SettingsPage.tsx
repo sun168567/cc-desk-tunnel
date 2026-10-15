@@ -11,8 +11,9 @@ import {
   SlidersHorizontal,
   UserRound,
 } from 'lucide-react';
-import { Claude } from '@lobehub/icons';
+import { Claude, OpenAI } from '@lobehub/icons';
 import type { ComponentType } from 'react';
+import type { AccountState } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import Help from './Help.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
@@ -27,6 +28,7 @@ import {
 import type { ConnectionWaits, NotifyKind } from './prefs.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
+import OpenAISettings from './OpenAISettings.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
 import { useShared } from './shared.ts';
 import type { ListedConnection } from './shared.ts';
@@ -35,7 +37,14 @@ import { IconButton, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
 export type Section =
-  'account' | 'claude' | 'general' | 'notifications' | 'shortcuts' | 'help' | 'about';
+  | 'account'
+  | 'claude'
+  | 'openai'
+  | 'general'
+  | 'notifications'
+  | 'shortcuts'
+  | 'help'
+  | 'about';
 // `words` is what the search box matches besides the name: the settings found inside.
 const sections: {
   id: Section;
@@ -47,16 +56,23 @@ const sections: {
   {
     id: 'account',
     name: '账号与额度',
-    group: 'Claude Code',
+    group: '',
     icon: UserRound,
-    words: '登录 退出 订阅 用量 调用日志 重置 提醒 停发 每周 开关 启用',
+    words: '登录 退出 订阅 用量 调用日志 重置 提醒 停发 每周 开关 启用 ChatGPT OpenAI Claude',
   },
   {
     id: 'claude',
     name: 'Claude Code',
-    group: 'Claude Code',
+    group: '',
     icon: Claude.Color,
     words: '自动压缩 思考 快速模式 记忆 检查点 缓存 语言 额度 模型',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    group: '',
+    icon: OpenAI,
+    words: 'Codex 运行时 登录 模型 内存 进程 审批 限额 沙箱 用量',
   },
   {
     id: 'general',
@@ -847,6 +863,7 @@ export default function SettingsPage({
   adapterName,
   updates,
   showNotes,
+  openai,
   back,
   leave,
 }: {
@@ -869,6 +886,7 @@ export default function SettingsPage({
   adapterName: string;
   updates: MenuItem[];
   showNotes: (version: string) => void;
+  openai: AccountState | null;
 }) {
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
@@ -900,7 +918,7 @@ export default function SettingsPage({
         <nav className="session-list" aria-label="设置分类">
           {shown.map((item, index) => (
             <div key={item.id}>
-              {item.group !== shown[index - 1]?.group && (
+              {item.group && item.group !== shown[index - 1]?.group && (
                 <div className="list-heading">{item.group}</div>
               )}
               <button
@@ -934,6 +952,8 @@ export default function SettingsPage({
               </div>
             </section>
           )
+        ) : section === 'openai' ? (
+          <OpenAISettings client={client} account={openai} openAccount={() => go('account')} />
         ) : section === 'general' ? (
           <General
             form={form}

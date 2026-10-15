@@ -1,16 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
   CornerDownLeft,
   FileCode2,
   FileImage,
   FileText,
   Folder,
   GitBranch,
+  HelpCircle,
   ImagePlus,
   Laptop,
+  MessageSquare,
   Play,
   Plus,
   RefreshCw,
+  ShieldAlert,
   Shrink,
   Square,
 } from 'lucide-react';
@@ -33,6 +39,167 @@ export type Scenario = 'chat' | 'tool' | 'question' | 'error';
 // A draft that is only a slash and an optional command name opens the command menu.
 const slashDraft = /^[/\\][^ \n]*$/;
 const compactDraft = /^[/\\](compact)?$/;
+
+const scenarioItems: {
+  value: Scenario;
+  name: string;
+  detail: string;
+  icon: typeof MessageSquare;
+}[] = [
+  { value: 'chat', name: '对话', detail: '正常流式回复与多轮对话', icon: MessageSquare },
+  { value: 'tool', name: '工具审批', detail: '模拟工具调用并等待允许或拒绝', icon: ShieldAlert },
+  { value: 'question', name: '提问', detail: '模拟向你提问并等待回答', icon: HelpCircle },
+  { value: 'error', name: '上游错误', detail: '模拟本轮运行报错中断', icon: AlertTriangle },
+];
+
+function useMenuDismiss(open: boolean, setOpen: (open: boolean) => void) {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open, setOpen]);
+  return container;
+}
+
+function ScenarioMenu({
+  scenario,
+  disabled,
+  onChange,
+}: {
+  scenario: Scenario;
+  disabled: boolean;
+  onChange: (scenario: Scenario) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const container = useMenuDismiss(open, setOpen);
+  const current = scenarioItems.find((item) => item.value === scenario) ?? scenarioItems[0];
+  return (
+    <div className="permission-control" ref={container}>
+      <select
+        className="sr-select"
+        tabIndex={-1}
+        aria-label="模拟场景"
+        value={scenario}
+        onChange={(event) => onChange(event.target.value as Scenario)}
+        disabled={disabled}
+      >
+        {scenarioItems.map((item) => (
+          <option key={item.value} value={item.value}>
+            {item.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="chip"
+        title="模拟场景"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <current.icon />
+        <span>{current.name}</span>
+        <ChevronDown />
+      </button>
+      {open && (
+        <div className="permission-menu toolbar-menu" role="menu" aria-label="模拟场景菜单">
+          <p className="menu-heading">模拟运行场景</p>
+          {scenarioItems.map(({ value, name, detail, icon: Icon }) => (
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={value === scenario}
+              key={value}
+              onClick={() => {
+                setOpen(false);
+                if (value !== scenario) onChange(value);
+              }}
+            >
+              <Icon />
+              <span className="menu-label">
+                {name}
+                <small>{detail}</small>
+              </span>
+              {value === scenario && <Check className="menu-check" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionModelSelect({
+  provider,
+  model,
+  capabilities,
+  openaiModels,
+  disabled,
+  onSelect,
+}: {
+  provider: 'claude' | 'openai';
+  model: string | null;
+  capabilities: NativeCapabilities | null;
+  openaiModels: { id: string; displayName: string }[];
+  disabled: boolean;
+  onSelect: (provider: 'claude' | 'openai', model: string | null) => void;
+}) {
+  const claudeList = capabilities?.models.filter((row) => row.value !== 'default') ?? [];
+  const customClaude =
+    provider !== 'openai' &&
+    model &&
+    !claudeList.some((row) => row.value === model || row.resolvedModel === model)
+      ? model
+      : null;
+  const customOpenAI =
+    provider === 'openai' && model && !openaiModels.some((row) => row.id === model) ? model : null;
+
+  return (
+    <select
+      className="sr-select"
+      tabIndex={-1}
+      aria-label="会话模型"
+      value={`${provider}:${model ?? ''}`}
+      disabled={disabled}
+      onChange={(event) => {
+        const value = event.target.value;
+        const split = value.indexOf(':');
+        const nextProvider = value.slice(0, split) === 'openai' ? 'openai' : 'claude';
+        const nextModel = value.slice(split + 1) || null;
+        onSelect(nextProvider, nextModel);
+      }}
+    >
+      <optgroup label="Claude">
+        <option value="claude:">默认</option>
+        {claudeList.map((row) => (
+          <option key={row.value} value={`claude:${row.value}`}>
+            {row.displayName}
+          </option>
+        ))}
+        {customClaude && <option value={`claude:${customClaude}`}>{customClaude}</option>}
+      </optgroup>
+      <optgroup label="OpenAI">
+        <option value="openai:">默认</option>
+        {openaiModels.map((row) => (
+          <option key={row.id} value={`openai:${row.id}`}>
+            {row.displayName}
+          </option>
+        ))}
+        {customOpenAI && <option value={`openai:${customOpenAI}`}>{customOpenAI}</option>}
+      </optgroup>
+    </select>
+  );
+}
 
 function formatMatchPath(fullPath: string, projectRoot: string) {
   const name = fullPath.split(/[\\/]/).at(-1) ?? fullPath;
@@ -105,6 +272,8 @@ export default function Composer({
   nativeSession,
   metrics,
   quota,
+  projectBusy,
+  openaiModels,
   openAccount,
   send,
   resume,
@@ -140,6 +309,9 @@ export default function Composer({
   metrics: NativeMetrics | null;
   // Set while a quota window is at the reminder line, or past the line that pauses sending.
   quota: { level: 'warn' | 'stop'; text: string } | null;
+  // Another session on this project is running. Sending stays allowed.
+  projectBusy: boolean;
+  openaiModels: { id: string; displayName: string }[];
   openAccount: () => void;
   send: () => void;
   // Present when the session's last turn was stopped or cut off: takes it up again without a message.
@@ -150,9 +322,13 @@ export default function Composer({
     model?: string | null;
     effort?: Effort | null;
     permissionMode?: PermissionMode;
+    provider?: 'claude' | 'openai';
   }) => Promise<void>;
   stop: () => void;
 }) {
+  const projectTools = session.provider !== 'openai';
+  const localFiles = Boolean(window.desktop);
+  const commands = session.provider === 'openai' || (projectTools && native);
   const input = useRef<HTMLTextAreaElement>(null);
   const branch = useBranch(session.projectPath, !!session.activeRun);
   const [dropping, setDropping] = useState(false);
@@ -259,7 +435,7 @@ export default function Composer({
   };
   return (
     <div className="composer-area">
-      {native && slashOpen && (
+      {commands && slashOpen && (
         <div className="slash-menu" role="listbox" aria-label="会话命令">
           <button
             type="button"
@@ -276,22 +452,24 @@ export default function Composer({
               </small>
             </span>
           </button>
-          <button
-            type="button"
-            role="option"
-            aria-selected={false}
-            disabled={controlsDisabled || refreshing}
-            onClick={() => {
-              setSlashOpen(false);
-              setDraft('');
-              refresh();
-            }}
-          >
-            <RefreshCw />
-            <span>
-              刷新原生状态<small>上下文与订阅额度</small>
-            </span>
-          </button>
+          {projectTools && (
+            <button
+              type="button"
+              role="option"
+              aria-selected={false}
+              disabled={controlsDisabled || refreshing}
+              onClick={() => {
+                setSlashOpen(false);
+                setDraft('');
+                refresh();
+              }}
+            >
+              <RefreshCw />
+              <span>
+                刷新原生状态<small>上下文与订阅额度</small>
+              </span>
+            </button>
+          )}
         </div>
       )}
       <div className="composer-context">
@@ -325,6 +503,11 @@ export default function Composer({
           {quota.text}
         </p>
       )}
+      {projectBusy && (
+        <p className="quota-notice" role="status">
+          这个项目还有会话在运行。两个会话可能同时改同一个文件，不会自动合并。
+        </p>
+      )}
       <form
         className={`composer ${dropping ? 'dropping' : ''}`}
         onSubmit={(event) => {
@@ -332,7 +515,11 @@ export default function Composer({
           send();
         }}
         onDragOver={(event) => {
-          if (!window.desktop || inputDisabled || !event.dataTransfer.types.includes('Files'))
+          if (
+            !localFiles ||
+            inputDisabled ||
+            !event.dataTransfer.types.includes('Files')
+          )
             return;
           event.preventDefault();
           setDropping(true);
@@ -340,7 +527,8 @@ export default function Composer({
         onDragLeave={() => setDropping(false)}
         onDrop={(event) => {
           setDropping(false);
-          if (!window.desktop || inputDisabled || !event.dataTransfer.files.length) return;
+          if (!localFiles || inputDisabled || !event.dataTransfer.files.length)
+            return;
           event.preventDefault();
           void paste([...event.dataTransfer.files]);
         }}
@@ -349,7 +537,7 @@ export default function Composer({
           items={attachments}
           remove={(path) => setAttachments(attachments.filter((item) => item.path !== path))}
         />
-        {window.desktop && mention && matches.length > 0 && (
+        {localFiles && mention && matches.length > 0 && (
           <div className="attachment-matches" role="listbox" aria-label="项目文件" ref={matchList}>
             {matches.map((path, index) => {
               const { name, dir } = formatMatchPath(path, session.projectPath);
@@ -385,9 +573,9 @@ export default function Composer({
             rows={1}
             onChange={(event) => {
               setDraft(event.target.value);
-              setSlashOpen(native && slashDraft.test(event.target.value));
+              setSlashOpen(commands && slashDraft.test(event.target.value));
               const before = event.target.value.slice(0, event.target.selectionStart);
-              const match = /(?:^|\s)@([^\s@]*)$/.exec(before);
+              const match = localFiles ? /(?:^|\s)@([^\s@]*)$/.exec(before) : null;
               setMention(
                 match
                   ? { start: before.lastIndexOf('@'), end: before.length, query: match[1] }
@@ -396,7 +584,7 @@ export default function Composer({
             }}
             onPaste={(event) => {
               // Pasted text is left to the browser, also when a program put a picture of it beside the text.
-              if (!window.desktop || !event.clipboardData.files.length) return;
+              if (!localFiles || !event.clipboardData.files.length) return;
               const files = [...event.clipboardData.files];
               const text = event.clipboardData.getData('text/plain');
               const usable = files.filter(
@@ -451,7 +639,7 @@ export default function Composer({
                 <Play />
               </IconButton>
             ) : (
-              (!session.activeRun || native) && (
+              (!session.activeRun || native || session.provider === 'openai') && (
                 <button
                   type="submit"
                   className="icon-button send-button"
@@ -470,7 +658,7 @@ export default function Composer({
           </div>
         </div>
         <div className="composer-toolbar">
-          {window.desktop && (
+          {localFiles && (
             <IconButton
               title="添加文件卡片：发送时附上本机路径"
               className="attach-button"
@@ -480,45 +668,51 @@ export default function Composer({
               <Plus />
             </IconButton>
           )}
-          {!native ? (
-            <label className="scenario-label">
-              场景
-              <select
-                aria-label="模拟场景"
-                value={scenario}
-                onChange={(event) => setScenario(event.target.value as Scenario)}
-                disabled={!!session.activeRun || busy}
-              >
-                <option value="chat">对话</option>
-                <option value="tool">工具审批</option>
-                <option value="question">提问</option>
-                <option value="error">上游错误</option>
-              </select>
-            </label>
+          {projectTools && !native ? (
+            <ScenarioMenu
+              scenario={scenario}
+              disabled={!!session.activeRun || busy}
+              onChange={setScenario}
+            />
           ) : (
             <PermissionMenu
               mode={session.permissionMode}
               disabled={controlsDisabled}
+              who={session.provider === 'openai' ? 'Codex' : 'Claude Code'}
               change={(permissionMode) => void configure({ permissionMode })}
             />
           )}
+          <SessionModelSelect
+            provider={session.provider === 'openai' ? 'openai' : 'claude'}
+            model={session.model}
+            capabilities={capabilities}
+            openaiModels={openaiModels}
+            disabled={controlsDisabled}
+            onSelect={(provider, model) =>
+              void configure({
+                provider,
+                model,
+                ...(provider === session.provider ? {} : { effort: null }),
+              })
+            }
+          />
           <span className="toolbar-space" />
-          {native && (
-            <ComposerControls
-              key={session.id}
-              model={session.model}
-              effort={session.effort}
-              capabilities={capabilities}
-              nativeSession={nativeSession}
-              metrics={metrics}
-              openAccount={openAccount}
-              disabled={controlsDisabled}
-              configure={configure}
-              refresh={refresh}
-              refreshing={refreshing}
-              canRefreshModels={canRefreshModels}
-            />
-          )}
+          <ComposerControls
+            key={session.id}
+            provider={session.provider === 'openai' ? 'openai' : 'claude'}
+            model={session.model}
+            effort={session.effort}
+            capabilities={capabilities}
+            nativeSession={nativeSession}
+            metrics={metrics}
+            openAccount={openAccount}
+            disabled={controlsDisabled}
+            configure={configure}
+            refresh={refresh}
+            refreshing={refreshing}
+            canRefreshModels={canRefreshModels}
+            openaiModels={openaiModels}
+          />
         </div>
       </form>
     </div>

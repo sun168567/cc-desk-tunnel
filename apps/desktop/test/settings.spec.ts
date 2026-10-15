@@ -96,6 +96,63 @@ test('Claude Code settings load from the service and save each change at once', 
   await page.screenshot({ path: resolve('.local/screenshots/settings.png') });
 });
 
+test('Account page shows Claude and ChatGPT side by side', async ({ page }) => {
+  await page.routeWebSocket('ws://127.0.0.1:18889/ws', (route) => {
+    const send = (value: unknown) => route.send(JSON.stringify(value));
+    route.onMessage((raw) => {
+      const message = JSON.parse(String(raw));
+      if (message.type === 'device') return;
+      if (message.type === 'auth') {
+        send({
+          type: 'ready',
+          protocolVersion: PROTOCOL_VERSION,
+          version: '0.0.1',
+          connectionId: randomUUID(),
+          adapter: 'claude-code',
+          sessions: [],
+        });
+        return;
+      }
+      if (message.type === 'account.status' && message.provider === 'openai')
+        send({
+          type: 'account.state',
+          provider: 'openai',
+          profileId: 'default',
+          loggedIn: true,
+          login: null,
+          runtime: 'ready',
+          executable: '/opt/codex',
+          defaultModel: 'gpt-test',
+          limits: { kind: 'cgroup', memory: true, memoryMb: 2048, pids: 64 },
+        });
+      if (message.requestId) send({ type: 'response', requestId: message.requestId, ok: true });
+    });
+  });
+  await page.goto('/');
+  await page.getByLabel('服务地址', { exact: true }).fill('ws://127.0.0.1:18889/ws');
+  await page
+    .getByLabel('服务凭据', { exact: true })
+    .fill('test-only-settings-token-with-enough-length');
+  await page.getByRole('button', { name: '连接', exact: true }).click();
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^账号/ }).click();
+  const panel = page.getByRole('region', { name: '账号信息' });
+  await expect(panel.getByLabel('Claude 账号')).toBeVisible();
+  const chatgpt = panel.getByLabel('ChatGPT 账号');
+  await expect(chatgpt).toBeVisible();
+  await expect(chatgpt.getByText('就绪', { exact: true })).toBeVisible();
+  await expect(chatgpt.getByText('gpt-test', { exact: true })).toBeVisible();
+  await expect(chatgpt.getByText('订阅用量')).toBeVisible();
+  await expect(chatgpt.getByText('当前会话')).toBeVisible();
+  await page.screenshot({ path: resolve('.local/screenshots/account-providers.png') });
+
+  await page.getByRole('button', { name: 'OpenAI', exact: true }).click();
+  const openaiPanel = page.getByRole('region', { name: 'OpenAI 设置' });
+  await expect(openaiPanel.getByText('就绪', { exact: true })).toBeVisible();
+  await expect(openaiPanel.getByLabel('Codex 路径')).toHaveValue('/opt/codex');
+  await expect(openaiPanel.getByText('gpt-test', { exact: true })).toBeVisible();
+});
+
 test('the settings of this computer open from the login page without a connection', async ({
   page,
 }) => {

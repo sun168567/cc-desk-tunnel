@@ -18,6 +18,9 @@ export type Task = {
   prompt: string;
   schedule: Schedule;
   target: Target;
+  // Missing in a file written before providers were recorded: that task stays on Claude.
+  provider: 'claude' | 'openai';
+  profileId: string;
   model: string | null;
   effort: Effort | null;
 };
@@ -32,6 +35,7 @@ export const guide = [
   'schedule 四选一，时间均为本机时间：{"type":"once","at":"2026-01-31T09:00"}、{"type":"daily","time":"09:00"}、',
   '{"type":"weekly","days":[1,3,5],"time":"09:00"}（1=周一 … 7=周日）、{"type":"interval","minutes":60}（不少于 5）。',
   'target 二选一：{"type":"session","sessionId":"…"} 接续已有会话；{"type":"new","projectPath":"D:\\\\项目"} 每次新开会话。',
+  'provider 为 claude 或 openai，缺省是 claude。profileId 缺省是 default。任务不会改走另一家。',
   'model 与 effort 可为 null（不改动会话当前设置）；effort 取 low / medium / high / xhigh / max。',
   '只在客户端运行并已连接时触发；晚于计划 10 分钟仍无法发送的那一次会跳过。无人值守时会话应使用自动审批，否则会停在审批处。',
 ];
@@ -88,6 +92,18 @@ function parseTask(value: unknown): Task {
   if (effort === undefined) return fail('effort 应为 low / medium / high / xhigh / max 或 null');
   if (task.model != null && (typeof task.model !== 'string' || !task.model.trim()))
     return fail('model 应为模型名或 null');
+  const provider =
+    task.provider == null || task.provider === 'claude'
+      ? 'claude'
+      : task.provider === 'openai'
+        ? 'openai'
+        : fail('provider 应为 claude 或 openai');
+  const profileId =
+    task.profileId == null
+      ? 'default'
+      : typeof task.profileId === 'string' && task.profileId.trim()
+        ? task.profileId.trim()
+        : fail('profileId 应为非空文本');
   return {
     id: text('id', 120),
     name: text('name', 80),
@@ -95,6 +111,8 @@ function parseTask(value: unknown): Task {
     prompt: text('prompt', 15000),
     schedule: rule,
     target: where,
+    provider,
+    profileId,
     model: (task.model as string | null | undefined) ?? null,
     effort,
   };

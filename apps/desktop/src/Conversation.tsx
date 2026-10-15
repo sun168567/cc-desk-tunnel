@@ -26,7 +26,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { Claude } from '@lobehub/icons';
+import { Claude, OpenAI } from '@lobehub/icons';
 import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
@@ -345,10 +345,12 @@ function UserMessage({ item, edit }: { item: Text; edit?: (item: Text) => void }
 function Message({
   item,
   native,
+  provider,
   edit,
 }: {
   item: Text;
   native: boolean;
+  provider?: 'claude' | 'openai';
   edit?: (item: Text) => void;
 }) {
   if (item.kind === 'user') {
@@ -363,7 +365,12 @@ function Message({
         {item.kind === 'thinking' ? <p>{item.text}</p> : <Rich text={item.text} />}
       </div>
       <div className="message-toolbar assistant-toolbar">
-        {item.kind === 'assistant' && <Claude.Color size={13} className="assistant-claude-mark" />}
+        {item.kind === 'assistant' &&
+          (provider === 'openai' ? (
+            <OpenAI size={13} className="assistant-claude-mark" />
+          ) : (
+            <Claude.Color size={13} className="assistant-claude-mark" />
+          ))}
         {item.kind === 'assistant' && !native && <span className="chip quiet">模拟</span>}
         {time && (
           <time className="message-time" dateTime={item.at} title={time.full}>
@@ -376,7 +383,17 @@ function Message({
   );
 }
 
-function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: Live }) {
+function TurnView({
+  turn,
+  native,
+  provider,
+  live,
+}: {
+  turn: Turn;
+  native: boolean;
+  provider?: 'claude' | 'openai';
+  live: Live;
+}) {
   const [jump, setJump] = useState({ path: '', request: 0 });
   const root = useRef<HTMLDivElement>(null);
   const openDocument = useContext(OpenDocument);
@@ -431,7 +448,7 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
           live={live}
         />
       ) : (
-        <Message key={step.id} item={step} native={native} />
+        <Message key={step.id} item={step} native={native} provider={provider} />
       ),
     );
   return (
@@ -446,6 +463,7 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
             <Message
               item={turn.question}
               native={native}
+              provider={provider}
               edit={turn.joined ? undefined : live.edit}
             />
           )
@@ -466,7 +484,7 @@ function TurnView({ turn, native, live }: { turn: Turn; native: boolean; live: L
                 {steps}
               </Fold>
             )}
-        {turn.answer && <Message item={turn.answer} native={native} />}
+        {turn.answer && <Message item={turn.answer} native={native} provider={provider} />}
         {files.size > 0 && (
           <div className="changed-files" aria-label="本轮文件改动">
             <span>本轮文件改动</span>
@@ -783,6 +801,8 @@ export default function Conversation({
             connected={connected}
             accountName={accountName}
             onNewSession={newSession}
+            client={client}
+            sessions={allSessions}
           />
         ) : (
           <div className="transcript" ref={transcriptRoot}>
@@ -808,17 +828,30 @@ export default function Conversation({
               </div>
             )}
             {turns.length === 0 && !history?.loading && (
-              <WelcomeHero sessionTitle={session.title} projectPath={session.projectPath} />
+              <WelcomeHero
+                sessionTitle={session.title}
+                projectPath={session.projectPath}
+                provider={session.provider}
+                client={client}
+                sessions={allSessions}
+              />
             )}
             {turns.map((turn) => (
-              <TurnView key={turn.id} turn={turn} native={native} live={live} />
+              <TurnView
+                key={turn.id}
+                turn={turn}
+                native={native}
+                provider={session.provider}
+                live={live}
+              />
             ))}
             {session.activeRun && background && (
               <div className="background-tasks">
                 <div className="run-indicator" role="status">
                   <span className={`running-dot${connected ? ' breathing' : ''}`} />
-                  后台任务{tasks.length ? ` ${tasks.length} 个` : ''} · Claude
-                  已答完，任务结束后会接着处理
+                  {session.provider === 'openai'
+                    ? `进行中的命令${tasks.length ? ` ${tasks.length} 条` : ''} · 可以单独结束这一条`
+                    : `后台任务${tasks.length ? ` ${tasks.length} 个` : ''} · Claude 已答完，任务结束后会接着处理`}
                   {!ownsRun && ' · 另一连接'}
                 </div>
                 <ul>
@@ -868,6 +901,7 @@ export default function Conversation({
                   clock={clock}
                   connected={connected}
                   suffix={ownsRun ? '' : ' · 另一连接'}
+                  provider={session.provider}
                 />
               ) : (
                 <div className="run-indicator" role="status">

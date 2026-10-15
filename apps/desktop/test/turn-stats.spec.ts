@@ -25,6 +25,8 @@ async function open(page: Page, stats: Record<string, unknown>, on = true) {
     title: '回复小结',
     autoTitle: false,
     projectPath: 'D:\\工作\\小结',
+    provider: 'claude',
+    profileId: 'default',
     permissionMode: 'auto',
     model: null,
     effort: null,

@@ -27,7 +27,8 @@ import type { Page } from './Rail.tsx';
 function activity(session: Session) {
   if (!session.activeRun) return ago(Date.parse(session.updatedAt));
   if (session.activeRun.surface === 'terminal') return '原生终端';
-  if (session.activeRun.waiting === 'background') return '后台任务';
+  if (session.activeRun.waiting === 'background')
+    return session.provider === 'openai' ? '进行中的命令' : '后台任务';
   if (session.activeRun.status !== 'awaiting_approval') return '运行中';
   return session.activeRun.waiting === 'question' ? '等待回答' : '等待审批';
 }
@@ -223,6 +224,7 @@ export default function Sidebar({
             aria-hidden="true"
           />
           <strong>{session.title}</strong>
+          {session.provider === 'openai' && <small>OpenAI</small>}
           {session.activeRun && (
             <span
               className={`running-dot${session.activeRun.status === 'awaiting_approval' ? '' : ' breathing'}`}
@@ -298,7 +300,7 @@ export default function Sidebar({
           type="button"
           className="side-action new-session"
           disabled={!connected || busy || refreshing || terminalOpen}
-          onClick={newSession}
+          onClick={() => newSession()}
         >
           <SquarePen />
           <span>新建会话</span>

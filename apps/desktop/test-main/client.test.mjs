@@ -407,12 +407,20 @@ test('scheduled tasks: the file round-trips, bad tasks are named, and rules find
     prompt: '整理今天的提交',
     schedule: { type: 'weekly', days: [1, 5], time: '09:30' },
     target: { type: 'new', projectPath: 'D:\\项目' },
+    provider: 'claude',
+    profileId: 'default',
     model: null,
     effort: 'high',
   };
   const text = formatTasks([task]);
   assert.ok(JSON.parse(text).说明.length > 0);
   assert.deepEqual(parseTasks(text), { tasks: [task], problems: [] });
+  const stored = JSON.parse(text);
+  delete stored.tasks[0].provider;
+  delete stored.tasks[0].profileId;
+  const legacy = parseTasks(JSON.stringify(stored));
+  assert.equal(legacy.tasks[0].provider, 'claude');
+  assert.equal(legacy.tasks[0].profileId, 'default');
   // What Claude or an editor may leave behind: missing optional fields, a bad task beside a good one.
   const mixed = parseTasks(
     JSON.stringify({

@@ -13,9 +13,15 @@ function fenced(text: string) {
 // The whole session as one Markdown document: questions, answers, and under each answer what was done to
 // reach it — thinking, tool calls with their input and output — folded into <details>.
 export function markdown(session: Session, events: SessionEvent[]) {
+  const openai = session.provider === 'openai';
   const parts = [
     `# ${session.title}`,
-    `- 项目：\`${session.projectPath}\`\n- 导出时间：${new Date().toLocaleString('zh-CN')}`,
+    [
+      `- 项目：\`${session.projectPath}\``,
+      `- 提供商：${openai ? 'OpenAI' : 'Claude'}`,
+      `- 模型：${session.model ?? '默认'}`,
+      `- 导出时间：${new Date().toLocaleString('zh-CN')}`,
+    ].join('\n'),
   ];
   const step = (item: Step): string[] => {
     if (item.kind === 'assistant') return [item.text];
@@ -34,7 +40,7 @@ export function markdown(session: Session, events: SessionEvent[]) {
         turn.question.text,
       );
     const body = [...turn.steps.flatMap(step), ...(turn.answer ? [turn.answer.text] : [])];
-    if (body.length) parts.push('## Claude Code', ...body);
+    if (body.length) parts.push(`## ${openai ? 'OpenAI' : 'Claude Code'}`, ...body);
     for (const notice of turn.notices) parts.push(`> ${notice.text}`);
   }
   return `${parts.join('\n\n')}\n`;
