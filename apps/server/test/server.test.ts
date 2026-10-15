@@ -101,6 +101,7 @@ test('requires authentication, rejects wrong token/version/origin and accepts he
     status: 'ok',
     protocolVersion: PROTOCOL_VERSION,
     adapter: 'simulation',
+    providers: { claude: 'absent', openai: 'absent' },
   });
   for (const [badToken, version, code] of [
     ['wrong-token-with-enough-length', 1, 'unauthorized'],

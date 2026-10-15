@@ -39,3 +39,5 @@ playwright-report/
 Thumbs.db
 Desktop.ini
 .idea/
+apps/desktop/tmp-hl.mjs
+Openai实施.md

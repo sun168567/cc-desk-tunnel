@@ -6,6 +6,7 @@ import {
   authSchema,
   commandSchema,
   eventSchema,
+  sessionSchema,
   terminalControlSchema,
 } from '../src/index.ts';
 
@@ -139,4 +140,54 @@ test('a turn report names the message it answered, or none for a turn a backgrou
   assert.equal(eventSchema.safeParse(event(stats)).success, true);
   assert.equal(eventSchema.safeParse(event({ ...stats, requests: -1 })).success, false);
   assert.equal(eventSchema.safeParse(event({ ...stats, partial: undefined })).success, false);
+});
+
+test('a session without a provider is Claude, and native events still decode', () => {
+  const now = new Date().toISOString();
+  const session = sessionSchema.parse({
+    id: randomUUID(),
+    title: '旧会话',
+    projectPath: 'D:\\work',
+    createdAt: now,
+    updatedAt: now,
+    activeRun: null,
+  });
+  assert.equal(session.provider, 'claude');
+  assert.equal(session.profileId, 'default');
+  assert.equal(session.codexThreadId, undefined);
+  assert.equal(sessionSchema.safeParse({ ...session, codexThreadId: 'thr_test' }).success, true);
+  assert.equal(sessionSchema.safeParse({ ...session, codexThreadId: '' }).success, false);
+  const created = commandSchema.parse({
+    type: 'session.create',
+    requestId: randomUUID(),
+    title: '新会话',
+    projectPath: 'D:\\work',
+  });
+  assert.equal(created.type, 'session.create');
+  if (created.type === 'session.create') assert.equal(created.provider, 'claude');
+  const openai = commandSchema.parse({
+    type: 'session.create',
+    requestId: randomUUID(),
+    title: '新会话',
+    projectPath: 'D:\\work',
+    provider: 'openai',
+  });
+  if (openai.type === 'session.create') assert.equal(openai.provider, 'openai');
+  const account = commandSchema.parse({ type: 'account.login', requestId: randomUUID() });
+  if (account.type === 'account.login') assert.equal(account.provider, 'claude');
+  assert.equal(
+    eventSchema.safeParse({
+      sessionId: session.id,
+      runId: randomUUID(),
+      sequence: 1,
+      createdAt: now,
+      payload: {
+        type: 'native.session',
+        nativeSessionId: randomUUID(),
+        model: 'claude',
+        version: '1',
+      },
+    }).success,
+    true,
+  );
 });

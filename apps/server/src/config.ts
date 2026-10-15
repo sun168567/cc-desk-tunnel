@@ -1,6 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { ServerOptions } from './server.ts';
+
+function bounded(
+  value: string | undefined,
+  fallback: number,
+  name: string,
+  min: number,
+  max: number,
+) {
+  if (value === undefined || value === '') return fallback;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max) throw new Error(`Invalid ${name}`);
+  return number;
+}
 
 function port(value: string | undefined, fallback: number, name: string) {
   const number = Number(value ?? fallback);
@@ -19,6 +32,12 @@ export function clearServiceVariables(env: NodeJS.ProcessEnv) {
         'CLAUDE_MODEL',
         'CLAUDE_SETTINGS_PATH',
         'CLAUDE_CONTEXT_RETENTION_DAYS',
+        'CODEX_PATH',
+        'CODEX_PROFILE',
+        'CODEX_MODEL',
+        'CODEX_MEMORY_MB',
+        'CODEX_PIDS_MAX',
+        'CODEX_CPU_MILLICORES',
       ].includes(name)
     )
       delete env[name];
@@ -64,11 +83,21 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
           contextRetentionDays: retention,
         }
       : undefined,
+    codex: env.CODEX_PATH
+      ? {
+          executable: env.CODEX_PATH,
+          profileId: env.CODEX_PROFILE ?? 'default',
+          ...(env.CODEX_MODEL ? { model: env.CODEX_MODEL } : {}),
+          memoryMb: bounded(env.CODEX_MEMORY_MB, 2048, 'CODEX_MEMORY_MB', 256, 65536),
+          pidsMax: bounded(env.CODEX_PIDS_MAX, 64, 'CODEX_PIDS_MAX', 8, 4096),
+          cpuMillis: bounded(env.CODEX_CPU_MILLICORES, 1000, 'CODEX_CPU_MILLICORES', 50, 16000),
+        }
+      : undefined,
   };
   // Releases are followed only by a real service; the entry script of the image says where programs and runtime are.
   if (native && env.PROXY_RELEASE_REPO !== 'none')
     options.updates = {
-      repository: env.PROXY_RELEASE_REPO ?? 'sun168567/cc-desk-tunnel',
+      repository: env.PROXY_RELEASE_REPO ?? 'Dreamer062176/cc-desk-tunnel',
       token: env.PROXY_RELEASE_TOKEN || undefined,
       programDir:
         env.PROXY_PROGRAM_DIR && env.PROXY_RUNTIME_DIR ? env.PROXY_PROGRAM_DIR : undefined,
@@ -79,4 +108,38 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
       },
     };
   return { options, native, port: port(env.PROXY_PORT, 8787, 'PROXY_PORT') };
+}
+
+function codexPathFile(dataDir: string) {
+  return join(dataDir, 'CODEX_PATH');
+}
+
+// Missing file: the process environment decides. An empty file turns Codex off.
+export function savedCodexExecutable(dataDir: string): string | undefined {
+  const file = codexPathFile(dataDir);
+  if (!existsSync(file)) return undefined;
+  return readFileSync(file, 'utf8').trim();
+}
+
+export function writeCodexExecutable(dataDir: string, executable: string) {
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(codexPathFile(dataDir), executable, { mode: 0o600 });
+}
+
+// The settings page stores the path beside the sessions. It wins over CODEX_PATH from the environment.
+export function applySavedCodexPath(options: ServerOptions) {
+  const saved = savedCodexExecutable(options.dataDir);
+  if (saved === undefined) return;
+  if (!saved) {
+    options.codex = undefined;
+    return;
+  }
+  options.codex = {
+    executable: saved,
+    profileId: options.codex?.profileId ?? 'default',
+    ...(options.codex?.model ? { model: options.codex.model } : {}),
+    memoryMb: options.codex?.memoryMb ?? 2048,
+    pidsMax: options.codex?.pidsMax ?? 64,
+    cpuMillis: options.codex?.cpuMillis ?? 1000,
+  };
 }

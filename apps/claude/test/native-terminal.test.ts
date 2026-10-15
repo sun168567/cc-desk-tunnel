@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { deviceTerms } from '../../server/src/device-terms.ts';
 import { NativeTerminal, terminalArguments, terminalEnvironment } from '../src/native-terminal.ts';
 import { completeOnboarding } from '../src/native-onboarding.ts';
 import { NativeLogin, parseAccountStatus } from '../src/native-account.ts';
@@ -92,6 +93,7 @@ test('control terminal launches the official CLI directly with remote guidance a
     { executable: '/native/claude', model: 'provider', settingsPath: '/private/provider.json' },
     { projectPath: 'D:\\项目', permissionMode: 'auto', model: null, effort: 'high' } as Session,
     { configPath: '/private/ssh.conf' },
+    deviceTerms('win32', 'D:\\项目'),
   );
   assert.ok(args.includes('--append-system-prompt'));
   assert.ok(args.some((arg) => arg.includes('D:\\\\项目')));
@@ -106,6 +108,7 @@ test('control terminal launches the official CLI directly with remote guidance a
       { executable: 'claude' },
       { projectPath: 'D:\\test', permissionMode: 'default' } as Session,
       { configPath: '/ssh' },
+      deviceTerms('win32', 'D:\\test'),
     )[1],
     'manual',
   );
@@ -114,6 +117,7 @@ test('control terminal launches the official CLI directly with remote guidance a
       { executable: 'claude' },
       { projectPath: 'D:\\test', permissionMode: 'bypassPermissions' } as Session,
       { configPath: '/ssh' },
+      deviceTerms('win32', 'D:\\test'),
     )[1],
     'bypassPermissions',
   );
@@ -220,6 +224,8 @@ test('official sign-in: the link is read from the command output, the pasted cod
       '{"loggedIn":true,"authMethod":"claude.ai","email":"user@example.invalid","orgName":"Org","orgId":"x","subscriptionType":"pro"}',
     ),
     {
+      provider: 'claude',
+      profileId: 'default',
       loggedIn: true,
       authMethod: 'claude.ai',
       email: 'user@example.invalid',
@@ -228,6 +234,8 @@ test('official sign-in: the link is read from the command output, the pasted cod
     },
   );
   assert.deepEqual(parseAccountStatus('{"loggedIn":false,"authMethod":"none"}'), {
+    provider: 'claude',
+    profileId: 'default',
     loggedIn: false,
     authMethod: 'none',
   });

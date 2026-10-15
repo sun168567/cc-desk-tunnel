@@ -11,7 +11,18 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { TestContext } from 'node:test';
-import { remotePrompt } from '../src/claude.ts';
+import type { DevicePlatform } from '@cc-desk-tunnel/protocol';
+import { remotePrompt } from '../../claude/src/claude.ts';
+import { deviceTerms } from '../src/device-terms.ts';
+
+function prompt(
+  projectPath: string,
+  ssh: { configPath: string },
+  sessionId: string,
+  platform: DevicePlatform = 'win32',
+) {
+  return remotePrompt(projectPath, ssh, sessionId, deviceTerms(platform, projectPath));
+}
 
 // A tunnel whose device is this test: each request for a channel is recorded, and `device.open` answers one
 // with a real WebSocket pair, handing the service's end to the tunnel as the service would.
@@ -102,29 +113,29 @@ test('commands share one SSH connection where the platform and the length of the
   assert.doesNotMatch(config(`/srv/${'long-name/'.repeat(9)}connections/id`, 'linux'), /Control/);
 });
 test('context references native SSH configuration without inventing execution tools', () => {
-  const prompt = remotePrompt(
+  const text = prompt(
     "D:\\中文 空格\\it's",
     { configPath: '/private/ssh_config' },
     '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11',
   );
   // Scripts travel on standard input to a host of the configuration: nothing of the device's command line,
   // and no encoding, is for the model to write.
-  assert.match(prompt, /ssh -F "\/private\/ssh_config" device-script <<'PS'/);
-  assert.doesNotMatch(prompt, /EncodedCommand|CC_DESK_TUNNEL_PWSH|ReadToEnd/);
-  assert.match(prompt, /The host device runs a command line as it is/);
+  assert.match(text, /ssh -F "\/private\/ssh_config" device-script <<'PS'/);
+  assert.doesNotMatch(text, /EncodedCommand|CC_DESK_TUNNEL_PWSH|ReadToEnd/);
+  assert.match(text, /The host device runs a command line as it is/);
   // The path given for scp is the project's own: an example on another drive was taken for the drive to use.
   assert.match(
-    prompt,
+    text,
     /scp or sftp, where a Windows path takes forward slashes: the project directory is "device:D:\/中文 空格\/it's"/,
   );
-  assert.match(prompt, /CC_DESK_TUNNEL_SCHEDULES/);
+  assert.match(text, /CC_DESK_TUNNEL_SCHEDULES/);
   // Nothing of the device's own layout: where its programs and the client's files are is the device's to know.
-  assert.doesNotMatch(prompt, /pwsh\.exe|APPDATA/);
-  assert.match(prompt, /0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11/);
-  assert.match(prompt, /native Bash/);
-  assert.match(prompt, /ssh -F/);
-  assert.match(prompt, /it''s/);
-  assert.doesNotMatch(prompt, /mcp__/);
+  assert.doesNotMatch(text, /pwsh\.exe|APPDATA/);
+  assert.match(text, /0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11/);
+  assert.match(text, /native Bash/);
+  assert.match(text, /ssh -F/);
+  assert.match(text, /it''s/);
+  assert.doesNotMatch(text, /mcp__/);
 });
 test('the fixed script command survives the double quotes of cmd.exe', () => {
   // What follows -Command is wrapped in double quotes and holds neither kind of quote itself.
@@ -140,7 +151,7 @@ test('a session keeps one SSH path, and so one system prompt, across reconnects'
     const configPath = join(directory, 'connections', connection, 'ssh_config');
     const ssh = sessionSsh(directory, session, { configPath });
     assert.equal(readFileSync(ssh.configPath, 'utf8'), `Include ${JSON.stringify(configPath)}\n`);
-    return remotePrompt('D:\\work', ssh, session);
+    return prompt('D:\\work', ssh, session);
   });
   assert.equal(prompts[0], prompts[1]);
   assert.doesNotMatch(prompts[0]!, /connections/);
@@ -385,9 +396,9 @@ test('a device keeps one door: commands begun while it is away wait for its next
   assert.ok(Date.now() - began >= 300);
 });
 test('the prompt lets the model look at a picture of the device by copying that one file here', () => {
-  const prompt = remotePrompt('D:\\work', { configPath: '/private/ssh_config' }, 'session');
-  assert.match(prompt, /copy that one file with scp to a temporary file on this host/);
-  assert.match(prompt, /Do not use this host's Read\/Edit tools on project files/);
+  const text = prompt('D:\\work', { configPath: '/private/ssh_config' }, 'session');
+  assert.match(text, /copy that one file with scp to a temporary file on this host/);
+  assert.match(text, /Do not use this host's Read\/Edit tools on project files/);
 });
 
 test('a device with a POSIX shell gets a script command and a prompt of its own', () => {
@@ -403,20 +414,90 @@ test('a device with a POSIX shell gets a script command and a prompt of its own'
   assert.match(files.config, /\n {2}RemoteCommand exec "\$CC_DESK_TUNNEL_SHELL" -s\n/);
   assert.doesNotMatch(files.config, /CC_DESK_TUNNEL_PWSH/);
   const ssh = { configPath: '/private/ssh_config' };
-  const prompt = remotePrompt("/Users/me/my project/it's", ssh, 'session', 'darwin');
-  assert.match(prompt, /Device: macOS\. Project directory: "\/Users\/me\/my project\/it's"\./);
-  assert.match(prompt, /ssh -F "\/private\/ssh_config" device-script <<'PS'/);
-  assert.match(prompt, /Begin it with cd -- '\/Users\/me\/my project\/it'\\''s'\./);
-  assert.match(prompt, /the project directory is "device:\/Users\/me\/my project\/it's"/);
-  assert.doesNotMatch(prompt, /PowerShell|cmd\.exe|Windows|Set-Location/);
+  const text = prompt("/Users/me/my project/it's", ssh, 'session', 'darwin');
+  assert.match(text, /Device: macOS\. Project directory: "\/Users\/me\/my project\/it's"\./);
+  assert.match(text, /ssh -F "\/private\/ssh_config" device-script <<'PS'/);
+  assert.match(text, /Begin it with cd -- '\/Users\/me\/my project\/it'\\''s'\./);
+  assert.match(text, /the project directory is "device:\/Users\/me\/my project\/it's"/);
+  assert.doesNotMatch(text, /PowerShell|cmd\.exe|Windows|Set-Location/);
   // Everything that does not depend on the system reads the same on both, line for line.
-  const windows = remotePrompt('D:\\work', ssh, 'session').split('\n');
-  const mac = remotePrompt('/work', ssh, 'session', 'darwin').split('\n');
+  const windows = prompt('D:\\work', ssh, 'session').split('\n');
+  const mac = prompt('/work', ssh, 'session', 'darwin').split('\n');
   assert.equal(windows.length, mac.length);
   assert.deepEqual(
     windows.flatMap((line, index) => (line === mac[index] ? [] : [index])),
     [1, 3, 4],
   );
   // No system named is Windows, as it was before others were supported.
-  assert.equal(remotePrompt('D:\\work', ssh, 'session', 'win32'), windows.join('\n'));
+  assert.equal(prompt('D:\\work', ssh, 'session', 'win32'), windows.join('\n'));
+});
+
+test('an OpenAI SSH port drops only that connection when it is over its limit', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-openai-ssh-'));
+  const limits = { maxWaiting: 1, maxChannels: 1, maxBytes: 32 };
+  const door = new Door({ probe: async () => {}, openai: limits }, directory, 'device');
+  await door.start();
+  const requests: string[] = [];
+  let unexpected = 0;
+  const tunnel = new Tunnel(
+    { probe: async () => {}, pairMs: 2000, openai: limits },
+    directory,
+    randomUUID(),
+    (channelId) => {
+      requests.push(channelId);
+      return true;
+    },
+    () => unexpected++,
+  );
+  await tunnel.start();
+  await tunnel.accept({
+    type: 'tunnel.credentials',
+    connectionId: tunnel.id,
+    username: 'device',
+    privateKey: 'key',
+    hostPublicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForQuotaTestOnly',
+  });
+  door.use(tunnel);
+  const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  await once(wss, 'listening');
+  t.after(async () => {
+    await door.close();
+    await tunnel.close();
+    for (const client of wss.clients) client.terminate();
+    await new Promise((resolve) => wss.close(resolve));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const session = '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11';
+  const written = sessionSsh(directory, session, door.ssh!, door.openaiPort);
+  assert.match(readFileSync(written.configPath, 'utf8'), new RegExp(`^Host device windows device-script\\n  Port ${door.openaiPort}\\nInclude `));
+  const claude = connect(door.port, '127.0.0.1');
+  for (let attempt = 0; requests.length < 1; attempt++) {
+    assert.ok(attempt < 200);
+    await delay(10);
+  }
+  const first = connect(door.openaiPort, '127.0.0.1');
+  for (let attempt = 0; requests.length < 2; attempt++) {
+    assert.ok(attempt < 200);
+    await delay(10);
+  }
+  const second = connect(door.openaiPort, '127.0.0.1');
+  await closed(second);
+  assert.equal(requests.length, 2);
+  assert.equal(unexpected, 0);
+  assert.equal(tunnel.closePromise, undefined);
+  const arrivals = new Map<string, (service: WebSocket) => void>();
+  wss.on('connection', (service, request) => arrivals.get(request.url ?? '')?.(service));
+  const path = `/${randomUUID()}`;
+  const accepted = new Promise<WebSocket>((resolve) => arrivals.set(path, resolve));
+  const url = `ws://127.0.0.1:${(wss.address() as { port: number }).port}${path}`;
+  const device = new WebSocket(url);
+  const service = await accepted;
+  await once(device, 'open');
+  assert.equal(tunnel.attach(requests[1]!, service), true);
+  first.write(Buffer.alloc(64, 1));
+  await closed(first);
+  assert.equal(unexpected, 0);
+  assert.equal(tunnel.closePromise, undefined);
+  assert.equal(claude.destroyed, false);
+  claude.destroy();
 });

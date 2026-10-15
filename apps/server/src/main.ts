@@ -2,13 +2,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createProxyServer } from './server.ts';
 import { rmSync } from 'node:fs';
-import { clearServiceVariables, environmentConfig } from './config.ts';
+import { applySavedCodexPath, clearServiceVariables, environmentConfig } from './config.ts';
 import { removeFrpLeftovers } from './legacy.ts';
 
 const { options, native, port } = environmentConfig(
   process.env,
   fileURLToPath(new URL('../../../.local/sessions', import.meta.url)),
 );
+applySavedCodexPath(options);
 const programDir = process.env.PROXY_PROGRAM_DIR;
 if (native) removeFrpLeftovers();
 clearServiceVariables(process.env);

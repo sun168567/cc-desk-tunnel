@@ -73,6 +73,10 @@ export class UsageLog {
     const columns = database.prepare('PRAGMA table_info(api_requests)').all() as { name: string }[];
     if (!columns.some((column) => column.name === 'prompt_id'))
       database.exec('ALTER TABLE api_requests ADD COLUMN prompt_id TEXT');
+    if (!columns.some((column) => column.name === 'provider'))
+      database.exec(
+        "ALTER TABLE api_requests ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude'",
+      );
     database.exec('CREATE INDEX IF NOT EXISTS api_requests_prompt ON api_requests(prompt_id)');
     this.restoreStarts();
     this.prune();
@@ -166,8 +170,8 @@ export class UsageLog {
   // Accepts one OTLP/HTTP JSON log export and keeps only the model request records.
   ingest(body: unknown) {
     const insert = this.database.prepare(`INSERT OR IGNORE INTO api_requests
-      (at, session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, ttft_ms, source, request_id, prompt_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      (at, session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, ttft_ms, source, request_id, prompt_id, provider)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'claude')`);
     let stored = 0;
     for (const resource of asArray((body as { resourceLogs?: unknown })?.resourceLogs))
       for (const scope of asArray(resource?.scopeLogs))
@@ -310,7 +314,7 @@ export class UsageLog {
     const values = [...range, ...(query.model ? [query.model] : [])];
     const rows = this.database
       .prepare(
-        `SELECT id, at, session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        `SELECT id, at, session_id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
         cost_usd, duration_ms, ttft_ms, source FROM api_requests
       WHERE ${filtered}${query.beforeId ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ? OFFSET ?`,
       )
@@ -354,6 +358,7 @@ export class UsageLog {
         at: new Date(row.at as number).toISOString(),
         sessionId: row.session_id as string | null,
         sessionTitle: row.session_id ? title(row.session_id as string) : null,
+        provider: row.provider === 'openai' ? 'openai' : 'claude',
         model: row.model as string,
         inputTokens: row.input_tokens as number,
         outputTokens: row.output_tokens as number,
@@ -405,6 +410,88 @@ export class UsageLog {
       ttftMs: number | null;
     };
     return { ...sums, outputPerSecond: perSecond(streamedTokens, streamedMs) };
+  }
+  // One Codex turn, as the app-server reported it. There is no API price for a subscription turn, so the cost is zero.
+  record(entry: {
+    at: number;
+    sessionId: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    durationMs: number;
+    ttftMs: number | null;
+    requestId: string;
+    provider: 'openai' | 'claude';
+  }) {
+    this.database
+      .prepare(
+        `INSERT OR IGNORE INTO api_requests
+        (at, session_id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, ttft_ms, source, request_id, provider)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        entry.at,
+        entry.sessionId,
+        entry.model,
+        entry.inputTokens,
+        entry.outputTokens,
+        entry.cacheReadTokens,
+        entry.cacheCreationTokens,
+        entry.durationMs,
+        entry.ttftMs,
+        entry.provider,
+        entry.requestId,
+        entry.provider,
+      );
+  }
+  private gates = {
+    fiveHour: { enabled: true, warn: 90, stop: 95 },
+    week: { enabled: true, warn: 90, stop: 95 },
+  };
+  setLimits(fiveHour: { enabled: boolean; warn: number; stop: number }, week: typeof fiveHour) {
+    const gate = (value: { enabled: boolean; warn: number; stop: number }) =>
+      Number.isInteger(value.warn) &&
+      Number.isInteger(value.stop) &&
+      value.warn >= 1 &&
+      value.warn < value.stop &&
+      value.stop <= 100
+        ? value
+        : null;
+    const hour = gate(fiveHour);
+    const weekly = gate(week);
+    if (!hour || !weekly) return false;
+    this.gates = { fiveHour: hour, week: weekly };
+    return true;
+  }
+  // The same percents the desktop uses. No reading, a disabled gate, or a window whose reset has passed does not stop.
+  stopMessage(now = Date.now()) {
+    const windows = this.database
+      .prepare('SELECT name, resets_at, utilization FROM usage_windows')
+      .all() as { name: string; resets_at: number | null; utilization: number | null }[];
+    const hour = windows.find((window) => window.name === 'five_hour');
+    const week = windows
+      .filter(
+        (window) =>
+          window.name.startsWith('seven_day') &&
+          window.name !== 'seven_day_oauth_apps' &&
+          window.utilization != null,
+      )
+      .sort((a, b) => b.utilization! - a.utilization!)[0];
+    const blocked = (
+      [
+        ['5 小时额度', this.gates.fiveHour, hour],
+        ['每周额度', this.gates.week, week],
+      ] as const
+    ).find(([, gate, window]) => {
+      if (!gate.enabled || !window || window.utilization == null || window.utilization < gate.stop)
+        return false;
+      return window.resets_at == null || window.resets_at > now;
+    });
+    if (!blocked) return null;
+    const window = blocked[2]!;
+    return `${blocked[0]}已用 ${Math.round(window.utilization!)}%，已暂停发送、继续、压缩和终端。`;
   }
   prune(now = Date.now()) {
     this.database

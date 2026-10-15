@@ -23,6 +23,23 @@ import type {
   SessionSnapshot,
 } from '@cc-desk-tunnel/protocol';
 
+function toolSummary(input: string) {
+  try {
+    const value = JSON.parse(input) as {
+      command?: unknown;
+      file_path?: unknown;
+      questions?: { question?: unknown }[];
+    };
+    if (typeof value.command === 'string') return value.command;
+    if (typeof value.file_path === 'string') return value.file_path;
+    const question = value.questions?.find((item) => typeof item.question === 'string')?.question;
+    if (typeof question === 'string') return question;
+  } catch {
+    // The raw input is still something the next thread can read.
+  }
+  return input;
+}
+
 type StoredSession = SessionSnapshot & { createRequestId: string };
 const pageEvents = 1000;
 const pageBytes = 512 * 1024;
@@ -367,7 +384,14 @@ export class SessionStore {
     return row ? (JSON.parse(String(row.data)) as SessionEvent) : undefined;
   }
 
-  create(requestId: string, title: string, projectPath: string, device: Device): Session {
+  create(
+    requestId: string,
+    title: string,
+    projectPath: string,
+    device: Device,
+    provider: Session['provider'] = 'claude',
+    profileId = 'default',
+  ): Session {
     const row = this.database
       .prepare('SELECT metadata FROM sessions WHERE create_request_id = ?')
       .get(requestId);
@@ -375,7 +399,9 @@ export class SessionStore {
       const session = sessionSchema.parse(JSON.parse(String(row.metadata)));
       if (
         ((!session.autoTitle || title !== '新会话') && session.title !== title) ||
-        session.projectPath !== projectPath
+        session.projectPath !== projectPath ||
+        session.provider !== provider ||
+        session.profileId !== profileId
       )
         throw new DomainError('request_conflict', '请求 ID 已被其他内容使用。');
       return session;
@@ -386,6 +412,8 @@ export class SessionStore {
       title,
       autoTitle: title === '新会话',
       projectPath,
+      provider,
+      profileId,
       device,
       permissionMode: 'auto',
       model: null,
@@ -426,6 +454,7 @@ export class SessionStore {
     native: boolean,
     place: { device: Device; projectPath?: string },
     beforeSequence?: number,
+    codexThreadId?: string,
   ): Session {
     const { session: source } = this.get(sourceId);
     const now = new Date().toISOString();
@@ -441,6 +470,12 @@ export class SessionStore {
       updatedAt: now,
       activeRun: null,
     };
+    // Sharing the source thread would make both sessions continue the same one.
+    // A new id is Codex's own fork. Without one, the copy is the transcript.
+    if (source.provider === 'openai') {
+      if (codexThreadId) session.codexThreadId = codexThreadId;
+      else delete session.codexThreadId;
+    }
     const events = this.events(sourceId, 0, beforeSequence).filter(
       ({ payload }) =>
         native || (payload.type !== 'native.session' && payload.type !== 'native.context'),
@@ -588,15 +623,78 @@ export class SessionStore {
     permissionMode: PermissionMode,
     model?: string | null,
     effort?: Effort | null,
+    provider?: Session['provider'],
+    profileId?: string,
   ) {
     const { session } = this.get(sessionId);
     if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再修改审批模式。');
+    const switching = !!provider && provider !== session.provider;
+    if (switching) {
+      const spoken = this.database
+        .prepare(
+          "SELECT 1 FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') = 'message.user' LIMIT 1",
+        )
+        .get(sessionId);
+      if (spoken)
+        throw new DomainError(
+          'invalid_argument',
+          '这个会话已经有对话。新建一个会话，再在底部选择模型。',
+        );
+      session.provider = provider;
+      session.profileId = profileId ?? 'default';
+      delete session.codexThreadId;
+      delete session.nativeRoot;
+      delete session.prompt;
+    }
     session.permissionMode = permissionMode;
     if (model !== undefined) session.model = model;
-    if (effort !== undefined) session.effort = effort;
+    if (switching) session.effort = null;
+    else if (effort !== undefined) session.effort = effort;
     session.updatedAt = new Date().toISOString();
     this.save(session);
     return session;
+  }
+  // Keeps the Codex thread for the next turn.
+  rememberCodexThread(sessionId: string, threadId: string) {
+    const trimmed = threadId.trim();
+    if (!trimmed || trimmed.length > 200) return;
+    const { session } = this.get(sessionId);
+    if (session.provider !== 'openai' || session.codexThreadId === trimmed) return;
+    session.codexThreadId = trimmed;
+    this.save(session);
+  }
+  // Text the model can read when a fork starts a new thread. The message being sent now is left out;
+  // it is the turn itself. Only the tail is kept, so a long session does not become the whole request.
+  modelHistory(sessionId: string, exceptMessageId?: string) {
+    const lines: string[] = [];
+    const clip = (text: string) => {
+      const flat = text.replace(/\s+/g, ' ').trim();
+      return flat.length <= 2000 ? flat : `${flat.slice(0, 2000)}…`;
+    };
+    for (const event of this.events(sessionId)) {
+      const payload = event.payload;
+      if (payload.type === 'message.user') {
+        if (payload.messageId === exceptMessageId) continue;
+        lines.push(`User: ${clip(payload.text)}`);
+      } else if (payload.type === 'text.delta' && payload.text)
+        lines.push(`Assistant: ${clip(payload.text)}`);
+      else if (payload.type === 'tool.requested')
+        lines.push(`Tool ${payload.name}: ${clip(toolSummary(payload.input))}`);
+      else if (payload.type === 'tool.result')
+        lines.push(
+          `Tool result ${payload.status}${payload.output ? `: ${clip(payload.output)}` : ''}`,
+        );
+    }
+    const text = lines.join('\n\n');
+    const limit = 24_000;
+    return text.length <= limit ? text : text.slice(text.length - limit);
+  }
+  // A resume that never started drops the id, so the next message begins a new thread.
+  forgetCodexThread(sessionId: string) {
+    const { session } = this.get(sessionId);
+    if (session.provider !== 'openai' || !session.codexThreadId) return;
+    delete session.codexThreadId;
+    this.save(session);
   }
   // Points the session at a project directory on a computer, which may be another one than it was on. What
   // Claude knows of either changes with the next message: `notice`.

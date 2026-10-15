@@ -11,6 +11,9 @@
   "workspaces": [
     "apps/desktop",
     "apps/server",
+    "apps/claude",
+    "apps/codex",
+    "packages/agent-ipc",
     "packages/protocol"
   ],
   "scripts": {
@@ -19,7 +22,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test apps/server/test/*.test.ts packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs",
+    "test": "node --test apps/server/test/*.test.ts apps/claude/test/*.test.ts apps/codex/test/*.test.ts packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs",
     "pretest:ui": "npm run build",
     "test:ui": "playwright test",
     "dev": "node scripts/dev.mjs",

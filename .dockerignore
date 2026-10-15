@@ -6,6 +6,14 @@
 !apps/server/package.json
 !apps/server/src/
 !apps/server/src/**
+!apps/claude/
+!apps/claude/package.json
+!apps/claude/src/
+!apps/claude/src/**
+!apps/codex/
+!apps/codex/package.json
+!apps/codex/src/
+!apps/codex/src/**
 !apps/desktop/
 !apps/desktop/package.json
 !packages/
@@ -13,6 +21,10 @@
 !packages/protocol/package.json
 !packages/protocol/src/
 !packages/protocol/src/**
+!packages/agent-ipc/
+!packages/agent-ipc/package.json
+!packages/agent-ipc/src/
+!packages/agent-ipc/src/**
 !scripts/
 !scripts/install-linux.sh
 !deploy/

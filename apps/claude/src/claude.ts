@@ -2,16 +2,9 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { query, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type {
-  DevicePlatform,
-  Effort,
-  EventPayload,
-  NativeMetrics,
-  PermissionMode,
-} from '@cc-desk-tunnel/protocol';
-import { deviceTerms } from './device-terms.ts';
+import type { DeviceTerms } from '@cc-desk-tunnel/agent-ipc';
+import type { Effort, EventPayload, NativeMetrics, PermissionMode } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream } from './claude-stream.ts';
-import type { SshConnection } from './tunnel.ts';
 import { nativeCapabilities, nativeContextRefresh, nativeMetrics } from './native-controls.ts';
 import type { NativeInput } from './native-input.ts';
 import { readNativeSettings } from './native-settings.ts';
@@ -39,8 +32,8 @@ export type ClaudeRun = {
   // The session whose Linux directory holds this session's native history; itself unless it is a fork.
   nativeRoot: string;
   projectPath: string;
-  // The system of the device, as the session's prompt has it.
-  platform: DevicePlatform;
+  // The device sentences the parent resolved. This process does not import the server's prompt helper.
+  terms: DeviceTerms;
   permissionMode: PermissionMode;
   model?: string | null;
   effort?: Effort | null;
@@ -54,7 +47,7 @@ export type ClaudeRun = {
     toolId: string,
     waiting: 'approval' | 'question',
   ) => Promise<{ allowed: boolean; answers?: Record<string, string> }>;
-  ssh: SshConnection;
+  ssh: { configPath: string };
   // Told when Claude has finished its turn and the run goes on only for background tasks, and when it resumes.
   waiting: (background: boolean) => void;
   // Told when a turn ends: the user message it answered, its time window, and how many model requests it made.
@@ -68,16 +61,20 @@ export type ClaudeRun = {
   }) => void;
   // Filled in while the CLI is running, so the service can ask it for fresh account quota mid-run and end
   // one of its background tasks.
-  controls: { refresh?: () => Promise<void>; stopTask?: (taskId: string) => Promise<void> };
+  controls: {
+    refresh?: () => Promise<void>;
+    stopTask?: (taskId: string) => Promise<void>;
+    // Told when those two are set or cleared, so the parent can offer them.
+    ready?: () => void;
+  };
 };
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
 export function remotePrompt(
   projectPath: string,
-  ssh: SshConnection,
+  ssh: { configPath: string },
   sessionId: string,
-  platform: DevicePlatform = 'win32',
+  terms: DeviceTerms,
 ) {
-  const terms = deviceTerms(platform, projectPath);
   return [
     "The user's projects are on their own computer, the device, NOT on this Linux host, which only runs Claude Code and has no copy of them.",
     `Device: ${terms.name}. Project directory: ${JSON.stringify(projectPath)}.`,
@@ -156,7 +153,7 @@ export async function runClaude(
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: remotePrompt(run.projectPath, run.ssh, run.sessionId, run.platform),
+          append: remotePrompt(run.projectPath, run.ssh, run.sessionId, run.terms),
           snapshot: false,
         },
         ...(run.resume ? { resume: run.sessionId } : { sessionId: run.sessionId }),
@@ -229,6 +226,7 @@ export async function runClaude(
       quotaAt = Date.now();
       if (!run.signal.aborted) run.emit(payload);
     };
+    run.controls.ready?.();
     // Background Bash tasks and subagents live in the CLI process, and the completion of one starts a turn of
     // its own. Closing the CLI with the turn that started them would kill them, so the run stays open until
     // none is left.
@@ -369,6 +367,7 @@ export async function runClaude(
     clearTimeout(settle);
     run.controls.refresh = undefined;
     run.controls.stopTask = undefined;
+    run.controls.ready?.();
     run.input.close();
     session?.close();
     run.signal.removeEventListener('abort', stop);

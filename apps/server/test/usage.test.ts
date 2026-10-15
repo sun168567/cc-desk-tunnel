@@ -71,6 +71,7 @@ test('collector keeps model requests only, once each, without account identity',
       at: new Date(base + 1).toISOString(),
       sessionId: '4f0c9d0e-1111-4222-8333-444455556666',
       sessionTitle: '标题',
+      provider: 'claude',
       model: 'claude-opus-5-5',
       inputTokens: 10,
       outputTokens: 200,
@@ -409,4 +410,39 @@ test('a turn is summed over the requests of its prompts, whatever the time', () 
   assert.equal(log.turnStats(session, turn(['p1'])).mainRequests, 1);
   assert.equal(log.turnStats(session, turn(['p1', 'p2'])).requests, 3);
   assert.equal(log.turnStats(session, turn([])).requests, 3);
+});
+
+test('a Codex turn is stored under its provider and a full window stops sending', () => {
+  const database = new DatabaseSync(':memory:');
+  const log = new UsageLog(database);
+  log.record({
+    at: base,
+    sessionId: '4f0c9d0e-1111-4222-8333-444455556666',
+    model: 'gpt-test',
+    inputTokens: 12,
+    outputTokens: 4,
+    cacheReadTokens: 3,
+    cacheCreationTokens: 0,
+    durationMs: 0,
+    ttftMs: null,
+    requestId: 'turn-1',
+    provider: 'openai',
+  });
+  const page = log.query({ limit: 5, bucketMinutes: 60, offsetMinutes: 0 }, () => null);
+  assert.equal(page.rows[0]?.provider, 'openai');
+  assert.equal(page.rows[0]?.costUsd, 0);
+  assert.equal(log.stopMessage(base), null);
+  log.observe({
+    windows: [{ name: 'five_hour', utilization: 96, resetsAt: new Date(base + hour).toISOString() }],
+    measuredAt: new Date(base).toISOString(),
+  });
+  assert.match(log.stopMessage(base) ?? '', /5 小时额度已用 96%/);
+  assert.equal(
+    log.setLimits(
+      { enabled: false, warn: 90, stop: 95 },
+      { enabled: true, warn: 90, stop: 95 },
+    ),
+    true,
+  );
+  assert.equal(log.stopMessage(base), null);
 });

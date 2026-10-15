@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 18;
 export const MAX_FRAME_BYTES = 256 * 1024;
 const id = z.uuid();
 const timestamp = z.iso.datetime();
@@ -31,7 +31,12 @@ export const nativeAccountSchema = z.object({
   apiKeySource: z.string().optional(),
   tokenSource: z.string().optional(),
 });
+export const providerSchema = z.enum(['claude', 'openai']);
+export type Provider = z.infer<typeof providerSchema>;
+const profileIdSchema = z.string().trim().min(1).max(80);
 export const accountStateSchema = z.object({
+  provider: providerSchema.default('claude'),
+  profileId: profileIdSchema.default('default'),
   loggedIn: z.boolean(),
   authMethod: z.string().optional(),
   email: z.string().optional(),
@@ -40,6 +45,21 @@ export const accountStateSchema = z.object({
   // Present while the official sign-in command waits for the code shown after browser authorization.
   login: z.object({ url: z.url() }).nullable(),
   notice: z.string().optional(),
+  // OpenAI only. Absent on Claude. `absent` means this service was not given a Codex executable.
+  runtime: z.enum(['ready', 'unavailable', 'absent']).optional(),
+  executable: z.string().min(1).max(512).optional(),
+  defaultModel: z.string().min(1).max(200).optional(),
+  limits: z
+    .object({
+      kind: z.enum(['cgroup', 'rlimit', 'none']),
+      memory: z.boolean(),
+      memoryMb: z.number().int().nonnegative(),
+      pids: z.number().int().nonnegative(),
+      cpu: z.boolean().optional(),
+      cpuMillis: z.number().int().nonnegative().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 export type AccountState = z.infer<typeof accountStateSchema>;
 // The part of the official CLI's user settings the GUI edits. null means unset: the CLI's own default applies.
@@ -136,6 +156,8 @@ export const usagePageSchema = z.object({
       at: timestamp,
       sessionId: z.string().nullable(),
       sessionTitle: z.string().nullable(),
+      // Rows written before providers were recorded are Claude. A missing cost is not stored as zero.
+      provider: providerSchema.default('claude'),
       model: z.string(),
       inputTokens: z.number().nonnegative(),
       outputTokens: z.number().nonnegative(),
@@ -361,12 +383,17 @@ export const sessionSchema = z.object({
   title: z.string().min(1).max(120),
   autoTitle: z.boolean().default(false),
   projectPath: z.string().min(1).max(2048),
+  // Which model provider owns the session. Rows written before this field existed are Claude.
+  provider: providerSchema.default('claude'),
+  profileId: profileIdSchema.default('default'),
   // The computer the project directory is on, and so the only one to send the session messages. A session
   // from before 0.2.11 has none until a computer sends it one.
   device: deviceSchema.optional(),
   permissionMode: permissionModeSchema.default('auto'),
   model: z.string().trim().min(1).max(200).nullable().default(null),
   effort: effortSchema.nullable().default(null),
+  // Codex's own thread id. It is not a UUID, so it stays out of nativeSessionId. Absent, the next turn starts a thread.
+  codexThreadId: z.string().trim().min(1).max(200).optional(),
   // A fork keeps its native history beside the session it was forked from; this names that session.
   nativeRoot: id.optional(),
   // What the system prompt of the session's native runs says. It is kept word for word until a compaction,
@@ -435,22 +462,65 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       title: z.string().trim().min(1).max(120),
       projectPath: z.string().trim().min(1).max(2048),
+      // Omitted means a Claude session, which is what every earlier client created.
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
     })
     .strict(),
-  z.object({ type: z.literal('account.status'), ...request }).strict(),
-  z.object({ type: z.literal('account.login'), ...request }).strict(),
+  z
+    .object({
+      type: z.literal('account.status'),
+      ...request,
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('account.login'),
+      ...request,
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('account.code'),
       ...request,
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
       code: z
         .string()
         .trim()
         .regex(/^[\x21-\x7e]{1,2048}$/),
     })
     .strict(),
-  z.object({ type: z.literal('account.cancel'), ...request }).strict(),
-  z.object({ type: z.literal('account.logout'), ...request }).strict(),
+  z
+    .object({
+      type: z.literal('account.cancel'),
+      ...request,
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('account.logout'),
+      ...request,
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
+    })
+    .strict(),
+  // Empty path stops Codex. A path that is not a file is refused and the previous one stays.
+  z.object({ type: z.literal('openai.path'), ...request, path: z.string().max(512) }).strict(),
+  z
+    .object({
+      type: z.literal('model.list'),
+      ...request,
+      provider: providerSchema.default('claude'),
+      profileId: profileIdSchema.optional(),
+    })
+    .strict(),
   z.object({ type: z.literal('settings.get'), ...request }).strict(),
   z
     .object({
@@ -497,6 +567,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       permissionMode: permissionModeSchema,
       model: z.string().trim().min(1).max(200).nullable().optional(),
       effort: effortSchema.nullable().optional(),
+      // Set when the chosen model belongs to the other vendor. Only an empty session can change.
+      provider: providerSchema.optional(),
     })
     .strict(),
   // Points a session at a project directory on the computer that asks, which the session is on from then.
@@ -573,6 +645,14 @@ export const commandSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
+      type: z.literal('quota.set'),
+      ...request,
+      fiveHour: z.object({ enabled: z.boolean(), warn: z.number().int(), stop: z.number().int() }).strict(),
+      week: z.object({ enabled: z.boolean(), warn: z.number().int(), stop: z.number().int() }).strict(),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('approval.reply'),
       ...request,
       sessionId: id,
@@ -585,6 +665,8 @@ export const commandSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 export type Command = z.infer<typeof commandSchema>;
+// What a client may send. Fields with defaults, including `provider`, may be left out; the service reads them as Claude.
+export type CommandInput = z.input<typeof commandSchema>;
 export const terminalControlSchema = z.discriminatedUnion('type', [
   z
     .object({
@@ -666,6 +748,22 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     payload: eventPayloadSchema,
   }),
   z.object({ type: z.literal('account.state'), ...accountStateSchema.shape }),
+  z.object({
+    type: z.literal('models'),
+    requestId: id,
+    provider: providerSchema,
+    profileId: profileIdSchema,
+    models: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(200),
+            displayName: z.string().min(1).max(200),
+          })
+          .strict(),
+      )
+      .max(100),
+  }),
   z.object({ type: z.literal('settings.state'), requestId: id, values: nativeSettingsSchema }),
   z.object({ type: z.literal('usage.summary'), requestId: id, ...usageSummarySchema.shape }),
   z.object({ type: z.literal('usage.page'), requestId: id, ...usagePageSchema.shape }),

@@ -16,6 +16,8 @@ export type TunnelOptions = {
   probe?: (configPath: string) => Promise<void>;
   // How long a command started while its device is away waits for the device to come back.
   holdMs?: number;
+  // Present when OpenAI is enabled. Its SSH uses a second port so a burst cannot fill Claude's channel.
+  openai?: { maxWaiting?: number; maxChannels?: number; maxBytes?: number };
 };
 export type SshConnection = { configPath: string };
 
@@ -23,6 +25,21 @@ export type SshConnection = { configPath: string };
 // device's commands need; they bound what a stray local process connecting to the port can make the device do.
 const MAX_WAITING = 32;
 const MAX_CHANNELS = 128;
+const OPENAI_WAITING = 4;
+const OPENAI_CHANNELS = 8;
+const OPENAI_BYTES = 8 * 1024 * 1024;
+
+export type SshLane = 'claude' | 'openai';
+
+function laneLimits(options: TunnelOptions['openai'] | undefined, lane: SshLane) {
+  if (lane === 'claude')
+    return { maxWaiting: MAX_WAITING, maxChannels: MAX_CHANNELS, maxBytes: Number.POSITIVE_INFINITY };
+  return {
+    maxWaiting: options?.maxWaiting ?? OPENAI_WAITING,
+    maxChannels: options?.maxChannels ?? OPENAI_CHANNELS,
+    maxBytes: options?.maxBytes ?? OPENAI_BYTES,
+  };
+}
 
 // The SSH configuration a session's system prompt names. Its path is the session's for good; each run points
 // it at the door of the device it runs on. A system prompt that named something of a connection would change
@@ -31,11 +48,18 @@ const MAX_CHANNELS = 128;
 export function sessionSshPath(dataDir: string, sessionId: string) {
   return join(dataDir, 'session-ssh', `${sessionId}.conf`);
 }
-export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnection): SshConnection {
+export function sessionSsh(
+  dataDir: string,
+  sessionId: string,
+  ssh: SshConnection,
+  // OpenAI sessions name their own port first: ssh keeps the first Port it sees, so this must precede Include.
+  port?: number,
+): SshConnection {
   const configPath = sessionSshPath(dataDir, sessionId);
   mkdirSync(join(dataDir, 'session-ssh'), { recursive: true, mode: 0o700 });
   const next = `${configPath}.${randomBytes(6).toString('hex')}`;
-  writeFileSync(next, `Include ${JSON.stringify(ssh.configPath)}\n`, { mode: 0o600 });
+  const override = port ? `Host device windows device-script\n  Port ${port}\n` : '';
+  writeFileSync(next, `${override}Include ${JSON.stringify(ssh.configPath)}\n`, { mode: 0o600 });
   renameSync(next, configPath);
   return { ...ssh, configPath };
 }
@@ -135,10 +159,17 @@ export function sshConfig(
 
 // Joins one SSH connection to the channel connection opened for it. An end on either side ends the other once
 // what was already sent has been delivered; an error cuts both.
-function splice(socket: Socket, channel: WebSocket) {
+function splice(socket: Socket, channel: WebSocket, maxBytes: number) {
   const stream = createWebSocketStream(channel);
   stream.on('error', () => socket.destroy());
   socket.once('close', () => stream.destroy());
+  if (Number.isFinite(maxBytes)) {
+    let sent = 0;
+    socket.on('data', (chunk: Buffer) => {
+      sent += chunk.length;
+      if (sent > maxBytes) socket.destroy();
+    });
+  }
   socket.pipe(stream);
   stream.pipe(socket);
 }
@@ -160,9 +191,12 @@ export class Tunnel {
   private secret = randomBytes(32).toString('base64url');
   private pairMs: number;
   private probe: NonNullable<TunnelOptions['probe']>;
+  private openai?: TunnelOptions['openai'];
   private listener?: Server;
-  private waiting = new Map<string, { socket: Socket; timer: NodeJS.Timeout }>();
+  private waiting = new Map<string, { socket: Socket; timer: NodeJS.Timeout; lane: SshLane }>();
   private channels = new Map<Socket, WebSocket>();
+  private laneWaiting: Record<SshLane, number> = { claude: 0, openai: 0 };
+  private laneChannels: Record<SshLane, number> = { claude: 0, openai: 0 };
   // Asks the device to open a channel; false when the control connection can no longer carry the request.
   private request: (channelId: string) => boolean;
   private unexpectedClose: () => void;
@@ -177,6 +211,7 @@ export class Tunnel {
     this.directory = join(dataDir, 'connections', id);
     this.pairMs = options.pairMs ?? 10000;
     this.probe = options.probe ?? sshProbe;
+    this.openai = options.openai;
     this.request = request;
     this.unexpectedClose = unexpectedClose;
   }
@@ -204,22 +239,25 @@ export class Tunnel {
     return timingSafeEqual(digest(secret), digest(this.secret));
   }
   // Takes one SSH connection, paused, and asks the device for the channel to join it to.
-  carry(socket: Socket) {
+  // OpenAI is counted apart from Claude: past its limit only this socket is dropped.
+  carry(socket: Socket, lane: SshLane = 'claude') {
     socket.on('error', () => socket.destroy());
+    const limits = laneLimits(this.openai, lane);
     if (
       this.controller.signal.aborted ||
-      this.waiting.size >= MAX_WAITING ||
-      this.channels.size >= MAX_CHANNELS
+      this.laneWaiting[lane] >= limits.maxWaiting ||
+      this.laneChannels[lane] >= limits.maxChannels
     ) {
       socket.destroy();
       return;
     }
     const channelId = randomUUID();
     const timer = setTimeout(() => socket.destroy(), this.pairMs);
-    this.waiting.set(channelId, { socket, timer });
+    this.laneWaiting[lane] += 1;
+    this.waiting.set(channelId, { socket, timer, lane });
     socket.once('close', () => {
       clearTimeout(timer);
-      this.waiting.delete(channelId);
+      if (this.waiting.delete(channelId)) this.laneWaiting[lane] -= 1;
     });
     if (!this.request(channelId)) socket.destroy();
   }
@@ -230,10 +268,15 @@ export class Tunnel {
     if (!entry || this.controller.signal.aborted) return false;
     clearTimeout(entry.timer);
     this.waiting.delete(channelId);
-    const { socket } = entry;
+    this.laneWaiting[entry.lane] -= 1;
+    const { socket, lane } = entry;
+    this.laneChannels[lane] += 1;
     this.channels.set(socket, channel);
-    socket.once('close', () => this.channels.delete(socket));
-    splice(socket, channel);
+    socket.once('close', () => {
+      this.channels.delete(socket);
+      this.laneChannels[lane] -= 1;
+    });
+    splice(socket, channel, laneLimits(this.openai, lane).maxBytes);
     return true;
   }
   async accept(credentials: TunnelCredentials, platform: DevicePlatform = 'win32') {
@@ -301,42 +344,57 @@ export class Tunnel {
 export class Door {
   directory: string;
   ssh?: SshConnection;
-  private port = 0;
+  // Claude keeps this port. OpenAI, when enabled, has another so its SSH cannot fill Claude's.
+  port = 0;
+  openaiPort = 0;
   private holdMs: number;
+  private openai?: TunnelOptions['openai'];
   private listener?: Server;
+  private openaiListener?: Server;
   private tunnel?: Tunnel;
-  private held = new Map<Socket, NodeJS.Timeout>();
+  private held = new Map<Socket, { timer: NodeJS.Timeout; lane: SshLane }>();
   private closed = false;
   constructor(options: TunnelOptions, dataDir: string, device: string) {
     this.directory = join(dataDir, 'devices', device);
     this.holdMs = options.holdMs ?? 60000;
+    this.openai = options.openai;
   }
   async start() {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
-    const listener = createServer({ pauseOnConnect: true }, (socket) => this.incoming(socket));
-    this.listener = listener;
-    await new Promise<void>((resolve, reject) => {
-      listener.once('error', reject);
-      listener.listen(0, '127.0.0.1', () => {
-        listener.off('error', reject);
-        resolve();
+    const listen = (lane: SshLane) => {
+      const listener = createServer({ pauseOnConnect: true }, (socket) => this.incoming(socket, lane));
+      return new Promise<Server>((resolve, reject) => {
+        listener.once('error', reject);
+        listener.listen(0, '127.0.0.1', () => {
+          listener.off('error', reject);
+          listener.on('error', () => {});
+          resolve(listener);
+        });
       });
-    });
-    listener.on('error', () => {});
-    this.port = (listener.address() as AddressInfo).port;
+    };
+    this.listener = await listen('claude');
+    this.port = (this.listener.address() as AddressInfo).port;
+    if (this.openai) {
+      this.openaiListener = await listen('openai');
+      this.openaiPort = (this.openaiListener.address() as AddressInfo).port;
+    }
   }
-  private incoming(socket: Socket) {
+  private incoming(socket: Socket, lane: SshLane) {
+    const waiting = [...this.held.values()].filter((entry) => entry.lane === lane).length;
+    const limit = laneLimits(this.openai, lane).maxWaiting;
     if (this.closed) socket.destroy();
-    else if (this.tunnel) this.tunnel.carry(socket);
-    else if (this.held.size >= MAX_WAITING) socket.destroy();
+    else if (this.tunnel) this.tunnel.carry(socket, lane);
+    else if (waiting >= limit) socket.destroy();
     else {
       socket.on('error', () => socket.destroy());
-      this.held.set(
-        socket,
-        setTimeout(() => socket.destroy(), this.holdMs),
-      );
+      this.held.set(socket, {
+        timer: setTimeout(() => socket.destroy(), this.holdMs),
+        lane,
+      });
       socket.once('close', () => {
-        clearTimeout(this.held.get(socket));
+        const entry = this.held.get(socket);
+        if (!entry) return;
+        clearTimeout(entry.timer);
         this.held.delete(socket);
       });
     }
@@ -366,10 +424,10 @@ export class Door {
     write('known_hosts', files.knownHosts);
     write('ssh_config', files.config);
     this.ssh = { configPath: join(this.directory, 'ssh_config') };
-    for (const [socket, timer] of this.held) {
-      clearTimeout(timer);
+    for (const [socket, entry] of this.held) {
+      clearTimeout(entry.timer);
       this.held.delete(socket);
-      tunnel.carry(socket);
+      tunnel.carry(socket, entry.lane);
     }
   }
   uses(tunnel: Tunnel | undefined) {
@@ -379,10 +437,11 @@ export class Door {
     if (this.closed) return;
     this.closed = true;
     this.tunnel = undefined;
-    const listener = this.listener;
-    const closed = listener?.listening
-      ? new Promise<void>((resolve) => listener.close(() => resolve()))
-      : undefined;
+    const shut = (listener?: Server) =>
+      listener?.listening
+        ? new Promise<void>((resolve) => listener.close(() => resolve()))
+        : undefined;
+    const closed = Promise.all([shut(this.listener), shut(this.openaiListener)]);
     for (const socket of this.held.keys()) socket.destroy();
     await closed;
     rmSync(this.directory, { recursive: true, force: true });

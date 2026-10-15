@@ -1,10 +1,9 @@
 import { spawn as spawnPty } from 'node-pty';
 import type { IPty } from 'node-pty';
-import { platformOf } from '@cc-desk-tunnel/protocol';
-import type { Session } from '@cc-desk-tunnel/protocol';
+import type { DeviceTerms } from '@cc-desk-tunnel/agent-ipc';
+import type { Effort, PermissionMode } from '@cc-desk-tunnel/protocol';
 import type { ClaudeOptions } from './claude.ts';
 import { remotePrompt } from './claude.ts';
-import type { SshConnection } from './tunnel.ts';
 import { readFileSync } from 'node:fs';
 
 // node-pty takes a plain string map, while a process environment may hold undefined entries.
@@ -39,12 +38,23 @@ export type TerminalSpawner = (
   options: { cwd: string; cols: number; rows: number; env: Record<string, string>; name: string },
 ) => TerminalProcess;
 
-export function terminalArguments(options: ClaudeOptions, session: Session, ssh: SshConnection) {
+export function terminalArguments(
+  options: ClaudeOptions,
+  session: {
+    id?: string;
+    projectPath: string;
+    permissionMode: PermissionMode;
+    model?: string | null;
+    effort?: Effort | null;
+  },
+  ssh: { configPath: string },
+  terms: DeviceTerms,
+) {
   return [
     '--permission-mode',
     session.permissionMode === 'default' ? 'manual' : session.permissionMode,
     '--append-system-prompt',
-    remotePrompt(session.projectPath, ssh, session.id, platformOf(session.device)),
+    remotePrompt(session.projectPath, ssh, session.id ?? '', terms),
     ...((session.model ?? options.model) ? ['--model', session.model ?? options.model!] : []),
     ...(session.effort ? ['--effort', session.effort] : []),
     ...(options.settingsPath ? ['--settings', options.settingsPath] : []),

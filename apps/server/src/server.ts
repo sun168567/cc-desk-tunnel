@@ -1,17 +1,11 @@
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, rmSync } from 'node:fs';
+import { createReadStream, rmSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, RequestListener } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { WebSocket, WebSocketServer } from 'ws';
-import {
-  deleteSession,
-  forkSession,
-  getSessionMessages,
-  renameSession,
-} from '@anthropic-ai/claude-agent-sdk';
 import {
   authSchema,
   commandSchema,
@@ -33,23 +27,26 @@ import type {
   Device,
   EventPayload,
   Fragment,
+  PermissionMode,
   ServerMessage,
   Session,
   TerminalControl,
   TunnelCredentials,
 } from '@cc-desk-tunnel/protocol';
-import { runClaude, nativeDirectory, prepareNativeDirectory, readNativeStatus } from './claude.ts';
-import type { ClaudeOptions } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
+import { codexInstructions, codexModelText } from './codex-prompt.ts';
+import { deviceTerms } from './device-terms.ts';
+import { createAdmission } from './admission.ts';
+import type { Lane } from './admission.ts';
 import { DomainError } from './errors.ts';
-import type { NativeLogin } from './native-account.ts';
-import { NativeInput } from './native-input.ts';
-import { completeOnboarding } from './native-onboarding.ts';
-import { readNativeSettings, updateNativeSettings } from './native-settings.ts';
-import type { NativeTerminal } from './native-terminal.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
+import { writeCodexExecutable } from './config.ts';
+import { createCodexHost } from './codex-host.ts';
+import type { CodexHandlers, CodexHost, CodexServiceOptions } from './codex-host.ts';
+import { createClaudeHost } from './supervisor.ts';
+import type { ClaudeHost, ClaudeServiceOptions } from './supervisor.ts';
 import { Door, Tunnel, sessionSsh, sessionSshPath } from './tunnel.ts';
 import type { TunnelOptions } from './tunnel.ts';
 import { ServiceUpdates, serviceVersion } from './updates.ts';
@@ -89,10 +86,23 @@ export type Run = {
   cancelReason?: string;
   // Output still arriving in pieces: sent on as it comes, recorded once it is whole.
   open?: Fragment;
-  input?: NativeInput;
+  // The Claude worker owns the input stream. Follow-up sends wait their turn on `gate`.
+  native?: boolean;
+  // An OpenAI run is not a Claude native run: Claude's worker exiting leaves it alone.
+  backend?: 'openai';
+  // Set when this run holds one place in the shared admission budget.
+  slot?: Lane;
+  gate?: Promise<void>;
+  settled?: () => void;
   controls: { refresh?: () => Promise<void>; stopTask?: (taskId: string) => Promise<void> };
 };
-type Terminal = { id: string; sessionId: string; owner: Peer; process?: NativeTerminal };
+type Terminal = {
+  id: string;
+  sessionId: string;
+  owner: Peer;
+  backend: 'claude' | 'openai';
+  slot?: Lane;
+};
 // One of the user's computers, while it is connected or expected back: its connections, the door its commands
 // go through, and the wait that ends its runs if it stays away.
 type Seat = {
@@ -102,14 +112,16 @@ type Seat = {
   opening?: Promise<void>;
   away?: NodeJS.Timeout;
 };
-type Login = { process: NativeLogin; owner: Peer; url?: string };
+type Login = { owner: Peer; url?: string };
 type CommandOf<T extends Command['type']> = Extract<Command, { type: T }>;
 export type ServerOptions = {
   token: string;
   dataDir: string;
   stepMs?: number;
   allowedOrigins?: string[];
-  claude?: ClaudeOptions;
+  claude?: ClaudeServiceOptions;
+  // Codex control plane. It does not receive a project path or SSH config.
+  codex?: CodexServiceOptions;
   tunnel?: TunnelOptions;
   tls?: { cert: Buffer; key: Buffer };
   reverseProxy?: boolean;
@@ -135,6 +147,18 @@ const OPEN_LIMIT = 64 * 1024;
 const CONTINUE =
   'Continue from where the last turn stopped. A command that was running when it stopped may or may not have taken effect: check its result before repeating it.';
 
+// The same choices as Claude's menu, applied when Codex asks. Questions always reach the user.
+function codexVerdict(
+  mode: PermissionMode,
+  kind: 'command' | 'file' | 'question',
+): 'ask' | 'allow' | 'deny' {
+  if (kind === 'question') return 'ask';
+  if (mode === 'bypassPermissions') return 'allow';
+  if (mode === 'plan') return 'deny';
+  if (mode === 'acceptEdits' && kind === 'file') return 'allow';
+  return 'ask';
+}
+
 export function createProxyServer(options: ServerOptions) {
   if (options.token.length < 24)
     throw new Error('PROXY_TOKEN must contain at least 24 characters.');
@@ -155,10 +179,215 @@ export function createProxyServer(options: ServerOptions) {
   const seats = new Map<string, Seat>();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
   let login: Login | undefined;
+  let openaiLogin: Login | undefined;
+  let host: ClaudeHost | undefined;
+  let codexHost: CodexHost | undefined;
+  const codexHandlers: CodexHandlers = {
+      event(sessionId, payload) {
+        const run = runs.get(sessionId);
+        if (run?.backend !== 'openai') return;
+        emit(run, payload);
+        // A flood is this run's limit, not a reason to keep reading it.
+        if (payload.type === 'run.error' && payload.code === 'codex_limited') finish(run, 'failed');
+        // In-progress commands use the same task list as Claude. An empty list returns to the turn.
+        if (payload.type === 'native.tasks') {
+          run.controls.stopTask = (taskId) => {
+            codexHost?.stopTask(sessionId, taskId);
+            return Promise.resolve();
+          };
+          emit(run, {
+            type: 'run.status',
+            status: 'running',
+            connectionId: run.connectionId,
+            ...(payload.tasks.length ? { waiting: 'background' as const } : {}),
+          });
+        }
+      },
+      approvalRequested(sessionId, approvalId, toolId, waiting, kind) {
+        const run = runs.get(sessionId);
+        const alive = !!run && run.backend === 'openai' && !run.controller.signal.aborted;
+        const verdict = codexVerdict(
+          alive ? store.get(sessionId).session.permissionMode : 'default',
+          kind,
+        );
+        if (!alive || verdict !== 'ask') {
+          const allowed = alive && verdict === 'allow';
+          if (alive) emit(run, { type: 'approval.resolved', approvalId, allowed });
+          try {
+            codexHost?.resolveApproval(sessionId, approvalId, allowed);
+          } catch {
+            // The worker that asked is already gone.
+          }
+          return;
+        }
+        run.approvals.set(approvalId, (allowed, answers) => {
+          emit(run, { type: 'approval.resolved', approvalId, allowed });
+          try {
+            codexHost?.resolveApproval(sessionId, approvalId, allowed, answers);
+          } catch {
+            // A stopped worker does not need the decision.
+          }
+        });
+        emit(run, { type: 'approval.requested', approvalId, toolId });
+        emit(run, {
+          type: 'run.status',
+          status: 'awaiting_approval',
+          connectionId: run.connectionId,
+          waiting,
+        });
+      },
+      runFinished(sessionId, status, _unknown, threadId, dropThread) {
+        const run = runs.get(sessionId);
+        if (run?.backend !== 'openai') return;
+        // Remember before the status update, so the client learns the thread with the same broadcast.
+        if (threadId) store.rememberCodexThread(sessionId, threadId);
+        else if (dropThread) store.forgetCodexThread(sessionId);
+        finish(run, status, run.cancelReason);
+      },
+      loginExit(succeeded, cancelled) {
+        openaiLogin = undefined;
+        const notice = cancelled ? '登录已取消。' : succeeded ? undefined : '登录未完成。';
+        void publishOpenai(undefined, notice).catch(() => {});
+      },
+      terminalData(sessionId, terminalId, data, bytes) {
+        const terminal = terminals.get(sessionId);
+        if (!terminal || terminal.id !== terminalId) return;
+        send(terminal.owner, { type: 'terminal.data', sessionId, terminalId, data, bytes });
+      },
+      terminalExit(sessionId, terminalId, exitCode) {
+        const terminal = terminals.get(sessionId);
+        if (!terminal || terminal.id !== terminalId) return;
+        closeTerminalRecord(terminal, exitCode);
+      },
+      terminalFault(sessionId, terminalId) {
+        const terminal = terminals.get(sessionId);
+        if (!terminal || terminal.id !== terminalId) return;
+        track(codexHost?.closeTerminal(sessionId, terminalId) ?? Promise.resolve());
+      },
+      exited() {
+        openaiLogin = undefined;
+        for (const run of [...runs.values()]) {
+          if (run.backend !== 'openai') continue;
+          if (!closing)
+            emit(run, {
+              type: 'run.error',
+              code: 'openai_unavailable',
+              message: 'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+            });
+          finish(
+            run,
+            run.controller.signal.aborted || closing ? 'cancelled' : 'failed',
+            run.cancelReason,
+          );
+        }
+        for (const terminal of [...terminals.values()]) {
+          if (terminal.backend === 'openai') closeTerminalRecord(terminal, null);
+        }
+      },
+  };
+  function openCodex(service: CodexServiceOptions) {
+    options.codex = service;
+    codexHost = createCodexHost(service, store.directory, codexHandlers);
+  }
+  if (options.codex) openCodex(options.codex);
+  if (options.claude)
+    host = createClaudeHost(options.claude, store.directory, {
+      event(sessionId, payload) {
+        const run = runs.get(sessionId);
+        if (run) emit(run, payload);
+      },
+      turnEnded(sessionId, turn) {
+        const run = runs.get(sessionId);
+        if (run) track(turnStats(run, turn).catch(() => {}));
+      },
+      waiting(sessionId, background) {
+        const run = runs.get(sessionId);
+        if (!run) return;
+        emit(run, {
+          type: 'run.status',
+          status: 'running',
+          connectionId: run.connectionId,
+          ...(background ? { waiting: 'background' as const } : {}),
+        });
+      },
+      controls(sessionId, refresh, stopTask) {
+        const run = runs.get(sessionId);
+        if (!run) return;
+        run.controls.refresh = refresh ? () => host!.refresh(sessionId) : undefined;
+        run.controls.stopTask = stopTask
+          ? (taskId) => host!.stopTask(sessionId, taskId)
+          : undefined;
+      },
+      approvalRequested(sessionId, approvalId, toolId, waiting) {
+        const run = runs.get(sessionId);
+        if (!run || run.controller.signal.aborted) {
+          try {
+            host?.resolveApproval(sessionId, approvalId, false);
+          } catch {
+            // The worker that asked is already gone.
+          }
+          return;
+        }
+        run.approvals.set(approvalId, (allowed, answers) => {
+          emit(run, { type: 'approval.resolved', approvalId, allowed });
+          try {
+            host?.resolveApproval(sessionId, approvalId, allowed, answers);
+          } catch {
+            // A stopped worker does not need the decision.
+          }
+        });
+        emit(run, { type: 'approval.requested', approvalId, toolId });
+        emit(run, {
+          type: 'run.status',
+          status: 'awaiting_approval',
+          connectionId: run.connectionId,
+          waiting,
+        });
+      },
+      runFinished(sessionId, status) {
+        const run = runs.get(sessionId);
+        if (run) finish(run, status, run.cancelReason);
+      },
+      terminalData(sessionId, terminalId, data, bytes) {
+        const terminal = terminals.get(sessionId);
+        if (!terminal || terminal.id !== terminalId) return;
+        send(terminal.owner, { type: 'terminal.data', sessionId, terminalId, data, bytes });
+      },
+      terminalExit(sessionId, terminalId, exitCode) {
+        const terminal = terminals.get(sessionId);
+        if (!terminal || terminal.id !== terminalId) return;
+        closeTerminalRecord(terminal, exitCode);
+      },
+      terminalFault(sessionId, terminalId) {
+        const terminal = terminals.get(sessionId);
+        if (!terminal || terminal.id !== terminalId) return;
+        track(terminalOf(terminal).closeTerminal(sessionId, terminalId));
+      },
+      loginNotice(text) {
+        if (closing || !login) return;
+        track(publishAccount(undefined, text).catch(() => {}));
+      },
+      loginExit(succeeded, cancelled) {
+        if (!login) return;
+        login = undefined;
+        if (closing) return;
+        track(
+          publishAccount(
+            undefined,
+            succeeded || cancelled ? undefined : '登录未完成；请重新获取链接后再试。',
+          ).catch(() => {}),
+        );
+      },
+      exited() {
+        workerExited();
+      },
+    });
   // Each run or terminal is a CLI process that keeps some 250 MB; more of them than the memory holds would
   // take the machine down, and every one of them with it.
   const capacity =
     options.maxRuns ?? Math.max(1, Math.floor((totalmem() - 300 * 2 ** 20) / (300 * 2 ** 20)));
+  // One backend keeps the old immediate refusal. Both backends split the same budget and wait in turn.
+  const admission = options.claude && options.codex ? createAdmission(capacity) : undefined;
   // Background work that close() waits for.
   const tasks = new Set<Promise<unknown>>();
   const tunnelTasks = new Set<Promise<unknown>>();
@@ -200,7 +429,17 @@ export function createProxyServer(options: ServerOptions) {
   const handler: RequestListener = (request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      response.end(JSON.stringify({ status: 'ok', protocolVersion: PROTOCOL_VERSION, adapter }));
+      response.end(
+        JSON.stringify({
+          status: 'ok',
+          protocolVersion: PROTOCOL_VERSION,
+          adapter,
+          providers: {
+            claude: host ? host.availability() : 'absent',
+            openai: codexHost ? codexHost.availability() : 'absent',
+          },
+        }),
+      );
     } else if (request.method === 'GET' && request.url === '/client/installer') {
       // The same secret as the WebSocket: only a signed-in client can fetch the installer.
       const release = releases.current;
@@ -275,11 +514,36 @@ export function createProxyServer(options: ServerOptions) {
       );
   }
   function room() {
-    if (options.claude && runs.size + terminals.size >= capacity)
+    if ((options.claude || options.codex) && runs.size + terminals.size >= capacity)
       throw new DomainError(
         'capacity',
         `服务端同时最多进行 ${capacity} 个运行或终端（按服务器内存估算，可用 PROXY_MAX_RUNS 调整）。请等其他任务结束后再试。`,
       );
+  }
+  function releaseSlot(holder: { slot?: Lane }) {
+    if (!holder.slot) return;
+    const lane = holder.slot;
+    holder.slot = undefined;
+    admission?.release(lane);
+  }
+  // Takes a place for this backend, or refuses. A connection that drops while waiting does not keep the place.
+  async function hold(peer: Peer, lane: Lane) {
+    if (!admission) {
+      room();
+      return;
+    }
+    const ticket = admission.admit(lane);
+    const cancel = () => ticket.cancel();
+    peer.socket.once('close', cancel);
+    try {
+      await ticket.ready;
+    } finally {
+      peer.socket.removeListener('close', cancel);
+    }
+    if (closing || peer.socket.readyState !== WebSocket.OPEN) {
+      admission.release(lane);
+      throw new DomainError('capacity', '连接已断开，这一轮没有开始。');
+    }
   }
   function track(task: Promise<unknown>, group = tasks) {
     group.add(task);
@@ -331,6 +595,20 @@ export function createProxyServer(options: ServerOptions) {
         type: 'session.updated',
         session: store.renameNative(run.sessionId, payload.title),
       });
+    if (payload.type === 'turn.stats' && run.backend === 'openai')
+      usage.record({
+        at: Date.now(),
+        sessionId: run.sessionId,
+        model: store.get(run.sessionId).session.model || 'codex',
+        inputTokens: payload.inputTokens,
+        outputTokens: payload.outputTokens,
+        cacheReadTokens: payload.cacheReadTokens,
+        cacheCreationTokens: payload.cacheCreationTokens,
+        durationMs: payload.modelMs,
+        ttftMs: payload.ttftMs,
+        requestId: run.id,
+        provider: 'openai',
+      });
     if (payload.type === 'native.compact') store.compacted(run.sessionId);
     if (payload.type === 'run.status') updated(run.sessionId);
   }
@@ -369,7 +647,7 @@ export function createProxyServer(options: ServerOptions) {
   }
   function finish(run: Run, status: 'completed' | 'cancelled' | 'failed', reason?: string) {
     if (runs.get(run.sessionId) !== run) return;
-    run.input?.close();
+    releaseSlot(run);
     if (run.toolId && !run.toolFinished) {
       emit(run, {
         type: 'tool.result',
@@ -385,69 +663,101 @@ export function createProxyServer(options: ServerOptions) {
     run.decide?.(false);
     for (const decide of run.approvals.values()) decide(false);
     run.approvals.clear();
+    run.settled?.();
   }
   // A native run ends through its own adapter, which reports what is known about in-flight tools first.
   function cancel(run: Run, reason: string) {
-    if (!options.claude) {
+    if (run.backend === 'openai') {
+      run.cancelReason = reason;
+      run.controller.abort();
+      for (const decide of run.approvals.values()) decide(false);
+      run.approvals.clear();
+      try {
+        codexHost?.abort(run.sessionId);
+      } catch {
+        finish(run, 'cancelled', reason);
+      }
+      return;
+    }
+    if (!run.native) {
       finish(run, 'cancelled', reason);
       return;
     }
     run.cancelReason = reason;
-    run.input?.close();
     run.controller.abort();
     for (const decide of run.approvals.values()) decide(false);
     run.approvals.clear();
+    try {
+      host?.abort(run.sessionId);
+    } catch {
+      finish(run, 'cancelled', reason);
+    }
   }
   function nativeRoot(sessionId: string) {
     return store.get(sessionId).session.nativeRoot ?? sessionId;
   }
-  async function native(run: Run) {
+  function workerExited() {
+    login = undefined;
+    for (const run of [...runs.values()]) {
+      if (!run.native) continue;
+      if (!closing)
+        emit(run, {
+          type: 'run.error',
+          code: 'native_adapter_failed',
+          message: '原生进程适配失败；请检查服务配置和 CLI 版本。',
+        });
+      finish(
+        run,
+        run.controller.signal.aborted || closing ? 'cancelled' : 'failed',
+        run.cancelReason,
+      );
+    }
+    for (const terminal of [...terminals.values()]) {
+      if (terminal.backend === 'claude') closeTerminalRecord(terminal, null);
+    }
+  }
+  function closeTerminalRecord(terminal: Terminal, exitCode: number | null) {
+    if (terminals.get(terminal.sessionId) !== terminal) return;
+    releaseSlot(terminal);
+    store.append(terminal.sessionId, terminal.id, {
+      type: 'run.status',
+      status: 'completed',
+      surface: 'terminal',
+      connectionId: terminal.owner.id,
+    });
+    updated(terminal.sessionId);
+    send(terminal.owner, {
+      type: 'terminal.closed',
+      sessionId: terminal.sessionId,
+      terminalId: terminal.id,
+      exitCode,
+    });
+    terminals.delete(terminal.sessionId);
+  }
+  function terminalOf(terminal: Terminal) {
+    const owner = terminal.backend === 'openai' ? codexHost : host;
+    if (!owner) throw new DomainError('native_unavailable', '终端所属的工作进程不可用。');
+    return owner;
+  }
+  function startNative(run: Run, messageId: string, text: string) {
+    const { session } = store.get(run.sessionId);
+    const ssh = seats.get(run.device)!.door!.ssh!;
+    const said = store.promptValues(run.sessionId);
     try {
-      const { session } = store.get(run.sessionId);
-      const ssh = seats.get(run.device)!.door!.ssh!;
-      const said = store.promptValues(run.sessionId);
-      const status = await runClaude(options.claude!, {
+      host!.startRun({
         sessionId: run.sessionId,
+        runId: run.id,
         nativeRoot: session.nativeRoot ?? session.id,
         projectPath: said.projectPath,
-        platform: said.platform,
+        terms: deviceTerms(said.platform, said.projectPath),
         permissionMode: session.permissionMode,
         model: session.model,
         effort: session.effort,
-        input: run.input!,
-        controls: run.controls,
-        waiting: (background) =>
-          emit(run, {
-            type: 'run.status',
-            status: 'running',
-            connectionId: run.connectionId,
-            ...(background ? { waiting: 'background' as const } : {}),
-          }),
-        turnEnded: (turn) => track(turnStats(run, turn).catch(() => {})),
-        dataDir: store.directory,
         resume: store.hasNativeContext(run.sessionId),
-        signal: run.controller.signal,
-        ssh: sessionSsh(store.directory, run.sessionId, ssh),
-        emit: (event) => emit(run, event),
-        approve: (toolId, waiting) => {
-          if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
-          const approvalId = randomUUID();
-          return new Promise((resolve) => {
-            run.approvals.set(approvalId, (allowed, answers) => {
-              emit(run, { type: 'approval.resolved', approvalId, allowed });
-              resolve({ allowed, answers });
-            });
-            emit(run, { type: 'approval.requested', approvalId, toolId });
-            emit(run, {
-              type: 'run.status',
-              status: 'awaiting_approval',
-              connectionId: run.connectionId,
-              waiting,
-            });
-          });
-        },
+        sshConfigPath: sessionSsh(store.directory, run.sessionId, ssh).configPath,
+        messageId,
+        text,
       });
-      finish(run, status, run.cancelReason);
     } catch {
       emit(run, {
         type: 'run.error',
@@ -457,73 +767,249 @@ export function createProxyServer(options: ServerOptions) {
       finish(run, run.controller.signal.aborted ? 'cancelled' : 'failed', run.cancelReason);
     }
   }
+  async function startCodex(run: Run, messageId: string, text: string) {
+    try {
+      await codexHost!.whenReady();
+      const { session } = store.get(run.sessionId);
+      const door = seats.get(run.device)?.door;
+      const said = store.promptValues(run.sessionId);
+      const instructions = door?.ssh
+        ? codexInstructions(
+            said.projectPath,
+            sessionSsh(store.directory, run.sessionId, door.ssh, door.openaiPort || undefined)
+              .configPath,
+            run.sessionId,
+            deviceTerms(said.platform, said.projectPath),
+          )
+        : '';
+      codexHost!.startRun({
+        sessionId: run.sessionId,
+        runId: run.id,
+        messageId,
+        text: codexModelText({
+          instructions,
+          history: session.codexThreadId ? '' : store.modelHistory(run.sessionId, messageId),
+          notice: store.notice(run.sessionId),
+          effort: session.effort,
+          text,
+        }),
+        ...(session.codexThreadId ? { resumeThreadId: session.codexThreadId } : {}),
+        ...(session.model ? { model: session.model } : {}),
+        ...(session.effort ? { effort: session.effort } : {}),
+        permissionMode: session.permissionMode,
+        ...(text === '/compact' ? { compact: true } : {}),
+      });
+    } catch {
+      emit(run, {
+        type: 'run.error',
+        code: 'openai_unavailable',
+        message: 'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+      });
+      finish(run, run.controller.signal.aborted ? 'cancelled' : 'failed', run.cancelReason);
+    }
+  }
 
   async function publishAccount(target?: Peer, notice?: string) {
-    const { accountStatus } = await import('./native-account.ts');
     const state: AccountState = {
-      ...(await accountStatus(options.claude!.executable)),
+      ...(await host!.accountStatus()),
+      provider: 'claude',
+      profileId: 'default',
       login: login?.url ? { url: login.url } : null,
       notice,
     };
     if (target) send(target, { type: 'account.state', ...state });
     else broadcast({ type: 'account.state', ...state });
   }
+  function publishOpenaiOff(target?: Peer) {
+    const state = {
+      type: 'account.state' as const,
+      provider: 'openai' as const,
+      profileId: 'default',
+      loggedIn: false,
+      login: null,
+      runtime: 'absent' as const,
+      limits: null,
+    };
+    if (target) send(target, state);
+    else broadcast(state);
+  }
+  async function setCodexPath(peer: Peer, executable: string) {
+    const trimmed = executable.trim();
+    if (trimmed) {
+      let file = false;
+      try {
+        file = statSync(trimmed).isFile();
+      } catch {
+        file = false;
+      }
+      if (!file)
+        throw new DomainError(
+          'invalid_argument',
+          `找不到这个 Codex 程序：${trimmed}。仍使用上一次可用的配置。`,
+        );
+    }
+    const previous = options.codex;
+    const current = previous?.executable ?? '';
+    writeCodexExecutable(store.directory, trimmed);
+    if (trimmed === current && (trimmed ? !!codexHost : !codexHost)) {
+      if (codexHost) await publishOpenai(peer);
+      else publishOpenaiOff(peer);
+      return;
+    }
+    if (codexHost) {
+      const running = codexHost;
+      codexHost = undefined;
+      running.prepareStop();
+      await running.stop();
+    }
+    if (!trimmed) {
+      options.codex = undefined;
+      publishOpenaiOff(peer);
+      return;
+    }
+    openCodex({
+      executable: trimmed,
+      profileId: previous?.profileId ?? 'default',
+      ...(previous?.model ? { model: previous.model } : {}),
+      memoryMb: previous?.memoryMb ?? 2048,
+      pidsMax: previous?.pidsMax ?? 64,
+      cpuMillis: previous?.cpuMillis ?? 1000,
+      ...(previous?.turnTimeoutMs ? { turnTimeoutMs: previous.turnTimeoutMs } : {}),
+      ...(previous?.worker ? { worker: previous.worker } : {}),
+      ...(previous?.failureLimit !== undefined ? { failureLimit: previous.failureLimit } : {}),
+      ...(previous?.restartDelayMs ? { restartDelayMs: previous.restartDelayMs } : {}),
+      ...(previous?.openMs ? { openMs: previous.openMs } : {}),
+      ...(previous?.readyMs ? { readyMs: previous.readyMs } : {}),
+    });
+    await codexHost!.whenReady().catch(() => {});
+    await publishOpenai(peer);
+  }
+  function configuredProfile(profileId?: string) {
+    const configured = options.codex?.profileId ?? 'default';
+    if (profileId && profileId !== configured)
+      throw new DomainError('not_found', '没有这个 OpenAI 配置。');
+    return configured;
+  }
+  async function publishOpenai(target?: Peer, notice?: string) {
+    const status = await codexHost!.accountStatus();
+    const state: AccountState = {
+      provider: 'openai',
+      profileId: options.codex?.profileId ?? 'default',
+      loggedIn: status.loggedIn,
+      authMethod: status.accountType ?? undefined,
+      login: openaiLogin?.url ? { url: openaiLogin.url } : null,
+      notice,
+      runtime: codexHost!.availability() === 'ready' ? 'ready' : 'unavailable',
+      ...(options.codex?.executable ? { executable: options.codex.executable } : {}),
+      ...(options.codex?.model ? { defaultModel: options.codex.model } : {}),
+      limits: codexHost!.limits(),
+    };
+    if (target) send(target, { type: 'account.state', ...state });
+    else broadcast({ type: 'account.state', ...state });
+  }
+  async function openaiAccount(
+    peer: Peer,
+    command: CommandOf<`account.${string}` & Command['type']>,
+  ) {
+    if (!codexHost) {
+      if (command.type === 'account.status') {
+        send(peer, {
+          type: 'account.state',
+          provider: 'openai',
+          profileId: 'default',
+          loggedIn: false,
+          login: null,
+          runtime: 'absent',
+          limits: null,
+        });
+        return;
+      }
+      throw new DomainError(
+        'openai_unavailable',
+        'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+      );
+    }
+    configuredProfile(command.profileId);
+    await codexHost.whenReady();
+    if (command.type === 'account.status') {
+      await publishOpenai(peer);
+      return;
+    }
+    if (command.type === 'account.code')
+      throw new DomainError('login_inactive', 'OpenAI 使用设备码登录，不需要粘贴验证码。');
+    if (command.type === 'account.cancel') {
+      codexHost.loginCancel();
+      return;
+    }
+    if ([...runs.values()].some((run) => run.backend === 'openai'))
+      throw new DomainError('native_busy', '请先结束 OpenAI 会话的运行，再管理账号。');
+    if (command.type === 'account.logout') {
+      codexHost.loginCancel();
+      try {
+        await codexHost.logout();
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'openai_unavailable') throw error;
+        throw new DomainError('logout_failed', '退出 OpenAI 登录失败。');
+      }
+      await publishOpenai();
+      return;
+    }
+    if (!openaiLogin) {
+      const current: Login = { owner: peer };
+      openaiLogin = current;
+      try {
+        const started = await codexHost.login();
+        if (openaiLogin !== current) return;
+        if (started.already || !started.url) openaiLogin = undefined;
+        else current.url = started.url;
+        await publishOpenai(undefined, started.userCode ? `设备码 ${started.userCode}` : undefined);
+        return;
+      } catch (error) {
+        if (openaiLogin === current) openaiLogin = undefined;
+        if (error instanceof DomainError && error.code === 'openai_unavailable') throw error;
+        throw new DomainError('login_failed', 'OpenAI 登录没有给出授权链接，请检查 Codex 与网络。');
+      }
+    }
+    await publishOpenai();
+  }
   async function account(peer: Peer, command: CommandOf<`account.${string}` & Command['type']>) {
+    if (command.provider === 'openai') return openaiAccount(peer, command);
     if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有原生账号。');
+    await host!.whenReady();
     if (command.type === 'account.status') {
       await publishAccount(peer);
       return;
     }
     if (command.type === 'account.code') {
       if (!login?.url) throw new DomainError('login_inactive', '登录流程已结束，请重新获取链接。');
-      login.process.submit(command.code);
+      host!.loginCode(command.code);
       return;
     }
     if (command.type === 'account.cancel') {
-      login?.process.cancel();
+      host!.loginCancel();
       return;
     }
     if (terminals.size || runs.size || mutations.size)
       throw new DomainError('native_busy', '请先结束原生运行或终端，再管理账号。');
-    const { NativeLogin, accountLogout } = await import('./native-account.ts');
     if (command.type === 'account.logout') {
-      login?.process.cancel();
+      host!.loginCancel();
       try {
-        await accountLogout(options.claude.executable);
-      } catch {
+        await host!.logout();
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'native_unavailable') throw error;
         throw new DomainError('logout_failed', '退出登录失败，请在原生终端执行 /logout 确认。');
       }
       await publishAccount();
       return;
     }
     if (!login) {
-      const current: Login = {
-        owner: peer,
-        process: new NativeLogin(
-          options.claude.executable,
-          (succeeded) => {
-            if (login === current) login = undefined;
-            if (closing) return;
-            if (succeeded) completeOnboarding();
-            track(
-              publishAccount(
-                undefined,
-                succeeded || current.process.cancelled
-                  ? undefined
-                  : '登录未完成；请重新获取链接后再试。',
-              ).catch(() => {}),
-            );
-          },
-          (text) => {
-            if (closing || login !== current) return;
-            track(publishAccount(undefined, text).catch(() => {}));
-          },
-        ),
-      };
+      const current: Login = { owner: peer };
       login = current;
       try {
-        current.url = await current.process.url;
-      } catch {
+        current.url = await host!.login();
+      } catch (error) {
+        if (login === current) login = undefined;
+        if (error instanceof DomainError && error.code === 'native_unavailable') throw error;
         throw new DomainError('login_failed', '官方登录命令没有给出授权链接，请检查 CLI 与网络。');
       }
     }
@@ -532,7 +1018,27 @@ export function createProxyServer(options: ServerOptions) {
 
   // Starts the CLI without a prompt to read its account, model and quota state.
   async function readStatus(peer: Peer, command: CommandOf<'session.status'>) {
+    if (store.get(command.sessionId).session.provider === 'openai') {
+      if (!codexHost)
+        throw new DomainError(
+          'openai_unavailable',
+          'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+        );
+      await codexHost.whenReady();
+      const reading = await codexHost.readStatus();
+      if (!reading.rateLimits) return;
+      const event = record(command.sessionId, command.requestId, {
+        type: 'native.metrics',
+        context: null,
+        usage: null,
+        rateLimits: reading.rateLimits,
+      });
+      if (!peer.subscriptions.has(command.sessionId))
+        send(peer, { type: 'session.event', event });
+      return;
+    }
     if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有原生账号状态。');
+    await host!.whenReady();
     // During a run its own CLI answers, so quota can be reread without waiting for the turn to end.
     const active =
       runs.get(command.sessionId) ?? [...runs.values()].find((run) => run.controls.refresh);
@@ -547,11 +1053,9 @@ export function createProxyServer(options: ServerOptions) {
     const closed = () => controller.abort();
     peer.socket.once('close', closed);
     try {
-      const events = await readNativeStatus(
-        options.claude,
-        store.directory,
-        nativeRoot(command.sessionId),
+      const events = await host!.readStatus(
         command.sessionId,
+        nativeRoot(command.sessionId),
         controller.signal,
       );
       for (const payload of events) {
@@ -570,60 +1074,73 @@ export function createProxyServer(options: ServerOptions) {
     if (!terminal || terminal.id !== command.terminalId)
       throw new DomainError('terminal_inactive', '原生终端已结束。');
     if (terminal.owner !== peer) throw new DomainError('not_owner', '原生终端属于另一连接。');
-    await terminal.process?.close();
+    await terminalOf(terminal).closeTerminal(terminal.sessionId, terminal.id);
   }
   // The terminal occupies its session like a run does, so other connections see it as busy.
   async function openTerminal(peer: Peer, command: CommandOf<'terminal.open'>, session: Session) {
-    if (!options.claude) throw new DomainError('native_unavailable', '离线模拟不启动原生终端。');
+    const openai = session.provider === 'openai';
+    if (openai && !codexHost)
+      throw new DomainError(
+        'openai_unavailable',
+        'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+      );
+    if (!openai && !options.claude)
+      throw new DomainError('native_unavailable', '离线模拟不启动原生终端。');
     if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
       throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
     const ssh = peer.tunnel?.ssh && seats.get(deviceOf(peer).id)?.door?.ssh;
     if (!ssh) throw new DomainError('execution_offline', '本机的执行通道尚未就绪。');
+    assertQuota();
+    if (openai) await codexHost!.whenReady();
+    else await host!.whenReady();
     onDevice(peer, session);
-    room();
-    const current: Terminal = { id: randomUUID(), sessionId: command.sessionId, owner: peer };
+    const lane: Lane = openai ? 'openai' : 'claude';
+    await hold(peer, lane);
+    const current: Terminal = {
+      id: randomUUID(),
+      sessionId: command.sessionId,
+      owner: peer,
+      backend: lane,
+      ...(admission ? { slot: lane } : {}),
+    };
     terminals.set(current.sessionId, current);
     try {
-      const { NativeTerminal, terminalArguments, terminalEnvironment } =
-        await import('./native-terminal.ts');
       if (closing || peer.socket.readyState !== WebSocket.OPEN)
         throw new Error('Connection closed');
-      completeOnboarding();
-      current.process = new NativeTerminal(
-        options.claude.executable,
-        terminalArguments(options.claude, session, sessionSsh(store.directory, session.id, ssh)),
-        {
-          cwd: prepareNativeDirectory(options.claude, store.directory, nativeRoot(session.id)),
+      if (openai) {
+        const said = store.promptValues(session.id);
+        await codexHost!.openTerminal({
+          terminalId: current.id,
+          sessionId: session.id,
           cols: command.cols,
           rows: command.rows,
-          env: terminalEnvironment(options.claude),
-        },
-        (data, bytes) =>
-          send(peer, {
-            type: 'terminal.data',
-            sessionId: current.sessionId,
-            terminalId: current.id,
-            data,
-            bytes,
-          }),
-        (exitCode) => {
-          if (terminals.get(current.sessionId) !== current) return;
-          store.append(current.sessionId, current.id, {
-            type: 'run.status',
-            status: 'completed',
-            surface: 'terminal',
-            connectionId: peer.id,
-          });
-          updated(current.sessionId);
-          send(peer, {
-            type: 'terminal.closed',
-            sessionId: current.sessionId,
-            terminalId: current.id,
-            exitCode,
-          });
-          terminals.delete(current.sessionId);
-        },
-      );
+          ...(session.codexThreadId ? { resumeThreadId: session.codexThreadId } : {}),
+          instructions: codexInstructions(
+            said.projectPath,
+            sessionSsh(
+              store.directory,
+              session.id,
+              ssh,
+              seats.get(deviceOf(peer).id)?.door?.openaiPort || undefined,
+            ).configPath,
+            session.id,
+            deviceTerms(said.platform, said.projectPath),
+          ),
+        });
+      } else
+        await host!.openTerminal({
+        terminalId: current.id,
+        sessionId: session.id,
+        nativeRoot: nativeRoot(session.id),
+        projectPath: session.projectPath,
+        terms: deviceTerms(platformOf(session.device), session.projectPath),
+        permissionMode: session.permissionMode,
+        model: session.model,
+        effort: session.effort,
+        cols: command.cols,
+        rows: command.rows,
+        sshConfigPath: sessionSsh(store.directory, session.id, ssh).configPath,
+      });
       store.append(command.sessionId, current.id, {
         type: 'run.status',
         status: 'running',
@@ -632,9 +1149,11 @@ export function createProxyServer(options: ServerOptions) {
       });
       updated(command.sessionId);
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
-    } catch {
-      await current.process?.close();
+    } catch (error) {
+      await (openai ? codexHost : host)?.closeTerminal(current.sessionId, current.id);
+      releaseSlot(current);
       if (terminals.get(current.sessionId) === current) terminals.delete(current.sessionId);
+      if (error instanceof DomainError) throw error;
       throw new DomainError('terminal_failed', '原生终端启动失败，请检查 Linux PTY 组件与 CLI。');
     }
   }
@@ -647,12 +1166,10 @@ export function createProxyServer(options: ServerOptions) {
     mutations.add(command.sessionId);
     try {
       if (options.claude && store.hasNativeContext(command.sessionId)) {
-        const nativeOptions = {
-          dir: nativeDirectory(store.directory, nativeRoot(command.sessionId)),
-        };
-        if (command.type === 'session.delete')
-          await deleteSession(command.sessionId, nativeOptions);
-        else await renameSession(command.sessionId, command.title, nativeOptions);
+        await host!.whenReady();
+        const root = nativeRoot(command.sessionId);
+        if (command.type === 'session.delete') await host!.deleteSession(command.sessionId, root);
+        else await host!.renameSession(command.sessionId, root, command.title);
       }
       if (command.type === 'session.delete') {
         store.delete(command.sessionId);
@@ -689,30 +1206,35 @@ export function createProxyServer(options: ServerOptions) {
     const title = `${session.title.slice(0, 116)}（分叉）`;
     let id: string = randomUUID();
     let resumable = false;
+    let forkedThread: string | undefined;
+    let textCopy = false;
     mutations.add(command.sessionId);
     try {
-      if (options.claude && store.hasNativeContext(command.sessionId)) {
-        const dir = nativeDirectory(store.directory, nativeRoot(command.sessionId));
-        if (!command.beforeMessageId) {
-          id = (await forkSession(command.sessionId, { dir, title })).sessionId;
-          resumable = true;
-        } else {
-          const through = await forkSession(command.sessionId, {
-            dir,
-            upToMessageId: command.beforeMessageId,
-          });
-          try {
-            const kept = (await getSessionMessages(through.sessionId, { dir })).at(-2);
-            // Nothing before the message: the fork starts a native session of its own.
-            if (kept) {
-              id = (await forkSession(through.sessionId, { dir, upToMessageId: kept.uuid, title }))
-                .sessionId;
-              resumable = true;
-            }
-          } finally {
-            await deleteSession(through.sessionId, { dir });
-          }
+      if (session.provider === 'openai' && session.codexThreadId) {
+        if (!codexHost)
+          throw new DomainError(
+            'openai_unavailable',
+            'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+          );
+        await codexHost.whenReady();
+        try {
+          forkedThread = await codexHost.forkThread(session.codexThreadId);
+        } catch (error) {
+          // An older app-server has no thread/fork. The copy is the transcript, and the new session says so.
+          if (!(error instanceof DomainError) || error.code !== 'fork_unsupported') throw error;
+          textCopy = true;
         }
+      }
+      if (options.claude && session.provider !== 'openai' && store.hasNativeContext(command.sessionId)) {
+        await host!.whenReady();
+        const forked = await host!.forkSession(
+          command.sessionId,
+          nativeRoot(command.sessionId),
+          title,
+          command.beforeMessageId,
+        );
+        if (forked.id) id = forked.id;
+        resumable = forked.resumable;
       }
       const created = store.fork(
         command.requestId,
@@ -722,7 +1244,15 @@ export function createProxyServer(options: ServerOptions) {
         resumable,
         place,
         before,
+        forkedThread,
       );
+      if (textCopy) {
+        const event = store.append(created.id, randomUUID(), {
+          type: 'native.notice',
+          text: '这一份是文字副本，不是 Codex 自己的线程。',
+        });
+        broadcast({ type: 'session.event', event }, created.id);
+      }
       broadcast({ type: 'session.updated', session: created });
       return created.id;
     } catch (error) {
@@ -737,14 +1267,25 @@ export function createProxyServer(options: ServerOptions) {
   }
   // A message starts a run, or joins the native run this connection already owns. Compacting is the native
   // /compact command sent as a message.
-  function submit(
+  function assertQuota() {
+    const message = usage.stopMessage();
+    if (message) throw new DomainError('quota_exceeded', message);
+  }
+  async function submit(
     peer: Peer,
     command: CommandOf<'message.send' | 'session.compact' | 'run.continue'>,
     session: Session,
   ) {
-    if (command.type === 'session.compact' && !options.claude)
+    assertQuota();
+    if (command.type === 'session.compact' && session.provider === 'openai' && !session.codexThreadId)
+      throw new DomainError('native_context_missing', '先建立 Codex 会话再压缩上下文。');
+    if (command.type === 'session.compact' && session.provider !== 'openai' && !options.claude)
       throw new DomainError('native_unavailable', '离线模拟不提供原生上下文压缩。');
-    if (command.type === 'session.compact' && !store.hasNativeContext(command.sessionId))
+    if (
+      command.type === 'session.compact' &&
+      session.provider !== 'openai' &&
+      !store.hasNativeContext(command.sessionId)
+    )
       throw new DomainError('native_context_missing', '先建立原生会话再压缩上下文。');
     const continued = command.type === 'run.continue';
     if (continued && session.activeRun) throw new DomainError('run_active', '当前会话正在运行。');
@@ -760,18 +1301,84 @@ export function createProxyServer(options: ServerOptions) {
     }
     if (session.activeRun) {
       const active = runs.get(command.sessionId);
-      if (!options.claude || command.type !== 'message.send' || !active?.input)
+      if (active?.backend === 'openai' && command.type === 'message.send') {
+        if (!codexHost)
+          throw new DomainError(
+            'openai_unavailable',
+            'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+          );
+        if (active.device !== deviceOf(peer).id)
+          throw new DomainError('not_owner', '该运行属于另一台设备。');
+        if (active.controller.signal.aborted)
+          throw new DomainError('run_finishing', '这一轮正在停止，请稍后发送。');
+        peer.subscriptions.add(command.sessionId);
+        emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
+        codexHost.steer(command.sessionId, store.notice(command.sessionId) + text);
+        return;
+      }
+      if (!options.claude || command.type !== 'message.send' || !active?.native)
         throw new DomainError('run_active', '当前会话正在运行。');
       if (active.device !== deviceOf(peer).id)
         throw new DomainError('not_owner', '该运行属于另一台设备。');
       if (active.controller.signal.aborted)
         throw new DomainError('run_finishing', '原生运行正在停止，请稍后发送。');
-      active.input.assertWritable();
+      const gate = active.gate ?? Promise.resolve();
+      const reserved = gate.catch(() => {}).then(() => host!.reserve(active.sessionId));
+      active.gate = reserved.then(
+        () => undefined,
+        () => undefined,
+      );
+      await reserved;
       peer.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
-      active.input.submit(command.requestId, store.notice(command.sessionId) + text);
+      host!.submitInput(
+        command.sessionId,
+        command.requestId,
+        store.notice(command.sessionId) + text,
+      );
       return;
     }
+    if (session.provider === 'openai') {
+      if (!codexHost)
+        throw new DomainError(
+          'openai_unavailable',
+          'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+        );
+      // A connection that opened an execution channel has to wait until that channel can carry
+      // commands. One that never asked for a channel has nothing to wait for.
+      if (peer.tunnel && !(peer.tunnel.ssh && seats.get(deviceOf(peer).id)?.door?.ssh))
+        throw new DomainError(
+          'execution_offline',
+          '本机的执行通道尚未就绪，请稍候；客户端正在建立或重新建立连接。',
+        );
+      onDevice(peer, session);
+      await hold(peer, 'openai');
+      peer.subscriptions.add(command.sessionId);
+      const run: Run = {
+        id: randomUUID(),
+        sessionId: command.sessionId,
+        device: deviceOf(peer).id,
+        connectionId: peer.id,
+        controller: new AbortController(),
+        toolFinished: false,
+        approvals: new Map(),
+        controls: {},
+        backend: 'openai',
+        ...(admission ? { slot: 'openai' as const } : {}),
+      };
+      runs.set(command.sessionId, run);
+      let settle = () => {};
+      const done = new Promise<void>((resolve) => {
+        settle = resolve;
+      });
+      run.settled = settle;
+      track(done);
+      emit(run, { type: 'message.user', messageId: command.requestId, text, scenario });
+      emit(run, { type: 'run.status', status: 'running', connectionId: run.connectionId });
+      await startCodex(run, command.requestId, text);
+      return;
+    }
+    if (options.claude) await host!.whenReady();
     if (options.claude && mutations.size)
       throw new DomainError('native_busy', '原生状态正在读取，请稍后发送。');
     if (options.claude && !(peer.tunnel?.ssh && seats.get(deviceOf(peer).id)?.door?.ssh))
@@ -779,8 +1386,9 @@ export function createProxyServer(options: ServerOptions) {
         'execution_offline',
         '本机的执行通道尚未就绪，请稍候；客户端正在建立或重新建立连接。',
       );
+    if (runs.has(command.sessionId)) throw new DomainError('run_active', '当前会话正在运行。');
     onDevice(peer, session);
-    room();
+    await hold(peer, 'claude');
     peer.subscriptions.add(command.sessionId);
     const run: Run = {
       id: randomUUID(),
@@ -791,9 +1399,18 @@ export function createProxyServer(options: ServerOptions) {
       toolFinished: false,
       approvals: new Map(),
       controls: {},
+      ...(admission ? { slot: 'claude' as const } : {}),
     };
     runs.set(command.sessionId, run);
-    if (options.claude) run.input = new NativeInput(run.sessionId, (event) => emit(run, event));
+    if (options.claude) {
+      run.native = true;
+      let settle = () => {};
+      const done = new Promise<void>((resolve) => {
+        settle = resolve;
+      });
+      run.settled = settle;
+      track(done);
+    }
     emit(run, {
       type: 'message.user',
       messageId: command.requestId,
@@ -804,21 +1421,21 @@ export function createProxyServer(options: ServerOptions) {
     emit(run, { type: 'run.status', status: 'running', connectionId: run.connectionId });
     // What Claude's system prompt no longer has right is told to it with this message; the transcript shows the
     // user's own text.
-    run.input?.submit(command.requestId, store.notice(command.sessionId) + text);
-    track(
-      options.claude
-        ? native(run)
-        : simulate(
-            run,
-            { ...command, type: 'message.send', text, scenario },
-            {
-              stepMs: options.stepMs ?? 110,
-              projectPath: () => store.get(run.sessionId).session.projectPath,
-              emit: (payload) => emit(run, payload),
-              finish: (status, reason) => finish(run, status, reason),
-            },
-          ),
-    );
+    const told = store.notice(command.sessionId) + text;
+    if (options.claude) startNative(run, command.requestId, told);
+    else
+      track(
+        simulate(
+          run,
+          { ...command, type: 'message.send', text, scenario },
+          {
+            stepMs: options.stepMs ?? 110,
+            projectPath: () => store.get(run.sessionId).session.projectPath,
+            emit: (payload) => emit(run, payload),
+            finish: (status, reason) => finish(run, status, reason),
+          },
+        ),
+      );
   }
   function controlRun(
     peer: Peer,
@@ -838,13 +1455,15 @@ export function createProxyServer(options: ServerOptions) {
     if (command.type === 'run.cancel') {
       cancel(
         run,
-        options.claude
-          ? '用户停止；已发出的 SSH 命令可能继续执行，副作用未撤销，不能自动重试。'
-          : '用户停止',
+        run.backend === 'openai'
+          ? '用户停止'
+          : options.claude
+            ? '用户停止；已发出的 SSH 命令可能继续执行，副作用未撤销，不能自动重试。'
+            : '用户停止',
       );
       return;
     }
-    if (options.claude) {
+    if (run.backend === 'openai' || options.claude) {
       const decide = run.approvals.get(command.approvalId);
       if (!decide) throw new DomainError('approval_inactive', '审批已失效。');
       run.approvals.delete(command.approvalId);
@@ -870,16 +1489,21 @@ export function createProxyServer(options: ServerOptions) {
       case 'account.logout':
         await account(peer, command);
         return undefined;
+      case 'openai.path':
+        await setCodexPath(peer, command.path);
+        return undefined;
       case 'settings.get':
       case 'settings.update': {
         if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有原生设置。');
+        await host!.whenReady();
         try {
           const values =
             command.type === 'settings.get'
-              ? readNativeSettings()
-              : updateNativeSettings(command.values);
+              ? await host!.readSettings()
+              : await host!.updateSettings(command.values);
           send(peer, { type: 'settings.state', requestId: command.requestId, values });
-        } catch {
+        } catch (error) {
+          if (error instanceof DomainError) throw error;
           throw new DomainError(
             'settings_failed',
             '原生设置文件无法读取或写入；请在原生终端用 /config 检查。',
@@ -887,6 +1511,10 @@ export function createProxyServer(options: ServerOptions) {
         }
         return undefined;
       }
+      case 'quota.set':
+        if (!usage.setLimits(command.fiveHour, command.week))
+          throw new DomainError('invalid_argument', '提醒档必须低于停发档，且都是 1 到 100 之间的整数。');
+        return undefined;
       case 'usage.summary':
         send(peer, { type: 'usage.summary', requestId: command.requestId, ...usage.summary() });
         return undefined;
@@ -914,12 +1542,47 @@ export function createProxyServer(options: ServerOptions) {
         });
         return undefined;
       }
+      case 'model.list': {
+        if (command.provider === 'openai') {
+          if (!codexHost)
+            throw new DomainError(
+              'openai_unavailable',
+              'Codex 工作进程不可用；Claude、主服务和已有会话仍可使用。',
+            );
+          const profileId = configuredProfile(command.profileId);
+          await codexHost.whenReady();
+          const models = await codexHost.models();
+          send(peer, {
+            type: 'models',
+            requestId: command.requestId,
+            provider: 'openai',
+            profileId,
+            models,
+          });
+          return undefined;
+        }
+        if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有模型列表。');
+        await host!.whenReady();
+        send(peer, {
+          type: 'models',
+          requestId: command.requestId,
+          provider: 'claude',
+          profileId: 'default',
+          models: [],
+        });
+        return undefined;
+      }
       case 'session.create': {
+        const provider = command.provider;
+        const profileId =
+          provider === 'openai' ? configuredProfile(command.profileId) : (command.profileId ?? 'default');
         const session = store.create(
           command.requestId,
           command.title,
           command.projectPath,
           deviceOf(peer),
+          provider,
+          profileId,
         );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
@@ -980,6 +1643,8 @@ export function createProxyServer(options: ServerOptions) {
       throw new DomainError('service_upgrading', '服务端正在升级，重启完成后再发送。');
     switch (command.type) {
       case 'session.configure':
+        if (command.provider === 'openai' && session.provider !== 'openai' && !options.codex)
+          throw new DomainError('openai_unavailable', '还没有可用的 Codex，不能改用 OpenAI 模型。');
         broadcast({
           type: 'session.updated',
           session: store.configure(
@@ -987,6 +1652,12 @@ export function createProxyServer(options: ServerOptions) {
             command.permissionMode,
             command.model,
             command.effort,
+            command.provider,
+            command.provider === 'openai'
+              ? configuredProfile()
+              : command.provider === 'claude'
+                ? 'default'
+                : undefined,
           ),
         });
         break;
@@ -1005,7 +1676,7 @@ export function createProxyServer(options: ServerOptions) {
       case 'message.send':
       case 'session.compact':
       case 'run.continue':
-        submit(peer, command, session);
+        await submit(peer, command, session);
         break;
     }
     return command.sessionId;
@@ -1067,7 +1738,7 @@ export function createProxyServer(options: ServerOptions) {
     // Every connection that asks has an execution channel of its own, to the computer it comes from.
     if (auth.data.tunnel && options.tunnel) {
       peer.tunnel = new Tunnel(
-        options.tunnel,
+        options.codex ? { ...options.tunnel, openai: options.tunnel.openai ?? {} } : options.tunnel,
         store.directory,
         peer.id,
         (channelId) => {
@@ -1160,13 +1831,14 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     try {
-      if (control.type === 'terminal.input') current.process?.write(control.data);
+      const owner = terminalOf(current);
+      if (control.type === 'terminal.input')
+        owner.terminalInput(current.sessionId, current.id, control.data);
       else if (control.type === 'terminal.resize')
-        current.process?.resize(control.cols, control.rows);
-      else current.process?.acknowledge(control.bytes);
+        owner.terminalResize(current.sessionId, current.id, control.cols, control.rows);
+      else owner.terminalAck(current.sessionId, current.id, control.bytes);
     } catch {
-      const task = current.process?.close();
-      if (task) track(task);
+      track(terminalOf(current).closeTerminal(current.sessionId, current.id).catch(() => {}));
     }
   }
   // A request ID is answered once: a resend gets the same response, never a second execution.
@@ -1215,7 +1887,11 @@ export function createProxyServer(options: ServerOptions) {
       seat = { device, peers: new Set() };
       seats.set(device, seat);
       if (options.tunnel) {
-        seat.door = new Door(options.tunnel, store.directory, device);
+        seat.door = new Door(
+          options.codex ? { ...options.tunnel, openai: options.tunnel.openai ?? {} } : options.tunnel,
+          store.directory,
+          device,
+        );
         seat.opening = seat.door.start();
         seat.opening.catch(() => {});
       }
@@ -1246,12 +1922,10 @@ export function createProxyServer(options: ServerOptions) {
   // to come back, unless the client said it was leaving; nothing is replayed for a later connection either way.
   function release(peer: Peer) {
     peers.delete(peer);
-    if (login?.owner === peer) login.process.cancel();
+    if (login?.owner === peer) host?.loginCancel();
     for (const terminal of terminals.values())
-      if (terminal.owner === peer) {
-        const task = terminal.process?.close();
-        if (task) track(task);
-      }
+      if (terminal.owner === peer)
+        track(terminalOf(terminal).closeTerminal(terminal.sessionId, terminal.id).catch(() => {}));
     const seat = peer.device && seats.get(peer.device.id);
     if (seat?.peers.delete(peer)) {
       if (seat.door?.uses(peer.tunnel))
@@ -1400,11 +2074,28 @@ export function createProxyServer(options: ServerOptions) {
   });
   return {
     store,
+    ...(host
+      ? {
+          native: {
+            ready: () => host!.whenReady(),
+            exited: () => host!.exited(),
+            terminate: () => host!.terminate(),
+          },
+        }
+      : {}),
+    get codex() {
+      return codexHost;
+    },
     async listen(port = 8787): Promise<string> {
       await releases.refresh();
       updates?.start();
-      if (usageReceiver)
-        options.claude!.environment = telemetryEnvironment(await usageReceiver.listen());
+      if (usageReceiver) {
+        const environment = telemetryEnvironment(await usageReceiver.listen());
+        options.claude!.environment = environment;
+        host?.setEnvironment(environment);
+      }
+      if (host) void host.whenReady().catch(() => {});
+      if (codexHost) void codexHost.whenReady().catch(() => {});
       await new Promise<void>((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, options.host ?? '127.0.0.1', () => {
@@ -1419,9 +2110,14 @@ export function createProxyServer(options: ServerOptions) {
     async close() {
       closing = true;
       updates?.stop();
-      login?.process.cancel();
+      host?.prepareStop();
+      codexHost?.prepareStop();
+      host?.loginCancel();
+      codexHost?.loginCancel();
       const terminalCleanup = Promise.all(
-        [...terminals.values()].map((terminal) => terminal.process?.close()),
+        [...terminals.values()].map((terminal) =>
+          terminalOf(terminal).closeTerminal(terminal.sessionId, terminal.id).catch(() => {}),
+        ),
       );
       for (const run of runs.values()) cancel(run, '服务停止，运行未重放。');
       for (const seat of seats.values()) clearTimeout(seat.away);
@@ -1432,6 +2128,8 @@ export function createProxyServer(options: ServerOptions) {
       for (const peer of peers) peer.socket.terminate();
       await Promise.all([...tasks]);
       await terminalCleanup;
+      await host?.stop();
+      await codexHost?.stop();
       await Promise.all([...tunnelTasks]);
       await Promise.all(cleanup);
       await usageReceiver?.close();
