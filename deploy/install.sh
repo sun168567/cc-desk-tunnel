@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Installs or upgrades the CC Desk Tunnel service on this machine. It can be run on its own,
-#   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+#   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Dreamer062176/cc-desk-tunnel/main/deploy/install.sh)"
 # in which case it fetches the newest release from GitHub, or from an unpacked server archive, which it then uses.
 # It checks for what it needs and says how to install what is missing; it installs nothing on the host itself
 # and leaves the firewall, nginx and SSH alone.
 set -euo pipefail
 
-REPO="${CC_DESK_TUNNEL_REPO:-sun168567/cc-desk-tunnel}"
+REPO="${CC_DESK_TUNNEL_REPO:-Dreamer062176/cc-desk-tunnel}"
 TARGET="${CC_DESK_TUNNEL_DIR:-/opt/cc-desk-tunnel}"
 TEMP=''
 trap '[[ -z "$TEMP" ]] || rm -rf -- "$TEMP"' EXIT

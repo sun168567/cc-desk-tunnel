@@ -21,7 +21,7 @@ Node.js、Claude Code、Agent SDK 均为固定版本（见 `scripts/install-linu
 | Windows sshd / UI bridge | Windows `127.0.0.1:<随机>` | SSH / 本机 nonce + Origin WS | 不开放 |
 | 运维 SSH | 遵循 VPS 原有端口，常见 22 | SSH / SFTP 管理 | 管理者可访问 |
 
-`--control-port` 可改，nginx 公网端口由既有服务决定。无需 UDP、Windows 入站规则或公开随机 SSH 端口；暂不支持 IPv6 配置。业务双向控制、原生终端均走 WSS，没有 REST 会话 / 配置 / 上传接口或公网 Web UI。无认证的 `GET /health` 只返回状态、协议版本和适配器类型；`GET /client/installer` 凭服务凭据下载客户端安装包；其他 HTTP 路径 404。服务端自身只向外访问 GitHub 的发布接口（查询版本、下载程序包与安装包）和升级时的 npm 仓库，可用 `PROXY_RELEASE_REPO='none'` 关闭。
+`--control-port` 可改，nginx 公网端口由既有服务决定。无需 UDP、Windows 入站规则或公开随机 SSH 端口；暂不支持 IPv6 配置。业务双向控制、原生终端均走 WSS，没有 REST 会话 / 配置 / 上传接口或公网 Web UI。无认证的 `GET /health` 返回状态、协议版本、适配器类型，以及 Claude 与 OpenAI 各自是就绪、不可用还是未配置。OpenAI 不可用时状态仍是正常、适配器仍是 `claude-code`，容器健康检查不读取这一项，所以不会因此失败；`GET /client/installer` 凭服务凭据下载客户端安装包；其他 HTTP 路径 404。服务端自身只向外访问 GitHub 的发布接口（查询版本、下载程序包与安装包）和升级时的 npm 仓库，可用 `PROXY_RELEASE_REPO='none'` 关闭。
 
 容器内反代模式监听 `0.0.0.0` 供 Docker bridge 接入；宿主仅回环发布。不要将不可信容器加入同一网络或单独公开上游。Docker 端口发布与 UFW 常规 INPUT 的关系需核对，公网来源限制优先在云安全组 / Docker 防火墙策略实施。
 

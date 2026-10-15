@@ -3,6 +3,7 @@ set -euo pipefail
 
 NODE_VERSION=v24.21.0
 CLAUDE_VERSION=2.1.293
+CODEX_VERSION=0.162.1
 RUNTIME="${CC_DESK_TUNNEL_RUNTIME:-$HOME/.local/share/cc-desk-tunnel/runtime}"
 case "$(uname -m)" in
   x86_64) ARCH=x64 ;;
@@ -34,5 +35,9 @@ if [ ! -x "$RUNTIME/cli/bin/claude" ] || [ "$("$RUNTIME/cli/bin/claude" --versio
   npm install --global --prefix "$RUNTIME/cli" "@anthropic-ai/claude-code@$CLAUDE_VERSION"
 fi
 "$RUNTIME/cli/bin/claude" --version
+if [ ! -x "$RUNTIME/cli/bin/codex" ] || ! "$RUNTIME/cli/bin/codex" --version 2>/dev/null | grep -q "$CODEX_VERSION"; then
+  npm install --global --prefix "$RUNTIME/cli" "@openai/codex@$CODEX_VERSION"
+fi
+"$RUNTIME/cli/bin/codex" --version
 printf 'Runtime installed for user %s at %s\n' "$(id -un)" "$RUNTIME"
 printf 'No account login or model call has been performed.\n'

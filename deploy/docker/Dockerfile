@@ -20,14 +20,20 @@ ENV PATH=/home/ccdesktunnel/runtime/node/bin:$PATH
 WORKDIR /app
 COPY --chown=ccdesktunnel:ccdesktunnel package.json package-lock.json ./
 COPY --chown=ccdesktunnel:ccdesktunnel apps/server/package.json apps/server/package.json
+COPY --chown=ccdesktunnel:ccdesktunnel apps/claude/package.json apps/claude/package.json
+COPY --chown=ccdesktunnel:ccdesktunnel apps/codex/package.json apps/codex/package.json
 COPY --chown=ccdesktunnel:ccdesktunnel apps/desktop/package.json apps/desktop/package.json
 COPY --chown=ccdesktunnel:ccdesktunnel packages/protocol/package.json packages/protocol/package.json
+COPY --chown=ccdesktunnel:ccdesktunnel packages/agent-ipc/package.json packages/agent-ipc/package.json
 # Building node-pty downloads Node's headers, which now and then breaks off; it is tried a second time.
-RUN install() { npm ci --omit=dev --workspace=@cc-desk-tunnel/server --workspace=@cc-desk-tunnel/protocol; } \
+RUN install() { npm ci --omit=dev --workspace=@cc-desk-tunnel/server --workspace=@cc-desk-tunnel/claude --workspace=@cc-desk-tunnel/codex --workspace=@cc-desk-tunnel/agent-ipc --workspace=@cc-desk-tunnel/protocol; } \
     && { install || { sleep 20 && install; }; } \
     && npm cache clean --force
 COPY --chown=ccdesktunnel:ccdesktunnel apps/server/src apps/server/src
+COPY --chown=ccdesktunnel:ccdesktunnel apps/claude/src apps/claude/src
+COPY --chown=ccdesktunnel:ccdesktunnel apps/codex/src apps/codex/src
 COPY --chown=ccdesktunnel:ccdesktunnel packages/protocol/src packages/protocol/src
+COPY --chown=ccdesktunnel:ccdesktunnel packages/agent-ipc/src packages/agent-ipc/src
 
 FROM base
 COPY --from=build --chown=root:root /home/ccdesktunnel/runtime /opt/runtime

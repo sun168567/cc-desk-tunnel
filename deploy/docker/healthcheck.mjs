@@ -26,6 +26,7 @@ const request = (direct ? https : http).get(
     response.on('end', () => {
       try {
         const status = JSON.parse(body);
+        // providers.openai is reported for operators. A down Codex worker does not fail this check.
         process.exit(
           response.statusCode === 200 && status.status === 'ok' && status.adapter === 'claude-code'
             ? 0

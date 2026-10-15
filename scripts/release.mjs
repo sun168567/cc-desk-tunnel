@@ -34,7 +34,7 @@ const section = new RegExp(
   .exec(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))?.[1]
   .trim();
 if (!section) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
-const repository = 'https://github.com/sun168567/cc-desk-tunnel';
+const repository = 'https://github.com/Dreamer062176/cc-desk-tunnel';
 const [installer, server, ...others] = releaseFiles(version);
 // Every release reads the same way: what the project is, this version's section of the change log with its
 // headings one level up, then how to get and upgrade to it. A preview carries the same text, so that making

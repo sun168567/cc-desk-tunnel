@@ -65,8 +65,11 @@ try {
       'package.json',
       'package-lock.json',
       'apps/server',
+      'apps/claude',
+      'apps/codex',
       'apps/desktop/package.json',
       'packages/protocol',
+      'packages/agent-ipc',
     ],
     { windowsHide: true },
   );
@@ -105,6 +108,7 @@ try {
     PROXY_ADAPTER: 'claude-code',
     PROXY_DATA_DIR: `${base}/state`,
     CLAUDE_PATH: `${base}/runtime/cli/bin/claude`,
+    CODEX_PATH: `${base}/runtime/cli/bin/codex`,
     ...(config.model ? { CLAUDE_MODEL: config.model } : {}),
     ...(config.provider || config.settingsPath ? { CLAUDE_SETTINGS_PATH: settingsPath } : {}),
   };
@@ -125,7 +129,7 @@ try {
   console.log('Installing locked service dependencies...');
   console.log(
     await exec(
-      `tar -xzf ${quote(base + '/service.tar.gz')} -C ${quote(base + '/app')}; cd ${quote(base + '/app')}; export PATH=${quote(base + '/runtime/node/bin')}:$PATH; npm ci --omit=dev --workspace=@cc-desk-tunnel/server --workspace=@cc-desk-tunnel/protocol`,
+      `tar -xzf ${quote(base + '/service.tar.gz')} -C ${quote(base + '/app')}; cd ${quote(base + '/app')}; export PATH=${quote(base + '/runtime/node/bin')}:$PATH; npm ci --omit=dev --workspace=@cc-desk-tunnel/server --workspace=@cc-desk-tunnel/claude --workspace=@cc-desk-tunnel/codex --workspace=@cc-desk-tunnel/agent-ipc --workspace=@cc-desk-tunnel/protocol`,
     ),
   );
   // Only stop the exact executable and script previously launched by this deployment.

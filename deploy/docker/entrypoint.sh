@@ -28,4 +28,8 @@ fi
 [ ! -x "$PROGRAM/cli/bin/claude" ] || PATH="$PROGRAM/cli/bin:$PATH"
 echo "Starting program $(node -p "require('$PROGRAM/apps/desktop/package.json').version") from $PROGRAM"
 export PROXY_PROGRAM_DIR="$STORE" PROXY_RUNTIME_DIR=/opt/runtime
+# A configuration that already names Codex keeps that path. One that does not gets the copy in this image.
+if ! grep -q '^CODEX_PATH=' /data/config/service.env; then
+  export CODEX_PATH=/opt/runtime/cli/bin/codex
+fi
 exec node --env-file=/data/config/service.env "$PROGRAM/apps/server/src/main.ts"

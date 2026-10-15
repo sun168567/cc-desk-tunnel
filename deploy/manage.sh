@@ -33,6 +33,17 @@ fail() { echo "$*" >&2; exit 1; }
 valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && ((10#$1 >= 1024 && 10#$1 <= 65535)); }
 safe_value() { [[ "$1" != *"'"* && "$1" != *$'\n'* && "$1" != *$'\r'* && "$1" != *'$'* && "$1" != *'`'* ]]; }
 write_var() { safe_value "$2" || fail "Unsupported characters in $1"; printf "%s='%s'\n" "$1" "$2"; }
+# New installs write this in init. An existing file gains it only when the line is missing.
+ensure_codex_path() {
+  local file="$DATA_DIR/config/service.env" temp
+  [[ -f "$file" ]] || return 0
+  grep -q '^CODEX_PATH=' "$file" && return 0
+  temp="$(mktemp "$file.XXXXXX")"
+  { cat "$file"; write_var CODEX_PATH /opt/runtime/cli/bin/codex; } > "$temp"
+  chmod 600 "$temp"
+  [[ "$(id -u)" != 0 ]] || chown 1000:1000 "$temp"
+  mv -- "$temp" "$file"
+}
 dc() { docker compose --env-file "$CONFIG" -p "$PROJECT_NAME" -f "$COMPOSE" "$@"; }
 load() {
   [[ -f "$CONFIG" ]] || fail "Run init first."
@@ -211,6 +222,7 @@ case "$command" in
       write_var PROXY_DATA_DIR /data/state
       write_var CLAUDE_CONTEXT_RETENTION_DAYS 3650
       write_var CLAUDE_SETTINGS_PATH /data/config/provider.json
+      write_var CODEX_PATH /opt/runtime/cli/bin/codex
     } > "$DATA_DIR/config/service.env"
     printf '{}\n' > "$DATA_DIR/config/provider.json"
     PROJECT_NAME="cc-desk-tunnel-$(openssl rand -hex 4)"
@@ -233,11 +245,11 @@ esac
 load
 case "$command" in
   build) dc build --pull ;;
-  up) dc up -d; wait_healthy ;;
+  up) ensure_codex_path; dc up -d; wait_healthy ;;
   status) dc ps ;;
   logs) dc logs --tail=100 -f ;;
   stop) dc stop ;;
-  restart) dc restart; wait_healthy ;;
+  restart) ensure_codex_path; dc restart; wait_healthy ;;
   upgrade)
     # Data, account and configuration live outside the image; only the program is replaced.
     if [[ "${1:-}" = --from ]]; then
@@ -249,7 +261,7 @@ case "$command" in
     fi
     # The port frp had before 0.2.10 is no longer published; its setting goes with it.
     if grep -q '^FRPS_PORT=' "$CONFIG"; then sed -i '/^FRPS_PORT=/d' "$CONFIG"; fi
-    dc build --pull; dc up -d; wait_healthy; summary ;;
+    ensure_codex_path; dc build --pull; dc up -d; wait_healthy; summary ;;
   summary) summary ;;
   client)
     [[ $# = 1 && -f "$1" && "$(basename -- "$1")" =~ ^CC-Desk-Tunnel-Setup-[0-9]+\.[0-9]+\.[0-9]+-x64\.exe$ ]] \
