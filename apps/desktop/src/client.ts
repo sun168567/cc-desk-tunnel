@@ -19,6 +19,7 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 
 type Response = Extract<ServerMessage, { type: 'response' }>;
+export type RequestOutcome = Response | Error;
 type DataMessage = Extract<
   ServerMessage,
   {
@@ -194,6 +195,12 @@ export class ProxyClient {
       type: Command['type'];
     }
   >();
+  // Optional final-result observers outlive the normal request timeout. They never resend a command;
+  // a reply or the end of this connection releases them, including those whose promise already timed out.
+  private observed = new Map<
+    string,
+    { callback: (outcome: RequestOutcome) => void; type: Command['type'] }
+  >();
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -328,11 +335,13 @@ export class ProxyClient {
         if (selectedId) this.load(selectedId);
       } else if (message.type === 'response') {
         const request = this.pending.get(message.requestId);
-        if (!request) return;
-        clearTimeout(request.timer);
-        this.pending.delete(message.requestId);
-        if (message.ok) request.resolve(message);
-        else request.reject(new Error(message.message ?? '请求失败。'));
+        if (request) {
+          clearTimeout(request.timer);
+          this.pending.delete(message.requestId);
+          if (message.ok) request.resolve(message);
+          else request.reject(new Error(message.message ?? '请求失败。'));
+        }
+        this.finishObserved(message.requestId, message);
       } else if (message.type === 'connection.error') {
         this.update({ error: message.message });
         if (message.code === 'version_mismatch')
@@ -520,6 +529,21 @@ export class ProxyClient {
       request.reject(new RequestInterruptedError(request.type));
     }
     this.pending.clear();
+    for (const [id, observer] of this.observed)
+      this.finishObserved(id, new RequestInterruptedError(observer.type));
+  }
+  private notifyFinal(callback: (outcome: RequestOutcome) => void, outcome: RequestOutcome) {
+    try {
+      void Promise.resolve(callback(outcome)).catch(() => {});
+    } catch {
+      // An optional observer must not interrupt the client's original message or disconnect handling.
+    }
+  }
+  private finishObserved(requestId: string, outcome: RequestOutcome) {
+    const observer = this.observed.get(requestId);
+    if (!observer) return;
+    this.observed.delete(requestId);
+    this.notifyFinal(observer.callback, outcome);
   }
   private upsert(session: Session) {
     this.update({
@@ -704,9 +728,21 @@ export class ProxyClient {
     if (!result) throw new Error('服务没有返回数据。');
     return result as Extract<ServerMessage, { type: Replies[T] }>;
   }
-  async request(command: NewCommand): Promise<Response> {
-    if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
-      throw new Error('服务未连接。');
+  async request(
+    command: NewCommand,
+    onFinal?: (outcome: RequestOutcome) => void,
+  ): Promise<Response> {
+    const socket = this.socket;
+    const failure =
+      this.state.status !== 'connected' || socket?.readyState !== WebSocket.OPEN
+        ? new Error('服务未连接。')
+        : onFinal && this.observed.size >= 32
+          ? new Error('等待确认的请求过多，请断开后重新连接。')
+          : null;
+    if (failure) {
+      if (onFinal) this.notifyFinal(onFinal, failure);
+      throw failure;
+    }
     const requestId = crypto.randomUUID();
     return new Promise<Response>((resolve, reject) => {
       const timer = setTimeout(
@@ -721,7 +757,15 @@ export class ProxyClient {
           : 10000,
       );
       this.pending.set(requestId, { resolve, reject, timer, type: command.type });
-      this.socket!.send(JSON.stringify({ ...command, requestId }));
+      if (onFinal) this.observed.set(requestId, { callback: onFinal, type: command.type });
+      try {
+        socket!.send(JSON.stringify({ ...command, requestId }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        this.finishObserved(requestId, error instanceof Error ? error : new Error(String(error)));
+        reject(error);
+      }
     });
   }
 }

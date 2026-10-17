@@ -33,11 +33,19 @@ export function AddProjectDialog({
         }}
       >
         <label>
-          本机项目目录
+          {window.desktop?.remote ? '桌面客户端上的项目目录' : '本机项目目录'}
           <input
             value={path}
             onChange={(event) => setPath(event.target.value)}
-            placeholder={isMac ? '/Users/me/projects/my-project' : 'D:\\projects\\my-project'}
+            placeholder={
+              window.desktop?.remote
+                ? window.desktop.platform === 'win32'
+                  ? 'D:\\projects\\my-project'
+                  : '/home/me/projects/my-project'
+                : isMac
+                  ? '/Users/me/projects/my-project'
+                  : 'D:\\projects\\my-project'
+            }
             maxLength={2048}
             required
             spellCheck={false}

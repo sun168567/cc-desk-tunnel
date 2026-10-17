@@ -1,6 +1,41 @@
 const { contextBridge, ipcRenderer, webFrame, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   dev: process.argv.includes('--cc-desk-tunnel-dev'),
+  remoteStatus: () => ipcRenderer.invoke('remote:status'),
+  openRemote: () => ipcRenderer.invoke('remote:open'),
+  configureRemote: (values) => ipcRenderer.invoke('remote:configure', values),
+  resetRemotePairing: () => ipcRenderer.invoke('remote:reset-pairing'),
+  revokeRemoteSession: (id) => ipcRenderer.invoke('remote:revoke-session', id),
+  onRemoteSessionsChanged: (callback) => {
+    const listener = (_event, sessions) => callback(sessions);
+    ipcRenderer.on('remote:sessions-changed', listener);
+    return () => ipcRenderer.removeListener('remote:sessions-changed', listener);
+  },
+  onRemoteEnabledChanged: (callback) => {
+    const listener = (_event, enabled) => callback(enabled);
+    ipcRenderer.on('remote:enabled-changed', listener);
+    callback(ipcRenderer.sendSync('remote:enabled'));
+    return () => ipcRenderer.removeListener('remote:enabled-changed', listener);
+  },
+  onRemoteRequest: (methods, callback) => {
+    const listener = (_event, request) => {
+      if (!methods.includes(request.method)) return;
+      void Promise.resolve()
+        .then(() => callback(request))
+        .then(
+          (result) => ipcRenderer.send('remote:response', { id: request.id, ok: true, result }),
+          (error) =>
+            ipcRenderer.send('remote:response', {
+              id: request.id,
+              ok: false,
+              error: error instanceof Error ? error.message : '桌面操作失败。',
+            }),
+        );
+    };
+    ipcRenderer.on('remote:request', listener);
+    return () => ipcRenderer.removeListener('remote:request', listener);
+  },
+  publishRemoteEvent: (event) => ipcRenderer.send('remote:event', event),
   platform: process.platform,
   // Read once, before the page draws: see `boot` in main.cjs.
   boot: ipcRenderer.sendSync('boot'),
@@ -39,6 +74,9 @@ contextBridge.exposeInMainWorld('desktop', {
   saveDrafts: (drafts) => ipcRenderer.invoke('drafts:save', drafts),
   loadSchedules: (initial) => ipcRenderer.invoke('schedules:load', initial),
   saveSchedules: (text) => ipcRenderer.invoke('schedules:save', text),
+  readRemoteSchedules: () => ipcRenderer.invoke('remote:schedules:read'),
+  saveRemoteSchedules: (text, revision) =>
+    ipcRenderer.invoke('remote:schedules:save', text, revision),
   onSchedulesChanged: (callback) => {
     const listener = (_event, text) => callback(text);
     ipcRenderer.on('schedules:changed', listener);

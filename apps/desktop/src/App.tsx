@@ -41,13 +41,16 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import AccountPanel from './AccountPanel.tsx';
 import { ProxyClient, RequestInterruptedError } from './client.ts';
+import { RemoteClient } from './remote-client.ts';
+import { useRemoteClientRequests } from './remote-client-hook.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { isHere, thisDevice } from './device.ts';
 import { isMac, selfUpdating } from './platform.ts';
 import { useDrafts } from './drafts.ts';
 import SchedulePanel from './SchedulePanel.tsx';
-import { taskMessage, useSchedules } from './schedules.ts';
+import { taskMessage } from './schedules.ts';
+import { useRemoteScheduleRequests, useWorkbenchSchedules } from './browser-schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
 import LoginPage from './LoginPage.tsx';
@@ -113,7 +116,9 @@ function savedProjects(value: unknown = shared('projects')): string[] {
 
 // Owns the connection, the selection and every request; the components below render and report user intent.
 export function App() {
-  const [client] = useState(() => new ProxyClient());
+  const [client] = useState(() =>
+    window.desktop?.remote ? new RemoteClient() : new ProxyClient(),
+  );
   const [clock] = useState(() => ({ now: client.serviceNow, activityAt: client.activityAt }));
   // The version whose notes are shown, over whichever page is up.
   const [notes, setNotes] = useState<string | null>(null);
@@ -175,7 +180,21 @@ export function App() {
   useEffect(() => {
     void window.desktop?.version().then(setVersion);
   }, []);
-  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
+  const [terminalSessionId, updateTerminalSessionId] = useState<string | null>(null);
+  const localTerminal = useRef<string | null>(null);
+  const remoteTerminalProblem = useRemoteClientRequests(client, () => localTerminal.current);
+  const setTerminalSessionId = useCallback(
+    (id: string | null) => {
+      const problem = id && remoteTerminalProblem(id);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      localTerminal.current = id;
+      updateTerminalSessionId(id);
+    },
+    [remoteTerminalProblem],
+  );
   const closeTerminal = useCallback(() => setTerminalSessionId(null), []);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -207,9 +226,14 @@ export function App() {
     const folders: string[] = JSON.parse(unplaced);
     if (!window.desktop || !folders.length) return;
     let current = true;
-    void window.desktop.foldersExist(folders).then((found) => {
-      if (current) setAbsent(new Set(folders.filter((_, index) => !found[index]).map(pathKey)));
-    });
+    void window.desktop
+      .foldersExist(folders)
+      .then((found) => {
+        if (current) setAbsent(new Set(folders.filter((_, index) => !found[index]).map(pathKey)));
+      })
+      .catch(() => {
+        // A temporarily unavailable Web transport does not prove that the host's folders are absent.
+      });
     return () => {
       current = false;
     };
@@ -476,9 +500,10 @@ export function App() {
       }),
     [],
   );
-  // Each session's native state is read once when it is first shown idle.
+  // The desktop owns automatic native-state refreshes; browser views consume its shared state.
   useEffect(() => {
     if (
+      window.desktop?.remote ||
       !nativeMode ||
       !selected ||
       !connected ||
@@ -492,10 +517,12 @@ export function App() {
     void refreshStatus(selected.id);
   }, [nativeMode, selected?.id, connected, history?.loading, selected?.activeRun, anyTerminal]);
   useEffect(() => {
-    if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
+    if (!window.desktop?.remote && nativeMode && connected)
+      void client.request({ type: 'account.status' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
   useEffect(() => {
     if (
+      window.desktop?.remote ||
       !accountOpen ||
       !nativeMode ||
       !connected ||
@@ -565,6 +592,14 @@ export function App() {
     });
   }
   function disconnect() {
+    if (window.desktop?.remote) {
+      void fetch('/api/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }).finally(() => location.reload());
+      return;
+    }
     client.disconnect();
     setForm((current) => (current.remember ? current : { ...current, token: '' }));
     void window.desktop?.disconnectProxy();
@@ -644,7 +679,7 @@ export function App() {
       if (path) setProjects((value) => withProject(value, path));
     });
   }
-  // The desktop gives a session without a project its own directory; a browser has none to offer and reuses a project.
+  // The desktop host gives ordinary sessions their own directories; the hostless development browser reuses a project.
   async function newSession() {
     if (window.desktop) {
       await act(async () => {
@@ -669,7 +704,7 @@ export function App() {
     place.page === 'chat' ? client.state.selectedId : null,
   );
   useEffect(() => window.desktop?.onNotifyClicked((sessionId) => sessionId && show(sessionId)));
-  const schedules = useSchedules(
+  const schedules = useWorkbenchSchedules(
     async (task, due) => {
       const { status, sessions, selectedId, device } = client.state;
       if (
@@ -722,6 +757,7 @@ export function App() {
         body: `${task.name}：${outcome.text}`,
       }),
   );
+  useRemoteScheduleRequests(schedules);
   // Where a session of another computer is to be on this one; null when the user gives none.
   async function placeHere(session: Session) {
     const path = window.desktop
@@ -922,7 +958,11 @@ export function App() {
       ...(window.desktop
         ? [
             {
-              label: isMac ? '在访达中打开' : '在资源管理器中打开',
+              label: window.desktop.remote
+                ? '显示项目路径'
+                : isMac
+                  ? '在访达中打开'
+                  : '在资源管理器中打开',
               icon: <FolderOpen />,
               separated: true,
               run: () => {
@@ -1126,7 +1166,7 @@ export function App() {
           checked: place.page === 'settings',
           run: () => open('settings'),
         },
-        ...(window.desktop
+        ...(window.desktop && !window.desktop.remote
           ? [
               {
                 label: '放大',
@@ -1178,9 +1218,9 @@ export function App() {
         place.page === 'chat' &&
         !terminalSessionId &&
         (() => setFindRequest((value) => value + 1)),
-      zoomIn: window.desktop && (() => window.desktop!.zoom(1)),
-      zoomOut: window.desktop && (() => window.desktop!.zoom(-1)),
-      zoomReset: window.desktop && (() => window.desktop!.zoom(0)),
+      zoomIn: window.desktop && !window.desktop.remote && (() => window.desktop!.zoom(1)),
+      zoomOut: window.desktop && !window.desktop.remote && (() => window.desktop!.zoom(-1)),
+      zoomReset: window.desktop && !window.desktop.remote && (() => window.desktop!.zoom(0)),
     };
     const act = run[action];
     if (!act) return;
@@ -1220,6 +1260,16 @@ export function App() {
         />
         {notesDialog}
       </div>
+    ) : window.desktop?.remote ? (
+      <main className="login-page">
+        <div className="login-content">
+          <h1>连接桌面客户端的工作台</h1>
+          <p role="status">{currentError || '正在连接桌面客户端的执行后台…'}</p>
+          <button className="button" onClick={() => location.reload()}>
+            重新连接
+          </button>
+        </div>
+      </main>
     ) : (
       <>
         {notesDialog}

@@ -4,6 +4,30 @@ declare global {
     desktop?: {
       // Run from the source tree, not installed: the login page then also offers the simulation service.
       dev: boolean;
+      remote?: boolean;
+      remoteStatus?: () => Promise<RemoteStatus>;
+      resetRemotePairing?: () => Promise<RemoteStatus>;
+      revokeRemoteSession?: (id: string) => Promise<RemoteStatus>;
+      onRemoteSessionsChanged?: (
+        callback: (sessions: RemoteBrowserSession[]) => void,
+      ) => () => void;
+      onRemoteEnabledChanged?: (callback: (enabled: boolean) => void) => () => void;
+      onRemoteRequest?: (
+        methods: string[],
+        callback: (request: {
+          id: string;
+          viewId?: string;
+          method: string;
+          args: unknown[];
+        }) => unknown | Promise<unknown>,
+      ) => () => void;
+      publishRemoteEvent?: (event: { viewId?: string; message: unknown }) => void;
+      openRemote?: () => Promise<void>;
+      configureRemote?: (values: {
+        enabled: boolean;
+        lan: boolean;
+        port: number;
+      }) => Promise<RemoteStatus>;
       platform: 'win32' | 'darwin' | 'linux';
       // Which of this computer's connections the window is ('' the first), and what they all share.
       boot: { connection: string; shared: import('./shared.ts').Shared };
@@ -28,6 +52,7 @@ declare global {
       foldersExist: (folders: string[]) => Promise<boolean[]>;
       // Files to mention in a message; the paths of the ones chosen.
       chooseFiles: () => Promise<string[]>;
+      uploadFile?: (file: File) => Promise<string>;
       pathForFile: (file: File) => string;
       // Asks where to save and writes the text there; false when the dialog was cancelled.
       saveFile: (name: string, text: string) => Promise<boolean>;
@@ -51,6 +76,10 @@ declare global {
       saveDrafts: (drafts: Record<string, string>) => Promise<void>;
       loadSchedules: (initial: string) => Promise<{ path: string; text: string }>;
       saveSchedules: (text: string) => Promise<void>;
+      readRemoteSchedules?: () => Promise<{ path: string; text: string; revision: string }>;
+      saveRemoteSchedules?: (text: string, revision: string) => Promise<void>;
+      scheduleState?: () => Promise<import('./browser-schedules.ts').ScheduleSnapshot | null>;
+      runScheduleNow?: (taskId: string) => Promise<void>;
       onSchedulesChanged: (callback: (text: string) => void) => () => void;
       windowSettings: () => Promise<{ closeToTray: boolean }>;
       setWindowSettings: (values: { closeToTray: boolean }) => Promise<void>;
@@ -103,3 +132,17 @@ declare global {
     };
   }
 }
+export type RemoteStatus = {
+  enabled: boolean;
+  lan: boolean;
+  port: number;
+  url: string | null;
+  token: string | null;
+  sessions: RemoteBrowserSession[];
+};
+export type RemoteBrowserSession = {
+  id: string;
+  label: string;
+  createdAt: number;
+  expiresAt: number;
+};

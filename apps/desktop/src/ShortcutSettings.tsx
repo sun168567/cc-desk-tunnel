@@ -19,7 +19,9 @@ export default function ShortcutSettings() {
     setRecording(null);
     setFailure(null);
   };
-  const listed = actions.filter((action) => !action.desktop || window.desktop);
+  const listed = actions.filter(
+    (action) => !action.desktop || (window.desktop && !window.desktop.remote),
+  );
   return (
     <section className="page" aria-label="快捷键">
       <div className="page-body">

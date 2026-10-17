@@ -60,32 +60,35 @@ export async function stageDesktop(root, app, { description, files = [], depende
     root: join(root, 'apps/desktop'),
     build: { outDir: join(app, 'dist'), emptyOutDir: true },
   });
-  await viteBuild({
-    configFile: false,
-    root,
-    // A package is for one system, the one it is built on. With that written into the bridge, what it would
-    // only do on another system falls out of the bundle: the Windows package holds nothing of the SSH
-    // service of macOS and Linux, and theirs nothing of the one of Windows.
-    define: { 'process.platform': JSON.stringify(process.platform) },
-    ssr: { noExternal: true },
-    build: {
-      ssr: true,
-      target: 'node24',
-      outDir: join(app, 'electron'),
-      emptyOutDir: true,
-      rolldownOptions: {
-        input: join(root, 'apps/desktop/electron/proxy-bridge.mjs'),
-        external: [
-          ...builtinModules,
-          ...builtinModules.map((name) => `node:${name}`),
-          'bufferutil',
-          'utf-8-validate',
-          ...dependencies,
-        ],
-        output: { format: 'es', entryFileNames: 'proxy-bridge.mjs', codeSplitting: false },
+  // Main's optional Web control runtime imports ws and the protocol as well. Bundle both entrypoints;
+  // copying the Web modules alone would work in this checkout but fail in an installed application.
+  for (const [index, entry] of ['proxy-bridge.mjs', 'desktop-web.mjs'].entries())
+    await viteBuild({
+      configFile: false,
+      root,
+      // A package is for one system, the one it is built on. With that written into the bridge, what it would
+      // only do on another system falls out of the bundle: the Windows package holds nothing of the SSH
+      // service of macOS and Linux, and theirs nothing of the one of Windows.
+      define: { 'process.platform': JSON.stringify(process.platform) },
+      ssr: { noExternal: true },
+      build: {
+        ssr: true,
+        target: 'node24',
+        outDir: join(app, 'electron'),
+        emptyOutDir: index === 0,
+        rolldownOptions: {
+          input: join(root, 'apps/desktop/electron', entry),
+          external: [
+            ...builtinModules,
+            ...builtinModules.map((name) => `node:${name}`),
+            'bufferutil',
+            'utf-8-validate',
+            ...dependencies,
+          ],
+          output: { format: 'es', entryFileNames: entry, codeSplitting: false },
+        },
       },
-    },
-  });
+    });
   // All CommonJS modules ship as written, including helpers required by main/preload.
   // The ESM bridge and its dependencies are already in the bundle above; the release download needs only Node.
   const commonjs = readdirSync(join(root, 'apps/desktop/electron')).filter((file) =>
@@ -94,12 +97,17 @@ export async function stageDesktop(root, app, { description, files = [], depende
   for (const file of [...commonjs, 'release-download.mjs', 'icon.png', ...files])
     cpSync(join(root, 'apps/desktop/electron', file), join(app, 'electron', file));
   // A file the main process loads by path is only missed when its feature is used, so each is looked for here.
-  for (const file of commonjs)
-    for (const [, name] of readFileSync(join(app, 'electron', file), 'utf8').matchAll(
-      /path\.join\(__dirname, '([^']+)'\)/g,
-    ))
+  for (const file of commonjs) {
+    const source = readFileSync(join(app, 'electron', file), 'utf8');
+    const references = [
+      ...source.matchAll(/path\.join\(__dirname, '([^']+)'\)/g),
+      ...source.matchAll(/import\(['"]\.\/([^'"]+)['"]\)/g),
+      ...source.matchAll(/require\(['"]\.\/([^'"]+)['"]\)/g),
+    ];
+    for (const [, name] of references)
       if (!name.startsWith('../vendor') && !existsSync(join(app, 'electron', name)))
         throw new Error(`${file} loads ${name}, which is not in the package.`);
+  }
   const versions = Object.fromEntries(
     dependencies.map((name) => [name, copyDependency(root, app, name)]),
   );

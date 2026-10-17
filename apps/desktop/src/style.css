@@ -1,4 +1,83 @@
 /* Every colour, corner and shadow the interface uses is named here. */
+.remote-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.remote-control input {
+  max-width: 100%;
+  min-width: 0;
+}
+.remote-control .setting-number {
+  width: 110px;
+  flex-shrink: 0;
+  text-align: center;
+  appearance: textfield;
+}
+.remote-control .setting-number::-webkit-inner-spin-button,
+.remote-control .setting-number::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.remote-control label small {
+  display: block;
+  margin-top: 4px;
+}
+.remote-session-row > .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.remote-address {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+.remote-address-text {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.remote-control .remote-pairing-row {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.remote-pairing-row > span:first-child {
+  flex-shrink: 0;
+}
+.remote-control .remote-pairing {
+  flex: 1;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.remote-pairing > .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.remote-pairing-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.remote-pairing-code {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  user-select: text;
+  text-align: right;
+}
+@media (max-width: 700px) {
+  .remote-control .setting-row:not(.remote-pairing-row) {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .remote-control .setting-actions:not(.remote-pairing) {
+    flex-wrap: wrap;
+  }
+}
 :root {
   --chrome: #edf0f6;
   --side: #f6f8fb;

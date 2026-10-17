@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CalendarClock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import type { Effort, NativeCapabilities, Session } from '@cc-desk-tunnel/protocol';
 import { folderName } from './paths.ts';
-import { describeSchedule, parseTasks, stamp } from './schedules.ts';
-import type { Schedule, Schedules, Task } from './schedules.ts';
+import { parseTasks } from './schedules.ts';
+import type { Schedule, Task } from './schedules.ts';
+import { scheduleDescription, scheduleNextLabel, scheduleStamp } from './browser-schedules.ts';
+import type { WorkbenchSchedules } from './browser-schedules.ts';
 import { IconButton } from './ui.tsx';
 
 // The editor's fields: every kind of rule and target keeps its own input, so switching kinds loses nothing.
@@ -28,7 +30,13 @@ const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 // Where Anthropic says what a subscription sign-in is meant for.
 const usagePolicy = 'https://code.claude.com/docs/en/legal-and-compliance';
 
-function formOf(task: Task | null, sessions: Session[], projects: string[]): Form {
+function formOf(
+  task: Task | null,
+  sessions: Session[],
+  projects: string[],
+  timeZone?: string,
+  remote = false,
+): Form {
   const rule = task?.schedule;
   return {
     id: task?.id ?? crypto.randomUUID(),
@@ -36,7 +44,12 @@ function formOf(task: Task | null, sessions: Session[], projects: string[]): For
     name: task?.name ?? '',
     prompt: task?.prompt ?? '',
     kind: rule?.type ?? 'daily',
-    at: rule?.type === 'once' ? rule.at : stamp(Date.now() + 3_600_000).replace(' ', 'T'),
+    at:
+      rule?.type === 'once'
+        ? rule.at
+        : remote && !timeZone
+          ? ''
+          : scheduleStamp(Date.now() + 3_600_000, timeZone).replace(' ', 'T'),
     time: rule?.type === 'daily' || rule?.type === 'weekly' ? rule.time : '09:00',
     days: rule?.type === 'weekly' ? rule.days : [1, 2, 3, 4, 5],
     minutes: String(rule?.type === 'interval' ? rule.minutes : 60),
@@ -79,6 +92,10 @@ function Editor({
   sessions,
   projects,
   capabilities,
+  timeZone,
+  remote,
+  revision,
+  editGeneration,
   save,
   cancel,
 }: {
@@ -86,12 +103,34 @@ function Editor({
   sessions: Session[];
   projects: string[];
   capabilities: NativeCapabilities | null;
-  save: (task: Task) => Promise<void>;
+  timeZone?: string;
+  remote: boolean;
+  revision?: string | null;
+  editGeneration?: number;
+  save: (task: Task, revision?: string | null, editGeneration?: number) => Promise<void>;
   cancel: () => void;
 }) {
-  const [form, setForm] = useState(() => formOf(task, sessions, projects));
+  const [form, setForm] = useState(() => formOf(task, sessions, projects, timeZone, remote));
   const [failure, setFailure] = useState<string | null>(null);
+  // Polling may refresh the list while this form stays open. Its draft still belongs to the version
+  // it was opened from; assigning the latest revision here would silently overwrite another edit.
+  // Keep the sharing generation too, including drafts opened before a complete Web on/off cycle.
+  const draft = useRef({ revision, editGeneration });
+  const awaitingTimeZone = useRef(remote && !timeZone && task?.schedule.type !== 'once');
+  const timeEdited = useRef(false);
+  useEffect(() => {
+    if (!awaitingTimeZone.current || !timeZone) return;
+    awaitingTimeZone.current = false;
+    // A late host timezone only supplies an untouched default; it must never replace the draft.
+    if (!timeEdited.current)
+      setForm((current) =>
+        current.at
+          ? current
+          : { ...current, at: scheduleStamp(Date.now() + 3_600_000, timeZone).replace(' ', 'T') },
+      );
+  }, [timeZone]);
   const change = (values: Partial<Form>) => {
+    if (values.at !== undefined) timeEdited.current = true;
     setFailure(null);
     setForm((current) => ({ ...current, ...values }));
   };
@@ -107,7 +146,9 @@ function Editor({
         // The same check the file goes through, so the window cannot write a task it would then refuse.
         const checked = parseTasks(JSON.stringify({ tasks: [taskOf(form)] }));
         if (!checked.tasks[0]) return setFailure(checked.problems[0] ?? '任务内容不完整。');
-        save(checked.tasks[0]).catch((error: Error) => setFailure(error.message));
+        save(checked.tasks[0], draft.current.revision, draft.current.editGeneration).catch(
+          (error: Error) => setFailure(error.message),
+        );
       }}
     >
       <label>
@@ -299,7 +340,7 @@ function Editor({
         <button type="button" className="button" onClick={cancel}>
           取消
         </button>
-        <button type="submit" className="button primary">
+        <button type="submit" className="button primary" disabled={remote && !timeZone}>
           保存任务
         </button>
       </div>
@@ -314,7 +355,7 @@ export default function SchedulePanel({
   projects,
   capabilities,
 }: {
-  schedules: Schedules;
+  schedules: WorkbenchSchedules;
   sessions: Session[];
   projects: string[];
   capabilities: NativeCapabilities | null;
@@ -324,8 +365,24 @@ export default function SchedulePanel({
   const [removing, setRemoving] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const { tasks } = schedules;
+  const refresh = schedules.refresh;
+  useEffect(() => {
+    if (!refresh) return;
+    const read = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    read();
+    const timer = setInterval(read, 3000);
+    document.addEventListener('visibilitychange', read);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', read);
+    };
+  }, [refresh]);
   const store = (next: Task[]) =>
-    schedules.save(next).catch((error: Error) => setFailure(error.message));
+    schedules
+      .save(next, schedules.revision, schedules.editGeneration)
+      .catch((error: Error) => setFailure(error.message));
   const where = (task: Task) => {
     if (task.target.type === 'new') return `新会话 · ${folderName(task.target.projectPath)}`;
     const { sessionId } = task.target;
@@ -367,16 +424,21 @@ export default function SchedulePanel({
                 <span>
                   <strong>{task.name}</strong>
                   <small>
-                    {describeSchedule(task.schedule)} · {where(task)}
+                    {scheduleDescription(task.schedule, schedules.timeZone, schedules.remote)} ·{' '}
+                    {where(task)}
                   </small>
                   <small>
-                    {task.enabled ? (next ? `下次 ${stamp(next)}` : '不会再运行') : '已停用'}
-                    {last && ` · 上次 ${stamp(last.at)} ${last.text}`}
+                    {scheduleNextLabel(task, next, schedules.timeZone)}
+                    {last && ` · 上次 ${scheduleStamp(last.at, schedules.timeZone)} ${last.text}`}
                   </small>
                   <span className="schedule-row-actions">
                     <IconButton
                       title={`立即运行 ${task.name}`}
-                      onClick={() => void schedules.runNow(task)}
+                      onClick={() =>
+                        void schedules
+                          .runNow(task)
+                          .catch((error: Error) => setFailure(error.message))
+                      }
                     >
                       <Play />
                     </IconButton>
@@ -409,6 +471,13 @@ export default function SchedulePanel({
       </aside>
       <main className="workspace">
         <section className="page" aria-label="定时任务">
+          {schedules.remote && (
+            <p className="page-notes muted" role="status">
+              {schedules.timeZone
+                ? `按桌面客户端时区 ${schedules.timeZone} 显示和编辑时间；自动任务仅由桌面客户端触发。`
+                : '等待桌面客户端的调度状态和时区；浏览器不会自行推算或触发自动任务。'}
+            </p>
+          )}
           {editing !== undefined ? (
             <div className="page-body">
               <h1 className="page-title">{editing ? '编辑任务' : '新建任务'}</h1>
@@ -419,12 +488,18 @@ export default function SchedulePanel({
                   sessions={sessions}
                   projects={projects}
                   capabilities={capabilities}
+                  timeZone={schedules.timeZone}
+                  remote={schedules.remote}
+                  revision={schedules.revision}
+                  editGeneration={schedules.editGeneration}
                   cancel={() => setEditing(undefined)}
-                  save={async (task) => {
+                  save={async (task, revision, editGeneration) => {
                     await schedules.save(
                       tasks.some((item) => item.id === task.id)
                         ? tasks.map((item) => (item.id === task.id ? task : item))
                         : [...tasks, task],
+                      revision,
+                      editGeneration,
                     );
                     setEditing(undefined);
                   }}
@@ -437,8 +512,8 @@ export default function SchedulePanel({
                 <CalendarClock />
                 <h2>安排任务</h2>
                 <p className="muted">
-                  到点时由这台电脑上的客户端向会话发送一条带“定时任务”标签的消息，让 Claude Code
-                  替你处理重复的事。
+                  到点时由{schedules.remote ? '桌面客户端所在电脑' : '这台电脑'}
+                  上的客户端向会话发送一条带“定时任务”标签的消息，让 Claude Code 替你处理重复的事。
                 </p>
                 <button type="button" className="button primary" onClick={() => setEditing(null)}>
                   新建任务

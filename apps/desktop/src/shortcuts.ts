@@ -1,5 +1,11 @@
-import { isMac } from './platform.ts';
+import { isMac as desktopIsMac } from './platform.ts';
 import type { Prefs } from './prefs.ts';
+
+// Browser shortcuts follow the keyboard in front of the user, not the remote execution host.
+const isMac =
+  typeof window !== 'undefined' && (!window.desktop || window.desktop.remote)
+    ? typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+    : desktopIsMac;
 
 // The window's keyboard shortcuts. They act only on key presses that reach this window while it is in front —
 // nothing is registered with the system — and the user can change each one or turn them all off.

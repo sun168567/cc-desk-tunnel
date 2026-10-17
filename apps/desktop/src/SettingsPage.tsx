@@ -24,6 +24,7 @@ import SettingsPanel from './SettingsPanel.tsx';
 import { useShared } from './shared.ts';
 import type { ListedConnection } from './shared.ts';
 import ShortcutSettings from './ShortcutSettings.tsx';
+import RemoteControl from './RemoteControl.tsx';
 import { IconButton, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
@@ -51,7 +52,7 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     group: '客户端',
     icon: SlidersHorizontal,
     words:
-      '额度 输入框 托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 会话栏 用量 首字 速度 缓存 多开 多个连接 窗口 服务端',
+      '额度 输入框 托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 会话栏 用量 首字 速度 缓存 多开 多个连接 窗口 服务端 Web 远程控制 配对 端口 局域网',
   },
   {
     id: 'notifications',
@@ -446,6 +447,23 @@ function General({
 }) {
   const [closeToTray, setCloseToTray] = useState<boolean | null>(null);
   const { connection, bypassPermissions, quota } = usePrefs();
+  const quotaSettings = (
+    <>
+      <h2 className="page-heading">输入框</h2>
+      <div className="card">
+        <Row
+          title="在输入框旁显示额度"
+          detail="5 小时和每周额度的已用比例，取自最近一次读数；点它打开“账号与额度”"
+        >
+          <Switch
+            label="在输入框旁显示额度"
+            checked={quota}
+            onChange={(value) => setPrefs((prefs) => ({ ...prefs, quota: value }))}
+          />
+        </Row>
+      </div>
+    </>
+  );
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
   }, []);
@@ -454,7 +472,7 @@ function General({
       <div className="page-body">
         <h1 className="page-title">常规</h1>
         {!window.desktop && <p className="muted">窗口、会话和连接的设置只在桌面客户端里有。</p>}
-        {window.desktop && (
+        {window.desktop && !window.desktop.remote && (
           <>
             <h2 className="page-heading">窗口</h2>
             <div className="card">
@@ -490,19 +508,7 @@ function General({
                 </span>
               </Row>
             </div>
-            <h2 className="page-heading">输入框</h2>
-            <div className="card">
-              <Row
-                title="在输入框旁显示额度"
-                detail="5 小时和每周额度的已用比例，取自最近一次读数；点它打开“账号与额度”"
-              >
-                <Switch
-                  label="在输入框旁显示额度"
-                  checked={quota}
-                  onChange={(value) => setPrefs((prefs) => ({ ...prefs, quota: value }))}
-                />
-              </Row>
-            </div>
+            {quotaSettings}
             <h2 className="page-heading">连接</h2>
             <div className="card">
               <Row title="记住凭据" detail="服务凭据经当前系统账户加密后保存在本机">
@@ -558,6 +564,7 @@ function General({
             </div>
           </>
         )}
+        {window.desktop?.remote && quotaSettings}
         <h2 className="page-heading">审批</h2>
         <div className="card">
           <Row
@@ -574,6 +581,7 @@ function General({
         <TranscriptViewSettings />
         <ReplyStats />
         <SessionBarSettings />
+        <RemoteControl />
       </div>
     </section>
   );
@@ -581,6 +589,7 @@ function General({
 
 function Notices() {
   const { notify } = usePrefs();
+  const remote = window.desktop?.remote;
   const set = (values: Partial<typeof notify>) =>
     setPrefs((prefs) => ({ ...prefs, notify: { ...prefs.notify, ...values } }));
   return (
@@ -588,24 +597,31 @@ function Notices() {
       <div className="page-body">
         <h1 className="page-title">通知</h1>
         <p className="muted">
-          窗口收在托盘或不在前台时，用系统通知提醒需要你知道的事；点通知回到对应的会话。正在看的会话不会重复提醒。
+          {remote
+            ? '任务提醒会显示在页面的通知列表中。正在看的会话不会重复提醒。'
+            : '窗口收在托盘或不在前台时，用系统通知提醒需要你知道的事；点通知回到对应的会话。正在看的会话不会重复提醒。'}
         </p>
         <div className="card">
-          <Row title="开启通知" detail="关闭后既不弹出系统通知，也不记入通知列表">
+          <Row
+            title="开启通知"
+            detail={remote ? '关闭后不再记入通知列表' : '关闭后既不弹出系统通知，也不记入通知列表'}
+          >
             <Switch
               label="开启通知"
               checked={notify.enabled}
               onChange={(enabled) => set({ enabled })}
             />
           </Row>
-          <Row title="提示音" detail="弹出系统通知时播放系统的通知声音">
-            <Switch
-              label="提示音"
-              checked={notify.sound}
-              disabled={!notify.enabled}
-              onChange={(sound) => set({ sound })}
-            />
-          </Row>
+          {!remote && (
+            <Row title="提示音" detail="弹出系统通知时播放系统的通知声音">
+              <Switch
+                label="提示音"
+                checked={notify.sound}
+                disabled={!notify.enabled}
+                onChange={(sound) => set({ sound })}
+              />
+            </Row>
+          )}
         </div>
         <h2 className="page-heading">提醒哪些事</h2>
         <div className="card">
@@ -620,7 +636,7 @@ function Notices() {
             </Row>
           ))}
         </div>
-        {window.desktop && (
+        {window.desktop && !remote && (
           <button
             type="button"
             className="button"
@@ -700,7 +716,7 @@ function About({
             </span>
           </Row>
         </div>
-        {window.desktop && (
+        {window.desktop && !window.desktop.remote && (
           <>
             <h2 className="page-heading">排查</h2>
             <div className="card">

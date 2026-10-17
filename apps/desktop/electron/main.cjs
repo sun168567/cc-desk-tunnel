@@ -31,14 +31,21 @@ const { gitBranch } = require('./git-branch.cjs');
 const { asOnDisk } = require('./disk-path.cjs');
 const { openLog } = require('./client-log.cjs');
 const { hostname, tmpdir } = require('node:os');
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { mkdir, readdir, rmdir, unlink } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 let bridge;
+let webServer;
+let webAuthentication;
+let webConfiguration;
+let webControl;
+let webRequests;
+const handlers = new Map();
 // The last connection, kept for its installer download after a service refused this client's version.
 let lastBridge;
 let connectionGeneration = 0;
+let webConfigurationTasks = Promise.resolve();
 const connections = require('./connections.cjs');
 // See connections.cjs. The profile is chosen before anything is read from it, the instance lock included:
 // each connection is then a single instance of its own.
@@ -107,6 +114,7 @@ function keepAwake(on) {
 
 // These channels answer only the application's own page.
 function handle(channel, listener) {
+  handlers.set(channel, listener);
   ipcMain.handle(channel, (event, ...args) => {
     if (!event.senderFrame.url.startsWith('file://')) throw new Error('Untrusted renderer');
     return listener(event, ...args);
@@ -424,6 +432,30 @@ handle('schedules:save', (_event, text) => {
   schedules = String(text);
   replaceFile(schedulesPath(), schedules);
 });
+// Web edits compare the file they displayed, not the renderer's possibly older React state. Keep the
+// comparison and replacement in this one synchronous handler; ordinary desktop saves stay unchanged.
+const scheduleRevision = (text) => createHash('sha256').update(text).digest('hex');
+handle('remote:schedules:read', () => {
+  if (!webServer) throw new Error('Web 入口已关闭。');
+  const text = readSchedules();
+  return { path: schedulesPath(), text, revision: scheduleRevision(text) };
+});
+handle('remote:schedules:save', (_event, text, revision) => {
+  if (!webServer) throw new Error('Web 入口已关闭。');
+  const previous = readSchedules();
+  if (typeof revision !== 'string' || scheduleRevision(previous) !== revision)
+    throw new Error('定时任务已在其他页面或文件中更改。草稿已保留，请核对最新任务后重新打开编辑。');
+  // A malformed file must be repaired explicitly, never replaced by a partial browser snapshot.
+  if (
+    typeof text !== 'string' ||
+    !Array.isArray((previous.trim() ? JSON.parse(previous) : { tasks: [] })?.tasks) ||
+    !Array.isArray(JSON.parse(text)?.tasks)
+  )
+    throw new Error('定时任务配置不是有效的 tasks 数组。');
+  replaceFile(schedulesPath(), text);
+  schedules = text;
+  BrowserWindow.getAllWindows()[0]?.webContents.send('schedules:changed', text);
+});
 handle('app:version', () => app.getVersion());
 // The notes of a release as its page on GitHub has them, for a version newer than this program, whose notes
 // it cannot carry itself.
@@ -440,6 +472,7 @@ handle('release:notes', async (_event, version) => {
 handle('device:get', () => ({
   id: readComputer().deviceId ?? writeComputer({ deviceId: randomUUID() }).deviceId,
   name: hostname(),
+  ...(process.platform === 'win32' ? {} : { platform: process.platform }),
 }));
 // A connection is named in its window, on its tray icon and in its notifications once there are several.
 function label() {
@@ -638,6 +671,237 @@ ipcMain.handle('proxy:disconnect', async () => {
   await previous?.close();
 });
 
+// Only these host operations are available remotely. Never expose arbitrary IPC, login secrets or installers.
+const webOperations = new Set([
+  'folders:exist',
+  'git:branch',
+  'release:notes',
+  'workspace:roots',
+  'workspace:create',
+  'workspace:remove',
+]);
+async function webInvoke(method, args) {
+  if (!Array.isArray(args)) throw new Error('Expected argument list');
+  if (['schedules:state', 'schedules:save', 'schedules:run-now'].includes(method))
+    return requestRenderer(method, args);
+  if (webOperations.has(method)) return handlers.get(method)(null, ...args);
+  if (method === 'project:check') {
+    const directory = await asOnDisk(String(args[0]));
+    if (!path.isAbsolute(directory) || !(await stat(directory)).isDirectory())
+      throw new Error('请输入桌面客户端上已有文件夹的绝对路径。');
+    return directory;
+  }
+  if (method === 'files:upload') {
+    return require('./web-files.cjs').saveWebUpload(
+      path.join(app.getPath('userData'), 'uploads'),
+      args[0],
+      args[1],
+    );
+  }
+  throw new Error('这个操作请在桌面客户端完成。');
+}
+function validateRemoteConfiguration(values, previous = { port: 17890, lan: false }) {
+  if (!values || typeof values.enabled !== 'boolean')
+    throw new Error('Invalid remote configuration');
+  const port = Number(values.port ?? previous.port);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535)
+    throw new Error('端口范围为 1024–65535。');
+  return {
+    enabled: values.enabled,
+    port,
+    lan: values.lan === undefined ? previous.lan : values.lan === true,
+  };
+}
+function remoteConfiguration() {
+  if (!webConfiguration) {
+    try {
+      webConfiguration = validateRemoteConfiguration({
+        ...readSettings().remoteControl,
+        enabled: false,
+      });
+    } catch {
+      webConfiguration = validateRemoteConfiguration({ enabled: false });
+    }
+  }
+  return webConfiguration;
+}
+function remoteAuthentication() {
+  if (!webAuthentication) {
+    webAuthentication = require('./web-auth.cjs').createWebAuthStore({
+      filePath: path.join(app.getPath('userData'), 'remote-web', 'auth.json'),
+      safeStorage,
+    });
+    webAuthentication.subscribe(() => {
+      BrowserWindow.getAllWindows()[0]?.webContents.send(
+        'remote:sessions-changed',
+        webAuthentication.list(),
+      );
+    });
+  }
+  return webAuthentication;
+}
+function saveRemoteConfiguration(configuration) {
+  const { port, lan } = configuration;
+  require('./web-auth.cjs').atomicPrivateWrite(
+    settingsPath(),
+    JSON.stringify(
+      {
+        ...readSettings(),
+        remoteControl: { port, lan },
+      },
+      null,
+      2,
+    ),
+  );
+}
+function remoteStatus() {
+  return {
+    ...remoteConfiguration(),
+    enabled: !!webServer,
+    url: webServer ? `http://127.0.0.1:${webServer.port}` : null,
+    token: webServer ? remoteAuthentication().token : null,
+    sessions: remoteAuthentication().list(),
+  };
+}
+handle('remote:status', remoteStatus);
+handle('remote:open', async () => {
+  if (webServer)
+    await shell.openExternal(
+      `http://127.0.0.1:${webServer.port}/#pair=${encodeURIComponent(remoteAuthentication().token)}`,
+    );
+});
+function queueRemote(operation) {
+  const next = webConfigurationTasks.then(() => {
+    if (quitting) throw new Error('The application is quitting');
+    return operation();
+  });
+  webConfigurationTasks = next.catch(() => {});
+  return next;
+}
+handle('remote:configure', (_event, values) => queueRemote(() => configureRemote(values)));
+handle('remote:reset-pairing', () =>
+  queueRemote(() => {
+    // The store writes successfully before publishing the new token or revoking any live session.
+    remoteAuthentication().reset();
+    return remoteStatus();
+  }),
+);
+handle('remote:revoke-session', (_event, id) =>
+  queueRemote(() => {
+    remoteAuthentication().revokeSession(id);
+    return remoteStatus();
+  }),
+);
+function requestRenderer(method, args = [], viewId) {
+  if (!webServer && method !== 'client:detach')
+    return Promise.reject(new Error('Web 入口未开启。'));
+  webRequests ??= require('./web-requests.cjs').createWebRequests({
+    window: () => BrowserWindow.getAllWindows()[0],
+  });
+  return webRequests.invoke(method, args, viewId);
+}
+ipcMain.on('remote:enabled', (event) => {
+  event.returnValue = event.senderFrame?.url.startsWith('file://') ? !!webServer : false;
+});
+ipcMain.on('remote:response', (event, response) => {
+  if (event.senderFrame?.url.startsWith('file://')) webRequests?.reply(event.sender, response);
+});
+ipcMain.on('remote:event', (event, value) => {
+  if (webServer && event.senderFrame?.url.startsWith('file://')) webControl?.publish(value);
+});
+let remoteEnabled = false;
+function changedRemoteEnabled() {
+  const enabled = !!webServer;
+  if (enabled === remoteEnabled) return;
+  remoteEnabled = enabled;
+  BrowserWindow.getAllWindows()[0]?.webContents.send('remote:enabled-changed', enabled);
+  if (!enabled) webRequests?.cancel();
+}
+async function startRemoteListener(configuration) {
+  const { startWebServer, createWebControl } = await import('./desktop-web.mjs');
+  const started = await startWebServer({
+    host: configuration.lan ? '0.0.0.0' : '127.0.0.1',
+    port: configuration.port,
+    distDirectory: path.join(__dirname, '../dist'),
+    authStore: remoteAuthentication(),
+    // Cookies are shared across ports on one host. Each connection keeps its own stable name,
+    // so opening another connection's Web page never replaces this profile's browser login.
+    cookieName: `ccdt_web_session_${createHash('sha256').update(settingsPath()).digest('hex').slice(0, 16)}`,
+    getInfo: async () => ({
+      kind: 'desktop-web',
+      device: handlers.get('device:get')(),
+      platform: process.platform,
+      version: app.getVersion(),
+      connected: await requestRenderer('client:info').then(
+        (info) => info.connected === true,
+        () => false,
+      ),
+    }),
+    invoke: webInvoke,
+    onConnection: (socket) => {
+      webControl ??= createWebControl(requestRenderer);
+      webControl.attach(socket);
+    },
+  });
+  if (quitting) {
+    await started.close();
+    throw new Error('The application is quitting');
+  }
+  return started;
+}
+async function configureRemote(values) {
+  const previous = remoteConfiguration();
+  const configuration = validateRemoteConfiguration(values, previous);
+  const old = webServer;
+  if (!configuration.enabled) {
+    let failure;
+    try {
+      if (configuration.port !== previous.port || configuration.lan !== previous.lan)
+        saveRemoteConfiguration(configuration);
+      webConfiguration = configuration;
+    } catch (error) {
+      failure = error;
+      webConfiguration = { ...previous, enabled: false };
+    }
+    // Explicit shutdown is never held hostage by a preferences write failure.
+    webServer = null;
+    await old?.close();
+    changedRemoteEnabled();
+    if (failure) throw failure;
+    return remoteStatus();
+  }
+  if (old && configuration.port === previous.port && configuration.lan === previous.lan)
+    return remoteStatus();
+  // A different port is bound before the old listener is touched. Same-port host changes need a
+  // short rebind, so retain the complete previous configuration and restore it on any failure.
+  const rebind = old && configuration.port === previous.port;
+  if (rebind) {
+    await old.close();
+    webServer = null;
+  }
+  let candidate;
+  try {
+    candidate = await startRemoteListener(configuration);
+    saveRemoteConfiguration(configuration);
+  } catch (error) {
+    await candidate?.close();
+    if (rebind && !quitting) {
+      try {
+        webServer = await startRemoteListener(previous);
+      } catch {
+        changedRemoteEnabled();
+        throw new Error('应用失败，原端口暂未恢复；已保留原设置，请重新启用。');
+      }
+    }
+    throw error;
+  }
+  webServer = candidate;
+  webConfiguration = configuration;
+  changedRemoteEnabled();
+  if (!rebind) await old?.close();
+  return remoteStatus();
+}
+
 // Windows files notifications under this identity; the installer gives the shortcut the same one.
 if (process.platform === 'win32')
   app.setAppUserModelId(app.isPackaged ? 'io.github.ccdesktunnel.desktop' : process.execPath);
@@ -813,5 +1077,7 @@ app.on('before-quit', (event) => {
 });
 app.on('window-all-closed', () => app.quit());
 app.on('quit', () => {
+  void webServer?.close();
+  webRequests?.cancel();
   if (ownsInstance) connections.mark(base, connectionId, false);
 });
