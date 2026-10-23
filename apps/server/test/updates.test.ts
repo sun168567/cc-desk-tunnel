@@ -114,6 +114,45 @@ test('the same or an older release, or an unreachable page, offers nothing', asy
   assert.match(missing.state.detail!, /404/);
 });
 
+test('a failed check clears a previously available version', async (t) => {
+  const f = await feed(t, '99.0.0');
+  const updates = f.updates({ runtimeLevel: 1 });
+  await updates.check();
+  assert.equal(updates.state.state, 'available');
+  assert.equal(updates.state.latest, '99.0.0');
+
+  f.manifest.version = 'invalid';
+  await updates.check();
+  assert.equal(updates.state.state, 'failed');
+  assert.equal(updates.state.latest, undefined);
+  assert.equal(updates.state.detail, 'release.json 格式不符。');
+  assert.ok(updates.state.checkedAt);
+  assert.deepEqual(
+    f.states.map((state) => state.state),
+    ['checking', 'available', 'checking', 'failed'],
+  );
+});
+
+test('a failed upgrade retains its target version and reports the version still running', async (t) => {
+  const f = await feed(t, '99.0.0');
+  const updates = f.updates({ runtimeLevel: 1 });
+  await updates.check();
+  // The feed has no server archive: installation fails before any program is unpacked or executed.
+  updates.install('99.0.0');
+  for (let attempt = 0; updates.state.state !== 'failed' && attempt < 200; attempt++)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(updates.state.state, 'failed');
+  assert.equal(updates.state.latest, '99.0.0');
+  assert.equal(
+    updates.state.detail,
+    `升级没有完成，仍在运行 ${serviceVersion()}：发布中缺少 cc-desk-tunnel-server-99.0.0.tar.gz。`,
+  );
+  assert.equal(existsSync(join(f.directory, 'program', '99.0.0.new')), false);
+  assert.equal(existsSync(join(f.directory, 'program', 'current')), false);
+  assert.throws(() => updates.install('99.0.0'), /请先检查更新/);
+});
+
 test('the installer of the running version is fetched for clients and checked against the manifest', async (t) => {
   const f = await feed(t, serviceVersion());
   const updates = f.updates();

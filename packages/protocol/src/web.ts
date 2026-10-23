@@ -1,5 +1,13 @@
 import { z } from 'zod';
 import { webCertificateCommandSchemas } from './web-certificate.ts';
+import {
+  passkeyCommandSchemas,
+  passkeySchema,
+  webCredentialProofSchema,
+  webProofSchema,
+} from './passkey.ts';
+export { webProofSchema } from './passkey.ts';
+export type { WebProof } from './passkey.ts';
 
 export const webDomainSchema = z
   .string()
@@ -14,6 +22,30 @@ export const webDomainSchema = z
         value.split('.').every((part) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(part))),
     '请填写域名，不含协议、端口或路径。',
   );
+export const webPublicOriginSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .refine((value) => {
+    if (!value) return true;
+    if (!/^https:\/\/[^/?#\\\s]+\/?$/i.test(value)) return false;
+    try {
+      const url = new URL(value);
+      const host = url.hostname;
+      return (
+        !url.username &&
+        !url.password &&
+        url.port !== '0' &&
+        (webDomainSchema.safeParse(host).success ||
+          z.ipv4().safeParse(host).success ||
+          z.ipv6().safeParse(host.slice(1, -1)).success ||
+          host === 'localhost')
+      );
+    } catch {
+      return false;
+    }
+  }, '请填写有效的 HTTPS 地址，不含路径、账号或密码。')
+  .transform((value) => (value ? new URL(value).origin : ''));
 export const webPathSchema = z
   .string()
   .max(64)
@@ -22,17 +54,7 @@ export const webPathSchema = z
     (value) => !['ws', 'health', 'client', 'assets', 'api'].includes(value),
     '此路径已保留。',
   );
-export const webProofSchema = z
-  .object({
-    password: z.string().min(1).max(1024),
-    code: z
-      .string()
-      .regex(/^\d{6}$/)
-      .optional(),
-  })
-  .strict();
-export type WebProof = z.infer<typeof webProofSchema>;
-export const webLoginSchema = webProofSchema;
+export const webLoginSchema = webCredentialProofSchema;
 export const webAuthSchema = z
   .object({ type: z.literal('web.auth'), protocolVersion: z.number().int().positive() })
   .strict();
@@ -48,26 +70,32 @@ export const webStoredSettingsSchema = z
   .object({
     enabled: z.boolean(),
     domain: webDomainSchema,
+    // Existing releases saved a domain without a public port; do not invent an origin for it.
+    publicOrigin: webPublicOriginSchema.default(''),
     path: webPathSchema,
     idleMinutes: z.number().int().min(15).max(1440),
     proxyEnabled: z.boolean(),
     trustedProxies: z.array(z.union([z.ipv4(), z.ipv6()])).max(16),
   })
   .strict();
-export const webSettingsValuesSchema = webStoredSettingsSchema.partial();
+export const webSettingsValuesSchema = webStoredSettingsSchema
+  .omit({ domain: true, publicOrigin: true })
+  .extend({ publicOrigin: webPublicOriginSchema })
+  .partial();
 export const webSettingsStateSchema = z.object({
   enabled: z.boolean(),
   domain: webDomainSchema,
+  publicOrigin: webPublicOriginSchema,
   path: webPathSchema,
   idleMinutes: z.number().int().min(15).max(1440),
   proxyEnabled: z.boolean(),
   trustedProxies: z.array(z.string()),
   totpEnabled: z.boolean(),
   sessions: z.array(webSessionSchema),
+  passkeys: z.array(passkeySchema),
+  passkeyAvailable: z.boolean(),
+  passkeyUnavailableReason: z.string().optional(),
   url: z.url().optional(),
-  selfSigned: z.boolean(),
-  // The last address that sent a client address without being a trusted proxy, to help name the right one.
-  forwardedBy: z.string().optional(),
 });
 export type WebSettingsState = z.infer<typeof webSettingsStateSchema>;
 export const webTotpSetupSchema = z.object({
@@ -78,13 +106,16 @@ export const webTotpSetupSchema = z.object({
 export type WebTotpSetup = z.infer<typeof webTotpSetupSchema>;
 export const webLoginStateSchema = z.object({
   authenticated: z.boolean(),
+  passkeyAvailable: z.boolean(),
   session: webSessionSchema.optional(),
   totpEnabled: z.boolean(),
-  selfSigned: z.boolean(),
   url: z.url().optional(),
 });
 export type WebLoginState = z.infer<typeof webLoginStateSchema>;
 const request = { requestId: z.uuid() };
+export const webProxyDetectSchema = z
+  .object({ type: z.literal('web.proxy.detect'), ...request })
+  .strict();
 export const webCommandSchemas = [
   z
     .object({
@@ -122,6 +153,7 @@ export const webCommandSchemas = [
     .object({ type: z.literal('web.totp.disable'), ...request, proof: webProofSchema.optional() })
     .strict(),
   ...webCertificateCommandSchemas,
+  ...passkeyCommandSchemas,
 ] as const;
 export const webCommandSchema = z.discriminatedUnion('type', webCommandSchemas);
 export type WebCommand = z.infer<typeof webCommandSchema>;

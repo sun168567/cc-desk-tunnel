@@ -13,7 +13,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { WebCommand, WebSettingsState, WebTotpSetup } from '@cc-desk-tunnel/protocol';
 import { WebAccess, webStaticPath, type WebContext } from '../src/web-access.ts';
-import { defaultCertificate } from './fixtures/web-certificates.ts';
+import { custom, defaultCertificate } from './fixtures/web-certificates.ts';
 import { totp, totpSecret } from '../src/web-totp.ts';
 
 const password = 'test-web-service-token-' + randomUUID();
@@ -124,10 +124,7 @@ async function fixture(t: TestContext, tls = false) {
       req.end(body === undefined ? undefined : JSON.stringify(body));
     });
   const command = (value: object, custom: WebContext = context) => {
-    const reply = web.execute({ ...value, requestId: randomUUID() } as WebCommand, {
-      ...custom,
-      origin,
-    });
+    const reply = web.execute({ ...value, requestId: randomUUID() } as WebCommand, custom);
     return reply.type === 'web.settings.state' ? reply.values : reply;
   };
   return {
@@ -415,7 +412,7 @@ test('browser path changes require proof, desktop settings revoke old sessions, 
     },
   }) as WebSettingsState;
   assert.equal(f.web.active(login.data.session.id), false);
-  assert.equal(changed.url, `${f.origin}/private/`);
+  assert.equal(changed.url, undefined);
   assert.equal((await f.http('/')).status, 404);
   assert.equal((await f.http('/api/session', undefined, { Cookie: login.cookie! })).status, 404);
   assert.equal((await f.http('/private/')).status, 200);
@@ -432,20 +429,34 @@ test('browser path changes require proof, desktop settings revoke old sessions, 
   assert.equal(f.web.address(requestAt('192.0.2.10', '198.51.100.1, 127.0.0.1')), '192.0.2.10');
 });
 
-test('a browser behind a trusted proxy is not warned about this certificate, and an untrusted forwarder is shown', async (t) => {
+test('browser login state does not infer certificate trust from proxy configuration', async (t) => {
   const f = await fixture(t, true);
   f.enable();
   const forwarded = { 'X-Real-IP': '198.51.100.1' };
-  assert.equal((await f.http('/api/session', undefined, forwarded)).data.selfSigned, true);
+  assert.equal(Object.hasOwn((await f.http('/api/session')).data, 'selfSigned'), false);
   assert.equal(
-    (f.command({ type: 'web.settings.get' }) as WebSettingsState).forwardedBy,
-    '127.0.0.1',
+    Object.hasOwn((await f.http('/api/session', undefined, forwarded)).data, 'selfSigned'),
+    false,
   );
   f.command({
     type: 'web.settings.update',
     values: { proxyEnabled: true, trustedProxies: ['127.0.0.1'] },
   });
-  assert.equal((await f.http('/api/session', undefined, forwarded)).data.selfSigned, false);
+  assert.equal(
+    Object.hasOwn((await f.http('/api/session', undefined, forwarded)).data, 'selfSigned'),
+    false,
+  );
+  const signedIn = await f.login();
+  assert.equal(signedIn.status, 200);
+  assert.equal(Object.hasOwn(signedIn.data, 'selfSigned'), false);
+  assert.equal(Object.hasOwn(f.web.state(), 'selfSigned'), false);
+  const certificate = f.command({ type: 'web.certificate.get' });
+  assert.ok('type' in certificate && certificate.type === 'web.certificate.state');
+  assert.equal(
+    certificate.selfSigned,
+    true,
+    'the desktop can still inspect its direct certificate',
+  );
 });
 
 test('authenticated desktop saves access settings without proof or consuming a TOTP code', async (t) => {
@@ -459,7 +470,7 @@ test('authenticated desktop saves access settings without proof or consuming a T
     }
     const before = f.database.prepare('SELECT totp_last FROM web_settings').get();
     const values = {
-      domain: 'web.example.test',
+      publicOrigin: 'https://web.example.test',
       path: 'private',
       idleMinutes: 60,
       proxyEnabled: true,
@@ -472,7 +483,7 @@ test('authenticated desktop saves access settings without proof or consuming a T
       /IP/,
     );
     f.restart();
-    const state = f.web.state(f.origin);
+    const state = f.web.state();
     for (const key of Object.keys(values) as (keyof typeof values)[])
       assert.deepEqual(state[key], values[key]);
     assert.equal(state.totpEnabled, enabled);
@@ -594,7 +605,11 @@ test('public plain HTTP cannot be enabled and a configured domain rejects IP req
   assert.equal(web.enabled, false);
   const f = await fixture(t, true);
   f.enable();
-  f.command({ type: 'web.settings.update', values: { domain: 'web.example.test' }, proof });
+  f.command({
+    type: 'web.settings.update',
+    values: { publicOrigin: `https://web.example.test:${f.port}` },
+    proof,
+  });
   assert.equal((await f.http('/')).status, 404);
   const port = new URL(f.origin).port;
   assert.equal(
@@ -633,7 +648,7 @@ test('browser privileges are limited, re-login rotates rather than duplicates it
   const browser = { desktop: false, address: '127.0.0.1', sessionId: login.data.session.id };
   for (const values of [
     { enabled: false },
-    { domain: 'other.example.test' },
+    { publicOrigin: 'https://other.example.test' },
     { proxyEnabled: true },
     { idleMinutes: 60 },
   ])
@@ -677,4 +692,139 @@ test('strict protocol and stored settings reject unknown or incomplete fields', 
   assert.throws(() => f.command({ type: 'web.settings.update', values: { unknown: true } }));
   f.database.prepare('UPDATE web_settings SET settings = ? WHERE id = 1').run('{}');
   assert.throws(() => f.restart());
+});
+
+test('a configured public origin is persisted, matches the exact authority, and can be cleared', async (t) => {
+  const f = await fixture(t, true);
+  f.enable();
+  assert.equal(f.web.state().url, undefined);
+  assert.equal(f.web.state().passkeyAvailable, false);
+  const publicOrigin = 'https://web.example.test:1443';
+  f.command({ type: 'web.settings.update', values: { publicOrigin, path: 'entry' } });
+  f.restart();
+  assert.equal(f.web.state().url, publicOrigin + '/entry/');
+  assert.equal(f.web.state().domain, 'web.example.test');
+  for (const host of ['web.example.test', 'web.example.test:443', '127.0.0.1:1443'])
+    assert.equal((await f.http('/entry/', undefined, { Host: host })).status, 404);
+  assert.equal((await f.http('/entry/', undefined, { Host: 'web.example.test:1443' })).status, 200);
+  f.command({ type: 'web.settings.update', values: { publicOrigin: '' } });
+  assert.equal(f.web.state().publicOrigin, '');
+  assert.equal(f.web.state().domain, '');
+  assert.equal(f.web.state().url, undefined);
+  assert.equal(f.web.state().passkeyAvailable, false);
+  assert.equal(
+    (await f.http('/entry/')).status,
+    200,
+    'direct Web remains available without a published link',
+  );
+});
+
+test('released domain-only settings keep their Host constraint without borrowing a desktop address', async (t) => {
+  const f = await fixture(t, true);
+  const stored = {
+    enabled: true,
+    domain: 'web.example.test',
+    path: '',
+    idleMinutes: 120,
+    proxyEnabled: false,
+    trustedProxies: [],
+  };
+  f.database
+    .prepare('UPDATE web_settings SET settings = ? WHERE id = 1')
+    .run(JSON.stringify(stored));
+  f.restart();
+  assert.equal(f.web.state().domain, stored.domain);
+  assert.equal(f.web.state().publicOrigin, '');
+  assert.equal(f.web.state().url, undefined);
+  assert.equal(f.web.state().passkeyAvailable, false);
+  assert.equal((await f.http('/')).status, 404);
+  assert.equal((await f.http('/', undefined, { Host: 'web.example.test:1443' })).status, 200);
+});
+
+test('an IP public origin preserves the direct self-signed Web flow but does not enable Passkeys', async (t) => {
+  const f = await fixture(t, true);
+  f.command({ type: 'web.settings.update', values: { enabled: true, publicOrigin: f.origin } });
+  assert.equal(f.web.state().url, f.origin + '/');
+  assert.equal(f.web.state().domain, '');
+  assert.equal(f.web.state().passkeyAvailable, false);
+  assert.equal((await f.login()).status, 200);
+  assert.equal((await f.http('/', undefined, { Host: '127.0.0.1:1443' })).status, 404);
+});
+
+test('an imported domain certificate permits port edits but blocks removing or replacing its hostname', async (t) => {
+  const f = await fixture(t, true);
+  f.command({
+    type: 'web.settings.update',
+    values: { publicOrigin: 'https://web.example.test:1443' },
+  });
+  f.command({ type: 'web.certificate.set', ...custom });
+  f.command({
+    type: 'web.settings.update',
+    values: { publicOrigin: 'https://web.example.test:2443' },
+  });
+  assert.equal(f.web.state().url, 'https://web.example.test:2443/');
+  for (const publicOrigin of ['', 'https://other.example.test:2443'])
+    assert.throws(
+      () => f.command({ type: 'web.settings.update', values: { publicOrigin } }),
+      /恢复默认证书/,
+    );
+  f.command({ type: 'web.certificate.reset' });
+  f.command({ type: 'web.settings.update', values: { publicOrigin: '' } });
+  assert.equal(f.web.state().domain, '');
+});
+
+test('a slow password login cannot recreate sessions or consume TOTP after access settings change', async (t) => {
+  for (const values of [
+    { publicOrigin: 'https://web.example.test:2443' },
+    { publicOrigin: '' },
+    { path: 'changed' },
+    { enabled: false },
+  ]) {
+    const f = await fixture(t, true);
+    const publicOrigin = 'https://web.example.test:1443';
+    f.command({ type: 'web.settings.update', values: { enabled: true, publicOrigin } });
+    const setup = f.command({ type: 'web.totp.setup' }) as WebTotpSetup;
+    f.command({ type: 'web.totp.enable', code: totp(setup.secret, Math.floor(f.now() / 30_000)) });
+    f.advance(30_000);
+    const before = f.database.prepare('SELECT totp_last FROM web_settings').get();
+    const payload = JSON.stringify({
+      password,
+      code: totp(setup.secret, Math.floor(f.now() / 30_000)),
+    });
+    const received = once(f.server, 'request');
+    let req: ReturnType<typeof request>;
+    const response = new Promise<{ status: number; data: any }>((resolve, reject) => {
+      req = request(
+        {
+          hostname: '127.0.0.1',
+          port: f.port,
+          path: '/api/login',
+          method: 'POST',
+          headers: {
+            Host: 'web.example.test:1443',
+            Origin: publicOrigin,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => {
+            body += chunk;
+          });
+          res.on('end', () => resolve({ status: res.statusCode!, data: JSON.parse(body) }));
+        },
+      );
+      req.on('error', reject);
+      req.write(payload.slice(0, 5));
+    });
+    await received;
+    f.command({ type: 'web.settings.update', values });
+    req!.end(payload.slice(5));
+    const result = await response;
+    assert.equal(result.status, 400);
+    assert.equal(result.data.code, 'web_access_changed');
+    assert.equal(f.web.state().sessions.length, 0);
+    assert.deepEqual(f.database.prepare('SELECT totp_last FROM web_settings').get(), before);
+  }
 });

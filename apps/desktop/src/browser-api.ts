@@ -10,7 +10,7 @@ export function browserSocket() {
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.href;
 }
-async function request(name: string, body?: unknown) {
+export async function browserRequest(name: string, body?: unknown, signal?: AbortSignal) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
@@ -22,7 +22,7 @@ async function request(name: string, body?: unknown) {
       redirect: 'error',
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
     });
     // A refusal from a proxy or the entry itself may have no JSON body at all.
     const value: unknown = await response.json().catch(() => undefined);
@@ -41,11 +41,12 @@ async function request(name: string, body?: unknown) {
     clearTimeout(timer);
   }
 }
-export const browserSession = async () => webLoginStateSchema.parse(await request('session'));
-export const browserLogin = async (proof: WebProof) =>
-  webLoginStateSchema.parse(await request('login', proof));
+export const browserSession = async () =>
+  webLoginStateSchema.parse(await browserRequest('session'));
+export const browserLogin = async (proof: Extract<WebProof, { password: string }>) =>
+  webLoginStateSchema.parse(await browserRequest('login', proof));
 export const browserLogout = async () => {
-  await request('logout', {});
+  await browserRequest('logout', {});
 };
 // What the user does on the page keeps the browser's login; the service hears of it at most once a minute.
 // Reading counts too, while updates pushed to an unattended page do not.

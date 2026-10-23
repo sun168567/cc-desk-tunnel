@@ -24,7 +24,7 @@ const selfSigned = (certificate: X509Certificate) =>
 
 function validate(domain: string, material: Material): Installed {
   const parsed = webDomainSchema.safeParse(domain);
-  if (!parsed.success || !parsed.data) throw failure('请先填写访问域名。');
+  if (!parsed.success || !parsed.data) throw failure('请先在 Web 对外地址中填写域名。');
   const { cert, key } = material;
   if (cert.length > 64 * 1024 || key.length > 16 * 1024) {
     throw failure('证书链或私钥过长。');
@@ -147,12 +147,6 @@ export class WebCertificates {
     return servername.toLowerCase() === this.current?.details.domain
       ? this.current.context
       : undefined;
-  }
-
-  selfSigned(servername?: string): boolean {
-    return servername && this.context(servername)
-      ? this.current!.details.selfSigned
-      : this.originalSelfSigned;
   }
 
   validateDomain(domain: string): void {

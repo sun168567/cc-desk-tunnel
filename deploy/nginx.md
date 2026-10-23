@@ -8,7 +8,7 @@
 客户端 ── wss://proxy.example.com/ws（443）──▶ nginx ── http://127.0.0.1:8787 ──▶ 容器
 ```
 
-- **全部流量都经过 nginx**：`/ws`（登录与对话，以及 Claude 到 Windows 的执行通道）、`/client/installer`（客户端升级下载）和可选的 `/health`。
+- **全部流量都经过 nginx**：`/ws`（登录与对话，以及 Claude 到 Windows 的执行通道）、`/client/installer`（客户端升级下载）和可选的 `/health`。启用 Web 时还需转发下文的浏览器入口。
 - **执行通道也走 `/ws`**。Claude 每执行一条命令，客户端就另开一条到 `/ws` 的连接，所以同一来源会同时有多条连接；不要用 `limit_conn` 之类的设置把它限制到一条。0.2.9 及更早版本单独使用的隧道端口（默认 7000）不再需要。
 - nginx 模式下容器的 8787 只发布在服务器的 `127.0.0.1`，公网无法直接访问。
 
@@ -25,7 +25,7 @@ sudo bash deploy/manage.sh up
 
 - `--host` 是这个服务的域名。
 - `--url` 是客户端填写的服务地址。nginx 不在 443 端口时写成 `wss://proxy.example.com:8443/ws`。
-- 路径固定为域名根下的 `/ws` 和 `/client/installer`，不支持放到子路径里。
+- 桌面路径固定为域名根下的 `/ws` 和 `/client/installer`，不支持放到子路径里；Web 可以使用访问设置中的自定义路径。
 
 ## 第二步：配置 nginx
 
@@ -46,7 +46,7 @@ location = /ws {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $cc_desk_tunnel_connection;
-    proxy_set_header Host $host;
+    proxy_set_header Host $http_host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
@@ -67,6 +67,7 @@ location = /health {
 | 配置 | 为什么需要 |
 | --- | --- |
 | `proxy_http_version 1.1` 与 `Upgrade` / `Connection` | WebSocket 握手依赖它们，缺少时连接无法建立 |
+| `Host $http_host` | 保留外部域名及端口，让 Web 和通行密钥授权使用真实访问地址；不要改成上游地址或丢失 `8443` 等外部端口 |
 | `X-Real-IP $remote_addr` | 服务端按来源地址做登录限速。缺少这一行时所有客户端共用一个计数，一处输错凭据会连累全部 |
 | 两个 3600s 超时 | nginx 默认 60 秒没有数据就断开，长时间等待模型回复时会掉线 |
 | `proxy_buffering off` | 流式输出和安装包下载不在 nginx 里积压 |
@@ -82,6 +83,43 @@ location = /health {
 ```sh
 sudo nginx -t && sudo nginx -s reload
 ```
+
+### 可选：Web 与通行密钥
+
+不使用 Web 时保留上面的配置即可。需要时，先在桌面访问设置中启用 Web、保存 Web 对外地址与路径，
+再给同一个 `server` 增加浏览器入口。访问路径留空时，用下面的块替换示例的
+`location / { return 404; }`：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8787;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $cc_desk_tunnel_connection;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+}
+```
+
+如果访问路径设为 `private-entry`，将这一块改为 `location ^~ /private-entry/`，
+保留其余路径的 404，并增加 `location = /private-entry { return 308 /private-entry/$is_args$args; }`。
+`proxy_pass` 后面不要加 `/` 或子路径，避免转发时去掉 Web 前缀。
+无论 Web 路径如何设置，都保留原有的 `/ws` 和 `/client/installer`。
+
+通行密钥支持用户自行维护的 nginx：外部使用固定域名和浏览器信任的 HTTPS，
+证书只需在 nginx 配置，不必再次导入应用。桌面从设置打开已保存的 Web 对外地址完成浏览器注册，
+桌面连接仍使用服务凭据，可保留原有地址，无须与 Web 使用相同域名或端口。
+例如外部端口为 `8443` 时，Web 对外地址填写 `proxy.example.com:8443`，
+访问路径填写 `private-entry`；浏览器入口为 `https://proxy.example.com:8443/private-entry/`。
+
+本页的 nginx 部署模式已按回环隔离的 HTTP 上游运行，不要把该 HTTP 端口开放到公网。
+如果仍保留原有 HTTPS 服务端，在其前面增加 nginx，可在桌面生成 HTTPS 上游配置；
+后端自签证书不影响外部可信 HTTPS 使用通行密钥。需要按真实访客 IP 限制登录尝试时，
+再开启「识别真实访客 IP」，检测或填写代理来源 IP，核对后保存；关闭不影响反代访问。
+设置方法见[浏览器访问](../docs/server-web.md#反向代理)。
 
 ## 第三步：检查
 

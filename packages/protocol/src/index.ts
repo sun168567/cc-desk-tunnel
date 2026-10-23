@@ -1,10 +1,19 @@
 import { z } from 'zod';
-import { webCommandSchemas, webSettingsStateSchema, webTotpSetupSchema } from './web.ts';
+import {
+  webCommandSchemas,
+  webProxyDetectSchema,
+  webPublicOriginSchema,
+  webPathSchema,
+  webSettingsStateSchema,
+  webTotpSetupSchema,
+} from './web.ts';
 import { webCertificateStateSchema } from './web-certificate.ts';
+import { passkeyRegistrationSchema } from './passkey.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
+export * from './passkey.ts';
 
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 21;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -19,6 +28,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.3': 18,
   '0.3.5': 19,
   '0.3.6': 20,
+  '0.3.7': 21,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -482,6 +492,7 @@ export type ServiceUpdate = z.infer<typeof serviceUpdateSchema>;
 const request = { requestId: id };
 export const commandSchema = z.discriminatedUnion('type', [
   ...webCommandSchemas,
+  webProxyDetectSchema,
   z
     .object({
       type: z.literal('server.session.create'),
@@ -716,6 +727,18 @@ export const deviceIdentitySchema = z
 export const leaveSchema = z.object({ type: z.literal('leave') }).strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({
+    type: z.literal('web.proxy.detected'),
+    requestId: id,
+    address: z.union([z.ipv4(), z.ipv6()]),
+    publicOrigin: webPublicOriginSchema.refine((value) => !!value),
+    path: webPathSchema,
+  }),
+  z.object({
+    type: z.literal('web.passkey.registration'),
+    requestId: id,
+    ...passkeyRegistrationSchema.shape,
+  }),
+  z.object({
     type: z.literal('web.settings.state'),
     requestId: id,
     values: webSettingsStateSchema,
@@ -738,7 +761,7 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     // The newest Windows installer the service holds, for clients that want to upgrade themselves.
     client: installerSchema.optional(),
     sessions: z.array(sessionSchema),
-    browser: z.object({ sessionId: id, serverDeviceId: id, selfSigned: z.boolean() }).optional(),
+    browser: z.object({ sessionId: id, serverDeviceId: id }).optional(),
   }),
   z.object({
     type: z.literal('response'),

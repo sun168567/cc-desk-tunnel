@@ -215,13 +215,17 @@ handle('external:open', async (event, target) => {
 // Only an address announced by the currently authenticated service may leave the application here.
 handle('web:open', async (_event, target) => {
   const url = new URL(String(target));
+  const base = new URL(url);
+  base.hash = '';
+  const registration =
+    /^#passkey-register=[A-Za-z0-9_-]+$/.test(url.hash) && bridge?.registrationUrl() === url.href;
   if (
     url.protocol !== 'https:' ||
     url.username ||
     url.password ||
-    url.hash ||
+    (url.hash && !registration) ||
     url.search ||
-    bridge?.webUrl() !== url.href
+    bridge?.webUrl() !== base.href
   )
     throw new Error('Unexpected Web address');
   await shell.openExternal(url.href);

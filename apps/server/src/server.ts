@@ -70,9 +70,6 @@ type Peer = {
   address: string;
   authenticated: boolean;
   browser?: string;
-  origin?: string;
-  // A browser that came through a trusted proxy, which serves it the proxy's certificate.
-  proxied?: boolean;
   // The computer it is from: the name it signed in with, and the identity that follows in a frame of its own.
   name: string;
   device?: Device;
@@ -212,8 +209,6 @@ export function createProxyServer(options: ServerOptions) {
     host: options.host ?? '127.0.0.1',
   });
   const serverDevice: Device = { id: web.serverDeviceId, name: '服务端', platform: 'linux' };
-  const originOf = (request: IncomingMessage) =>
-    `${options.tls || options.reverseProxy ? 'https' : 'http'}://${request.headers.host}`;
   // Behind the reverse proxy every socket comes from the proxy itself; it passes the client on in X-Real-IP.
   const addressOf = (request: IncomingMessage) =>
     (options.reverseProxy && [request.headers['x-real-ip']].flat()[0]) ||
@@ -289,8 +284,6 @@ export function createProxyServer(options: ServerOptions) {
       wss.handleUpgrade(request, socket, head, (ws) =>
         wss.emit('connection', ws, address, {
           browser: session.id,
-          origin: originOf(request),
-          proxied: web.proxied(request),
         }),
       );
       return;
@@ -310,9 +303,7 @@ export function createProxyServer(options: ServerOptions) {
       );
       return;
     }
-    wss.handleUpgrade(request, socket, head, (ws) =>
-      wss.emit('connection', ws, address, { origin: originOf(request) }),
-    );
+    wss.handleUpgrade(request, socket, head, (ws) => wss.emit('connection', ws, address, {}));
   });
 
   function send(peer: Peer, message: ServerMessage) {
@@ -985,14 +976,17 @@ export function createProxyServer(options: ServerOptions) {
   // Resolves to the session ID carried in the response frame; account and usage commands have none.
   async function execute(peer: Peer, command: Command): Promise<string | undefined> {
     if (isWebCommand(command)) {
+      const context = {
+        desktop: !peer.browser,
+        address: peer.address,
+        sessionId: peer.browser,
+        connectionId: peer.id,
+      };
       send(
         peer,
-        web.execute(command, {
-          desktop: !peer.browser,
-          address: peer.address,
-          sessionId: peer.browser,
-          origin: peer.origin,
-        }),
+        command.type === 'web.proxy.detect'
+          ? await web.detectProxy(command, context)
+          : web.execute(command, context),
       );
       return undefined;
     }
@@ -1217,7 +1211,6 @@ export function createProxyServer(options: ServerOptions) {
         browser: {
           sessionId: peer.browser,
           serverDeviceId: serverDevice.id,
-          selfSigned: web.selfSigned(peer.origin, peer.proxied),
         },
       });
       send(peer, devices());
@@ -1489,186 +1482,178 @@ export function createProxyServer(options: ServerOptions) {
     announce();
   }
 
-  wss.on(
-    'connection',
-    (
-      socket: WebSocket,
-      address: string,
-      context?: { browser?: string; origin: string; proxied?: boolean },
-    ) => {
-      void releases.refresh();
-      const peer: Peer = {
-        socket,
-        id: randomUUID(),
-        address,
-        authenticated: false,
-        browser: context?.browser,
-        origin: context?.origin,
-        proxied: context?.proxied,
-        name: '',
-        registering: false,
-        left: false,
-        subscriptions: new Set(),
-        responses: new Map(),
-      };
-      peers.add(peer);
-      // Browsers wait for sign-in in places of their own, so that they cannot crowd out desktops.
-      const gate = peer.browser ? web.throttle : throttle;
-      if (peer.browser && !web.attach(peer.browser, socket)) {
-        peers.delete(peer);
-        gate.leave(address);
-        socket.close(4001, 'Browser session unavailable');
+  wss.on('connection', (socket: WebSocket, address: string, context: { browser?: string }) => {
+    void releases.refresh();
+    const peer: Peer = {
+      socket,
+      id: randomUUID(),
+      address,
+      authenticated: false,
+      browser: context.browser,
+      name: '',
+      registering: false,
+      left: false,
+      subscriptions: new Set(),
+      responses: new Map(),
+    };
+    peers.add(peer);
+    // Browsers wait for sign-in in places of their own, so that they cannot crowd out desktops.
+    const gate = peer.browser ? web.throttle : throttle;
+    if (peer.browser && !web.attach(peer.browser, socket)) {
+      peers.delete(peer);
+      gate.leave(address);
+      socket.close(4001, 'Browser session unavailable');
+      return;
+    }
+    const opened = Date.now();
+    const authTimer = setTimeout(() => socket.close(4001, 'Authentication timeout'), 5000);
+    // A long unattended run should survive a brief network stall: only two pings in a row without an answer,
+    // about 45 seconds of silence, end the connection.
+    let missed = 0;
+    let timedOut = false;
+    // Whether this connection still holds one of the places for those that have not signed in.
+    let signedIn = false;
+    let greeted = false;
+    socket.on('pong', () => {
+      missed = 0;
+    });
+    const heartbeat = setInterval(() => {
+      if (missed >= 2) {
+        timedOut = true;
+        socket.terminate();
         return;
       }
-      const opened = Date.now();
-      const authTimer = setTimeout(() => socket.close(4001, 'Authentication timeout'), 5000);
-      // A long unattended run should survive a brief network stall: only two pings in a row without an answer,
-      // about 45 seconds of silence, end the connection.
-      let missed = 0;
-      let timedOut = false;
-      // Whether this connection still holds one of the places for those that have not signed in.
-      let signedIn = false;
-      let greeted = false;
-      socket.on('pong', () => {
-        missed = 0;
-      });
-      const heartbeat = setInterval(() => {
-        if (missed >= 2) {
-          timedOut = true;
-          socket.terminate();
+      missed++;
+      socket.ping();
+    }, 15000);
+    socket.on('error', () => socket.terminate());
+    socket.on('message', (data, isBinary) => {
+      let value: unknown;
+      try {
+        if (isBinary) throw new Error('Binary frame');
+        value = JSON.parse(data.toString('utf8'));
+      } catch {
+        send(peer, {
+          type: 'connection.error',
+          code: 'invalid_json',
+          message: '消息必须是 JSON 文本。',
+        });
+        socket.close(4002, 'Invalid frame');
+        return;
+      }
+      if (!peer.authenticated) {
+        // Only the first frame signs in. What a refused client sent after it is not another attempt.
+        if (greeted) return;
+        greeted = true;
+        const channel =
+          !peer.browser && (value as { type?: unknown } | null)?.type === 'tunnel.attach';
+        if (channel ? attachChannel(peer, value) : authenticate(peer, value)) {
+          clearTimeout(authTimer);
+          signedIn = true;
+          gate.leave(address);
+        }
+        return;
+      }
+      if (peer.browser) {
+        if (!web.active(peer.browser)) {
+          socket.close(4001, 'Browser session ended');
           return;
         }
-        missed++;
-        socket.ping();
-      }, 15000);
-      socket.on('error', () => socket.terminate());
-      socket.on('message', (data, isBinary) => {
-        let value: unknown;
-        try {
-          if (isBinary) throw new Error('Binary frame');
-          value = JSON.parse(data.toString('utf8'));
-        } catch {
-          send(peer, {
-            type: 'connection.error',
-            code: 'invalid_json',
-            message: '消息必须是 JSON 文本。',
-          });
-          socket.close(4002, 'Invalid frame');
+        if (webActivitySchema.safeParse(value).success) {
+          web.touch(peer.browser);
           return;
         }
-        if (!peer.authenticated) {
-          // Only the first frame signs in. What a refused client sent after it is not another attempt.
-          if (greeted) return;
-          greeted = true;
-          const channel =
-            !peer.browser && (value as { type?: unknown } | null)?.type === 'tunnel.attach';
-          if (channel ? attachChannel(peer, value) : authenticate(peer, value)) {
-            clearTimeout(authTimer);
-            signedIn = true;
-            gate.leave(address);
-          }
+        const type = (value as { type?: unknown } | null)?.type;
+        if (
+          type === 'device' ||
+          type === 'auth' ||
+          type === 'web.auth' ||
+          (typeof type === 'string' && type.startsWith('tunnel.'))
+        ) {
+          socket.close(4003, 'Browser execution frames are not allowed');
           return;
         }
-        if (peer.browser) {
-          if (!web.active(peer.browser)) {
-            socket.close(4001, 'Browser session ended');
-            return;
-          }
-          if (webActivitySchema.safeParse(value).success) {
-            web.touch(peer.browser);
-            return;
-          }
-          const type = (value as { type?: unknown } | null)?.type;
-          if (
-            type === 'device' ||
-            type === 'auth' ||
-            type === 'web.auth' ||
-            (typeof type === 'string' && type.startsWith('tunnel.'))
-          ) {
-            socket.close(4003, 'Browser execution frames are not allowed');
-            return;
-          }
-        }
-        const credentials = tunnelCredentialsSchema.safeParse(value);
-        if (credentials.success) {
-          registerTunnel(peer, credentials.data);
+      }
+      const credentials = tunnelCredentialsSchema.safeParse(value);
+      if (credentials.success) {
+        registerTunnel(peer, credentials.data);
+        return;
+      }
+      const identity = deviceIdentitySchema.safeParse(value);
+      if (identity.success) {
+        if (identity.data.id === serverDevice.id) {
+          socket.close(4003, 'Reserved device');
           return;
         }
-        const identity = deviceIdentitySchema.safeParse(value);
-        if (identity.success) {
-          if (identity.data.id === serverDevice.id) {
-            socket.close(4003, 'Reserved device');
-            return;
-          }
-          peer.device = {
-            id: identity.data.id,
-            name: peer.name,
-            ...(identity.data.platform ? { platform: identity.data.platform } : {}),
-          };
-          // With the line written when it closes, this tells which computer a connection was and how long it held.
-          if (!closing)
-            console.log(
-              `Connection ${peer.id.slice(0, 8)} opened: device "${peer.name}" (${identity.data.id.slice(0, 8)}) from ${address}`,
-            );
-          for (const session of store.named(peer.device))
-            broadcast({ type: 'session.updated', session });
-          enter(peer);
-          announce();
-          track(adopt(peer), tunnelTasks);
-          return;
-        }
-        if (leaveSchema.safeParse(value).success) {
-          peer.left = true;
-          return;
-        }
-        const control = terminalControlSchema.safeParse(value);
-        if (control.success) {
-          if (peer.browser && control.data.type === 'terminal.input') web.touch(peer.browser);
-          controlTerminal(peer, control.data);
-          return;
-        }
-        const command = commandSchema.safeParse(value);
-        if (!command.success) {
-          send(peer, {
-            type: 'connection.error',
-            code: 'invalid_command',
-            message: '请求格式无效。',
-          });
-          return;
-        }
-        if (peer.browser) {
-          if (!browserCommands.has(command.data.type)) {
-            send(peer, {
-              type: 'response',
-              requestId: command.data.requestId,
-              ok: false,
-              code: 'web_forbidden',
-              message: '浏览器不支持这项操作，请使用桌面客户端。',
-            });
-            return;
-          }
-          if (browserActivity.has(command.data.type)) web.touch(peer.browser);
-        }
-        dispatch(peer, command.data);
-      });
-      socket.on('close', (code) => {
-        clearTimeout(authTimer);
-        clearInterval(heartbeat);
-        if (!signedIn) gate.leave(address);
-        // Why a connection ended is the first thing needed when a run was cut short.
-        const device = peer.device?.id;
-        const before = [...runs.values()].filter((run) => run.device === device).length;
-        release(peer);
-        // A native run that is being ended takes a moment to go: what became of the runs is told by whether the
-        // computer still has a place here.
-        const seat = device ? seats.get(device) : undefined;
-        if (peer.authenticated && !closing)
+        peer.device = {
+          id: identity.data.id,
+          name: peer.name,
+          ...(identity.data.platform ? { platform: identity.data.platform } : {}),
+        };
+        // With the line written when it closes, this tells which computer a connection was and how long it held.
+        if (!closing)
           console.log(
-            `Connection ${peer.id.slice(0, 8)} closed after ${Math.round((Date.now() - opened) / 1000)} s: ${peer.left ? 'the client left' : timedOut ? 'no heartbeat answer for 45s' : `code ${code}`}; runs of its device: ${before}${!before ? '' : !seat ? ', ended' : seat.away ? `, kept for ${Math.round(graceMs / 1000)} s` : ', going on over another connection'}`,
+            `Connection ${peer.id.slice(0, 8)} opened: device "${peer.name}" (${identity.data.id.slice(0, 8)}) from ${address}`,
           );
-      });
-    },
-  );
+        for (const session of store.named(peer.device))
+          broadcast({ type: 'session.updated', session });
+        enter(peer);
+        announce();
+        track(adopt(peer), tunnelTasks);
+        return;
+      }
+      if (leaveSchema.safeParse(value).success) {
+        peer.left = true;
+        return;
+      }
+      const control = terminalControlSchema.safeParse(value);
+      if (control.success) {
+        if (peer.browser && control.data.type === 'terminal.input') web.touch(peer.browser);
+        controlTerminal(peer, control.data);
+        return;
+      }
+      const command = commandSchema.safeParse(value);
+      if (!command.success) {
+        send(peer, {
+          type: 'connection.error',
+          code: 'invalid_command',
+          message: '请求格式无效。',
+        });
+        return;
+      }
+      if (peer.browser) {
+        if (!browserCommands.has(command.data.type)) {
+          send(peer, {
+            type: 'response',
+            requestId: command.data.requestId,
+            ok: false,
+            code: 'web_forbidden',
+            message: '浏览器不支持这项操作，请使用桌面客户端。',
+          });
+          return;
+        }
+        if (browserActivity.has(command.data.type)) web.touch(peer.browser);
+      }
+      dispatch(peer, command.data);
+    });
+    socket.on('close', (code) => {
+      web.disconnected(peer.id);
+      clearTimeout(authTimer);
+      clearInterval(heartbeat);
+      if (!signedIn) gate.leave(address);
+      // Why a connection ended is the first thing needed when a run was cut short.
+      const device = peer.device?.id;
+      const before = [...runs.values()].filter((run) => run.device === device).length;
+      release(peer);
+      // A native run that is being ended takes a moment to go: what became of the runs is told by whether the
+      // computer still has a place here.
+      const seat = device ? seats.get(device) : undefined;
+      if (peer.authenticated && !closing)
+        console.log(
+          `Connection ${peer.id.slice(0, 8)} closed after ${Math.round((Date.now() - opened) / 1000)} s: ${peer.left ? 'the client left' : timedOut ? 'no heartbeat answer for 45s' : `code ${code}`}; runs of its device: ${before}${!before ? '' : !seat ? ', ended' : seat.away ? `, kept for ${Math.round(graceMs / 1000)} s` : ', going on over another connection'}`,
+        );
+    });
+  });
   return {
     store,
     async listen(port = 8787): Promise<string> {

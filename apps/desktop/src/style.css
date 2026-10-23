@@ -1277,6 +1277,31 @@ dialog:has(.release-notes) {
   overflow-wrap: anywhere;
   text-align: right;
 }
+.service-update-card .setting-actions {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.service-update-notice {
+  padding: 14px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.service-update-notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.service-update-notice details {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.service-update-notice summary {
+  cursor: pointer;
+}
+.service-update-notice details p {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
 .instructions-card {
   display: grid;
   gap: 10px;
@@ -3604,7 +3629,7 @@ dialog {
   width: 100%;
   min-width: 0;
 }
-.web-trust-warning {
+.web-context-warning {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3615,26 +3640,26 @@ dialog {
   border-bottom: 1px solid var(--line);
   font-size: 12px;
 }
-.web-trust-warning svg {
+.web-context-warning svg {
   flex-shrink: 0;
   width: 17px;
   height: 17px;
   color: var(--warn);
 }
-.shell.web-self-signed {
+.shell.web-insecure-context {
   grid-template-rows: var(--bar) auto minmax(0, 1fr);
 }
-.shell > .web-trust-warning {
+.shell > .web-context-warning {
   grid-column: 1 / -1;
   grid-row: 2;
   margin: 0;
 }
-.web-self-signed > .titlebar {
+.web-insecure-context > .titlebar {
   grid-row: 1;
 }
-.web-self-signed > .rail,
-.web-self-signed > .sidebar,
-.web-self-signed > .workspace {
+.web-insecure-context > .rail,
+.web-insecure-context > .sidebar,
+.web-insecure-context > .workspace {
   grid-row: 3;
 }
 .web-row-actions {
@@ -3647,6 +3672,46 @@ dialog {
 .web-access-address {
   overflow-wrap: anywhere;
   font-size: 12px;
+}
+.web-access-settings > .setting-row:has(+ .web-passkeys) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-bottom: 0;
+}
+.web-passkeys .web-row-actions {
+  flex-shrink: 0;
+}
+.web-passkeys li > span,
+.web-sessions li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.web-proof-choice {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.web-passkey-login {
+  gap: 8px;
+}
+.web-passkey-login svg,
+.passkey-authorization .button svg,
+.passkey-complete svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.passkey-authorization {
+  overflow-wrap: anywhere;
+}
+.passkey-authorization > .button {
+  margin: 8px 8px 0 0;
+  gap: 8px;
+}
+.passkey-complete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .web-sessions {
   border-top: 1px solid var(--line-soft);
@@ -3701,10 +3766,14 @@ dialog:has(.web-settings-form) {
 .web-settings-form .dialog-actions {
   margin-top: 24px;
 }
-.web-path-input {
+.web-path-input,
+.web-origin-input {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.web-origin-input > span {
+  flex: none;
 }
 .web-totp-setup {
   display: grid;
@@ -3758,10 +3827,10 @@ dialog:has(.web-settings-form) {
     flex-wrap: wrap;
     gap: 12px;
   }
-  .web-self-signed > .sidebar {
+  .web-insecure-context > .sidebar {
     top: calc(var(--bar) + var(--web-warning-height, 56px));
   }
-  .web-trust-warning {
+  .web-context-warning {
     min-height: 56px;
   }
 }
@@ -3788,6 +3857,29 @@ dialog:has(.web-settings-form) {
   transform: rotate(90deg);
 }
 
+.web-proxy-detection {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.web-proxy-detection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.web-proxy-detection-heading .button {
+  flex: none;
+}
+.web-proxy-detection textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.5;
+}
 .web-proxy-help {
   min-width: 0;
   border-top: 1px solid var(--line-soft);

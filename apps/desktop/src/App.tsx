@@ -40,7 +40,7 @@ import type {
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
 import { browserSession, browserSocket, watchActivity } from './browser-api.ts';
-import { CertificateWarning } from './WebGate.tsx';
+import SecureContextWarning from './SecureContextWarning.tsx';
 import { hostCapabilities } from './host-capabilities.ts';
 import AccountPanel from './AccountPanel.tsx';
 import { ProxyClient, RequestInterruptedError } from './client.ts';
@@ -117,7 +117,7 @@ function savedProjects(value: unknown = shared('projects')): string[] {
 // Owns the connection, the selection and every request; the components below render and report user intent.
 export function App({
   browser,
-}: { browser?: { selfSigned: boolean; expired: () => void; logout: () => Promise<void> } } = {}) {
+}: { browser?: { expired: () => void; logout: () => Promise<void> } } = {}) {
   const host = hostCapabilities(!!browser);
   const [client] = useState(() => new ProxyClient());
   useEffect(() => {
@@ -211,7 +211,7 @@ export function App({
 
   const nativeMode = state.adapter === 'claude-code';
   const connected = state.status === 'connected';
-  const selfSigned = !!browser && (state.browser?.selfSigned ?? browser.selfSigned);
+  const insecureContext = !!browser && !window.isSecureContext;
   const othersBusy = useShared('busy');
   const selected = state.sessions.find((session) => session.id === state.selectedId);
   // What is listed and managed here is what is on this computer. Sessions on the user's other computers are
@@ -378,11 +378,7 @@ export function App({
     });
   };
 
-  // A check or an upgrade of the service that failed says why.
   const update = state.update;
-  useEffect(() => {
-    if (update?.state === 'failed' && update.detail) setError(update.detail);
-  }, [update]);
   const serviceUpdate = !nativeMode
     ? null
     : update?.state === 'available'
@@ -419,9 +415,17 @@ export function App({
               label:
                 update?.state === 'checking'
                   ? '正在检查更新…'
-                  : update?.state === 'idle' && update.checkedAt
-                    ? `已是最新 ${state.service} · 再次检查`
-                    : '检查更新',
+                  : update?.state === 'failed'
+                    ? '重新检查更新'
+                    : update?.state === 'idle' && update.checkedAt
+                      ? `已是最新 ${state.service} · 再次检查`
+                      : '检查更新',
+              detail:
+                update?.state === 'failed'
+                  ? update.latest
+                    ? '服务端升级未完成，请在关于与更新中查看原因'
+                    : '上次检查失败，不影响当前连接'
+                  : undefined,
               icon: <RefreshCw />,
               disabled: busy || update?.state === 'checking',
               run: () => {
@@ -1080,12 +1084,14 @@ export function App({
     ...(upgradeItem ? [upgradeItem] : []),
     ...(serviceUpdate ? [serviceUpdate] : []),
   ];
-  // The rail shows its button only for an update that exists, not for the standing offer to look for one.
+  // Keep an unfinished upgrade discoverable, but do not badge a failed background check.
   const pendingUpdate = upgrade
     ? `客户端可升级到 ${upgrade}`
     : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
       ? (serviceUpdate?.label ?? null)
-      : null;
+      : update?.state === 'failed' && update.latest
+        ? '服务端升级未完成'
+        : null;
   // What a menu shows beside an item that has a shortcut.
   const hint = (action: Action) =>
     (prefs.shortcuts.enabled && comboText(keyFor(prefs, action))) || undefined;
@@ -1256,7 +1262,7 @@ export function App({
       <main className="web-login">
         <section className="web-login-body">
           <h1>连接服务端工作台</h1>
-          {browser.selfSigned && <CertificateWarning />}
+          {insecureContext && <SecureContextWarning />}
           <p role="status">{currentError ?? '正在连接…'}</p>
           {state.status === 'disconnected' && (
             <button
@@ -1386,9 +1392,9 @@ export function App({
   };
   return (
     <div
-      className={`shell ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''}`}
+      className={`shell ${sideOpen ? '' : 'side-closed'} ${insecureContext ? 'web-insecure-context' : ''}`}
     >
-      {selfSigned && <CertificateWarning />}
+      {insecureContext && <SecureContextWarning />}
       <TitleBar
         title={
           place.page === 'chat'
@@ -1440,6 +1446,7 @@ export function App({
           service={state.service}
           adapterName={adapterName}
           updates={host.serviceManagement ? updates : []}
+          update={nativeMode && host.serviceManagement ? (update ?? undefined) : undefined}
           showNotes={setNotes}
           account={
             <AccountPanel

@@ -33,8 +33,7 @@ test('imports the current pair, restores it at startup, and removes both files o
   assert.equal(certificates.state().mode, 'custom');
   assert.equal(certificates.state().details?.domain, domain);
   assert.equal(certificates.state().selfSigned, false);
-  assert.equal(certificates.selfSigned(domain), false);
-  assert.equal(certificates.selfSigned(), true);
+  assert.equal(certificates.state().details?.selfSigned, false);
   assert.ok(certificates.context(domain.toUpperCase()));
   assert.equal(certificates.context('other.example.test'), undefined);
   assert.deepEqual(fs.readdirSync(join(dataDir, 'web')).sort(), ['cert.pem', 'key.pem']);
@@ -54,7 +53,8 @@ test('imports the current pair, restores it at startup, and removes both files o
   assert.deepEqual(fs.readdirSync(join(dataDir, 'web')).sort(), ['cert.pem', 'key.pem']);
   certificates.set({ domain: 'default.example.test', ...defaultCertificate });
   assert.equal(certificates.state().mode, 'custom');
-  assert.equal(certificates.selfSigned('default.example.test'), true);
+  assert.equal(certificates.state().selfSigned, true);
+  assert.equal(certificates.state().details?.selfSigned, true);
   certificates.reset();
   certificates.validateDomain('');
   assert.deepEqual(fs.readdirSync(join(dataDir, 'web')), []);
@@ -91,7 +91,7 @@ test('invalid PEM, dates, SAN, key and supplied-chain signatures never replace t
     assert.equal(fs.readFileSync(join(dataDir, 'web', 'cert.pem'), 'utf8'), custom.cert);
     assert.equal(fs.readFileSync(join(dataDir, 'web', 'key.pem'), 'utf8'), custom.key);
   }
-  assert.throws(() => certificates.set({ domain: '', ...custom }), /访问域名/);
+  assert.throws(() => certificates.set({ domain: '', ...custom }), /Web 对外地址中填写域名/);
 });
 
 test('invalid saved material leaves original TLS usable and can be reset even without a domain', (t) => {

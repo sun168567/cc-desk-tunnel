@@ -32,7 +32,7 @@ function fixture(t) {
   client.connectBrowser(browserSocket(), () => expired++);
   const socket = Socket.current;
   socket.onopen();
-  const browser = { sessionId: randomUUID(), serverDeviceId: randomUUID(), selfSigned: true };
+  const browser = { sessionId: randomUUID(), serverDeviceId: randomUUID() };
   socket.message({
     type: 'ready',
     protocolVersion: PROTOCOL_VERSION,
@@ -69,13 +69,15 @@ test('revocation ends browser reconnect and reports expiry; settings data remain
   const values = {
     enabled: true,
     domain: '',
+    publicOrigin: '',
     path: 'entry',
     idleMinutes: 120,
     proxyEnabled: false,
     trustedProxies: [],
     totpEnabled: false,
     sessions: [],
-    selfSigned: true,
+    passkeys: [],
+    passkeyAvailable: false,
   };
   socket.message({ type: 'web.settings.state', requestId: request.requestId, values });
   socket.message({ type: 'response', requestId: request.requestId, ok: true });
@@ -180,5 +182,31 @@ test('disconnect cleanup does not discard a successful response awaiting its pro
   socket.message({ type: 'response', requestId, ok: true });
   client.disconnect();
   assert.equal((await pending).secret, 'FIXTURESECRET');
+  assert.equal(client.results.size, 0);
+});
+
+test('Passkey registration URLs stay request-local and are discarded after a failed response', async (t) => {
+  const { client, socket } = fixture(t);
+  const pending = client.fetch({
+    type: 'web.passkeys.start',
+    name: 'Test key',
+    proof: { password: 'fixture-password' },
+  });
+  const { requestId } = socket.sent.at(-1);
+  const registration = {
+    type: 'web.passkey.registration',
+    requestId,
+    registrationId: randomUUID(),
+    status: 'pending',
+    url: 'https://work.example.com/entry/#passkey-register=test-only-grant',
+    expiresAt: new Date(Date.now() + 300000).toISOString(),
+  };
+  socket.message(registration);
+  assert.equal(client.results.size, 1);
+  assert.equal(JSON.stringify(client.state).includes('test-only-grant'), false);
+  socket.message({ type: 'response', requestId, ok: false, message: 'test failure' });
+  await assert.rejects(pending);
+  assert.equal(client.results.size, 0);
+  socket.message(registration);
   assert.equal(client.results.size, 0);
 });

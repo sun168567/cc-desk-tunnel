@@ -73,7 +73,7 @@ for (const path of ['', 'private-access'])
       }
       await command({
         type: 'web.settings.update',
-        values: { enabled: true, path },
+        values: { enabled: true, publicOrigin: url, path },
         proof: { password: token },
       });
 
@@ -98,10 +98,13 @@ for (const path of ['', 'private-access'])
       expect(documentResponse?.headers()['content-security-policy']).toContain(
         "frame-ancestors 'none'",
       );
-      await expect(page.getByRole('note')).toContainText('自签名证书');
+      expect(await page.evaluate(() => window.isSecureContext)).toBe(true);
+      await expect(page.locator('.web-context-warning')).toHaveCount(0);
       await page.getByLabel('服务凭据', { exact: true }).fill(token);
       await page.getByRole('button', { name: '登录', exact: true }).click();
       await expect(page.locator('.shell')).toBeVisible();
+      await expect(page.locator('.web-context-warning')).toHaveCount(0);
+      await expect(page.locator('.shell')).not.toHaveClass(/web-insecure-context/);
       await expect(page.locator('.connection-status')).toContainText('已连接');
       const cookie = (await context.cookies(entry)).find((entry) =>
         entry.name.startsWith('cc_web_'),

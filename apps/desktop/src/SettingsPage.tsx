@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { ServiceUpdate } from '@cc-desk-tunnel/protocol';
 import {
   ArrowLeft,
   Bell,
@@ -689,12 +690,14 @@ function About({
   service,
   adapterName,
   updates,
+  update,
   showNotes,
 }: {
   version: string;
   service: string | null;
   adapterName: string;
   updates: MenuItem[];
+  update?: ServiceUpdate;
   showNotes: (version: string) => void;
 }) {
   return (
@@ -720,7 +723,7 @@ function About({
           </Row>
         </div>
         <h2 className="page-heading">更新</h2>
-        <div className="card">
+        <div className="card service-update-card">
           <Row
             title="客户端与服务端需要同一版本"
             detail="服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级"
@@ -741,6 +744,21 @@ function About({
               {updates.length === 0 && <span className="setting-value">没有可用的更新操作</span>}
             </span>
           </Row>
+          {update?.state === 'failed' && (
+            <div className="service-update-notice">
+              <p role="status">
+                {update.latest
+                  ? '服务端升级未完成，请查看原因后重试。'
+                  : '检查服务端更新失败，不影响当前连接。'}
+              </p>
+              {update.detail && (
+                <details>
+                  <summary>查看失败原因</summary>
+                  <p>{update.detail}</p>
+                </details>
+              )}
+            </div>
+          )}
         </div>
         {window.desktop && (
           <>
@@ -800,6 +818,7 @@ export default function SettingsPage({
   service,
   adapterName,
   updates,
+  update,
   showNotes,
   back,
   browser = false,
@@ -821,6 +840,7 @@ export default function SettingsPage({
   service: string | null;
   adapterName: string;
   updates: MenuItem[];
+  update?: ServiceUpdate;
   showNotes: (version: string) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -907,6 +927,7 @@ export default function SettingsPage({
             service={service}
             adapterName={adapterName}
             updates={updates}
+            update={update}
             showNotes={showNotes}
           />
         )}

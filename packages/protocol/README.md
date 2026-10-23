@@ -25,6 +25,8 @@
 
 桌面 `/ws` 及其首帧认证保持不变。启用 Web 后，浏览器先在入口路径下通过 HTTPS 登录，取得 `HttpOnly` Cookie，再连接该路径下的 `/api/ws`；握手校验 Cookie 和同源关系，首帧为 `web.auth`，不携带服务凭据或设备身份。`ready.browser` 标识这是一条浏览器控制连接，之后复用已有会话、运行和终端消息，不建立执行通道。
 
+`passkey.ts` 定义通行密钥管理请求、注册状态与敏感操作证明。`web.passkeys.start/status/cancel` 管理绑定发起连接的注册授权，`rename/remove` 管理注册；密码证明与短时一次性的 Passkey 再验证证明互斥。WebAuthn 注册、浏览器登录和再次验证通过当前 Web 前缀下的 HTTPS 接口完成，服务端校验域名、Origin、用户验证与一次性 challenge，认证结果不通过页面自报或客户端名称判定。
+
 `src/web.ts` 定义登录状态、`web.settings.*`、浏览器会话撤销和 TOTP；`src/index.ts` 定义 `server.session.create`；`src/web-certificate.ts` 定义桌面专用的证书命令与状态。Web 设置回复通过各自的状态消息返回，不进入 `ProxyClient` 的通用会话状态。服务端用显式命令白名单限制浏览器，新命令不会自动开放；浏览器不能发送 `device`、`tunnel.*`、项目管理或其他设备的会话创建 / 分叉命令。
 
 浏览器页面上有点击、按键、滚动或触摸时，最多每分钟发一次无 requestId 的 `web.activity` 帧，服务端据此更新空闲时间；发消息、审批等修改类命令本身也会更新。读取命令、自动加载和重连不会更新；桌面连接发送这一帧会被视为无效消息。它不改变命令权限，也不延长 30 天绝对期限。

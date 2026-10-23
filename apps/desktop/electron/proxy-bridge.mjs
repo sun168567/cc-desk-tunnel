@@ -122,6 +122,7 @@ export async function openProxyBridge(
   let token = '';
   let release;
   let webUrl = null;
+  let registration = null;
   let closed = false;
   let closing;
   // The window said it is ending the connection on purpose; the service is told, so that it keeps nothing.
@@ -265,6 +266,8 @@ export async function openProxyBridge(
       try {
         const message = JSON.parse(raw.toString('utf8'));
         if (message.type?.startsWith('tunnel.')) throw new Error('Renderer tunnel message');
+        if (message.type === 'web.passkeys.cancel' && registration?.id === message.registrationId)
+          registration = null;
         if (message.type === 'leave') {
           leaving = true;
           return;
@@ -295,6 +298,16 @@ export async function openProxyBridge(
       }
       if (message.type === 'web.settings.state')
         webUrl = message.values.enabled ? (message.values.url ?? null) : null;
+      if (message.type === 'web.passkey.registration') {
+        if (message.status === 'pending' && message.url)
+          registration = {
+            id: message.registrationId,
+            url: message.url,
+            expiresAt: Date.parse(message.expiresAt),
+          };
+        else if (message.status !== 'pending' && registration?.id === message.registrationId)
+          registration = null;
+      }
       // A service of another version refuses the connection but may still offer the installer for its own.
       if (message.type === 'connection.error' && message.client) release = message.client;
       if (message.type === 'connection.error')
@@ -425,6 +438,8 @@ export async function openProxyBridge(
     close,
     downloadInstaller,
     webUrl: () => (closed ? null : webUrl),
+    registrationUrl: () =>
+      !closed && registration?.expiresAt > Date.now() ? registration.url : null,
     // The installer the service last announced, if any.
     release: () => release,
   };
