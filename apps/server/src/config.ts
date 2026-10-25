@@ -62,6 +62,7 @@ export function environmentConfig(env: NodeJS.ProcessEnv, defaultDataDir: string
           model: env.CLAUDE_MODEL,
           settingsPath: env.CLAUDE_SETTINGS_PATH,
           contextRetentionDays: retention,
+          quotaProbe: env.PROXY_QUOTA_PROBE !== 'off',
         }
       : undefined,
   };

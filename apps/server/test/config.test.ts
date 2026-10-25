@@ -36,6 +36,13 @@ test('the frp settings of an older deployment are ignored, as is a missing publi
     undefined,
   );
 });
+test('the quota probe of a long-lived subscription token is on unless turned off', () => {
+  assert.equal(environmentConfig(native, '/state').options.claude?.quotaProbe, true);
+  assert.equal(
+    environmentConfig({ ...native, PROXY_QUOTA_PROBE: 'off' }, '/state').options.claude?.quotaProbe,
+    false,
+  );
+});
 test('explicit native TLS mode is required', () => {
   assert.throws(
     () => environmentConfig({ ...native, PROXY_TLS_MODE: undefined }, '/state'),

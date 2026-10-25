@@ -66,6 +66,8 @@ sudo bash deploy/manage.sh release-token /path/token.txt   # 不带参数则移�
 
 电脑断线后，它的任务在服务端继续，等它连回来；离线超过 5 分钟才停止。要改这个时间就加 `PROXY_GRACE_SECONDS='秒数'`（0 到 3600，0 表示断线即停止）并重启服务。
 
+用 `CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token` 生成的长期令牌）登录时，官方 CLI 读不到订阅额度；服务端会用这个令牌发一个 1 token 的请求，从响应头读出额度，至少间隔一分钟，计入订阅额度。不需要时加 `PROXY_QUOTA_PROBE='off'` 并重启服务。
+
 需要脚本化或分步执行时仍可用参数形式：
 
 ```sh

@@ -23,7 +23,7 @@ Node.js、Claude Code、Agent SDK 均为固定版本（见 `scripts/install-linu
 
 `--control-port` 可改，nginx 公网端口由既有服务决定。无需 UDP、Windows 入站规则或公开随机 SSH 端口；暂不支持 IPv6 配置。业务双向控制、原生终端均走 WSS，没有 REST 业务会话 / 配置 / 上传接口。无认证的 `GET /health` 只返回状态、协议版本和适配器类型；`GET /client/installer` 凭服务凭据下载客户端安装包。这两个入口和桌面 `/ws` 不受 Web 开关、域名或子路径设置影响。
 
-Web 首次默认关闭，由桌面设置启用，选择保存在服务端，重启后保持。启用后，在同一端口增加页面、静态资源、登录 / 退出 / 登录状态 HTTP 接口，以及单独的浏览器 WebSocket；未启用或不匹配的 Web 路径返回 404。不新增 Docker 端口映射，也不提供公网明文 HTTP 开关，详见[浏览器访问](server-web.md)。服务端自身只向外访问 GitHub 的发布接口（查询版本、下载程序包与安装包）和升级时的 npm 仓库，可用 `PROXY_RELEASE_REPO='none'` 关闭。
+Web 首次默认关闭，由桌面设置启用，选择保存在服务端，重启后保持。启用后，在同一端口增加页面、静态资源、登录 / 退出 / 登录状态 HTTP 接口，以及单独的浏览器 WebSocket；未启用或不匹配的 Web 路径返回 404。不新增 Docker 端口映射，也不提供公网明文 HTTP 开关，详见[浏览器访问](server-web.md)。服务端自身只向外访问 GitHub 的发布接口（查询版本、下载程序包与安装包）和升级时的 npm 仓库，可用 `PROXY_RELEASE_REPO='none'` 关闭。用 `claude setup-token` 的长期令牌（`CLAUDE_CODE_OAUTH_TOKEN`）登录时，官方 CLI 读不到订阅额度，服务端会用同一令牌向 `api.anthropic.com` 发一个 1 token 的请求，从响应头读出 5 小时与每周额度，多个会话共用一次读数，至少间隔一分钟；这是真实请求，计入订阅额度，可用 `PROXY_QUOTA_PROBE='off'` 关闭。Node 的 `fetch` 默认不走 `HTTPS_PROXY`，需要代理出网时另设 `NODE_USE_ENV_PROXY=1`。
 
 容器内反代模式监听 `0.0.0.0` 供 Docker bridge 接入；宿主仅回环发布。不要将不可信容器加入同一网络或单独公开上游。Docker 端口发布与 UFW 常规 INPUT 的关系需核对，公网来源限制优先在云安全组 / Docker 防火墙策略实施。
 

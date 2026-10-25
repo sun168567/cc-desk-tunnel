@@ -11,6 +11,7 @@ import type {
   NativeCapabilities,
   NativeMetrics as Metrics,
 } from '@cc-desk-tunnel/protocol';
+import type { ProbedQuota } from './quota-probe.ts';
 
 type ContextUsage = Awaited<ReturnType<Query['getContextUsage']>>;
 
@@ -135,10 +136,14 @@ export async function nativeContextRefresh(
   };
 }
 
+// `probe` reads the plan quota itself when the CLI reports none, see quota-probe.ts.
 export async function nativeMetrics(
   query: Query,
   result?: SDKResultMessage,
-  timeoutMs = 5000,
+  {
+    timeoutMs = 5000,
+    probe,
+  }: { timeoutMs?: number; probe?: () => Promise<ProbedQuota | null> } = {},
 ): Promise<EventPayload> {
   // Order readings by when they were requested, not when concurrent status calls happened to finish.
   const measuredAt = new Date().toISOString();
@@ -167,6 +172,16 @@ export async function nativeMetrics(
         return [];
       })
     : [];
+  // Only a reading that says the plan quota does not apply is completed; a failed one stays failed.
+  const probed =
+    usage && !usage.rate_limits_available && probe
+      ? (await optionalStatus(probe, timeoutMs)).value
+      : null;
+  const rateLimits = probed
+    ? { available: true, ...probed }
+    : usage
+      ? { available: usage.rate_limits_available, windows, measuredAt }
+      : null;
   const totals =
     result ??
     (usage?.session
@@ -179,7 +194,7 @@ export async function nativeMetrics(
     type: 'native.metrics',
     context: contextSummary(context),
     usage: totals ? resultUsage(totals) : null,
-    rateLimits: usage ? { available: usage.rate_limits_available, windows, measuredAt } : null,
+    rateLimits,
     ...(contextStatus.error || usageStatus.error
       ? {
           errors: { context: contextStatus.error, usage: usageStatus.error },

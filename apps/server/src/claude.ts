@@ -14,8 +14,9 @@ import { ClaudeStream } from './claude-stream.ts';
 import type { SshConnection } from './tunnel.ts';
 import { nativeCapabilities, nativeContextRefresh, nativeMetrics } from './native-controls.ts';
 import type { NativeInput } from './native-input.ts';
-import { readNativeSettings } from './native-settings.ts';
+import { readNativeSettings, settingsEnvironment } from './native-settings.ts';
 import { questionTally } from './question.ts';
+import { probeQuota } from './quota-probe.ts';
 
 // Whether reasoning summaries are asked for. A settings file that cannot be read leaves them on.
 function thinkingShown() {
@@ -34,6 +35,8 @@ export type ClaudeOptions = {
   contextRetentionDays?: number;
   // Added to the CLI's inherited environment; set by the service for its usage collector.
   environment?: Record<string, string>;
+  // Whether the plan quota of a CLAUDE_CODE_OAUTH_TOKEN login is read with a one-token request; off only when set so.
+  quotaProbe?: boolean;
 };
 export type ClaudeRun = {
   sessionId: string;
@@ -74,6 +77,17 @@ export type ClaudeRun = {
   // one of its background tasks.
   controls: { refresh?: () => Promise<void>; stopTask?: (taskId: string) => Promise<void> };
 };
+// The token is looked up where the CLI finds it: the inherited environment, then the `env` of its settings files.
+function quotaProbe(options: ClaudeOptions) {
+  if (options.quotaProbe === false) return undefined;
+  return () =>
+    probeQuota({
+      ...globalThis.process.env,
+      ...options.environment,
+      ...settingsEnvironment(),
+      ...(options.settingsPath ? settingsEnvironment(options.settingsPath) : {}),
+    });
+}
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
 export function remotePrompt(
   projectPath: string,
@@ -142,6 +156,7 @@ export async function runClaude(
   // The prompts the CLI took since the last turn ended; the OpenTelemetry records of their requests carry the same ids.
   let promptIds: string[] = [];
   const tally = questionTally();
+  const probe = quotaProbe(options);
   // Output tokens of every model call so far, subagents included, as the CLI's running total counts them; a turn's
   // share is the step from one result to the next. A resumed session's total already holds earlier runs.
   let outputSoFar: number | undefined = run.resume ? undefined : 0;
@@ -244,7 +259,7 @@ export async function runClaude(
     const running = session;
     run.controls.stopTask = (taskId) => running.stopTask(taskId);
     run.controls.refresh = async () => {
-      const payload = await nativeMetrics(running);
+      const payload = await nativeMetrics(running, undefined, { probe });
       if (payload.type === 'native.metrics') metrics = payload;
       quotaAt = Date.now();
       if (!run.signal.aborted) run.emit(payload);
@@ -331,7 +346,11 @@ export async function runClaude(
         // Quota moves slowly; a long turn rereads it once a minute and the context every few seconds.
         const full = !metrics || refreshedAt - quotaAt >= 60000;
         if (full) quotaAt = refreshedAt;
-        refresh = (full ? nativeMetrics(session) : nativeContextRefresh(session, metrics!))
+        refresh = (
+          full
+            ? nativeMetrics(session, undefined, { probe })
+            : nativeContextRefresh(session, metrics!)
+        )
           .then(
             (payload) => {
               if (payload?.type !== 'native.metrics' || !payload.context || run.signal.aborted)
@@ -375,7 +394,7 @@ export async function runClaude(
         promptIds = [];
         if (!run.signal.aborted) {
           try {
-            const payload = await nativeMetrics(session, message);
+            const payload = await nativeMetrics(session, message, { probe });
             if (payload.type === 'native.metrics') metrics = payload;
             run.emit(payload);
           } catch {
@@ -483,7 +502,7 @@ export async function readNativeStatus(
         initialized.commands,
         options.model,
       ),
-      await nativeMetrics(process),
+      await nativeMetrics(process, undefined, { probe: quotaProbe(options) }),
     ];
   } finally {
     clearTimeout(timer);

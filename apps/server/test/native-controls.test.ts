@@ -129,7 +129,7 @@ test('optional native telemetry has a bounded wait and cannot hold a completed t
       return { rate_limits_available: false, rate_limits: null };
     },
   } as unknown as Query;
-  const metrics = await nativeMetrics(query, undefined, 10);
+  const metrics = await nativeMetrics(query, undefined, { timeoutMs: 10 });
   assert.ok(metrics.type === 'native.metrics');
   assert.equal(metrics.context, null);
   assert.equal(metrics.rateLimits?.available, false);

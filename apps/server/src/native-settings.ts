@@ -33,6 +33,19 @@ function readFile(path: string): Record<string, unknown> {
   return value;
 }
 
+// The variables the file gives the CLI; a file that cannot be read gives none.
+export function settingsEnvironment(path = settingsPath()): Record<string, string> {
+  try {
+    return Object.fromEntries(
+      Object.entries(environment(readFile(path))).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
 export function readNativeSettings(path = settingsPath()): NativeSettings {
   const file = readFile(path);
   // A value the schema does not accept was written by hand; it is shown as unset and left alone until changed here.
