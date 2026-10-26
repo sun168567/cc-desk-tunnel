@@ -1,5 +1,13 @@
 import { z } from 'zod';
 import { webCertificateCommandSchemas } from './web-certificate.ts';
+import {
+  passkeyCommandSchemas,
+  passkeySchema,
+  webCredentialProofSchema,
+  webProofSchema,
+} from './passkey.ts';
+export { webProofSchema } from './passkey.ts';
+export type { WebProof } from './passkey.ts';
 
 export const webDomainSchema = z
   .string()
@@ -22,17 +30,7 @@ export const webPathSchema = z
     (value) => !['ws', 'health', 'client', 'assets', 'api'].includes(value),
     '此路径已保留。',
   );
-export const webProofSchema = z
-  .object({
-    password: z.string().min(1).max(1024),
-    code: z
-      .string()
-      .regex(/^\d{6}$/)
-      .optional(),
-  })
-  .strict();
-export type WebProof = z.infer<typeof webProofSchema>;
-export const webLoginSchema = webProofSchema;
+export const webLoginSchema = webCredentialProofSchema;
 export const webAuthSchema = z
   .object({ type: z.literal('web.auth'), protocolVersion: z.number().int().positive() })
   .strict();
@@ -64,6 +62,9 @@ export const webSettingsStateSchema = z.object({
   trustedProxies: z.array(z.string()),
   totpEnabled: z.boolean(),
   sessions: z.array(webSessionSchema),
+  passkeys: z.array(passkeySchema),
+  passkeyAvailable: z.boolean(),
+  passkeyReason: z.string().optional(),
   url: z.url().optional(),
   selfSigned: z.boolean(),
   // The last address that sent a client address without being a trusted proxy, to help name the right one.
@@ -78,6 +79,7 @@ export const webTotpSetupSchema = z.object({
 export type WebTotpSetup = z.infer<typeof webTotpSetupSchema>;
 export const webLoginStateSchema = z.object({
   authenticated: z.boolean(),
+  passkeyAvailable: z.boolean(),
   session: webSessionSchema.optional(),
   totpEnabled: z.boolean(),
   selfSigned: z.boolean(),
@@ -122,6 +124,7 @@ export const webCommandSchemas = [
     .object({ type: z.literal('web.totp.disable'), ...request, proof: webProofSchema.optional() })
     .strict(),
   ...webCertificateCommandSchemas,
+  ...passkeyCommandSchemas,
 ] as const;
 export const webCommandSchema = z.discriminatedUnion('type', webCommandSchemas);
 export type WebCommand = z.infer<typeof webCommandSchema>;

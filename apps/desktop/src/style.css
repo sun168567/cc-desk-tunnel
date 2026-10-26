@@ -3742,6 +3742,37 @@ dialog {
   overflow-wrap: anywhere;
   font-size: 12px;
 }
+.web-passkey-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+.web-passkey-actions p {
+  margin: 0;
+}
+.web-passkeys li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.web-passkeys .web-row-actions {
+  flex-shrink: 0;
+}
+.web-proof-choice {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.web-passkey-login {
+  gap: 8px;
+}
+.web-passkey-login svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
 .web-sessions {
   border-top: 1px solid var(--line-soft);
   padding: 16px 0;

@@ -42,6 +42,8 @@ type Replies = {
   'settings.update': 'settings.state';
   'instructions.get': 'instructions.state';
   'instructions.update': 'instructions.state';
+  'web.passkeys.rename': 'web.settings.state';
+  'web.passkeys.remove': 'web.settings.state';
   'web.settings.get': 'web.settings.state';
   'web.settings.update': 'web.settings.state';
   'web.sessions.revoke': 'web.settings.state';

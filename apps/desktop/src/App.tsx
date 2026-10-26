@@ -186,10 +186,19 @@ export function App({
     return () => query.removeEventListener('change', follow);
   }, []);
   const [place, setPlace] = useState<Place>({
-    page: 'chat',
+    page: browser && location.hash === '#passkeys' ? 'settings' : 'chat',
     section: browser ? 'general' : 'account',
     sessionId: null,
   });
+  useEffect(() => {
+    if (!browser) return;
+    const navigate = () => {
+      if (location.hash === '#passkeys')
+        setPlace((current) => ({ ...current, page: 'settings', section: 'general' }));
+    };
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  }, [browser]);
   // Places visited, for the title bar's way back and forward.
   const trail = useRef<{ places: Place[]; at: number }>({ places: [place], at: 0 });
   const [, setTrailAt] = useState(0);

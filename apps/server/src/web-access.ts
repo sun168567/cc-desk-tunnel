@@ -7,6 +7,11 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
 import {
+  passkeyAuthenticationResponseSchema,
+  passkeyCancellationSchema,
+  passkeyEmptyRequestSchema,
+  passkeyRegistrationRequestSchema,
+  passkeyRegistrationResponseSchema,
   webCommandSchema,
   webLoginSchema,
   webStoredSettingsSchema,
@@ -14,12 +19,15 @@ import {
 import type {
   ServerMessage,
   WebCommand,
+  WebCredentialProof,
   WebLoginState,
   WebProof,
   WebSession,
   WebSettingsState,
 } from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
+import { Passkeys } from './passkeys.ts';
+import type { PasskeyEntry } from './passkeys.ts';
 import { Throttle } from './throttle.ts';
 import { WebCertificates } from './web-certificate.ts';
 import { totpSecret, totpStep } from './web-totp.ts';
@@ -43,6 +51,7 @@ type StoredSession = {
   created: number;
   active: number;
   expires: number;
+  passkey_id: string | null;
 };
 type StoredSettings = {
   settings: string;
@@ -79,7 +88,11 @@ const loopback = (address: string) => address === '::1' || /^127(?:\.\d{1,3}){3}
 const fail = (code: string, message: string): never => {
   throw new DomainError(code, message);
 };
-const statuses: Record<string, number> = { web_unauthorized: 401, web_rate_limited: 429 };
+const statuses: Record<string, number> = {
+  web_unauthorized: 401,
+  web_rate_limited: 429,
+  passkey_busy: 429,
+};
 const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -111,6 +124,7 @@ export class WebAccess {
   // that shares its address.
   readonly throttle = new Throttle();
   readonly certificates: WebCertificates;
+  readonly passkeys: Passkeys;
 
   constructor(options: WebAccessOptions) {
     this.options = options;
@@ -139,6 +153,11 @@ export class WebAccess {
       reverseProxy: options.reverseProxy,
     });
     options.database.prepare('DELETE FROM web_sessions WHERE token_hash != ?').run(this.tokenHash);
+    // Upgrade the session table published before Passkey support; existing credential logins stay valid.
+    const columns = options.database.prepare('PRAGMA table_info(web_sessions)').all();
+    if (!columns.some((column) => column.name === 'passkey_id'))
+      options.database.exec('ALTER TABLE web_sessions ADD COLUMN passkey_id TEXT');
+    this.passkeys = new Passkeys(options.database, this.tokenHash, this.serverDeviceId, this.now);
     this.sweep();
   }
 
@@ -185,6 +204,7 @@ export class WebAccess {
     this.sockets.delete(id);
   }
   private revoke(id: string) {
+    this.passkeys.revokeSession(id);
     this.options.database.prepare('DELETE FROM web_sessions WHERE id = ?').run(id);
     this.disconnect(id);
   }
@@ -353,6 +373,9 @@ export class WebAccess {
     return {
       ...this.settings,
       totpEnabled: !!this.record().totp_secret,
+      passkeys: this.passkeys.list(this.settings.domain),
+      passkeyAvailable: !this.passkeyReason(),
+      ...(this.passkeyReason() ? { passkeyReason: this.passkeyReason() } : {}),
       sessions: (
         this.options.database
           .prepare('SELECT * FROM web_sessions ORDER BY created DESC')
@@ -367,6 +390,9 @@ export class WebAccess {
     const origin = this.requestOrigin(request);
     return {
       authenticated: !!row,
+      passkeyAvailable:
+        !this.passkeyReason() &&
+        this.passkeys.list(this.settings.domain).some((key) => key.available),
       ...(row ? { session: this.publicSession(row) } : {}),
       totpEnabled: !!this.record().totp_secret,
       selfSigned: this.selfSigned(origin, this.proxied(request)),
@@ -374,7 +400,7 @@ export class WebAccess {
     };
   }
   // The service token, and the authenticator code once two-step verification is on.
-  private proof(proof: WebProof | undefined, address: string) {
+  private proof(proof: WebCredentialProof | undefined, address: string) {
     if (this.throttle.blocked(address, this.now()))
       fail('web_rate_limited', '尝试过于频繁，请稍后重试。');
     const row = this.record();
@@ -394,7 +420,30 @@ export class WebAccess {
   }
   // A browser proves itself again for a security setting; an authenticated desktop already holds the token.
   private reauthenticate(proof: WebProof | undefined, context: WebContext) {
-    if (!context.desktop) this.proof(proof, context.address);
+    if (context.desktop) return;
+    if (proof && 'passkey' in proof) {
+      const sessionId = context.sessionId ?? fail('web_unauthorized', '登录已失效，请重新登录。');
+      if (!this.active(sessionId)) fail('web_unauthorized', '登录已失效，请重新登录。');
+      this.passkeys.consumeProof(proof.passkey, sessionId);
+    } else this.proof(proof, context.address);
+  }
+
+  private passkeyReason() {
+    if (!this.enabled) return '请先启用 Web 访问。';
+    if (!this.https || !this.settings.domain) return '请先设置 HTTPS 访问域名。';
+    return undefined;
+  }
+  private passkeyEntry(request: IncomingMessage): PasskeyEntry {
+    const reason = this.passkeyReason();
+    if (reason) fail('passkey_unavailable', reason);
+    const origin = this.requestOrigin(request) ?? fail('web_unauthorized', '访问地址已变化。');
+    return { rpId: this.settings.domain, origin };
+  }
+  private passkeySession(request: IncomingMessage) {
+    return this.cookieSession(request) ?? fail('web_unauthorized', '请先登录 Web 工作台。');
+  }
+  private sessionExpiry(session: StoredSession) {
+    return Math.min(session.expires, session.active + this.settings.idleMinutes * 60_000);
   }
 
   execute(input: WebCommand, context: WebContext): WebReply {
@@ -403,6 +452,18 @@ export class WebAccess {
     if (!context.desktop && (!context.sessionId || !this.active(context.sessionId)))
       fail('web_unauthorized', '登录已失效，请重新登录。');
     switch (command.type) {
+      case 'web.passkeys.rename':
+        this.reauthenticate(command.proof, context);
+        this.passkeys.rename(command.passkeyId, command.name);
+        break;
+      case 'web.passkeys.remove':
+        this.reauthenticate(command.proof, context);
+        this.passkeys.remove(command.passkeyId);
+        for (const row of this.options.database
+          .prepare('SELECT id FROM web_sessions WHERE passkey_id = ?')
+          .all(command.passkeyId) as { id: string }[])
+          this.revoke(row.id);
+        break;
       case 'web.settings.get':
         break;
       case 'web.settings.update':
@@ -438,6 +499,7 @@ export class WebAccess {
             key: command.key,
           });
         if (command.type === 'web.certificate.reset') this.certificates.reset();
+        if (command.type !== 'web.certificate.get') this.passkeys.clearPending();
         return { type: 'web.certificate.state', requestId, ...this.certificates.state() };
     }
     return { type: 'web.settings.state', requestId, values: this.state(context.origin) };
@@ -460,6 +522,7 @@ export class WebAccess {
       .prepare('UPDATE web_settings SET settings = ? WHERE id = 1')
       .run(JSON.stringify(next));
     this.settings = next;
+    this.passkeys.clearPending();
     // Logins belong to an address; a browser that moved it is told after its answer is on the way.
     if (moved) this.options.database.prepare('DELETE FROM web_sessions').run();
     if (moved || !next.enabled) {
@@ -510,6 +573,7 @@ export class WebAccess {
     this.clearSessions(context.sessionId);
   }
   private clearSessions(except?: string) {
+    this.passkeys.clearPending();
     const rows = this.options.database.prepare('SELECT id FROM web_sessions').all() as {
       id: string;
     }[];
@@ -536,7 +600,7 @@ export class WebAccess {
     response.end(JSON.stringify(body));
     return true;
   }
-  private async body(request: IncomingMessage) {
+  private async body(request: IncomingMessage, limit = 4096) {
     if (!/^application\/json(?:\s*;|$)/i.test(String(request.headers['content-type'] ?? '')))
       fail('web_bad_request', '请使用 JSON 请求。');
     const chunks: Buffer[] = [];
@@ -545,7 +609,7 @@ export class WebAccess {
     try {
       for await (const chunk of request) {
         size += chunk.length;
-        if (size > 4096) fail('web_bad_request', '请求内容过长。');
+        if (size > limit) fail('web_bad_request', '请求内容过长。');
         chunks.push(Buffer.from(chunk));
       }
       try {
@@ -588,6 +652,8 @@ export class WebAccess {
       return this.json(response, 200, { authenticated: false });
     }
     if (route === '/api/login' && request.method === 'POST') return this.login(request, response);
+    if (route.startsWith('/api/passkey/') && request.method === 'POST')
+      return this.passkeyApi(route.slice('/api/passkey/'.length), request, response);
     return this.empty(response, 404);
   }
   private async login(request: IncomingMessage, response: ServerResponse) {
@@ -601,33 +667,7 @@ export class WebAccess {
       const body = webLoginSchema.safeParse(await this.body(request));
       if (!body.success) fail('web_bad_request', '登录请求格式无效。');
       this.proof(body.data, address);
-      this.sweep();
-      // Signing in again replaces this browser's login instead of adding one.
-      const previous = this.cookieSession(request);
-      const { count } = this.options.database
-        .prepare('SELECT COUNT(*) AS count FROM web_sessions')
-        .get() as { count: number };
-      if (count >= 128 && !previous)
-        fail('web_session_limit', '登录会话数量已达上限，请先撤销不用的会话。');
-      const now = this.now();
-      const secret = randomBytes(32).toString('hex');
-      const row: StoredSession = {
-        id: randomUUID(),
-        name: String(request.headers['user-agent'] ?? '浏览器').slice(0, 120),
-        secret_hash: hash(secret),
-        token_hash: this.tokenHash,
-        created: now,
-        active: now,
-        expires: now + 30 * DAY,
-      };
-      this.options.database
-        .prepare(
-          'INSERT INTO web_sessions (id, secret_hash, token_hash, name, created, active, expires) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        )
-        .run(row.id, row.secret_hash, row.token_hash, row.name, now, now, row.expires);
-      if (previous) this.revoke(previous.id);
-      response.setHeader('Set-Cookie', this.cookie(secret, row.expires));
-      return this.json(response, 200, this.loginState(request, row));
+      return this.signIn(request, response);
     } catch (error) {
       const known = error instanceof DomainError;
       return this.json(response, (known && statuses[error.code]) || 400, {
@@ -637,6 +677,145 @@ export class WebAccess {
     } finally {
       this.throttle.leave(address);
     }
+  }
+  private async passkeyApi(route: string, request: IncomingMessage, response: ServerResponse) {
+    if (!/^(?:register|login|proof)\/(?:options|verify|cancel)$/.test(route))
+      return this.empty(response, 404);
+    const address = this.address(request);
+    const cancelling = route.endsWith('/cancel');
+    const wait = cancelling ? 0 : this.throttle.blocked(address, this.now());
+    if (wait || !this.throttle.enter(address)) {
+      response.setHeader('Retry-After', String(wait || 5));
+      return this.json(response, 429, { error: '尝试过于频繁，请稍后重试。' });
+    }
+    try {
+      const input: unknown = await this.body(request, 64 * 1024);
+      // A slow upload must not start a ceremony for an entry that was disabled or moved meanwhile.
+      if (this.route(request) !== `/api/passkey/${route}` || !this.trusted(request))
+        fail('passkey_expired', '访问地址已变化，请重新开始。');
+      const entry = this.passkeyEntry(request);
+      if (cancelling) {
+        const kind = route.startsWith('register/')
+          ? 'register'
+          : route.startsWith('login/')
+            ? 'login'
+            : 'proof';
+        const session = kind === 'login' ? undefined : this.passkeySession(request);
+        const { challengeId } = passkeyCancellationSchema.parse(input);
+        this.passkeys.cancel(challengeId, kind, entry, session?.id);
+        return this.json(response, 200, { cancelled: true });
+      }
+      if (route.startsWith('register/')) {
+        const result = await this.registerPasskey(route, input, request, entry);
+        return this.json(response, 200, result);
+      }
+      return await this.authenticatePasskey(route, input, request, response, entry);
+    } catch (error) {
+      if (route.endsWith('/verify')) this.throttle.fail(address, this.now());
+      const known = error instanceof DomainError;
+      return this.json(response, (known && statuses[error.code]) || 400, {
+        error: known ? error.message : '通行密钥验证失败，请重新尝试。',
+        code: known ? error.code : 'passkey_failed',
+      });
+    } finally {
+      this.throttle.leave(address);
+    }
+  }
+  private async registerPasskey(
+    route: string,
+    input: unknown,
+    request: IncomingMessage,
+    entry: PasskeyEntry,
+  ) {
+    const session = this.passkeySession(request);
+    if (route === 'register/options') {
+      const body = passkeyRegistrationRequestSchema.parse(input);
+      return this.passkeys.registrationOptions(
+        body.name,
+        session.id,
+        entry,
+        this.address(request),
+        this.sessionExpiry(session),
+      );
+    }
+    const body = passkeyRegistrationResponseSchema.parse(input);
+    const id = await this.passkeys.register(body.challengeId, body.response, entry, session.id);
+    return { registered: true, id };
+  }
+  private async authenticatePasskey(
+    route: string,
+    input: unknown,
+    request: IncomingMessage,
+    response: ServerResponse,
+    entry: PasskeyEntry,
+  ) {
+    const kind = route.startsWith('login/') ? 'login' : 'proof';
+    const session = kind === 'proof' ? this.passkeySession(request) : undefined;
+    if (route.endsWith('/options')) {
+      passkeyEmptyRequestSchema.parse(input);
+      const options = await this.passkeys.authenticationOptions(
+        kind,
+        entry,
+        this.address(request),
+        session?.id,
+        session ? this.sessionExpiry(session) : undefined,
+      );
+      return this.json(response, 200, options);
+    }
+    const body = passkeyAuthenticationResponseSchema.parse(input);
+    return this.passkeys.authenticate(
+      kind,
+      body.challengeId,
+      body.response,
+      entry,
+      session?.id,
+      (id) => {
+        this.throttle.succeed(this.address(request));
+        return kind === 'login'
+          ? this.signIn(request, response, id)
+          : this.json(response, 200, this.passkeys.proof(session!.id));
+      },
+    );
+  }
+
+  private signIn(request: IncomingMessage, response: ServerResponse, passkeyId?: string) {
+    this.sweep();
+    // Signing in again replaces this browser's login instead of adding one.
+    const previous = this.cookieSession(request);
+    const { count } = this.options.database
+      .prepare('SELECT COUNT(*) AS count FROM web_sessions')
+      .get() as { count: number };
+    if (count >= 128 && !previous)
+      fail('web_session_limit', '登录会话数量已达上限，请先撤销不用的会话。');
+    const now = this.now();
+    const secret = randomBytes(32).toString('hex');
+    const row: StoredSession = {
+      id: randomUUID(),
+      name: String(request.headers['user-agent'] ?? '浏览器').slice(0, 120),
+      secret_hash: hash(secret),
+      token_hash: this.tokenHash,
+      created: now,
+      active: now,
+      expires: now + 30 * DAY,
+      passkey_id: passkeyId ?? null,
+    };
+    this.options.database
+      .prepare(
+        'INSERT INTO web_sessions (id, secret_hash, token_hash, name, created, active, expires, passkey_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        row.id,
+        row.secret_hash,
+        row.token_hash,
+        row.name,
+        now,
+        now,
+        row.expires,
+        row.passkey_id,
+      );
+    if (previous) this.revoke(previous.id);
+    response.setHeader('Set-Cookie', this.cookie(secret, row.expires));
+    return this.json(response, 200, this.loginState(request, row));
   }
   // Files of the build only: the page, its assets and icons; no dotfiles or source maps.
   private async file(route: string, request: IncomingMessage, response: ServerResponse) {
@@ -683,6 +862,7 @@ export class WebAccess {
   }
   close() {
     this.closed = true;
+    this.passkeys.clearPending();
     clearTimeout(this.timer);
     for (const id of this.sockets.keys()) this.disconnect(id);
   }

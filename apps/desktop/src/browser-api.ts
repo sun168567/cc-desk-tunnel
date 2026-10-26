@@ -1,5 +1,5 @@
 import { webLoginStateSchema } from '@cc-desk-tunnel/protocol';
-import type { WebProof } from '@cc-desk-tunnel/protocol';
+import type { WebCredentialProof } from '@cc-desk-tunnel/protocol';
 
 // The server redirects an entry without its trailing slash before serving the application.
 export function browserEndpoint(name: string) {
@@ -10,8 +10,11 @@ export function browserSocket() {
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.href;
 }
-async function request(name: string, body?: unknown) {
+export async function browserRequest(name: string, body?: unknown, signal?: AbortSignal) {
   const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(browserEndpoint(name), {
@@ -35,17 +38,20 @@ async function request(name: string, body?: unknown) {
     }
     return value;
   } catch (error) {
+    signal?.throwIfAborted();
     if (controller.signal.aborted) throw new Error('连接超时，请重试。');
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
 }
-export const browserSession = async () => webLoginStateSchema.parse(await request('session'));
-export const browserLogin = async (proof: WebProof) =>
-  webLoginStateSchema.parse(await request('login', proof));
+export const browserSession = async () =>
+  webLoginStateSchema.parse(await browserRequest('session'));
+export const browserLogin = async (proof: WebCredentialProof) =>
+  webLoginStateSchema.parse(await browserRequest('login', proof));
 export const browserLogout = async () => {
-  await request('logout', {});
+  await browserRequest('logout', {});
 };
 // What the user does on the page keeps the browser's login; the service hears of it at most once a minute.
 // Reading counts too, while updates pushed to an unattended page do not.

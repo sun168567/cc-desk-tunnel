@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { ChevronRight, Copy, ExternalLink, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronRight, Copy, ExternalLink, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import type {
   WebCertificateState,
   WebProof,
@@ -8,11 +8,13 @@ import type {
   WebTotpSetup,
 } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
-import { IconButton, Modal, Switch } from './ui.tsx';
+import { IconButton, Switch } from './ui.tsx';
 import { CopyButton } from './copy.tsx';
 import ReverseProxyHelp from './ReverseProxyHelp.tsx';
-
-const message = (error: unknown) => (error instanceof Error ? error.message : '请求失败，请重试。');
+import { DialogForm, ProofFields, message, useSubmit } from './WebSettingsForm.tsx';
+import { confirmedWebProof, passkeySupportError } from './passkey.ts';
+import type { ProofInput } from './passkey.ts';
+import { PasskeyDialog, RenamePasskeyDialog } from './PasskeySettings.tsx';
 
 function Row({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
   return (
@@ -25,110 +27,6 @@ function Row({ title, detail, children }: { title: string; detail?: string; chil
     </div>
   );
 }
-// The service token, and the current authenticator code once two-step verification is on.
-function ProofFields({
-  proof,
-  change,
-  totp,
-}: {
-  proof: WebProof;
-  change: (value: WebProof) => void;
-  totp: boolean;
-}) {
-  return (
-    <>
-      <label>
-        服务凭据
-        <input
-          type="password"
-          autoComplete="current-password"
-          required
-          value={proof.password}
-          onChange={(event) => change({ ...proof, password: event.target.value })}
-        />
-      </label>
-      {totp && (
-        <label>
-          当前验证器动态码
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
-            value={proof.code ?? ''}
-            onChange={(event) => change({ ...proof, code: event.target.value })}
-          />
-        </label>
-      )}
-    </>
-  );
-}
-function useSubmit() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  async function run(task: () => Promise<void>) {
-    setBusy(true);
-    setError('');
-    try {
-      await task();
-    } catch (error) {
-      setError(message(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return { busy, error, setError, run };
-}
-function DialogForm({
-  title,
-  busy,
-  error,
-  submit,
-  submitLabel,
-  close,
-  children,
-}: {
-  title: string;
-  busy: boolean;
-  error: string;
-  submit: () => void;
-  submitLabel?: string;
-  close: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Modal
-      title={title}
-      onClose={() => {
-        if (!busy) close();
-      }}
-    >
-      <form
-        className="web-settings-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!busy) submit();
-        }}
-      >
-        <fieldset disabled={busy}>{children}</fieldset>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="dialog-actions">
-          <button type="button" className="button" disabled={busy} onClick={close}>
-            取消
-          </button>
-          <button className="button primary" disabled={busy}>
-            {submitLabel ?? (busy ? '正在保存…' : '确认')}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
 export function displayWebAddress(value: string) {
   try {
     const url = new URL(value);
@@ -139,7 +37,16 @@ export function displayWebAddress(value: string) {
   }
 }
 
-type Dialog = 'access' | 'totp' | 'disable' | 'certificate' | 'reset' | { revoke: string };
+type Dialog =
+  | 'access'
+  | 'totp'
+  | 'disable'
+  | 'certificate'
+  | 'reset'
+  | 'passkey'
+  | { revoke: string }
+  | { rename: string }
+  | { remove: string };
 
 // The Web entry of the service this window is connected to. Its state lives here, not in ProxyClient; a
 // connection that ends or changes closes the dialogs and forgets what was typed into them.
@@ -187,6 +94,22 @@ export default function WebAccessSettings({
       generation.current++;
     };
   }, [connection.connectionId, connected, client, browser]);
+  useEffect(() => {
+    if (!browser || !connected || !values || busy) return;
+    const locate = () => {
+      if (location.hash !== '#passkeys') return;
+      const element = document.getElementById('passkeys');
+      if (!(element instanceof HTMLDetailsElement)) return;
+      element.open = true;
+      element.scrollIntoView({ block: 'center' });
+      element.querySelector('summary')?.focus();
+      if (values.passkeyAvailable && !passkeySupportError()) setDialog('passkey');
+      history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+    };
+    locate();
+    window.addEventListener('hashchange', locate);
+    return () => window.removeEventListener('hashchange', locate);
+  }, [browser, connected, values, busy]);
   async function toggle(enabled: boolean) {
     const current = generation.current;
     setBusy(true);
@@ -287,7 +210,9 @@ export default function WebAccessSettings({
                 <Row
                   title="两步验证"
                   detail={
-                    values.totpEnabled ? '登录时需要验证器动态码。' : '建议开启验证器两步验证。'
+                    values.totpEnabled
+                      ? '使用服务凭据登录时需要验证器动态码。'
+                      : '建议开启验证器两步验证。'
                   }
                 >
                   <button
@@ -298,6 +223,72 @@ export default function WebAccessSettings({
                     {values.totpEnabled ? '关闭' : '设置'}
                   </button>
                 </Row>
+                <details id="passkeys" className="web-sessions web-passkeys">
+                  <summary>
+                    通行密钥{' '}
+                    <span>
+                      {values.passkeys.length}
+                      <ChevronRight aria-hidden="true" />
+                    </span>
+                  </summary>
+                  <div className="web-passkey-actions">
+                    <p className="muted">用于登录 Web 工作台。</p>
+                    <button
+                      className="button"
+                      disabled={
+                        busy ||
+                        !values.passkeyAvailable ||
+                        (browser ? !!passkeySupportError() : !values.url)
+                      }
+                      onClick={() =>
+                        browser ? setDialog('passkey') : void open(`${values.url}#passkeys`)
+                      }
+                    >
+                      添加通行密钥
+                    </button>
+                  </div>
+                  {(values.passkeyReason || (browser && passkeySupportError())) && (
+                    <p className="muted">{values.passkeyReason || passkeySupportError()}</p>
+                  )}
+                  {values.passkeys.length === 0 ? (
+                    <p className="muted">暂无通行密钥</p>
+                  ) : (
+                    <ul>
+                      {values.passkeys.map((key) => (
+                        <li key={key.id}>
+                          <span>
+                            <strong>{key.name}</strong>
+                            <small>
+                              {key.rpId}
+                              {key.available ? '' : ' · 当前域名不可用'}
+                            </small>
+                            <small>
+                              {key.lastUsedAt
+                                ? `最近使用 ${new Date(key.lastUsedAt).toLocaleString()}`
+                                : `创建于 ${new Date(key.createdAt).toLocaleString()}`}
+                            </small>
+                          </span>
+                          <div className="web-row-actions">
+                            <IconButton
+                              title={`重命名 ${key.name}`}
+                              disabled={busy}
+                              onClick={() => setDialog({ rename: key.id })}
+                            >
+                              <Pencil />
+                            </IconButton>
+                            <IconButton
+                              title={`删除 ${key.name}`}
+                              disabled={busy}
+                              onClick={() => setDialog({ remove: key.id })}
+                            >
+                              <Trash2 />
+                            </IconButton>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </details>
                 <details className="web-sessions">
                   <summary>
                     已登录浏览器{' '}
@@ -399,6 +390,36 @@ export default function WebAccessSettings({
           </p>
         )}
       </div>
+      {values && browser && dialog === 'passkey' && (
+        <PasskeyDialog client={client} values={values} close={close} changed={setValues} />
+      )}
+      {values && typeof dialog === 'object' && dialog && 'rename' in dialog && (
+        <RenamePasskeyDialog
+          client={client}
+          browser={browser}
+          values={values}
+          id={dialog.rename}
+          close={close}
+          changed={setValues}
+        />
+      )}
+      {values && typeof dialog === 'object' && dialog && 'remove' in dialog && (
+        <ConfirmDialog
+          title="删除通行密钥"
+          text={`删除“${values.passkeys.find((key) => key.id === dialog.remove)?.name ?? ''}”？使用它登录的浏览器也会退出。`}
+          proof={browser ? values.totpEnabled : undefined}
+          passkeyAvailable={values.passkeys.some((key) => key.available)}
+          act={async (proof) => {
+            const result = await client.fetch({
+              type: 'web.passkeys.remove',
+              passkeyId: dialog.remove,
+              ...proof,
+            });
+            setValues(result.values);
+          }}
+          close={close}
+        />
+      )}
       {values && dialog === 'access' && (
         <AccessDialog
           client={client}
@@ -411,13 +432,20 @@ export default function WebAccessSettings({
         />
       )}
       {values && dialog === 'totp' && (
-        <TotpDialog client={client} browser={browser} close={close} changed={setValues} />
+        <TotpDialog
+          client={client}
+          browser={browser}
+          passkeyAvailable={values.passkeys.some((key) => key.available)}
+          close={close}
+          changed={setValues}
+        />
       )}
       {values && dialog === 'disable' && (
         <ConfirmDialog
           title="关闭两步验证"
           text="关闭两步验证后，使用服务凭据即可登录。已登录浏览器将退出。"
           proof={browser ? values.totpEnabled : undefined}
+          passkeyAvailable={values.passkeys.some((key) => key.available)}
           act={async (proof) => {
             const result = await client.fetch({ type: 'web.totp.disable', ...proof });
             setValues(result.values);
@@ -425,16 +453,17 @@ export default function WebAccessSettings({
           close={close}
         />
       )}
-      {values && typeof dialog === 'object' && dialog && (
+      {values && typeof dialog === 'object' && dialog && 'revoke' in dialog && (
         <ConfirmDialog
           title="退出浏览器登录"
           text={
             dialog.revoke === own
               ? '退出当前浏览器的登录？'
-              : '退出这个浏览器的登录？它需要重新输入服务凭据和动态码。'
+              : '退出这个浏览器的登录？它需要重新验证身份后登录。'
           }
           // Ending another login from a browser asks for proof; a desktop or this browser itself need none.
           proof={browser && dialog.revoke !== own ? values.totpEnabled : undefined}
+          passkeyAvailable={values.passkeys.some((key) => key.available)}
           act={async (proof) => {
             const result = await client.fetch({
               type: 'web.sessions.revoke',
@@ -471,16 +500,18 @@ function ConfirmDialog({
   title,
   text,
   proof: totp,
+  passkeyAvailable = false,
   act,
   close,
 }: {
   title: string;
   text: string;
   proof?: boolean;
+  passkeyAvailable?: boolean;
   act: (proof: { proof?: WebProof }) => Promise<void>;
   close: () => void;
 }) {
-  const [proof, setProof] = useState<WebProof>({ password: '' });
+  const [proof, setProof] = useState<ProofInput>({ password: '' });
   const { busy, error, run } = useSubmit();
   return (
     <DialogForm
@@ -489,14 +520,23 @@ function ConfirmDialog({
       error={error}
       close={close}
       submit={() =>
-        void run(async () => {
-          await act(totp === undefined ? {} : { proof });
+        void run(async (signal) => {
+          await act(totp === undefined ? {} : { proof: confirmedWebProof(proof) }).finally(() => {
+            if (!signal.aborted && 'passkey' in proof) setProof({ passkey: '' });
+          });
           close();
         })
       }
     >
       <p>{text}</p>
-      {totp !== undefined && <ProofFields proof={proof} change={setProof} totp={totp} />}
+      {totp !== undefined && (
+        <ProofFields
+          proof={proof}
+          change={setProof}
+          totp={totp}
+          passkeyAvailable={passkeyAvailable}
+        />
+      )}
     </DialogForm>
   );
 }
@@ -518,7 +558,7 @@ function AccessDialog({
   close: () => void;
   changed: (values: WebSettingsState) => void;
 }) {
-  const [proof, setProof] = useState<WebProof>({ password: '' });
+  const [proof, setProof] = useState<ProofInput>({ password: '' });
   const [draft, setDraft] = useState({
     domain: values.domain,
     path: values.path,
@@ -529,24 +569,28 @@ function AccessDialog({
   const { busy, error, run } = useSubmit();
   // A browser may only move the entry, and proves itself for it; a desktop saves the rest as well.
   const save = () =>
-    run(async () => {
+    run(async (signal) => {
       const path = draft.path.trim();
-      const result = await client.fetch({
-        type: 'web.settings.update',
-        ...(browser
-          ? { values: { path }, proof }
-          : {
-              values: {
-                ...draft,
-                domain: draft.domain.trim(),
-                path,
-                trustedProxies: draft.trustedProxies
-                  .split(/[\n,]/)
-                  .map((value) => value.trim())
-                  .filter(Boolean),
-              },
-            }),
-      });
+      const result = await client
+        .fetch({
+          type: 'web.settings.update',
+          ...(browser
+            ? { values: { path }, proof: confirmedWebProof(proof) }
+            : {
+                values: {
+                  ...draft,
+                  domain: draft.domain.trim(),
+                  path,
+                  trustedProxies: draft.trustedProxies
+                    .split(/[\n,]/)
+                    .map((value) => value.trim())
+                    .filter(Boolean),
+                },
+              }),
+        })
+        .finally(() => {
+          if (!signal.aborted && 'passkey' in proof) setProof({ passkey: '' });
+        });
       if (browser && result.values.path !== values.path) {
         const url = new URL(result.values.url ?? '', location.href);
         const expected = result.values.path ? `/${result.values.path}/` : '/';
@@ -645,7 +689,14 @@ function AccessDialog({
           )}
         </>
       )}
-      {browser && <ProofFields proof={proof} change={setProof} totp={values.totpEnabled} />}
+      {browser && (
+        <ProofFields
+          proof={proof}
+          change={setProof}
+          totp={values.totpEnabled}
+          passkeyAvailable={values.passkeys.some((key) => key.available)}
+        />
+      )}
     </DialogForm>
   );
 }
@@ -654,15 +705,17 @@ function AccessDialog({
 function TotpDialog({
   client,
   browser,
+  passkeyAvailable,
   close,
   changed,
 }: {
   client: ProxyClient;
   browser: boolean;
+  passkeyAvailable: boolean;
   close: () => void;
   changed: (values: WebSettingsState) => void;
 }) {
-  const [proof, setProof] = useState<WebProof>({ password: '' });
+  const [proof, setProof] = useState<ProofInput>({ password: '' });
   const [setup, setSetup] = useState<WebTotpSetup | null>(null);
   const [qr, setQr] = useState('');
   const [code, setCode] = useState('');
@@ -670,12 +723,18 @@ function TotpDialog({
   // One request however often React runs the effect that asks for it.
   const pending = useRef<Promise<WebTotpSetup> | null>(null);
   const prepare = () =>
-    run(async () => {
-      pending.current ??= client.fetch({ type: 'web.totp.setup', ...(browser ? { proof } : {}) });
+    run(async (signal) => {
+      pending.current ??= client.fetch({
+        type: 'web.totp.setup',
+        ...(browser ? { proof: confirmedWebProof(proof) } : {}),
+      });
       try {
-        setSetup(await pending.current);
+        const value = await pending.current;
+        signal.throwIfAborted();
+        setSetup(value);
       } finally {
         pending.current = null;
+        if (!signal.aborted && 'passkey' in proof) setProof({ passkey: '' });
       }
     });
   useEffect(() => {
@@ -713,7 +772,14 @@ function TotpDialog({
       submit={() => void (setup ? enable() : prepare())}
       submitLabel={setup ? undefined : busy ? '正在准备…' : browser ? '下一步' : '重试'}
     >
-      {!setup && browser && <ProofFields proof={proof} change={setProof} totp={false} />}
+      {!setup && browser && (
+        <ProofFields
+          proof={proof}
+          change={setProof}
+          totp={false}
+          passkeyAvailable={passkeyAvailable}
+        />
+      )}
       {!setup && !browser && busy && <p role="status">正在生成验证器密钥…</p>}
       {setup && (
         <div className="web-totp-setup">

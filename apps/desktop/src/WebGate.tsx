@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ShieldAlert } from 'lucide-react';
+import { Fingerprint, ShieldAlert } from 'lucide-react';
 import type { WebLoginState } from '@cc-desk-tunnel/protocol';
 import { browserLogin, browserLogout, browserSession } from './browser-api.ts';
 import { App } from './App.tsx';
+import {
+  cancelPasskey,
+  loginWithPasskey,
+  passkeyError,
+  passkeySupportError,
+  usePasskeyOptions,
+} from './passkey.ts';
 
 export function CertificateWarning() {
   const ref = useRef<HTMLParagraphElement>(null);
@@ -35,6 +42,36 @@ export default function WebGate() {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const generation = useRef(0);
+  const supportError = passkeySupportError();
+  const {
+    options,
+    error: optionsError,
+    refresh,
+  } = usePasskeyOptions(
+    'login',
+    !!session?.passkeyAvailable && !session.authenticated && !supportError,
+  );
+  async function login(task: () => Promise<WebLoginState>, passkey = false) {
+    if (busy) return;
+    const current = ++generation.current;
+    setBusy(true);
+    setError('');
+    try {
+      const value = await task();
+      if (current !== generation.current) return;
+      setPassword('');
+      setCode('');
+      setSession(value);
+    } catch (error) {
+      if (current === generation.current) {
+        setError(passkeyError(error));
+        if (passkey) refresh();
+      }
+    } finally {
+      if (current === generation.current) setBusy(false);
+    }
+  }
+
   const check = useCallback(async () => {
     const current = ++generation.current;
     setBusy(true);
@@ -53,6 +90,7 @@ export default function WebGate() {
     void check();
     return () => {
       generation.current++;
+      cancelPasskey();
     };
   }, [check]);
   const expired = useCallback(() => {
@@ -92,26 +130,9 @@ export default function WebGate() {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (busy) return;
-              const current = ++generation.current;
-              setBusy(true);
-              setError('');
-              void browserLogin({ password, ...(session.totpEnabled ? { code } : {}) })
-                .then(
-                  (value) => {
-                    if (current !== generation.current) return;
-                    setPassword('');
-                    setCode('');
-                    setSession(value);
-                  },
-                  (error: unknown) => {
-                    if (current === generation.current)
-                      setError(error instanceof Error ? error.message : '登录失败。');
-                  },
-                )
-                .finally(() => {
-                  if (current === generation.current) setBusy(false);
-                });
+              void login(() =>
+                browserLogin({ password, ...(session.totpEnabled ? { code } : {}) }),
+              );
             }}
           >
             <label>
@@ -149,6 +170,28 @@ export default function WebGate() {
             <button className="button primary" disabled={busy}>
               {busy ? '正在登录…' : '登录'}
             </button>
+            {session.passkeyAvailable && (
+              <>
+                <button
+                  type="button"
+                  className="button web-passkey-login"
+                  disabled={busy || !!supportError || (!options && !optionsError)}
+                  onClick={() => {
+                    if (!options) {
+                      refresh();
+                      return;
+                    }
+                    void login(() => loginWithPasskey(options), true);
+                  }}
+                >
+                  <Fingerprint aria-hidden="true" />
+                  {optionsError ? '重新准备通行密钥' : '使用通行密钥登录'}
+                </button>
+                {(supportError || optionsError) && (
+                  <p className="muted">{supportError || optionsError}</p>
+                )}
+              </>
+            )}
           </form>
         )}
       </section>

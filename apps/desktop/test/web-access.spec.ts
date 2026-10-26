@@ -43,6 +43,8 @@ async function browserFixture(page: Page, authenticated = false, withHistory = f
     proxyEnabled: false,
     trustedProxies: [],
     totpEnabled: true,
+    passkeyAvailable: false,
+    passkeys: [],
     sessions: [
       {
         id: sessionId,
@@ -71,6 +73,7 @@ async function browserFixture(page: Page, authenticated = false, withHistory = f
         json: {
           authenticated: loggedIn,
           totpEnabled: true,
+          passkeyAvailable: false,
           selfSigned: true,
           ...(loggedIn ? { session: values.sessions[0] } : {}),
         },
@@ -318,6 +321,8 @@ async function settingsFixture(
         proxyEnabled: false,
         trustedProxies: [],
         totpEnabled: totp,
+        passkeyAvailable: true,
+        passkeys: [],
         sessions: [],
         selfSigned: true,
         url: 'https://web.example.com/entry/',
@@ -407,9 +412,39 @@ async function settingsFixture(
     },
     { enabled, custom, browser, totp },
   );
-  if (browser) await expect(page.locator('.web-sessions > summary')).toHaveText('已登录浏览器 0');
+  if (browser)
+    await expect(page.locator('.web-sessions:not(.web-passkeys) > summary')).toHaveText(
+      '已登录浏览器 0',
+    );
   else await expect(page.getByRole('switch', { name: '启用 Web 访问' })).toBeVisible();
 }
+
+test('desktop Passkey entry opens the browser add link without a desktop registration or credentials', async ({
+  page,
+}) => {
+  await settingsFixture(page);
+  await page.evaluate(() => {
+    Object.assign(window, {
+      openedWebAddress: '',
+      desktop: {
+        openWeb: async (url: string) => Object.assign(window, { openedWebAddress: url }),
+        saveDrafts: async () => {},
+      },
+    });
+  });
+  await page.locator('.web-passkeys > summary').click();
+  await page.getByRole('button', { name: '添加通行密钥', exact: true }).click();
+  const result = await page.evaluate(() => {
+    const state = window as unknown as {
+      openedWebAddress: string;
+      settingsFixture: { calls: { type: string }[] };
+    };
+    return { url: state.openedWebAddress, calls: state.settingsFixture.calls };
+  });
+  expect(result.url).toBe('https://web.example.com/entry/#passkeys');
+  expect(result.calls.some((command) => command.type.startsWith('web.passkeys.'))).toBe(false);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
 
 test('disabled Web keeps only custom-certificate recovery, confirms reset, and retries a failed reset', async ({
   page,
@@ -509,6 +544,7 @@ for (const browser of [false, true])
         Object.defineProperty(window, 'desktop', {
           configurable: true,
           value: {
+            saveDrafts: async () => {},
             copyText: async (text: string) => {
               clipboard.desktopCalls++;
               await write(text);
