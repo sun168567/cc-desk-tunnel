@@ -321,13 +321,15 @@ handle('path:act', async (event, action, target, options) => {
 // Only an address announced by the currently authenticated service may leave the application here.
 handle('web:open', async (_event, target) => {
   const url = new URL(String(target));
+  if (url.hash && url.hash !== '#passkeys') throw new Error('Unexpected Web address');
+  const address = new URL(url);
+  address.hash = '';
   if (
     url.protocol !== 'https:' ||
     url.username ||
     url.password ||
-    url.hash ||
     url.search ||
-    bridge?.webUrl() !== url.href
+    bridge?.webUrl() !== address.href
   )
     throw new Error('Unexpected Web address');
   await shell.openExternal(url.href);

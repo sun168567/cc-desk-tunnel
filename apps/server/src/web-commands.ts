@@ -27,6 +27,8 @@ export const browserCommands = new Set<Command['type']>([
   'web.totp.setup',
   'web.totp.enable',
   'web.totp.disable',
+  'web.passkeys.rename',
+  'web.passkeys.remove',
 ]);
 
 // What a browser changes is its user's doing; reading is told apart by the page with \web.activity\.
@@ -48,6 +50,8 @@ export const browserActivity = new Set<Command['type']>([
   'web.totp.setup',
   'web.totp.enable',
   'web.totp.disable',
+  'web.passkeys.rename',
+  'web.passkeys.remove',
 ]);
 
 // Web settings, browser logins and the domain certificate are answered by WebAccess.

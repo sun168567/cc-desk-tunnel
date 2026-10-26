@@ -76,6 +76,8 @@ test('revocation ends browser reconnect and reports expiry; settings data remain
     totpEnabled: false,
     sessions: [],
     selfSigned: true,
+    passkeys: [],
+    passkeyAvailable: false,
   };
   socket.message({ type: 'web.settings.state', requestId: request.requestId, values });
   socket.message({ type: 'response', requestId: request.requestId, ok: true });

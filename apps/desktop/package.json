@@ -1,6 +1,6 @@
 {
   "name": "@cc-desk-tunnel/desktop",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cc-desk-tunnel/protocol": "0.0.0",
+    "@simplewebauthn/browser": "14.0.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "katex": "0.19.0",
@@ -25,7 +26,8 @@
     "remark-gfm": "4.0.1",
     "remark-math": "6.0.0",
     "ssh2": "1.17.0",
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@rolldown/plugin-babel": "0.2.4",

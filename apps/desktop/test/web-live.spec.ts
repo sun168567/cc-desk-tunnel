@@ -14,6 +14,152 @@ import { screenshots } from './helpers.ts';
 const webScreenshots = resolve(screenshots, 'web');
 mkdirSync(webScreenshots, { recursive: true });
 
+test('Passkey registration, login and proof recovery use the real HTTPS service', async ({
+  browser,
+}, testInfo) => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'cc-web-passkey-'));
+  const token = `passkey-live-test-${randomUUID()}`;
+  const service = createProxyServer({
+    token,
+    dataDir,
+    host: '127.0.0.1',
+    tls: { cert: Buffer.from(defaultCertificate.cert), key: Buffer.from(defaultCertificate.key) },
+    webDirectory: resolve('apps/desktop/dist'),
+  });
+  // This fixture exercises TLS transport, not public certificate trust or a reverse-proxy deployment.
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  let desktop: WebSocket | undefined;
+  try {
+    const url = await service.listen(0);
+    desktop = new WebSocket(`${url.replace('https:', 'wss:')}/ws`, { rejectUnauthorized: false });
+    const messages: ServerMessage[] = [];
+    desktop.on('message', (raw) =>
+      messages.push(serverMessageSchema.parse(JSON.parse(raw.toString()))),
+    );
+    await once(desktop, 'open');
+    desktop.send(
+      JSON.stringify({
+        type: 'auth',
+        token,
+        protocolVersion: PROTOCOL_VERSION,
+        deviceName: '测试桌面',
+      }),
+    );
+    desktop.send(JSON.stringify({ type: 'device', id: randomUUID() }));
+    await expect.poll(() => messages.some((message) => message.type === 'ready')).toBe(true);
+    const requestId = randomUUID();
+    desktop.send(
+      JSON.stringify({
+        type: 'web.settings.update',
+        requestId,
+        values: { enabled: true, domain: 'web.localhost', path: 'passkey' },
+      }),
+    );
+    await expect
+      .poll(() =>
+        messages.find((message) => message.type === 'response' && message.requestId === requestId),
+      )
+      .toMatchObject({ ok: true });
+    const entry = new URL('/passkey/', url);
+    entry.hostname = 'web.localhost';
+    const page = await context.newPage();
+    const frames: Record<string, unknown>[] = [];
+    page.on('websocket', (socket) =>
+      socket.on('framesent', ({ payload }) => frames.push(JSON.parse(String(payload)))),
+    );
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('WebAuthn.enable');
+    await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2',
+        transport: 'internal',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    await page.goto(`${entry.href}#passkeys`);
+    await page.getByLabel('服务凭据', { exact: true }).fill(token);
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByLabel('名称', { exact: true }).fill('真实链路');
+    await page.getByRole('button', { name: '下一步', exact: true }).click();
+    await page.getByRole('button', { name: '创建通行密钥', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const key = service.store.database.prepare('SELECT id, name FROM passkeys').get()!;
+    expect(key.name).toBe('真实链路');
+    await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+    await page.getByRole('menuitem', { name: '退出登录', exact: true }).click();
+    await page.getByRole('button', { name: '使用通行密钥登录', exact: true }).click();
+    await expect(page.locator('.connection-status')).toContainText('已连接');
+    expect(
+      (await context.cookies(entry.href)).find((cookie) => cookie.name.startsWith('cc_web_')),
+    ).toMatchObject({ secure: true, httpOnly: true, sameSite: 'Strict', path: '/passkey/' });
+    expect(service.store.database.prepare('SELECT passkey_id FROM web_sessions').all()).toEqual([
+      { passkey_id: key.id },
+    ]);
+    await page.goto(`${entry.href}#passkeys`);
+    await page.getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('button', { name: '重命名 真实链路', exact: true }).click();
+    await page.getByLabel('名称', { exact: true }).fill('已验证链路');
+    await page.getByRole('button', { name: '改用通行密钥验证', exact: true }).click();
+    await page.getByRole('button', { name: '验证通行密钥', exact: true }).click();
+    await expect(page.getByText('已通过通行密钥验证', { exact: true })).toBeVisible();
+    const renames = () => frames.filter((frame) => frame.type === 'web.passkeys.rename');
+    const name = page.getByLabel('名称', { exact: true });
+    await name.fill('');
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(name).toBeFocused();
+    await expect(page.getByText('已通过通行密钥验证', { exact: true })).toBeVisible();
+    expect(renames()).toHaveLength(0);
+    await name.fill('已验证链路');
+    service.store.database.exec(`CREATE TRIGGER reject_rename BEFORE UPDATE OF name ON passkeys
+      BEGIN SELECT RAISE(FAIL, 'test rename failure'); END;`);
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('服务处理失败');
+    await expect(page.getByText('已通过通行密钥验证', { exact: true })).toHaveCount(0);
+    expect(renames()).toHaveLength(1);
+    expect(
+      service.store.database.prepare('SELECT name FROM passkeys WHERE id = ?').get(key.id),
+    ).toMatchObject({ name: '真实链路' });
+    service.store.database.exec('DROP TRIGGER reject_rename');
+    await page
+      .getByRole('dialog')
+      .screenshot({ path: testInfo.outputPath('proof-retry-desktop.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({ path: testInfo.outputPath('proof-retry-mobile.png') });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('请先完成通行密钥验证');
+    expect(renames()).toHaveLength(1);
+    await page.getByRole('button', { name: '验证通行密钥', exact: true }).click();
+    await expect(page.getByText('已通过通行密钥验证', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '确认', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: '重命名 已验证链路', exact: true }),
+    ).toBeVisible();
+    expect(
+      service.store.database.prepare('SELECT name FROM passkeys WHERE id = ?').get(key.id),
+    ).toMatchObject({ name: '已验证链路' });
+    expect(frames.find((frame) => frame.type === 'web.passkeys.rename')).toMatchObject({
+      proof: { passkey: expect.any(String) },
+    });
+    expect(renames()).toHaveLength(2);
+    expect(frames.some((frame) => ['auth', 'device'].includes(String(frame.type)))).toBe(false);
+  } finally {
+    await context.close();
+    desktop?.terminate();
+    await service.close();
+    expect(dirname(dataDir)).toBe(resolve(tmpdir()));
+    expect(basename(dataDir)).toMatch(/^cc-web-passkey-/);
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 for (const path of ['', 'private-access'])
   test(`production workbench at ${path || 'root'} uses real HTTPS, protected cookies and WSS alongside desktop`, async ({
     browser,
