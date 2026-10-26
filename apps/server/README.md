@@ -14,7 +14,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 正式 Web 首次默认关闭，在桌面设置中启用，选择保存到现有 SQLite 数据库，服务重启后保持。服务端在同一 HTTPS 端口提供与桌面共用的前端、登录接口和单独的浏览器 WebSocket，不改变桌面 `/ws`、健康检查或 Docker 端口映射。镜像和升级包包含同版本前端构建，运行环境不需要 Electron 或 Vite。
 
-`web-access.ts` 管登录、Cookie 会话、域名 / 子路径和静态资源；`web-totp.ts` 管可选验证器动态码；`web-commands.ts` 明确浏览器命令白名单；`web-certificate.ts` 管指定域名的 SNI 证书，原默认 TLS 上下文和健康检查保持原样。Web 状态不放进客户端的通用会话仓库。启用步骤、权限和部署边界见[浏览器访问](../../docs/server-web.md)。
+`web-access.ts` 管登录、Cookie 会话、域名 / 子路径和静态资源；`web-totp.ts` 管可选验证器动态码；`passkeys.ts` 管通行密钥公钥与一次性 WebAuthn 挑战；`web-commands.ts` 明确浏览器命令白名单；`web-certificate.ts` 管指定域名的 SNI 证书，原默认 TLS 上下文和健康检查保持原样。Web 状态不放进客户端的通用会话仓库。启用步骤、权限和部署边界见[浏览器访问](../../docs/server-web.md)。
 
 ## 原生连接
 

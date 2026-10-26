@@ -2,6 +2,8 @@
 
 当前版本见 `src/index.ts` 的 `PROTOCOL_VERSION`，导出 TypeScript 类型和 Zod 运行时校验。两端需一起升级。服务适配原生公开事件，不复制 CLI 私有控制协议；该部分由官方 SDK 管理。
 
+`src/passkey.ts` 定义 WebAuthn 注册、登录与再次验证的 HTTP 请求，以及密钥列表和重命名、删除命令。注册请求只提交名称，授权来自有效的浏览器登录会话，不提供桌面注册授权协议。
+
 ## 连接与消息
 
 - WebSocket `/ws` 建立后，首帧必须是 `auth`：协议版本、代理服务 token、设备名称。5 秒内不认证则关闭；token 不进入会话事件。服务回传 `ready`、连接 ID 和会话目录。
