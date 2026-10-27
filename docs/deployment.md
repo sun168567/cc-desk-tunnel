@@ -6,7 +6,7 @@
 
 官方 CLI、PTY 与代理服务在同一个容器里，通往 Windows 的随机 SSH 端口只在容器回环上，不需要 host 网络、特权容器或 Docker socket。镜像是较完整的 Ubuntu 工具环境，预装 Git、SSH、Node、Python 以及编译、文本、网络工具，保留可写层与持久的工作目录，普通用户可以安装用户级工具。
 
-`deploy/install.sh` 检查 Docker 与 Compose（缺少时只给出安装命令），单独运行时还会从发布页下载并校验最新的程序包；`deploy/manage.sh` 负责初始化、构建、启动、升级、更换证书与凭据、备份恢复和卸载。`npm run package:server` 生成不含秘密、携带同版本 Web 前端构建的源码包；运行镜像不需要 Electron 或 Vite。也可以在别处构建镜像后 `docker save` / `load`，配合不含构建步骤的 `deploy/compose.yml` 使用。目前没有公共镜像仓库。
+`deploy/install.sh` 检查 Docker 与 Compose（缺少时只给出安装命令），单独运行时下载部署脚本并选择发布版本，从 GHCR 拉取对应双架构镜像；`deploy/manage.sh` 负责初始化、构建、启动、升级、更换证书与凭据、备份恢复和卸载。`npm run package:server` 生成不含秘密、携带同版本 Web 前端构建的源码包；运行镜像不需要 Electron 或 Vite。也可以在别处构建镜像后 `docker save` / `load`，配合不含构建步骤的 `deploy/compose.yml` 使用。公共镜像为 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z`，不包含桌面安装包；对应 Windows 安装包由服务启动后另行下载到数据目录。
 
 Node.js、Claude Code、Agent SDK 均为固定版本（见 `scripts/install-linux.sh` 与 `package-lock.json`），不声称最新或无漏洞。`scripts/install-linux.sh` 与 `scripts/deploy-linux.mjs` 另提供一条普通用户直接运行的开发调试路径，没有进程监督，不用于生产。
 
@@ -42,7 +42,7 @@ Web 首次默认关闭，由桌面设置启用，选择保存在服务端，重�
 
 Compose `unless-stopped`、`tini -g`、30 秒正常停止、日志上限 3 × 10MB；强杀由 Docker 回收容器全部进程。正常代理退出 / 断连仍负责临时隧道与终端回收，服务启动删除失效连接目录。健康检查不调用模型，不代表提供方 / Windows 在线；unhealthy 不自动触发 Docker 重启。
 
-`--data` 默认 root 初始化为 `/srv/cc-desk-tunnel`，持久化原生 home、代理 state / SQLite / WAL、workspace、配置和证书。目录 0700、秘密文件 0600；容器 uid 1000 可写数据，程序与官方运行时由 root 拥有。备份停止服务保持一致，排除临时 SSH identity，结束恢复原运行状态。恢复只允许空的长期数据目录；卸载保留数据与镜像，不卸宿主 Docker，不自动删除上下文。升级先成功构建再替换，备份与旧镜像 tag 可供回退。
+`--data` 默认 root 初始化为 `/srv/cc-desk-tunnel`，持久化原生 home、代理 state / SQLite / WAL、workspace、配置和证书。目录 0700、秘密文件 0600；容器 uid 1000 可写数据，程序与官方运行时由 root 拥有。备份停止服务保持一致，排除临时 SSH identity，结束恢复原运行状态。恢复只允许空的长期数据目录；卸载保留数据与镜像，不卸宿主 Docker，不自动删除上下文。升级先成功拉取（显式源码模式为构建）再替换；数据迁移在程序启动时执行。回退需要与旧程序兼容的数据备份，不能仅靠换旧镜像保证恢复。
 
 Web 设置、稳定的服务端设备标识、浏览器会话和 TOTP 密钥存在同一 SQLite 数据库；浏览器会话秘密只存哈希，TOTP 密钥和备份仍应按秘密保存。更换服务凭据并重启服务后，已有浏览器登录失效。
 

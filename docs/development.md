@@ -33,9 +33,17 @@ Windows 上的 shell 命令与脚本使用 `pwsh.exe`（PowerShell 7）。终端
 
 1. 在合并请求里改好版本号与变更记录，合入 `main`。
 2. 在任意一台电脑上检出最新的 `main`，准备好已登录的 `gh`。发布的文件不在本机构建。
-3. `npm run release` 先建一个草稿发布，写好发布说明，再启动 GitHub 上的 `package` 工作流：它从同一提交打出 Windows 安装包、macOS 的两个 dmg、Linux 的 deb 和服务端程序包，每个客户端都实际启动一次作检查，然后连同 `release.json`（版本、协议版本、提交、各文件的大小与 SHA256）和 `SHA256SUMS` 一起挂到草稿上，约十五分钟。任何一个文件没有打出或启动检查没过即中止，草稿留在原处，删掉后可重来。默认停在草稿，核对无误后在发布页点发布，或直接用 `npm run release -- --publish`。`--dry-run` 只把发布说明写到 `artifacts/release/notes.md`，不动 GitHub。
+3. `npm run release` 先建一个草稿发布，写好发布说明，再启动 GitHub 上的 `package` 工作流：它从同一提交打出 Windows 安装包、macOS 的两个 dmg、Linux 的 deb 、服务端程序包和 amd64 / arm64 镜像，每个客户端都实际启动一次作检查，然后连同 `release.json`（版本、协议版本、提交、各文件的大小与 SHA256）和 `SHA256SUMS` 一起挂到草稿上，约十五分钟。任何一个文件或镜像没有打出、部署检查或启动检查没过即中止，草稿留在原处，删掉后可重来。默认停在草稿，核对无误后在发布页点发布，或直接用 `npm run release -- --publish`。`--dry-run` 只把发布说明写到 `artifacts/release/notes.md`，不动 GitHub。
 
 发布的文件只来自 GitHub 的机器：谁来发布、在哪台电脑上发布，得到的都是同一提交按同一流程构建的文件，构建记录留在该次运行里。
+
+镜像由 `images.yml` 在 GitHub 的 amd64、arm64 机器上分别构建并执行部署回归，全部通过后合并为 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z`。`package` 已调用这个工作流，维护者仍只运行原来的发布命令；镜像失败会阻止草稿文件挂载完成。镜像不包含桌面安装包，客户端下载继续使用 Release。应用数据迁移、应用内升级和 `runtime-level` 的规则不变，没有镜像专属的数据升级步骤。
+
+首次发布 GHCR 包时需在 GitHub 的 Packages 设置里将包设为 Public（只需一次），并允许本仓库 Actions 写入；工作流最终会匿名检查镜像可读，未公开时失败，设好后重跑失败任务。版本标签不覆盖：重跑时已存在的镜像必须属于同一提交，否则失败。架构构建的 `build-...` 标签是临时中间产物，正式入口使用版本标签。
+
+发布或编辑 Release 后，`image-latest.yml` 按 GitHub 实际的 Latest 正式版更新镜像 `latest`；预发布不抢占正式版，转正只调整标签，不重新构建。安装脚本使用固定版本，所以不依赖 `latest` 标签的更新时机。该工作流失败时可重跑；不要手工把预发布设为镜像 latest。
+
+补建已有版本镜像无需改版本号或重发安装包：手动运行 `images`，`source` 填 `vX.Y.Z`，`tag` 填 `vX.Y.Z`。应用严格取已有标签的提交，部署验证使用工作流所在分支的脚本；不会改动原 Release 附件。补建最新正式版后手动运行一次 `image-latest`。开发分支默认只构建验证；需要验证真实推送时手动指定 `verify-主题`，不会影响正式版本和 latest。
 
 `release.json` 里的 `runtime` 是该版本所需的镜像级别，取自 `deploy/docker/runtime-level`。改动 Dockerfile、镜像入口脚本或 Node.js 的版本时把这个数字加一：旧镜像上的服务端会提示在服务器上升级，而不是自行安装。只更换 Claude Code 的版本不需要加，升级时会把所需版本装进数据目录。
 
