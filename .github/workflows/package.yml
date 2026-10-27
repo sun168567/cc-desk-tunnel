@@ -27,6 +27,7 @@ concurrency:
 # downloads now and then time out.
 jobs:
   images:
+    if: inputs.release != ''
     uses: ./.github/workflows/images.yml
     permissions:
       contents: read

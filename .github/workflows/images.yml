@@ -16,11 +16,6 @@ on:
       tag:
         description: Empty builds/tests only; vX.Y.Z publishes a release; verify-NAME publishes a test image
         default: ''
-  push:
-    branches: ['dev/**']
-    paths:
-      - .github/workflows/images.yml
-      - deploy/**
 permissions:
   contents: read
   packages: write
@@ -106,7 +101,7 @@ jobs:
         run: |
           staging="$IMAGE:build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$ARCH"
           docker tag cc-desk-tunnel:local "$staging"
-          docker push "$staging"
+          docker push "$staging" || { sleep 10; docker push "$staging"; }
           # Record an immutable digest; the other architecture can finish independently.
           docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$staging" \
             | grep -F "$IMAGE@" > "digest-$ARCH.txt"
