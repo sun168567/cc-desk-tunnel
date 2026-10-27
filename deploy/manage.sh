@@ -3,17 +3,17 @@ set -euo pipefail
 umask 077
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${PROXY_DEPLOY_CONFIG:-$ROOT/.local/docker.env}"
-COMPOSE="${PROXY_COMPOSE_FILE:-$ROOT/deploy/docker/compose.yaml}"
+COMPOSE="${PROXY_COMPOSE_FILE:-$ROOT/deploy/compose.yml}"
 
 usage() {
   cat <<'HELP'
 Usage:
-  manage.sh setup                      interactive first install: asks, builds, starts, prints a summary
+  manage.sh setup                      interactive first install: asks, pulls, starts, prints a summary
   manage.sh init --host HOST [--mode fingerprint|certificate|nginx]
     [--data ABSOLUTE_PATH] [--control-port 8787]
     [--cert FULLCHAIN --key PRIVATE_KEY] [--url wss://DOMAIN/ws] [--token SECRET]
-  manage.sh build|up|status|logs|stop|restart|uninstall|connection|summary
-  manage.sh upgrade [--from SERVER_ARCHIVE]   rebuild the image and replace the container in place
+  manage.sh pull|build|up|status|logs|stop|restart|uninstall|connection|summary
+  manage.sh upgrade [--from SERVER_ARCHIVE]   pull the release image and replace the container
   manage.sh client INSTALLER_EXE              offer a Windows installer to connected clients
   manage.sh token [SECRET]                    replace the service token (random when omitted) and restart
   manage.sh release-token [FILE]              save a read-only GitHub token for following releases (none: remove)
@@ -26,6 +26,8 @@ Requires Docker Engine + Compose v2+, Bash, OpenSSL, curl, tar.
 Use sudo if your user cannot access Docker. Config defaults to .local/docker.env;
 set PROXY_DEPLOY_CONFIG to manage a different isolated installation.
 Set PROXY_COMPOSE_FILE when managing an image-only standalone compose.yml.
+Set CC_DESK_TUNNEL_VERSION=X.Y.Z to select a release (otherwise latest stable).
+Set CC_DESK_TUNNEL_BUILD=1 explicitly to build from the local source instead.
 Uninstall keeps all data; backup/restore pause the service.
 HELP
 }
@@ -85,7 +87,31 @@ build_image() {
     commit="$(git -c safe.directory="$ROOT" -C "$ROOT" log -1 --format=%ct 2>/dev/null || echo 0)"
     if ((commit > $(stat -c %Y "$web"))); then rm -rf -- "$ROOT/apps/server/web"; fi
   fi
-  dc build --pull
+  PROXY_IMAGE=cc-desk-tunnel:local docker compose --env-file "$CONFIG" -p "$PROJECT_NAME" \
+    -f "$ROOT/deploy/docker/compose.yaml" build --pull
+  save_image cc-desk-tunnel:local
+}
+save_image() {
+  local temp
+  temp="$(mktemp "$CONFIG.XXXXXX")"
+  { grep -v '^PROXY_IMAGE=' "$CONFIG" || true; write_var PROXY_IMAGE "$1"; } > "$temp"
+  mv -- "$temp" "$CONFIG"
+  PROXY_IMAGE="$1"
+}
+pull_image() {
+  local version="${CC_DESK_TUNNEL_VERSION:-}" repo="${CC_DESK_TUNNEL_REPO:-sun168567/cc-desk-tunnel}" image
+  if [[ -z "$version" ]]; then
+    version="$(curl -fsSL --connect-timeout 20 --max-time 60 "https://github.com/$repo/releases/latest/download/SHA256SUMS" \
+      | sed -n 's/.*  cc-desk-tunnel-server-\([0-9]*\.[0-9]*\.[0-9]*\)\.tar\.gz$/\1/p')"
+  fi
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Cannot resolve a release version."
+  image="${CC_DESK_TUNNEL_IMAGE:-ghcr.io/${repo,,}}:$version"
+  docker pull "$image"
+  # Keep the previous configured image and running container if the pull failed.
+  save_image "$image"
+}
+prepare_image() {
+  if [[ "${CC_DESK_TUNNEL_BUILD:-0}" = 1 ]]; then build_image; else pull_image; fi
 }
 running() { [[ -n "$(dc ps --status running -q proxy)" ]]; }
 ask() {
@@ -127,7 +153,7 @@ case "$command" in
   help|--help|-h) usage; exit ;;
   setup)
     if [[ -f "$CONFIG" ]]; then
-      echo "已有部署配置（$CONFIG），跳过问答，直接构建并启动。"
+      echo "已有部署配置（$CONFIG），跳过问答，准备镜像并启动。"
     else
       [[ -t 0 ]] || fail "setup needs an interactive terminal; use init with options in scripts."
       echo "CC Desk Tunnel 首次安装。直接回车使用方括号内的默认值。"
@@ -154,9 +180,8 @@ case "$command" in
       bash "${BASH_SOURCE[0]}" init "${options[@]}"
     fi
     load
-    echo "构建镜像（首次需要几分钟）…"
-    build_image
-    dc up -d
+    prepare_image
+    dc up -d --no-build
     wait_healthy
     summary
     exit ;;
@@ -237,14 +262,15 @@ case "$command" in
     if [[ "$(id -u)" = 0 ]]; then
       chown -R 1000:1000 "$DATA_DIR"
     fi
-    echo "Initialized. Edit $DATA_DIR/config/provider.json for API settings, then build and up."
+    echo "Initialized. Edit $DATA_DIR/config/provider.json for API settings, then pull and up (or build and up for source)."
     echo "Private client connection information: manage.sh connection"
     exit ;;
 esac
 load
 case "$command" in
   build) build_image ;;
-  up) dc up -d; wait_healthy ;;
+  pull) pull_image ;;
+  up) dc up -d --no-build; wait_healthy ;;
   status) dc ps ;;
   logs) dc logs --tail=100 -f ;;
   stop) dc stop ;;
@@ -256,11 +282,12 @@ case "$command" in
       if tar -tzf "$2" | grep -E '(^/|(^|/)\.\.(/|$))' >/dev/null; then fail "Unsafe archive paths."; fi
       tar -tzf "$2" | grep -Fx 'deploy/manage.sh' >/dev/null || fail "Not a CC Desk Tunnel server archive."
       tar -xzf "$2" -C "$ROOT" --no-same-owner
-      exec bash "$ROOT/deploy/manage.sh" upgrade
+      CC_DESK_TUNNEL_BUILD=1 exec bash "$ROOT/deploy/manage.sh" upgrade
     fi
+    prepare_image
     # The port frp had before 0.2.10 is no longer published; its setting goes with it.
     if grep -q '^FRPS_PORT=' "$CONFIG"; then sed -i '/^FRPS_PORT=/d' "$CONFIG"; fi
-    build_image; dc up -d; wait_healthy; summary ;;
+    dc up -d --no-build; wait_healthy; summary ;;
   summary) summary ;;
   client)
     [[ $# = 1 && -f "$1" && "$(basename -- "$1")" =~ ^CC-Desk-Tunnel-Setup-[0-9]+\.[0-9]+\.[0-9]+-x64\.exe$ ]] \

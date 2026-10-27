@@ -28,6 +28,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run format:check
       - run: npm test
+      - run: bash deploy/test-scripts.sh
   # The service as it is deployed: the image built on the machine, then every way of setting it up, on both
   # architectures a server may have. On arm64 the service's own tests run as well, for what it compiles there.
   deploy:
@@ -41,6 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f deploy/docker/Dockerfile -t cc-desk-tunnel:local .
       - run: sudo bash deploy/test.sh
+      - run: sudo bash deploy/test-image.sh
       - if: matrix.runner == 'ubuntu-24.04-arm'
         uses: actions/setup-node@v4
         with:

@@ -1,7 +1,7 @@
 name: ${PROJECT_NAME:-cc-desk-tunnel}
 services:
   proxy:
-    image: ${PROXY_IMAGE:?Specify an imported image tag in .env}
+    image: ${PROXY_IMAGE:?Run manage.sh init and pull, or specify a versioned image in .env}
     restart: unless-stopped
     stop_grace_period: 30s
     ports:

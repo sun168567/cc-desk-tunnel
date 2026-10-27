@@ -26,6 +26,14 @@ concurrency:
 # The steps that download Electron and the packaging tools are tried a second time after a minute: those
 # downloads now and then time out.
 jobs:
+  images:
+    uses: ./.github/workflows/images.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      source: ${{ github.sha }}
+      tag: ${{ inputs.release || '' }}
   windows:
     runs-on: windows-2022
     timeout-minutes: 30
@@ -187,7 +195,7 @@ jobs:
   # write to the repository.
   attach:
     if: inputs.release != ''
-    needs: [windows, macos, linux, server]
+    needs: [windows, macos, linux, server, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

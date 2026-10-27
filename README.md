@@ -62,11 +62,27 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-t
 脚本会：
 
 1. 检查 Docker、Docker Compose 等依赖。缺少时只告诉你安装命令，不会替你安装系统软件。
-2. 从本仓库的发布页下载最新的服务端程序包并校验，解压到 `/opt/cc-desk-tunnel`。
-3. 询问公网地址、证书方式、端口和数据目录（都有默认值，一路回车即可），然后构建镜像并启动。
+2. 将部署脚本保存到 `/opt/cc-desk-tunnel`，从发布页确定最新正式版本。
+3. 询问公网地址、证书方式、端口和数据目录（都有默认值，一路回车即可），然后从 GHCR 拉取该版本镜像并启动。
 4. 打印客户端要填的**服务地址、证书指纹、服务凭据**，以及需要在防火墙放行的 TCP 端口（默认 8787，只有这一个）。
 
-目前不提供现成镜像，镜像在你的服务器上从源码构建，首次需要几分钟。脚本不会修改防火墙、nginx 或 SSH 配置。再次运行同一条命令可以升级已有部署。手动安装、三种证书方式、备份恢复等见[部署操作手册](deploy/README.md)；已有 nginx 和域名时见[用 nginx 反代](deploy/nginx.md)。
+提供 `ghcr.io/sun168567/cc-desk-tunnel` 预构建镜像，Docker 自动选择 amd64 或 arm64，无需在服务器编译。镜像不包含桌面客户端安装包；服务启动后会另行下载对应的 Windows 安装包并缓存到数据目录，供已有客户端升级。脚本不会修改防火墙、nginx 或 SSH 配置。再次运行同一条命令可以升级已有部署。手动安装、三种证书方式、备份恢复等见[部署操作手册](deploy/README.md)；已有 nginx 和域名时见[用 nginx 反代](deploy/nginx.md)。
+
+**日常管理也用同一个入口，无需找脚本或切换目录：**
+
+```sh
+# 查看状态 / 持续查看日志（Ctrl+C 退出日志）
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- status
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- logs
+# 随机更换服务凭据并重启，随后在客户端更新凭据
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- token
+# 拉取最新正式镜像并升级；先结束正在进行的任务
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- upgrade
+# 备份到自己指定的、尚不存在的绝对路径；备份包含账号和会话秘密
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- backup /secure/cc-desk-tunnel-backup.tar.gz
+```
+
+默认查找 `/opt/cc-desk-tunnel`。自定义安装目录时，在 `sudo` 后加 `env CC_DESK_TUNNEL_DIR=/原安装目录`。状态、日志、改密和备份直接调用已有脚本；`upgrade` 询问确认后更新部署脚本并拉取镜像。更多操作将末尾参数换成 `help` 查看。
 
 ### 2. 安装 Windows 客户端
 

@@ -73,11 +73,27 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-t
 The script:
 
 1. Checks for Docker, Docker Compose and a few tools. If something is missing it tells you the command to install it; it does not install system software itself.
-2. Downloads the newest server archive from this repository's releases, verifies it and unpacks it to `/opt/cc-desk-tunnel`.
-3. Asks for the public address, certificate mode, ports and data directory (every question has a default), then builds the image and starts it.
+2. Saves deployment scripts to `/opt/cc-desk-tunnel` and resolves the latest stable release.
+3. Asks for the public address, certificate mode, ports and data directory (every question has a default), then pulls the matching image from GHCR and starts it.
 4. Prints what the client needs — **service address, certificate fingerprint, service token** — and the TCP port to open in the firewall (8787 by default, the only one).
 
-There is no prebuilt image yet: the image is built from source on your server, which takes a few minutes the first time. The script does not touch the firewall, nginx or SSH. Running the same command again upgrades an existing deployment. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
+Prebuilt images are available at `ghcr.io/sun168567/cc-desk-tunnel`; Docker selects amd64 or arm64 automatically, without building on your server. Images contain no desktop installers. After startup the service separately downloads the matching Windows installer into its persistent data directory for client upgrades. The script does not touch the firewall, nginx or SSH. Running the same command again upgrades an existing deployment. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
+
+**Use the same entry point for maintenance, from any directory:**
+
+```sh
+# Status / live logs (Ctrl+C stops following logs)
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- status
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- logs
+# Generate a new service credential and restart; update the credential in your clients afterwards
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- token
+# Upgrade to the latest stable image after finishing active tasks
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- upgrade
+# Choose a new absolute backup path; backups contain account and conversation secrets
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- backup /secure/cc-desk-tunnel-backup.tar.gz
+```
+
+The default installation directory is `/opt/cc-desk-tunnel`. For a custom location, insert `env CC_DESK_TUNNEL_DIR=/your/install/path` after `sudo`. Status, logs, credential changes and backups call the installed script directly. `upgrade` refreshes deployment tooling and pulls the selected release image after confirmation. Use `help` as the final argument for more commands.
 
 ### 2. Install the Windows client
 
