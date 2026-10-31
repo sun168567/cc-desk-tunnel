@@ -22,6 +22,8 @@
 
 每次模型调用的统计来自 CLI 自带的 OpenTelemetry 日志导出（`claude_code.api_request`）：服务在环回地址起接收端，只给自己启动的 CLI 进程设置 `CLAUDE_CODE_ENABLE_TELEMETRY` 与 `OTEL_*LOGS*` 变量，只保存模型、token、费用估算、耗时与会话 ID，不保存账号标识和内容；未开启提示词 / 回复导出。费用是 CLI 按 API 价格的估算，不是订阅账单。
 
+[外部 CLI 入口](external-cli.md)也复用这套统计：每次入口创建自己的回环采集器，使用独立 SQLite 连接写入同一 `sessions.sqlite`，沿用请求 ID 去重；不读取服务进程的环境文件。全局用量包含这些请求，GUI 当前会话的作用域不变。外部入口不自动扫描或补记历史 JSONL。
+
 运行中补充复用 SDK async user input，保持同一原生进程与 session ID；human origin 不把用户补充伪装成工具输出或系统提醒。原生可在工具间采纳或合并输入，回执通过消息 UUID 同步；代理不开发独立调度 / 记忆。输入收尾、断连 / 取消及重启按实际确认程度记录，无自动重放。
 
 ## 更换项目与换电脑

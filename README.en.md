@@ -51,6 +51,7 @@ This repository publishes all of its own client, server, build and deployment so
 | **Projects and sessions** | Grouped by Windows folder; create, rename, delete, search, fork; edit and resend any of your own messages |
 | **The conversation** | Streaming replies, thinking summaries, tool calls with their input and results; add messages during a run, stop at any time |
 | **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; an embedded native terminal when you need it |
+| **External terminal** | Use the server CLI from Windows Terminal / an existing SSH connection, keep tools in the Windows project, and include its requests in desktop usage; see [External CLI](docs/external-cli.md) (Chinese) |
 | **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics |
 | **Scheduled tasks** | Send a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
 | **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
