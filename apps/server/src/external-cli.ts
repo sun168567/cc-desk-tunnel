@@ -17,23 +17,30 @@ export type ExternalCliArguments = {
   dataDir: string;
   executable: string;
   settingsPath?: string;
+  model?: string;
+  contextRetentionDays?: number;
   deviceId: string;
   projectPath: string;
   continueSession: boolean;
   check: boolean;
 };
 
+// The defaults are the service's own settings, as service.env gives them: the external CLI uses the same state,
+// CLI, provider settings and model as the conversations of the desktop.
 export const externalCliHelp = `Usage: external-cli --device-id <UUID> --project-base64 <UTF-8 Base64> [options]
-  --data-dir <directory>       Server state directory (default: /data/state)
-  --executable <program>       Official Claude Code executable (default: claude)
-  --settings-path <file>       Existing provider settings, if the service uses them
+  --data-dir <directory>       Server state directory (default: PROXY_DATA_DIR, else /data/state)
+  --executable <program>       Official Claude Code executable (default: CLAUDE_PATH, else claude)
+  --settings-path <file>       Provider settings (default: CLAUDE_SETTINGS_PATH, if set)
   --continue                  Continue this project's last native CLI conversation
   --check                     Check existing state and the device channel without starting Claude
   --help                      Show this help
 Keep the desktop client connected: it supplies the Windows execution channel.
 `;
 
-export function parseExternalCliArguments(values: string[]): ExternalCliArguments {
+export function parseExternalCliArguments(
+  values: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): ExternalCliArguments {
   const argumentsOf: Record<string, string> = {};
   let check = false,
     continueSession = false;
@@ -65,12 +72,16 @@ export function parseExternalCliArguments(values: string[]): ExternalCliArgument
     /[\x00-\x1f]/.test(projectPath)
   )
     throw new Error('Choose a drive-qualified or UNC-share Windows project path.');
+  const settingsPath = argumentsOf['--settings-path'] ?? env.CLAUDE_SETTINGS_PATH;
+  const retention = Number(env.CLAUDE_CONTEXT_RETENTION_DAYS ?? 3650);
+  if (!Number.isInteger(retention) || retention < 1)
+    throw new Error('Invalid CLAUDE_CONTEXT_RETENTION_DAYS');
   return {
-    dataDir: resolve(argumentsOf['--data-dir'] ?? '/data/state'),
-    executable: argumentsOf['--executable'] ?? 'claude',
-    ...(argumentsOf['--settings-path']
-      ? { settingsPath: resolve(argumentsOf['--settings-path']) }
-      : {}),
+    dataDir: resolve(argumentsOf['--data-dir'] ?? env.PROXY_DATA_DIR ?? '/data/state'),
+    executable: argumentsOf['--executable'] ?? env.CLAUDE_PATH ?? 'claude',
+    ...(settingsPath ? { settingsPath: resolve(settingsPath) } : {}),
+    ...(env.CLAUDE_MODEL ? { model: env.CLAUDE_MODEL } : {}),
+    contextRetentionDays: retention,
     deviceId,
     projectPath,
     check,
@@ -162,6 +173,7 @@ export function externalCliCommand(options: ExternalCliArguments) {
       'manual',
       '--append-system-prompt',
       prompt,
+      ...(options.model ? ['--model', options.model] : []),
       ...(options.settingsPath ? ['--settings', options.settingsPath] : []),
       ...(options.continueSession ? ['--continue'] : []),
     ],

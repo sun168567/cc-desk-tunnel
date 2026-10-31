@@ -1,23 +1,44 @@
 [CmdletBinding()]
 param(
   [string]$SshTarget,
-  [string]$ProjectPath,
+  [string]$ProjectPath = (Get-Location).Path,
   [string]$DeviceId,
   [string]$ClientSettingsPath,
-  [string]$Container = 'cc-desk-tunnel',
-  [string]$ContainerUser = '1000:1000',
+  [string]$Container,
   [switch]$Sudo,
-  [string]$RemoteNodePath = '/opt/runtime/node/bin/node',
-  [string]$RemoteEntryPath = '/app/apps/server/src/external-cli.ts',
-  [string]$DataDir = '/data/state',
-  [string]$SettingsPath = '/data/config/provider.json',
-  [string]$Executable = '/opt/runtime/cli/bin/claude',
   [switch]$ContinueSession,
   [switch]$Check
 )
 
 # Keep the launcher ASCII so Windows PowerShell 5.1 does not depend on a BOM.
 # Dot-source this file to test argument construction without connecting to SSH.
+
+# Runs on the server: finds the service's container unless one is named, then enters it. A terminal asks for
+# a terminal in the container too; a check has none.
+$ExternalCliHostScript = @'
+use_sudo=$1 container=$2 inner=$3
+shift 3
+docker() { if [ "$use_sudo" = sudo ]; then sudo -n docker "$@"; else command docker "$@"; fi; }
+if [ -z "$container" ]; then
+  container=$(docker ps --filter label=com.docker.compose.service=proxy --format '{{.Names}}' | grep '^cc-desk-tunnel-' || true)
+  if [ -z "$container" ]; then echo 'No running CC Desk Tunnel container was found; name it with -Container.' >&2; exit 1; fi
+  if [ "$(printf '%s\n' "$container" | wc -l)" -ne 1 ]; then echo 'Several CC Desk Tunnel containers are running; name one with -Container.' >&2; exit 1; fi
+fi
+if [ -t 0 ]; then tty=-it; else tty=-i; fi
+docker exec "$tty" "$container" sh -c "$inner" sh "$@"
+'@.Replace("`r", '')
+
+# Runs in the container: the entry of the program the service runs, which after an upgrade from the client
+# is not the image's own, with the service's PATH and settings.
+$ExternalCliContainerScript = @'
+program=$(tr '\000' '\n' </proc/1/cmdline | sed -n 's#/apps/server/src/main\.ts$##p' | head -n 1)
+if [ -z "$program" ]; then echo 'The service in this container is not running; start it and try again.' >&2; exit 1; fi
+if [ ! -f "$program/apps/server/src/external-cli.ts" ]; then echo 'The running service has no external CLI entry; upgrade the service first.' >&2; exit 1; fi
+PATH=$(tr '\000' '\n' </proc/1/environ | sed -n 's/^PATH=//p')
+export PATH
+exec node --env-file=/data/config/service.env "$program/apps/server/src/external-cli.ts" "$@"
+'@.Replace("`r", '')
+
 function ConvertTo-ExternalCliShellArgument {
   param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
   return "'" + $Value.Replace("'", "'\''") + "'"
@@ -26,7 +47,7 @@ function ConvertTo-ExternalCliShellArgument {
 function Invoke-ExternalCliNativeCommand {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
-    [Parameter(Mandatory = $true)][string[]]$Arguments
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Arguments
   )
   $nativeMode = Get-Variable -Name PSNativeCommandArgumentPassing -ErrorAction SilentlyContinue
   $nativeArguments = $Arguments
@@ -42,44 +63,30 @@ function New-ExternalCliConnection {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory = $true)][string]$SshTarget,
-    [Parameter(Mandatory = $true)][string]$ProjectPath,
+    [string]$ProjectPath = (Get-Location).Path,
     [string]$DeviceId,
     [string]$ClientSettingsPath,
-    [string]$Container = 'cc-desk-tunnel',
-    [string]$ContainerUser = '1000:1000',
+    [string]$Container,
     [switch]$Sudo,
-    [string]$RemoteNodePath = '/opt/runtime/node/bin/node',
-    [string]$RemoteEntryPath = '/app/apps/server/src/external-cli.ts',
-    [string]$DataDir = '/data/state',
-    [string]$SettingsPath = '/data/config/provider.json',
-    [string]$Executable = '/opt/runtime/cli/bin/claude',
     [switch]$ContinueSession,
     [switch]$Check
   )
 
-  if ($SshTarget -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*$') {
-    throw 'SshTarget must be an SSH config alias, not a shell command or option.'
+  if ($SshTarget -notmatch '^[A-Za-z0-9][A-Za-z0-9_.@-]*$') {
+    throw 'SshTarget must be an SSH config alias or user@host, not a shell command or option.'
   }
-  if ($Container -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*$') {
+  if ($Container -and $Container -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*$') {
     throw 'Container must be a Docker container name.'
   }
-  if ($ContainerUser -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]*(?::[A-Za-z0-9_][A-Za-z0-9_.-]*)?$') {
-    throw 'ContainerUser must be a user or user:group name or numeric ID.'
-  }
-  foreach ($path in @($RemoteNodePath, $RemoteEntryPath, $DataDir, $SettingsPath, $Executable)) {
-    if (!$path.StartsWith('/') -or $path -match '[\x00-\x1f\x7f]') {
-      throw 'Remote paths must be absolute POSIX paths without control characters.'
-    }
-  }
   if ($ContinueSession -and $Check) { throw 'ContinueSession and Check are separate actions.' }
-  if (([bool]$DeviceId) -eq ([bool]$ClientSettingsPath)) {
-    throw 'Provide exactly one of DeviceId or ClientSettingsPath.'
-  }
-  if ($ClientSettingsPath) {
+  if ($DeviceId -and $ClientSettingsPath) { throw 'Provide DeviceId or ClientSettingsPath, not both.' }
+  if (!$DeviceId) {
+    # The desktop client keeps the identity of this computer in its settings.
+    if (!$ClientSettingsPath) { $ClientSettingsPath = Join-Path $env:APPDATA 'CC Desk Tunnel\settings.json' }
     try {
       $settings = [IO.File]::ReadAllText($ClientSettingsPath, [Text.Encoding]::UTF8) | ConvertFrom-Json -ErrorAction Stop
     } catch {
-      throw 'ClientSettingsPath must point to readable, valid JSON settings.'
+      throw 'The client settings could not be read; connect the CC Desk Tunnel client once, or give DeviceId.'
     }
     $DeviceId = [string]$settings.deviceId
   }
@@ -94,12 +101,9 @@ function New-ExternalCliConnection {
     throw 'ProjectPath must be an existing Windows filesystem directory.'
   }
   $projectBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($project.FullName))
-  $remoteArguments = @()
-  if ($Sudo) { $remoteArguments += @('sudo', '-n') }
-  $remoteArguments += @(
-    'docker', 'exec', $(if ($Check) { '-i' } else { '-it' }),
-    '--user', $ContainerUser, $Container, $RemoteNodePath, $RemoteEntryPath,
-    '--data-dir', $DataDir, '--settings-path', $SettingsPath, '--executable', $Executable,
+  $remoteArguments = @(
+    'sh', '-c', $ExternalCliHostScript, 'sh',
+    $(if ($Sudo) { 'sudo' } else { 'none' }), [string]$Container, $ExternalCliContainerScript,
     '--device-id', $DeviceId, '--project-base64', $projectBase64
   )
   if ($ContinueSession) { $remoteArguments += '--continue' }

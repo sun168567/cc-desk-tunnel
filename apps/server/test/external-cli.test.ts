@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import {
@@ -115,6 +123,42 @@ test('external CLI parses UTF-8 project paths and keeps history stable across de
   assert.deepEqual(command.args.slice(0, 2), ['--permission-mode', 'manual']);
   assert.ok(command.args.some((value) => value.includes('Windows')));
   assert.ok(command.args.some((value) => value.includes('Desktop scheduling')));
+});
+
+test('external CLI takes the state, CLI, provider settings and model of the service by default', () => {
+  const required = ['--device-id', deviceId, '--project-base64', encodedProject];
+  const service = {
+    PROXY_DATA_DIR: '/srv/state',
+    CLAUDE_PATH: '/srv/program/cli/bin/claude',
+    CLAUDE_SETTINGS_PATH: '/srv/config/provider.json',
+    CLAUDE_MODEL: 'service-model',
+    CLAUDE_CONTEXT_RETENTION_DAYS: '30',
+  };
+  const options = parseExternalCliArguments(required, service);
+  assert.equal(options.dataDir, resolve('/srv/state'));
+  assert.equal(options.executable, '/srv/program/cli/bin/claude');
+  assert.equal(options.settingsPath, resolve('/srv/config/provider.json'));
+  assert.equal(options.contextRetentionDays, 30);
+  const { args } = externalCliCommand(options);
+  assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), [
+    '--model',
+    'service-model',
+  ]);
+  assert.deepEqual(args.slice(-2), ['--settings', resolve('/srv/config/provider.json')]);
+  // Arguments still win, and without the service's settings the defaults are those of the image.
+  assert.equal(
+    parseExternalCliArguments([...required, '--data-dir', '/other'], service).dataDir,
+    resolve('/other'),
+  );
+  const bare = parseExternalCliArguments(required, {});
+  assert.equal(bare.dataDir, resolve('/data/state'));
+  assert.equal(bare.executable, 'claude');
+  assert.equal(bare.settingsPath, undefined);
+  assert.ok(!externalCliCommand(bare).args.includes('--model'));
+  assert.throws(
+    () => parseExternalCliArguments(required, { CLAUDE_CONTEXT_RETENTION_DAYS: '0' }),
+    /CLAUDE_CONTEXT_RETENTION_DAYS/,
+  );
 });
 
 test('external CLI rejects ambiguous Windows roots, malformed UTF-8 and unknown flags before launching', () => {
@@ -277,7 +321,8 @@ test('a short external CLI exports its final batch into the live GUI database on
     const child = JSON.parse(readFileSync(marker, 'utf8'));
     assert.equal(child.telemetry, '1');
     assert.equal(child.leaked, false);
-    assert.equal(child.cwd, externalCliCommand(f.options).cwd);
+    // macOS gives the temporary directory through a symbolic link.
+    assert.equal(realpathSync(child.cwd), realpathSync(externalCliCommand(f.options).cwd));
     const page = f.guiLog.query(query, () => null);
     assert.equal(page.totals.requests, 2);
     assert.equal(f.guiLog.sessionStats(guiSession).requests, 1);
