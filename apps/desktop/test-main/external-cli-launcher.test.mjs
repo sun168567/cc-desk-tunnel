@@ -248,10 +248,7 @@ printf 'arg=%s\\n' "$@"
       /Several CC Desk Tunnel containers/,
     );
     assert.match(run('', 'named').stdout, /container=named/);
-    assert.match(
-      readFileSync(join(root, 'mark'), 'utf8'),
-      /^CC_DESK_EXTERNAL_RUN=[0-9a-f]{32}\n$/,
-    );
+    assert.match(readFileSync(join(root, 'mark'), 'utf8'), /^CC_DESK_EXTERNAL_RUN=[0-9a-f]{32}\n$/);
   },
 );
 
