@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import { spawn } from 'node:child_process';
 import {
   existsSync,
@@ -22,6 +22,12 @@ import {
   waitForExternalDevice,
 } from '../src/external-cli.ts';
 import { UsageLog } from '../src/usage.ts';
+
+// The entry marks the CLI's first-run wizard done where a signed-in account has its configuration; the tests keep
+// that away from the configuration of whoever runs them.
+const configDirectory = mkdtempSync(join(tmpdir(), 'ccdesk-external-cli-config-'));
+process.env.CLAUDE_CONFIG_DIR = configDirectory;
+after(() => rmSync(configDirectory, { recursive: true, force: true }));
 
 const deviceId = '10000000-0000-4000-8000-000000000001';
 const guiSession = '20000000-0000-4000-8000-000000000001';

@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -202,7 +211,9 @@ test(
       join(root, 'bin', 'docker'),
       `#!/bin/sh
 if [ "$1" = ps ]; then printf '%s' "$NAMES"; exit 0; fi
-shift; printf 'tty=%s container=%s\\n' "$1" "$2"; shift 2
+shift
+printf '%s\\n' "$2" > "$ROOT/mark"; shift 2
+printf 'tty=%s container=%s\\n' "$1" "$2"; shift 2
 [ "$1" = sh ] && [ "$2" = -c ] || exit 9
 printf '%s\\n' "$3" > "$ROOT/inner"; shift 4
 printf 'arg=%s\\n' "$@"
@@ -237,5 +248,48 @@ printf 'arg=%s\\n' "$@"
       /Several CC Desk Tunnel containers/,
     );
     assert.match(run('', 'named').stdout, /container=named/);
+    assert.match(
+      readFileSync(join(root, 'mark'), 'utf8'),
+      /^CC_DESK_EXTERNAL_RUN=[0-9a-f-]{36}\n$/,
+    );
+  },
+);
+
+test(
+  'a hangup of the SSH session is passed on to the processes of the run in the container',
+  { skip: process.platform === 'win32' ? 'a POSIX shell is required' : false },
+  async (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'ccdesk-cli-hangup-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const source = readFileSync(launcher, 'utf8').replaceAll('\r', '');
+    const host = /\$ExternalCliHostScript = @'\n([\s\S]*?)\n'@/.exec(source)[1];
+    mkdirSync(join(root, 'bin'));
+    // The run waits in `docker exec -e MARK`; what the hangup sends in is any other `docker exec`.
+    writeFileSync(
+      join(root, 'bin', 'docker'),
+      `#!/bin/sh
+shift
+if [ "$1" != -e ]; then printf '%s\\n' "$@" > "$ROOT/hangup"; exit 0; fi
+printf '%s\\n' "$2" > "$ROOT/mark"
+sleep 30 & wait
+`,
+      { mode: 0o755 },
+    );
+    // A session that ends hangs up its whole process group, the waiting \`docker exec\` with it.
+    const child = spawn('sh', ['-c', host, 'sh', 'none', 'named', 'inner', '--check'], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}`, ROOT: root },
+    });
+    const closed = new Promise((done) =>
+      child.once('close', (code, signal) => done({ code, signal })),
+    );
+    for (let i = 0; i < 100 && !existsSync(join(root, 'mark')); i++) await delay(50);
+    process.kill(-child.pid, 'SIGHUP');
+    assert.deepEqual(await closed, { code: 129, signal: null });
+    const mark = readFileSync(join(root, 'mark'), 'utf8').trim().split('=')[1];
+    const hangup = readFileSync(join(root, 'hangup'), 'utf8').trim().split('\n');
+    assert.equal(hangup[0], 'named');
+    assert.equal(hangup.at(-1), mark);
   },
 );

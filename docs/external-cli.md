@@ -46,11 +46,13 @@ powershell -ExecutionPolicy Bypass -File C:\Tools\open-external-cli.ps1 -SshTarg
 
 第一次使用建议先加 `-Check`，看到 `ready` 再正式启动。
 
+第一次在某个项目上启动时，Claude Code 会询问是否信任它在服务器上的工作目录（`/data/state/native/cli-…`），选择“Yes, I trust this folder”。这个目录只保存外部 CLI 的会话历史，项目文件仍在 Windows 上。服务用 API key 而不是 Claude 账号时，第一次启动还会出现 Claude Code 自己的初始设置（选择主题等），和客户端里的原生终端一样。
+
 ## 会话、续接与退出
 
 - 同一台电脑上的同一个项目，外部 CLI 的历史保存在服务端固定的位置。用 `-ContinueSession` 继续上一次会话，或在 CLI 中用 `/resume` 选择更早的会话。
 - 这些会话与桌面会话分开管理，不出现在桌面的会话列表中。
-- 用 `/exit` 正常退出。SSH 断开时，服务端的 CLI 进程随之结束；已经发到 Windows 上的命令要另行确认是否执行完，入口不会自动重做任何操作。
+- 用 `/exit` 正常退出。直接关闭终端或 SSH 断开时，服务器上的 CLI 及它启动的命令也会随之结束；已经发到 Windows 上的命令要另行确认是否执行完，入口不会自动重做任何操作。
 - 模型、提供方设置与服务一致，来自服务的 `service.env` 和 `provider.json`。审批模式为“每次询问”，可以在 CLI 中切换。
 
 ## 用量

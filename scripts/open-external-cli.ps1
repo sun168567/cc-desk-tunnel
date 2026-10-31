@@ -20,21 +20,39 @@ use_sudo=$1 container=$2 inner=$3
 shift 3
 docker() { if [ "$use_sudo" = sudo ]; then sudo -n docker "$@"; else command docker "$@"; fi; }
 if [ -z "$container" ]; then
-  container=$(docker ps --filter label=com.docker.compose.service=proxy --format '{{.Names}}' | grep '^cc-desk-tunnel-' || true)
+  names=$(docker ps --filter label=com.docker.compose.service=proxy --format '{{.Names}}') || {
+    echo 'Docker cannot be used by this account here; add -Sudo, or use an account that may run docker.' >&2; exit 1; }
+  container=$(printf '%s\n' "$names" | grep '^cc-desk-tunnel-' || true)
   if [ -z "$container" ]; then echo 'No running CC Desk Tunnel container was found; name it with -Container.' >&2; exit 1; fi
   if [ "$(printf '%s\n' "$container" | wc -l)" -ne 1 ]; then echo 'Several CC Desk Tunnel containers are running; name one with -Container.' >&2; exit 1; fi
 fi
 if [ -t 0 ]; then tty=-it; else tty=-i; fi
-docker exec "$tty" "$container" sh -c "$inner" sh "$@"
+# docker exec leaves what it started running when its client goes. The processes of this run carry its mark, and
+# a hangup of this SSH session is passed on to them; the entry then ends the CLI and the commands it started.
+run=$(cat /proc/sys/kernel/random/uuid)
+hangup() {
+  docker exec "$container" sh -c 'for environ in /proc/[0-9]*/environ; do
+    if tr "\000" "\n" <"$environ" 2>/dev/null | grep -qx "CC_DESK_EXTERNAL_RUN=$1"; then
+      process=${environ%/environ}; kill -HUP "${process#/proc/}" 2>/dev/null
+    fi
+  done' sh "$run" >/dev/null 2>&1
+  exit 129
+}
+trap hangup HUP TERM
+docker exec -e "CC_DESK_EXTERNAL_RUN=$run" "$tty" "$container" sh -c "$inner" sh "$@"
 '@.Replace("`r", '')
 
-# Runs in the container: the entry of the program the service runs, which after an upgrade from the client
-# is not the image's own, with the service's PATH and settings.
+# Runs in the container: the entry of the program the service process runs, which after an upgrade from the
+# client is not the image's own, with that process's PATH and the service's settings.
 $ExternalCliContainerScript = @'
-program=$(tr '\000' '\n' </proc/1/cmdline | sed -n 's#/apps/server/src/main\.ts$##p' | head -n 1)
+program= service=
+for command in /proc/[0-9]*/cmdline; do
+  program=$(tr '\000' '\n' <"$command" 2>/dev/null | sed -n 's#/apps/server/src/main\.ts$##p' | head -n 1)
+  if [ -n "$program" ]; then service=${command%/cmdline}; break; fi
+done
 if [ -z "$program" ]; then echo 'The service in this container is not running; start it and try again.' >&2; exit 1; fi
 if [ ! -f "$program/apps/server/src/external-cli.ts" ]; then echo 'The running service has no external CLI entry; upgrade the service first.' >&2; exit 1; fi
-PATH=$(tr '\000' '\n' </proc/1/environ | sed -n 's/^PATH=//p')
+PATH=$(tr '\000' '\n' <"$service/environ" | sed -n 's/^PATH=//p')
 export PATH
 exec node --env-file=/data/config/service.env "$program/apps/server/src/external-cli.ts" "$@"
 '@.Replace("`r", '')

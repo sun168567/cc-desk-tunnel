@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { pathKey } from '@cc-desk-tunnel/protocol';
 import { nativeDirectory, prepareNativeDirectory, remotePrompt } from './claude.ts';
 import { clearServiceVariables } from './config.ts';
+import { completeOnboarding } from './native-onboarding.ts';
 import { terminalEnvironment } from './native-terminal.ts';
 import { UsageLog, createUsageReceiver, telemetryEnvironment } from './usage.ts';
 
@@ -256,6 +257,8 @@ export async function runExternalCli(
   });
   if (options.check) return 0;
   prepareNativeDirectory(options, options.dataDir, command.root);
+  // As before the terminal in the client: a signed-in account is not walked through the first-run wizard again.
+  completeOnboarding();
   const database = new DatabaseSync(databasePath);
   let receiver: ReturnType<typeof createUsageReceiver> | undefined;
   try {
