@@ -29,7 +29,7 @@ fi
 if [ -t 0 ]; then tty=-it; else tty=-i; fi
 # docker exec leaves what it started running when its client goes. The processes of this run carry its mark, and
 # a hangup of this SSH session is passed on to them; the entry then ends the CLI and the commands it started.
-run=$(cat /proc/sys/kernel/random/uuid)
+run=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 hangup() {
   docker exec "$container" sh -c 'for environ in /proc/[0-9]*/environ; do
     if tr "\000" "\n" <"$environ" 2>/dev/null | grep -qx "CC_DESK_EXTERNAL_RUN=$1"; then
