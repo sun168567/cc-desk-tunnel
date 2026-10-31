@@ -39,7 +39,7 @@ Claude Code（简称 CC）运行在一台 Linux 服务器上；项目代码、�
 | **项目与会话** | 按 Windows 文件夹分组；新建、改名、删除、搜索、分叉；从任意一条自己的消息“编辑重发” |
 | **对话过程** | 流式回复、思考摘要、工具调用的入参与结果；运行中追加消息、随时停止 |
 | **原生控制** | 模型、推理强度、审批模式、上下文占用与主动压缩、Claude Code 常用设置；需要时打开内嵌的原生终端 |
-| **外部终端** | 从 Windows Terminal / 已有 SSH 使用服务端 CLI，继续操作 Windows 项目，用量回到桌面统计；见[外部 CLI](docs/external-cli.md) |
+| **外部终端** | 在 Windows Terminal 中经 SSH 使用服务端的官方 CLI，照样操作本机项目，用量计入同一份统计；见[外部 CLI](docs/external-cli.md) |
 | **账号与用量** | 在客户端里登录 / 退出云端的 Claude 账号，查看额度、重置时间和调用统计 |
 | **定时任务** | 到点向指定会话或新会话发送预设提示词，也可以直接让 Claude 帮你设置 |
 | **省心** | 托盘后台、记住凭据与自动登录、未发送内容按会话保存 |
@@ -172,6 +172,7 @@ macOS 与 Linux 的安装包在同一个发布页，安装方法见 [macOS 客�
 | [安全说明](SECURITY.md) | 威胁模型、已有防护、已知不足、漏洞报告 |
 | [架构](docs/architecture.md) | 组成、连接建立过程、关键设计决定 |
 | [原生运行与会话存储](docs/native-runtime.md) | 如何驱动官方 CLI、上下文归属、审批、保留期 |
+| [外部 CLI](docs/external-cli.md) | 在自己的终端里经 SSH 使用服务端 CLI |
 | [Windows 客户端](apps/desktop/README.md) · [Linux 服务](apps/server/README.md) · [消息契约](packages/protocol/README.md) | 各模块的实现说明 |
 | [macOS 客户端（实验性）](docs/macos.md) · [Linux 客户端（实验性）](docs/linux.md) | 安装、与 Windows 的不同、已验证与未验证 |
 | [路线与现状](docs/roadmap.md) · [变更记录](CHANGELOG.md) | 已完成、待验证、计划；各版本的变化 |

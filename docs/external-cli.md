@@ -1,116 +1,70 @@
-# 在 Windows Terminal 中使用服务端 Claude Code
+# 外部 CLI：在 Windows Terminal 中使用服务端 Claude Code
 
-外部 CLI 入口让你在 Windows Terminal 中，通过已有管理 SSH 使用 Linux 服务端的官方 Claude Code。项目文件和工具继续留在 Windows，文件读写、编译和测试复用已连接的 CC Desk Tunnel 客户端执行通道；CLI 请求用量回到桌面端的“账号与额度”查看。
+外部 CLI 让你在自己的终端里直接使用服务器上的官方 Claude Code，界面、命令和快捷键与官方 CLI 一致。项目文件和命令仍在 Windows 上：Claude 读写文件、运行命令时，经桌面客户端已有的执行通道回到这台电脑的项目目录执行，用量记入桌面“账号与额度”的同一份统计。
 
-上游已有内嵌原生终端和用量界面。本功能增加外部终端入口，并把这条入口接到现有统计实现，不创建第二套会话管理器或统计界面。
+它和客户端里的原生终端是同一个 CLI，区别在于从哪里打开：
+
+| | 客户端内的原生终端 | 外部 CLI |
+|---|---|---|
+| 窗口 | 客户端里的终端面板 | Windows Terminal 等自己的终端 |
+| 连接方式 | 客户端与服务的连接 | 你自己的 SSH 登录服务器，再进入服务容器 |
+| 会话 | 属于某个桌面会话，可与对话界面互相切换 | 单独的会话，不出现在桌面会话列表 |
+| 执行通道与用量 | 客户端的执行通道；计入用量统计 | 相同 |
 
 ## 准备条件
 
-- 服务端包含本功能源码，使用 Node.js 24，官方 Claude Code 已安装并按正常流程授权。
-- Windows 客户端已连接到这个服务端，保持在线或留在托盘。它提供回到 Windows 的临时 SSH 执行通道。
-- Windows 已能通过自己的 SSH 配置别名登录服务端，主机密钥已经核对。脚本不安装 SSH 服务、不开放公网端口、不配置代理。
-- 项目是 Windows 中现有的文件夹，使用当前普通用户权限。
+- 服务端用 `deploy/manage.sh` 以容器方式部署，版本包含外部 CLI。一键升级到这个版本即可，不需要重建镜像。
+- 这台 Windows 的桌面客户端已连接该服务，使用期间保持连接（留在托盘也可以）。外部 CLI 的所有项目操作都经它执行。
+- 这台 Windows 能用 SSH 登录服务器，登录的账号可以运行 `docker`；需要 `sudo` 时，`sudo` 不能要求输入密码。主机密钥已经核对过，建议在 `~/.ssh/config` 里为服务器起一个别名。
+- 使用 Windows 自带的 OpenSSH 客户端（`ssh.exe`）。
 
-本文用 `ai-server`、`D:\Projects\demo` 和文档用设备 ID 举例。把它们替换成自己的值，不要把连接凭据写进仓库。
+## 启动
 
-## 取得这个功能
-
-服务端和 Windows 启动脚本需要来自包含本改动的同一份源码。官方 v0.3.7 发行包没有这个外部入口。按[部署手册](../deploy/README.md)从对应源码构建并部署服务端；Docker 构建入口例如：
-
-```sh
-docker build -f deploy/docker/Dockerfile -t cc-desk-tunnel:external-cli .
-```
-
-镜像的源码复制步骤会包含 `apps/server/src/external-cli.ts`。Windows 使用同一源码中的 `scripts/open-external-cli.ps1`。先在独立测试部署验证，再按原有部署流程升级；不需要安装第二套 Windows SSH 服务或同步整个项目。
-
-## 运行结构
-
-```text
-Windows Terminal
-  → 既有管理 SSH / PTY
-  → Linux 容器中的 external-cli.ts
-  → 官方 Claude Code
-       ├─ 工具：CC Desk 临时 SSH 执行通道 → Windows 项目
-       └─ 用量：仅回环的 CLI 采集器 → 同一 sessions.sqlite
-                                                ↓
-                                      CC Desk 用量查询和界面
-```
-
-外部 CLI 为本次进程启动回环采集器，复用现有 `UsageLog`、事件白名单和请求去重。它不用读取服务进程的私有环境文件，不要求重启服务端，也不新增对外监听端口。
-
-## 从 Windows 启动
-
-在普通用户 PowerShell 或 Windows Terminal 中，从源码仓库运行：
+启动脚本是源码中的 [`scripts/open-external-cli.ps1`](../scripts/open-external-cli.ps1)，请使用与服务端版本相同的那一份。在项目目录下，用普通用户（不要以管理员身份）的 PowerShell 运行：
 
 ```powershell
-.\scripts\open-external-cli.ps1 `
-  -SshTarget ai-server `
-  -ProjectPath 'D:\Projects\demo' `
-  -DeviceId '11111111-1111-4111-8111-111111111111'
+cd D:\Projects\demo
+powershell -ExecutionPolicy Bypass -File C:\Tools\open-external-cli.ps1 -SshTarget my-server
 ```
 
-设备 ID 来自对应客户端的设备身份；也可以通过 `-ClientSettingsPath` 显式指定客户端的 `settings.json`，脚本只取其中的 `deviceId`。不要复制整份设置文件到服务端或仓库。
+脚本会做这些事：
+1. 从本机客户端的设置读取这台电脑的设备 ID。
+2. SSH 登录服务器，找到服务容器，进入后按服务当前运行的程序启动入口。一键升级后，用的也是升级后的程序和 CLI。
+3. 入口确认这台电脑的执行通道可用，然后启动官方 Claude Code。Claude 知道项目位于 Windows 的哪个目录，并通过执行通道操作它。
 
-服务器需要 `sudo -n docker` 时，添加 `-Sudo`。容器名、容器用户、数据目录、Node、CLI 和配置文件位置可通过脚本参数调整；用 `Get-Help .\scripts\open-external-cli.ps1 -Full` 查看接口。
+常用参数：
 
-默认容器内位置：
-
-| 参数 | 默认值 |
+| 参数 | 说明 |
 |---|---|
-| 容器 | `cc-desk-tunnel` |
-| 执行身份 | `1000:1000` |
-| 数据目录 | `/data/state`，直接包含 `sessions.sqlite` 和 `devices` |
-| Node | `/opt/runtime/node/bin/node` |
-| 官方 CLI | `/opt/runtime/cli/bin/claude` |
-| 提供方设置 | `/data/config/provider.json` |
-| 本功能入口 | `/app/apps/server/src/external-cli.ts` |
+| `-SshTarget` | 必填。SSH 配置里的别名或 `user@host` |
+| `-ProjectPath` | 项目目录，默认为当前目录 |
+| `-Sudo` | 服务器上需要 `sudo -n docker` 时添加 |
+| `-Container` | 服务器上运行着多个服务容器时，指定其中一个；容器名可用 `manage.sh status` 查看 |
+| `-Check` | 只检查服务器、容器和执行通道，不启动 Claude |
+| `-ContinueSession` | 继续这个项目最近一次外部 CLI 会话 |
+| `-DeviceId` / `-ClientSettingsPath` | 设备 ID 读不到时手动指定，一般不需要 |
 
-数据目录必须是同一服务正在使用且已经初始化的目录。入口先检查数据库和对应设备执行通道，再启动 CLI；目录写错时应修正参数，不创建另一份空用量库。
+第一次使用建议先加 `-Check`，看到 `ready` 再正式启动。
 
-Windows 路径用 UTF-8 Base64 传输，避免空格、中文和引号被远程 shell 改写。管理 SSH 保留严格主机密钥检查和 PTY；脚本不会关闭验证或传输私钥内容。
+## 会话、续接与退出
 
-## 检查、续接和退出
+- 同一台电脑上的同一个项目，外部 CLI 的历史保存在服务端固定的位置。用 `-ContinueSession` 继续上一次会话，或在 CLI 中用 `/resume` 选择更早的会话。
+- 这些会话与桌面会话分开管理，不出现在桌面的会话列表中。
+- 用 `/exit` 正常退出。SSH 断开时，服务端的 CLI 进程随之结束；已经发到 Windows 上的命令要另行确认是否执行完，入口不会自动重做任何操作。
+- 模型、提供方设置与服务一致，来自服务的 `service.env` 和 `provider.json`。审批模式为“每次询问”，可以在 CLI 中切换。
 
-- 添加 `-Check`：只检查项目、设备通道和启动条件，不发送模型请求。
-- 添加 `-ContinueSession`：继续这个设备、项目对应的最近一份原生 CLI 历史。
-- 在 CLI 内使用 `/resume` 选择原生历史，使用 `/exit` 正常退出。
-- CLI 退出后外层 SSH 返回，采集器与数据库连接随本次入口关闭。
+## 用量
 
-同一设备、规范化后的同一 Windows 项目路径对应稳定的服务端辅助目录。该目录保存 CLI 的工作上下文，项目文件仍在 Windows。GUI 与外部 CLI 的会话列表分别管理，共用官方身份与统计账本。
+外部 CLI 的模型请求与桌面会话写入同一份统计：在桌面“账号与额度”中刷新，即可在汇总和调用日志里看到。同一请求重复上报只记一次。统计只保存模型、token、费用估算、耗时和会话 ID，不保存提示词、回复内容和账号信息。外部 CLI 的会话不在桌面会话列表中，所以没有单个会话的统计，只计入总量和调用日志。
 
-连接断开后先检查此前工具命令是否已经完成，再决定是否重试；入口不会自动重放模型任务。客户端执行通道离线时，先恢复客户端连接，再重开 CLI 并使用 `/resume`。
+## 常见问题
 
-入口的退出收尾覆盖本次采集器、数据库连接和 Linux CLI 进程组。已经在 Windows 端启动的命令需要另查执行状态，不能从外层终端退出推断它们已经停止。
-
-## 用量怎样查看
-
-1. 从本入口启动 CLI 并完成请求。
-2. 回到 CC Desk 的“账号与额度”页刷新，查看汇总和调用日志。
-3. 需要逐会话核对时，按原生会话和调用记录判断；GUI 的“当前会话”只计算当前 GUI 会话。
-
-同一请求重复导出时，沿用请求 ID 去重。每次入口使用独立 SQLite 连接，设置写锁等待，支持与服务端和其他外部 CLI 连接共用账本。
-
-Token 和 API 折算金额来自官方 CLI 的请求事件；金额是 API 价格估算，订阅额度由账号额度信息另行展示。统计只保存现有白名单字段，不开启提示词、回复正文或账号信息导出。
-
-环境只对新启动的进程生效。已经运行的旧入口没有采集配置时，退出后重新打开，再用 `/resume` 续接。本功能不扫描、导入或改写旧 CLI JSONL，也不自动补记历史。
-
-## 登录、权限与网络
-
-入口复用容器现有的官方登录和提供方配置，不导入浏览器会话令牌。需要重新授权时，按原有服务端授权流程操作；要求授权浏览器也位于服务端环境的部署，应在该环境打开授权页。
-
-Claude 的模型请求走服务端既有网络，本文脚本不改变代理、DNS、防火墙或出口。Windows 工具命令按 Windows 本机环境执行。项目选择不是强制沙箱，工具返回的 Windows 路径和系统信息会进入模型上下文。
-
-外部 CLI 与服务端同属一个可信用户环境。删除 `PROXY_*` 等环境变量用于避免无意继承服务秘密；它不会把同用户可读文件变成权限隔离区。
-
-## 定位问题
-
-| 现象 | 检查位置 |
+| 现象 | 处理 |
 |---|---|
-| SSH 无法登录 | 先独立运行 `ssh ai-server`，核对别名和主机密钥 |
-| 找不到入口模块 | 容器必须包含本分支源码；旧发行镜像没有新增文件 |
-| 数据库或设备配置不存在 | 数据目录、设备 ID、客户端是否已成功连接 |
-| Windows 通道探测失败 | CC Desk 客户端连接状态、临时 SSH 与本机执行组件 |
-| CLI 能工作而界面没有新增用量 | 是否从更新后的入口新开；是否查询同一数据库；账号页是否已刷新 |
-| 模型请求失败 | 按既有服务端登录、提供方和网络日志排查 |
-
-开发验证使用合成事件、临时数据库和模拟 CLI；真实模型、生产登录、网络代理不应进入单元测试。具体测试命令沿用仓库的 `npm test`、`npm run typecheck` 和 `npm run format:check`。
+| SSH 无法登录 | 先单独运行 `ssh my-server`，核对别名和主机密钥 |
+| `No running CC Desk Tunnel container` | 服务没有运行，或不是用 `manage.sh` 部署的；可用 `-Container` 指定容器 |
+| `Several CC Desk Tunnel containers` | 服务器上有多个部署，用 `-Container` 指定 |
+| `permission denied ... docker.sock` | 登录账号不能直接使用 docker，加 `-Sudo`，并让 `sudo` 免密码运行 docker |
+| `The running service has no external CLI entry` | 服务版本过旧，先在客户端里升级服务端 |
+| `Windows execution channel was not ready` | 这台电脑的客户端没有连接到该服务，或设备 ID 不是这台电脑的 |
+| 用量里看不到新的请求 | 在“账号与额度”页刷新；确认桌面客户端连接的是同一个服务 |
