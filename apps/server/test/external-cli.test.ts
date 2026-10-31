@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+  existsSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -277,7 +285,10 @@ test('a short external CLI exports its final batch into the live GUI database on
     const child = JSON.parse(readFileSync(marker, 'utf8'));
     assert.equal(child.telemetry, '1');
     assert.equal(child.leaked, false);
-    assert.equal(child.cwd, externalCliCommand(f.options).cwd);
+    assert.equal(
+      realpathSync.native(child.cwd),
+      realpathSync.native(externalCliCommand(f.options).cwd),
+    );
     const page = f.guiLog.query(query, () => null);
     assert.equal(page.totals.requests, 2);
     assert.equal(f.guiLog.sessionStats(guiSession).requests, 1);

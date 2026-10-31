@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -55,7 +55,7 @@ ${body}
     `${shell}: external CLI preserves project paths and uses the existing strict SSH channel`,
     { skip },
     (t) => {
-      const root = mkdtempSync(join(tmpdir(), 'ccdesk-cli-launcher-'));
+      const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'ccdesk-cli-launcher-')));
       t.after(() => rmSync(root, { recursive: true, force: true }));
       const project = join(root, "中文 project 'quote' & dollar$ `backtick");
       mkdirSync(project);
