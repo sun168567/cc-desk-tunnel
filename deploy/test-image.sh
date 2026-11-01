@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Synthetic old data, an old program overlay, and a real registry pull; no accounts or model calls.
+# The image as a deployment gets it from a registry: a failed pull, a pull and container replacement, and the
+# migration of older data on its first start, with a stale program from an in-app upgrade beside it. Synthetic data
+# only; no accounts or model calls. Run as root after building cc-desk-tunnel:local from this checkout.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="${PROXY_TEST_IMAGE:-cc-desk-tunnel:local}"
@@ -45,7 +47,7 @@ source "$PROXY_DEPLOY_CONFIG"
 dc=(docker compose --env-file "$PROXY_DEPLOY_CONFIG" -p "$PROJECT_NAME" -f "$ROOT/deploy/compose.yml")
 before="$("${dc[@]}" ps -q proxy)"
 config_hash="$(sha256sum "$PROXY_DEPLOY_CONFIG")"
-if CC_DESK_TUNNEL_IMAGE=127.0.0.1:1/missing CC_DESK_TUNNEL_VERSION="$version" manage upgrade >"$TEMP/failed-pull.log" 2>&1; then
+if CC_DESK_TUNNEL_IMAGE=127.0.0.1:1/missing CC_DESK_TUNNEL_BUILD=0 manage upgrade >"$TEMP/failed-pull.log" 2>&1; then
   echo 'A failed pull was accepted.' >&2; exit 1
 fi
 test "$config_hash" = "$(sha256sum "$PROXY_DEPLOY_CONFIG")"
@@ -62,7 +64,7 @@ done
 remote="127.0.0.1:$port/cc-desk-tunnel"
 docker tag "$IMAGE" "$remote:$version"
 docker push "$remote:$version"
-CC_DESK_TUNNEL_IMAGE="$remote" CC_DESK_TUNNEL_VERSION="$version" manage upgrade >"$TEMP/upgrade.log" 2>&1
+CC_DESK_TUNNEL_IMAGE="$remote" CC_DESK_TUNNEL_BUILD=0 manage upgrade >"$TEMP/upgrade.log" 2>&1
 after="$("${dc[@]}" ps -q proxy)"
 test "$before" != "$after"
 test "$(docker inspect --format '{{.Config.Image}}' "$after")" = "$remote:$version"

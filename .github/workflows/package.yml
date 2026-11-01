@@ -27,6 +27,7 @@ concurrency:
 # The steps that download Electron and the packaging tools are tried a second time after a minute: those
 # downloads now and then time out.
 jobs:
+  # The server image of the release, for amd64 and arm64 (see images.yml).
   images:
     if: inputs.release != ''
     uses: ./.github/workflows/images.yml
@@ -34,8 +35,7 @@ jobs:
       contents: read
       packages: write
     with:
-      source: ${{ github.sha }}
-      tag: ${{ inputs.release || '' }}
+      tag: ${{ inputs.release }}
   windows:
     runs-on: windows-2022
     timeout-minutes: 30

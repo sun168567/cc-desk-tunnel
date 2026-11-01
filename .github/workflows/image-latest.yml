@@ -1,3 +1,5 @@
+# `latest` follows the release GitHub shows as Latest. Deployments ask for a version of their own and do not use it;
+# it is there for those who write their own compose file.
 name: image-latest
 on:
   release:
@@ -27,4 +29,8 @@ jobs:
           version="${tag#v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          if ! docker buildx imagetools inspect "$image:$version" > /dev/null 2>&1; then
+            echo "Release $version has no image; latest stays where it is."
+            exit 0
+          fi
           docker buildx imagetools create --tag "$image:latest" "$image:$version"

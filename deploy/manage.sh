@@ -8,12 +8,12 @@ COMPOSE="${PROXY_COMPOSE_FILE:-$ROOT/deploy/compose.yml}"
 usage() {
   cat <<'HELP'
 Usage:
-  manage.sh setup                      interactive first install: asks, pulls, starts, prints a summary
+  manage.sh setup                      interactive first install: asks, gets the image, starts, prints a summary
   manage.sh init --host HOST [--mode fingerprint|certificate|nginx]
     [--data ABSOLUTE_PATH] [--control-port 8787]
     [--cert FULLCHAIN --key PRIVATE_KEY] [--url wss://DOMAIN/ws] [--token SECRET]
   manage.sh pull|build|up|status|logs|stop|restart|uninstall|connection|summary
-  manage.sh upgrade [--from SERVER_ARCHIVE]   pull the release image and replace the container
+  manage.sh upgrade [--from SERVER_ARCHIVE]   install the newest release (or the archive) and replace the container
   manage.sh client INSTALLER_EXE              offer a Windows installer to connected clients
   manage.sh token [SECRET]                    replace the service token (random when omitted) and restart
   manage.sh release-token [FILE]              save a read-only GitHub token for following releases (none: remove)
@@ -26,8 +26,10 @@ Requires Docker Engine + Compose v2+, Bash, OpenSSL, curl, tar.
 Use sudo if your user cannot access Docker. Config defaults to .local/docker.env;
 set PROXY_DEPLOY_CONFIG to manage a different isolated installation.
 Set PROXY_COMPOSE_FILE when managing an image-only standalone compose.yml.
-Set CC_DESK_TUNNEL_VERSION=X.Y.Z to select a release (otherwise latest stable).
-Set CC_DESK_TUNNEL_BUILD=1 explicitly to build from the local source instead.
+The image is the prebuilt one of this program's version (ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z), built here
+when it cannot be pulled. CC_DESK_TUNNEL_BUILD=1 always builds here, CC_DESK_TUNNEL_BUILD=0 never does.
+upgrade fetches the newest release; CC_DESK_TUNNEL_VERSION=X.Y.Z picks another.
+After an install with sudo, `sudo cc-desk-tunnel COMMAND` runs this script from anywhere.
 Uninstall keeps all data; backup/restore pause the service.
 HELP
 }
@@ -91,6 +93,7 @@ build_image() {
     -f "$ROOT/deploy/docker/compose.yaml" build --pull
   save_image cc-desk-tunnel:local
 }
+version_of() { sed -n 's/^ *"version": "\([0-9.]*\)",\{0,1\}$/\1/p' "$ROOT/apps/desktop/package.json" 2>/dev/null | head -n 1; }
 save_image() {
   local temp
   temp="$(mktemp "$CONFIG.XXXXXX")"
@@ -98,20 +101,70 @@ save_image() {
   mv -- "$temp" "$CONFIG"
   PROXY_IMAGE="$1"
 }
+# The image of this program's version, as the release workflow published it for amd64 and arm64.
 pull_image() {
-  local version="${CC_DESK_TUNNEL_VERSION:-}" repo="${CC_DESK_TUNNEL_REPO:-sun168567/cc-desk-tunnel}" image
-  if [[ -z "$version" ]]; then
-    version="$(curl -fsSL --connect-timeout 20 --max-time 60 "https://github.com/$repo/releases/latest/download/SHA256SUMS" \
-      | sed -n 's/.*  cc-desk-tunnel-server-\([0-9]*\.[0-9]*\.[0-9]*\)\.tar\.gz$/\1/p')"
-  fi
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Cannot resolve a release version."
-  image="${CC_DESK_TUNNEL_IMAGE:-ghcr.io/${repo,,}}:$version"
-  docker pull "$image"
-  # Keep the previous configured image and running container if the pull failed.
+  local version image
+  version="$(version_of)"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "No program version in $ROOT/apps/desktop/package.json."
+  image="${CC_DESK_TUNNEL_IMAGE:-ghcr.io/sun168567/cc-desk-tunnel}:$version"
+  echo "拉取镜像 $image …"
+  docker pull "$image" || return
+  # Only a pulled image is configured: a failed pull leaves the deployment as it was.
   save_image "$image"
 }
+# Where the image cannot be pulled (a version released before there were images, a registry this machine cannot
+# reach, a checkout with changes of its own), it is built here from the program beside this script.
 prepare_image() {
-  if [[ "${CC_DESK_TUNNEL_BUILD:-0}" = 1 ]]; then build_image; else pull_image; fi
+  case "${CC_DESK_TUNNEL_BUILD:-}" in
+    1) build_image ;;
+    0) pull_image || fail "Cannot pull the image." ;;
+    *)
+      pull_image && return
+      echo "没有拉取到预构建镜像，改为在本机构建（需要几分钟，期间联网下载系统包和依赖）…"
+      build_image ;;
+  esac
+}
+# The newest release's server archive (or CC_DESK_TUNNEL_VERSION's), checked against its SHA256SUMS.
+fetch_release() {
+  local releases=https://github.com/sun168567/cc-desk-tunnel/releases name version current
+  local listed="$releases/latest/download"
+  if [[ -n "${CC_DESK_TUNNEL_VERSION:-}" ]]; then
+    [[ "$CC_DESK_TUNNEL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "CC_DESK_TUNNEL_VERSION must be X.Y.Z."
+    listed="$releases/download/v$CC_DESK_TUNNEL_VERSION"
+  fi
+  FETCHED="$(mktemp -d)"
+  trap 'rm -rf -- "$FETCHED"' EXIT
+  if ! curl -fsSL --connect-timeout 20 --max-time 60 -o "$FETCHED/SHA256SUMS" "$listed/SHA256SUMS"; then
+    [[ -z "${CC_DESK_TUNNEL_VERSION:-}" ]] || fail "Cannot read release $CC_DESK_TUNNEL_VERSION; check that it exists."
+    echo "读不到发布页（检查这台机器能否访问 github.com），不下载新版本，用当前的 $(version_of) 继续。"
+    return
+  fi
+  name="$(awk '$2 ~ /^cc-desk-tunnel-server-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz$/ { print $2 }' "$FETCHED/SHA256SUMS" | head -n 1)"
+  [[ -n "$name" ]] || fail "The release has no server archive."
+  version="${name#cc-desk-tunnel-server-}"; version="${version%.tar.gz}"
+  # Nothing newer, or the version asked for is here already. This is also how a manage.sh from before the images hands
+  # over: it unpacks the archive it was given and runs this one without saying so.
+  current="$(version_of)"
+  if [[ "$version" = "$current" || ( -z "${CC_DESK_TUNNEL_VERSION:-}" && -n "$current" \
+    && "$(printf '%s\n' "$version" "$current" | sort -V | tail -n 1)" = "$current" ) ]]; then
+    echo "已是最新版本 $current。"
+    return
+  fi
+  # The version found is fetched by its own address, even if the newest release changes meanwhile.
+  echo "下载 $name …"
+  curl -fL --connect-timeout 20 --max-time 600 --progress-bar -o "$FETCHED/$name" \
+    "$releases/download/v$version/$name" || fail "Download failed."
+  (cd "$FETCHED" && grep "  $name\$" SHA256SUMS | sha256sum -c - >/dev/null) || fail "The archive does not match SHA256SUMS."
+  ARCHIVE="$FETCHED/$name"
+}
+# `sudo cc-desk-tunnel COMMAND` from anywhere, for the installation managed with the default configuration.
+COMMAND_LINK="${CC_DESK_TUNNEL_COMMAND:-/usr/local/bin/cc-desk-tunnel}"
+link_command() {
+  [[ "$(id -u)" = 0 && -z "${PROXY_DEPLOY_CONFIG:-}" ]] && safe_value "$ROOT" || return 0
+  { printf '#!/usr/bin/env bash\n# CC Desk Tunnel management; written by the deploy/manage.sh it runs.\n'
+    printf "exec bash '%s/deploy/manage.sh' \"\$@\"\n" "$ROOT"; } > "$COMMAND_LINK.new" \
+    && chmod 755 "$COMMAND_LINK.new" && mv -- "$COMMAND_LINK.new" "$COMMAND_LINK" \
+    || echo "Could not write $COMMAND_LINK; run $ROOT/deploy/manage.sh instead." >&2
 }
 running() { [[ -n "$(dc ps --status running -q proxy)" ]]; }
 ask() {
@@ -180,6 +233,7 @@ case "$command" in
       bash "${BASH_SOURCE[0]}" init "${options[@]}"
     fi
     load
+    link_command
     prepare_image
     dc up -d --no-build
     wait_healthy
@@ -262,7 +316,8 @@ case "$command" in
     if [[ "$(id -u)" = 0 ]]; then
       chown -R 1000:1000 "$DATA_DIR"
     fi
-    echo "Initialized. Edit $DATA_DIR/config/provider.json for API settings, then pull and up (or build and up for source)."
+    link_command
+    echo "Initialized. Edit $DATA_DIR/config/provider.json for API settings, then up."
     echo "Private client connection information: manage.sh connection"
     exit ;;
 esac
@@ -270,24 +325,46 @@ load
 case "$command" in
   build) build_image ;;
   pull) pull_image ;;
-  up) dc up -d --no-build; wait_healthy ;;
+  up)
+    docker image inspect "$PROXY_IMAGE" >/dev/null 2>&1 || prepare_image
+    dc up -d --no-build; wait_healthy ;;
   status) dc ps ;;
   logs) dc logs --tail=100 -f ;;
   stop) dc stop ;;
   restart) dc restart; wait_healthy ;;
   upgrade)
-    # Data, account and configuration live outside the image; only the program is replaced.
+    # Data, account and configuration live outside the image; only the program is replaced. An installation from
+    # a release fetches the next one; a checkout goes on with its own sources.
+    # CC_DESK_TUNNEL_UNPACKED says the program here is already the one to run (install.sh unpacked it).
     if [[ "${1:-}" = --from ]]; then
       [[ $# = 2 && -f "$2" ]] || fail "Specify the server archive: upgrade --from /path/cc-desk-tunnel-server.tar.gz"
-      if tar -tzf "$2" | grep -E '(^/|(^|/)\.\.(/|$))' >/dev/null; then fail "Unsafe archive paths."; fi
-      tar -tzf "$2" | grep -Fx 'deploy/manage.sh' >/dev/null || fail "Not a CC Desk Tunnel server archive."
-      tar -xzf "$2" -C "$ROOT" --no-same-owner
-      CC_DESK_TUNNEL_BUILD=1 exec bash "$ROOT/deploy/manage.sh" upgrade
+      ARCHIVE="$2"
+    else
+      [[ $# = 0 ]] || fail "upgrade takes no arguments besides --from SERVER_ARCHIVE."
+      [[ -n "${CC_DESK_TUNNEL_UNPACKED:-}" || -d "$ROOT/.git" ]] || fetch_release
     fi
+    if [[ -n "${ARCHIVE:-}" ]]; then
+      if tar -tzf "$ARCHIVE" | grep -E '(^/|(^|/)\.\.(/|$))' >/dev/null; then fail "Unsafe archive paths."; fi
+      tar -tzf "$ARCHIVE" | grep -Fx 'deploy/manage.sh' >/dev/null || fail "Not a CC Desk Tunnel server archive."
+      tar -xzf "$ARCHIVE" -C "$ROOT" --no-same-owner
+      # The script just unpacked goes on, so that what this version changed in it applies.
+      CC_DESK_TUNNEL_UNPACKED=1 bash "$ROOT/deploy/manage.sh" upgrade
+      exit
+    fi
+    echo "程序版本 $(version_of)。"
+    link_command
+    previous="$PROXY_IMAGE"
     prepare_image
     # The port frp had before 0.2.10 is no longer published; its setting goes with it.
     if grep -q '^FRPS_PORT=' "$CONFIG"; then sed -i '/^FRPS_PORT=/d' "$CONFIG"; fi
-    dc up -d --no-build; wait_healthy; summary ;;
+    dc up -d --no-build; wait_healthy
+    # Each image is a few gigabytes. The one replaced goes, if it is one of this project's that can be had again.
+    if [[ "$previous" != "$PROXY_IMAGE" && "$previous" =~ ^(ghcr\.io/sun168567/cc-desk-tunnel:.+|cc-desk-tunnel:local)$ ]] \
+      && [[ "$(docker image inspect -f '{{.Id}}' "$previous" 2>/dev/null)" != "$(docker image inspect -f '{{.Id}}' "$PROXY_IMAGE")" ]] \
+      && docker image rm "$previous" >/dev/null 2>&1; then
+      echo "已删除替换下来的镜像 $previous。"
+    fi
+    summary ;;
   summary) summary ;;
   client)
     [[ $# = 1 && -f "$1" && "$(basename -- "$1")" =~ ^CC-Desk-Tunnel-Setup-[0-9]+\.[0-9]+\.[0-9]+-x64\.exe$ ]] \
@@ -329,7 +406,10 @@ case "$command" in
     if running; then dc restart; wait_healthy; fi
     echo "Release token $([[ -n "$RELEASE_TOKEN" ]] && echo saved || echo removed)."
     ;;
-  uninstall) dc down --remove-orphans; echo "Removed containers/network. Data and config retained: $DATA_DIR" ;;
+  uninstall)
+    dc down --remove-orphans
+    if grep -qF "'$ROOT/deploy/manage.sh'" "$COMMAND_LINK" 2>/dev/null; then rm -f -- "$COMMAND_LINK"; fi
+    echo "Removed containers/network. Data and config retained: $DATA_DIR" ;;
   connection)
     echo "URL: $CONNECTION_URL"
     if [[ "$MODE" = fingerprint ]]; then

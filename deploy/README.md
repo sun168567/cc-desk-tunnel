@@ -4,20 +4,22 @@ Ubuntu amd64 优先；arm64 为实验性支持：镜像构建、部署自测和�
 
 ## 准备
 
-最省事的方式是一条命令。脚本检查 Docker 等依赖（缺少时给出安装命令，不代为安装），将部署脚本保存到 `/opt/cc-desk-tunnel`，从发布页确定版本并拉取 GHCR 镜像，随后进入下面的交互安装；已有部署时改为询问是否升级。程序目录可用环境变量 `CC_DESK_TUNNEL_DIR` 更改。
+最省事的方式是一条命令。脚本检查 Docker 等依赖（缺少时给出安装命令，不代为安装），从发布页下载最新的服务端程序包并校验，解压到 `/opt/cc-desk-tunnel`，随后进入下面的交互安装；已有部署时改为询问是否升级。程序目录可用环境变量 `CC_DESK_TUNNEL_DIR` 更改，`CC_DESK_TUNNEL_VERSION=X.Y.Z` 可指定版本（写在 `sudo env` 之后）。
 
 ```sh
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
 ```
 
-默认使用 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z`，同一标签同时支持 amd64 和 arm64。部署固定具体版本；`latest` 仅指向最新正式版。镜像只含服务端运行环境与 Web 界面，不含桌面安装包。服务启动后在 `/data/state/client` 缓存对应 Windows 安装包，供客户端更新；下载失败不会阻止服务启动。
+镜像用 GitHub 上预先构建好的 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z`，版本与程序包相同，x86_64 和 arm64 用同一个标签，Docker 自动选择。拉取不到时（服务器连不上 ghcr.io，或这个版本发布时还没有镜像），改为在服务器上从程序包构建，首次需要几分钟，期间联网下载系统包、Node.js、Claude Code 和 npm 依赖。想始终在本机构建（例如改过 Dockerfile）时设置 `CC_DESK_TUNNEL_BUILD=1`；只用预构建镜像、拉取不到就停下时设置 `CC_DESK_TUNNEL_BUILD=0`。
 
-一键脚本每次安装从 `main` 解析一个固定提交，下载同一提交的部署脚本；应用镜像则使用所选 Release 的固定版本。可用 `sudo env CC_DESK_TUNNEL_VERSION=X.Y.Z bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"` 指定版本。普通部署不下载应用源码；需要自行修改时用完整源码目录并显式选择 `CC_DESK_TUNNEL_BUILD=1`。
+镜像不含 Windows 安装包：服务启动后自己下载同版本的安装包，放在数据目录里供客户端升级，下载失败不影响服务。
 
-需要源码构建时，也可以从发布页下载服务端程序包 `cc-desk-tunnel-server-X.Y.Z.tar.gz` 和 `SHA256SUMS`。放到服务器的同一目录，校验后解压；客户端安装包仍单独下载到电脑：
+以 root 安装后多一个命令 `/usr/local/bin/cc-desk-tunnel`，就是 `deploy/manage.sh` 的快捷方式，下文的 `sudo bash deploy/manage.sh …` 都可以写成 `sudo cc-desk-tunnel …`，在任何目录下运行。卸载时一并删除。
+
+也可以手动准备：从项目的 GitHub 发布页取同一版本的三个文件：服务端程序包 `cc-desk-tunnel-server-X.Y.Z.tar.gz`、Windows 安装包 `CC-Desk-Tunnel-Setup-X.Y.Z-x64.exe` 和 `SHA256SUMS`。放到 VPS 的同一目录后先校验，再把程序包解压到专用程序目录：
 
 ```sh
-grep "  cc-desk-tunnel-server-X.Y.Z.tar.gz$" SHA256SUMS | sha256sum -c -
+sha256sum -c SHA256SUMS
 sudo mkdir -p /opt/cc-desk-tunnel
 sudo tar -xzf cc-desk-tunnel-server-X.Y.Z.tar.gz -C /opt/cc-desk-tunnel
 cd /opt/cc-desk-tunnel
@@ -25,19 +27,19 @@ cd /opt/cc-desk-tunnel
 
 程序包不含秘密、Windows UI、开发测试和依赖。也可以自己打包：本机运行 `npm run package:server`，或直接使用完整仓库。
 
-交互安装：不带参数运行，脚本依次询问公网地址（默认自动探测）、入口方式、端口、数据目录和服务凭据（留空自动生成），随后自动拉取镜像、启动，并在结尾汇总客户端要填的地址 / 指纹 / 凭据、需放行的端口和下一步。已有部署配置时跳过问答，只重新准备镜像并启动。
+交互安装：不带参数运行，脚本依次询问公网地址（默认自动探测）、入口方式、端口、数据目录和服务凭据（留空自动生成），随后取得镜像、启动，并在结尾汇总客户端要填的地址 / 指纹 / 凭据、需放行的端口和下一步。已有部署配置时跳过问答，只重新取得镜像并启动。
 
 ```sh
-sudo env CC_DESK_TUNNEL_BUILD=1 bash deploy/install.sh
+sudo bash deploy/install.sh
 ```
 
 升级与客户端分发：
 
 ```sh
-# 原地升级到最新正式镜像；数据、账号和配置不动
+# 原地升级到最新版本：下载并校验程序包、解包覆盖程序目录、换上新镜像并替换容器；数据、账号和配置不动
 sudo bash deploy/manage.sh upgrade
-# 或指定版本
-sudo env CC_DESK_TUNNEL_VERSION=X.Y.Z bash deploy/manage.sh upgrade
+# 用手上的程序包升级（例如服务器连不上 GitHub）
+sudo bash deploy/manage.sh upgrade --from /path/cc-desk-tunnel-server.tar.gz
 # 把 Windows 安装包交给服务端；已连接的旧客户端下次连接时在左下角连接菜单看到“升级到 x.y.z”
 sudo bash deploy/manage.sh client /path/CC-Desk-Tunnel-Setup-X.Y.Z-x64.exe
 # 更换服务凭据（留空则随机生成）并重启；已保存旧凭据的客户端需重新填写
@@ -52,9 +54,9 @@ nginx 模式需按示例配置反代 `/client/installer`，客户端自升级才
 
 服务端每 6 小时查询一次项目的 GitHub 发布页，客户端连接菜单里的“检查更新”立即查询一次。有新版本时：
 
-- 菜单出现“升级服务端到 x.y.z”：确认后服务端下载程序包并按清单校验、安装依赖，然后重启；对应客户端安装包在启动后后台下载，全程几分钟；重启后重新连接，客户端按提示升级自己。运行中的任务、原生终端或账号登录未结束时不能开始升级。
+- 菜单出现“升级服务端到 x.y.z”：确认后服务端下载程序包并按清单校验、安装依赖、取回同版本的客户端安装包，然后重启，全程几分钟；重启后重新连接，客户端按提示升级自己。运行中的任务、原生终端或账号登录未结束时不能开始升级。
 - 客户端比服务端新、登录页提示“此客户端较新”时：点登录页的“升级服务端”，服务端同样升级到最新的正式版并重启，然后照常连接。多个连接各连一台服务端时，从其中一台升级客户端后，其余服务端都这样升级。
-- 菜单显示“服务端 x.y.z 需在服务器上升级”：新版本需要更新的镜像（Node.js 或系统组件有变化），使用 `manage.sh upgrade` 拉取新版镜像。
+- 菜单显示“服务端 x.y.z 需在服务器上升级”：新版本需要更新的镜像（Node.js 或系统组件有变化），在服务器上运行 `sudo cc-desk-tunnel upgrade`。
 
 升级后的程序放在数据目录的 `program/` 下，镜像不变。容器启动时比较两处的版本，运行较新的一个：重建或替换容器不会回到旧版本，用更新的程序包重建镜像后则以镜像为准。升级后的程序连续三次启动失败时退回镜像里的版本，日志里有一行说明。失败的升级不改动正在运行的程序，原因显示在客户端。
 
@@ -76,12 +78,12 @@ sudo bash deploy/manage.sh release-token /path/token.txt   # 不带参数则移�
 sudo bash deploy/install.sh init --host VPS_IP
 # 上一步打印数据目录；默认 sudo 安装为 /srv/cc-desk-tunnel
 # 按需编辑 <数据目录>/config/provider.json，不把 API key 放进镜像。
-sudo bash deploy/manage.sh pull
+# up 先取得镜像（拉取，拉不到则构建），再启动
 sudo bash deploy/manage.sh up
 sudo bash deploy/manage.sh connection
 ```
 
-`install.sh` 只检查 Docker / Compose 等依赖，缺少或 Docker 未运行时给出安装命令后退出；不安装系统软件，不修改 nginx、防火墙、SSH 或账号。默认安装只拉取镜像。显式源码构建才联网下载系统包、固定 Node / CLI 和锁定 npm 依赖，node-pty 在镜像构建阶段准备。Node 24 原生执行 TypeScript；发行检查仍必须 typecheck。
+`install.sh` 只检查 Docker / Compose 等依赖，缺少或 Docker 未运行时给出安装命令后退出；不安装系统软件，不修改 nginx、防火墙、SSH 或账号。在服务器上构建镜像时联网下载系统包、固定 Node / CLI 和锁定 npm 依赖；非 JS 编译安装，node-pty 在镜像构建阶段准备。Node 24 原生执行 TypeScript；发行检查仍必须 typecheck。
 
 默认一个公网 TCP 端口：WSS / HTTPS `8787`，登录、对话和执行通道都经它。运维 SSH 遵循服务器已有端口。云防火墙与主机策略自行放行，**不需要 UDP 或公开 Windows / Linux 随机 SSH 端口**。从 0.2.9 及更早版本升级的部署原先还放行了 `7000`，不再使用，可以去掉；用 `manage.sh upgrade` 升级时容器也不再发布它。Docker 发布端口可能绕过 UFW 的常规 INPUT 规则，应采用云安全组或 Docker 对应防火墙策略，不把启用 UFW 当成已限制发布端口。
 
@@ -125,18 +127,6 @@ nginx 的配置步骤、检查方法和常见问题见[用 nginx 反代](nginx.m
 
 ## 运维
 
-无需找到脚本位置或先 `cd`：在线安装入口也接受管理命令。状态、日志、改密和备份直接调用已有部署的 `manage.sh`；在线 `upgrade` 询问确认后更新部署工具并拉取新版镜像，旧的源码部署也可通过这个入口迁移。其他管理操作不会触发升级。
-
-```sh
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- status
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- token
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)" -- backup /secure/backup.tar.gz
-```
-
-其他操作替换末尾参数即可：`logs`、`restart`、`upgrade`、`connection` 等；`help` 显示列表。默认寻找 `/opt/cc-desk-tunnel`；自定义目录在 `sudo` 后加 `env CC_DESK_TUNNEL_DIR=/原安装目录`。`token` 不带新凭据时随机生成，重启后原客户端凭据失效；不要把秘密写进命令行。备份路径的父目录需要已经存在，文件不能存在。
-
-已进入程序目录或离线管理时，原来的直接调用仍然可用：
-
 ```sh
 sudo bash deploy/manage.sh status
 sudo bash deploy/manage.sh logs
@@ -150,15 +140,11 @@ sudo bash deploy/manage.sh uninstall
 
 Compose 崩溃 / 主机重启恢复，`tini -g` 管理信号与孤儿进程；停止给代理 30 秒正常回收，强杀则 Docker 回收容器中全部进程。日志上限 3 × 10MB。健康检查不发模型请求，也不是深度外部可用性探测；Docker 不会仅因 unhealthy 自动重启进程。
 
-升级先拉取完整镜像，拉取失败不修改原镜像配置、不停止旧容器；成功后替换容器，保留原 `/data`。先备份再升级。新程序启动时执行已有的数据迁移，两种升级方式共用同一逻辑，可跳过中间版本；不承诺旧程序能读取已迁移的数据，因此换旧镜像不等于恢复备份。数据目录中若有应用内升级安装的更高版本，现有入口仍优先启动它。
+升级先拉取（或构建）新镜像，失败时不改配置、不停旧容器；成功后替换容器，数据保留，被替换下来的本项目镜像随后删除，以免每次升级多占几 GB。数据迁移在新程序启动时进行，换回旧镜像不等于回到旧数据，需要回退时用升级前的备份。没有外网的服务器可在别处 `docker save`、在服务器上 `docker load`，再在私有 `docker.env` 中把 `PROXY_IMAGE` 改成导入的标签后 `up`。
 
-源码构建是显式选项：在完整源码或服务端程序包目录执行 `sudo env CC_DESK_TUNNEL_BUILD=1 bash deploy/manage.sh setup` 或 `upgrade`；也可分开执行 `manage.sh build`、`manage.sh up`。`upgrade --from /path/server.tar.gz` 保留源码包升级行为。需要系统组件时仍可修改 Dockerfile 自行构建；普通镜像部署目录不包含这些源码。
+仅导入镜像、手工 Compose 管理时，使用 `deploy/compose.yml`（无 build）。在独立部署目录复制为 `compose.yml`，将初始化生成的 `docker.env` 复制为同目录 `.env`，确认 `PROXY_IMAGE` 为 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z` 或已导入的标签；该配置不含 token / API key，但目录和文件仍保持私有。运行 `sudo docker compose up -d` / `ps` / `logs` / `stop`。调用备份等脚本时设置 `PROXY_DEPLOY_CONFIG=/部署目录/.env`、`PROXY_COMPOSE_FILE=/部署目录/compose.yml`，确保使用相同数据和项目。升级时改 `.env` 里的版本号，执行 `sudo docker compose pull` 和 `sudo docker compose up -d`。
 
-手工 Compose 管理时，使用 `deploy/compose.yml`（无 build）。在独立部署目录复制为 `compose.yml`，将初始化生成的 `docker.env` 复制为同目录 `.env`，确认 `PROXY_IMAGE` 为 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z` 或自行导入的 tag；该配置不含 token / API key，但目录和文件仍保持私有。运行 `sudo docker compose up -d` / `ps` / `logs` / `stop`。调用备份等脚本时设置 `PROXY_DEPLOY_CONFIG=/部署目录/.env`、`PROXY_COMPOSE_FILE=/部署目录/compose.yml`，确保使用相同数据和项目。纯镜像部署升级时更新 `.env` 中的版本，执行 `docker compose pull`、`docker compose up -d --no-build`；保持同一数据目录。也可用上述环境变量调用 `manage.sh upgrade`。离线部署仍可 `docker save` / `load`。
-
-镜像构建后，`sudo bash deploy/test.sh` 可运行不调用模型的隔离部署回归；占用测试端口 19871..19874，创建临时数据并在结束时回收。不会改既有服务；测试数据被删除，不用来测试生产数据。
-
-`bash deploy/test-scripts.sh` 使用模拟 Docker 和网络验证部署脚本；Linux 上另测无源码安装与重复升级。`sudo bash deploy/test-image.sh` 用真实容器和临时本地注册表验证拉取、失败时保留原配置、换容器、重复启动，以及合成旧数据的启动迁移。它检查镜像不含桌面安装包，测试不使用真实账号；合成数据测试不代表所有历史部署都已实测。这两类检查已加入 CI。
+镜像构建后，`sudo bash deploy/test.sh` 可运行不调用模型的隔离部署回归；占用测试端口 19871..19874，创建临时数据并在结束时回收。不会改既有服务；测试数据被删除，不用来测试生产数据。`sudo bash deploy/test-image.sh` 用临时的本地镜像仓库走一遍拉取、拉取失败、替换容器和旧数据迁移；`bash deploy/test-scripts.sh` 不需要 Docker，用替身检查部署脚本的各种选择。三者都在 CI 里运行。
 
 备份先停服务保证 SQLite / WAL 与原生数据一致，结束后恢复之前运行状态；排除临时 SSH 凭据、缓存和升级时留下的会话库副本（`state/backups`）。备份**含 token、API / 账号秘密、证书私钥和历史**，权限 0600，需安全离线保存。恢复仅允许已 stop 且长期数据为空的新初始化部署：
 
