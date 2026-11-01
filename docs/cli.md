@@ -12,7 +12,7 @@
 | --- | --- |
 | Windows x64 | `ccdt-<版本>-windows-x64.zip` |
 | macOS Apple 芯片 / Intel | `ccdt-<版本>-mac-arm64.tar.gz` / `ccdt-<版本>-mac-x64.tar.gz` |
-| Linux x64 | `ccdt-<版本>-linux-x64.tar.gz` |
+| Linux x64 / arm64 | `ccdt-<版本>-linux-x64.tar.gz` / `ccdt-<版本>-linux-arm64.tar.gz` |
 
 解压后在 `ccdt` 文件夹里运行安装脚本，只为当前用户安装，不需要管理员权限：
 
@@ -40,7 +40,7 @@ ccdt login
 
 装有图形客户端时，服务地址和证书指纹取自它保存的设置，只需要输入服务凭据（与图形客户端填的相同，输入时不显示）。没有时写上地址：`ccdt login wss://<服务器>:8787/ws --fingerprint <证书指纹>`。
 
-凭据按系统的方式保存：Windows 的 DPAPI、macOS 的钥匙串、Linux 的 Secret Service（GNOME Keyring、KWallet）；都没有时存进只有当前账户能读的设置文件。不想保存时加 `--no-save`，之后用 `CCDT_TOKEN` 环境变量提供。登录过几个服务端时，用 `--server <地址>` 选择。
+凭据按系统的方式保存：Windows 的 DPAPI、macOS 的钥匙串、Linux 的 Secret Service（GNOME Keyring、KWallet）。没有这些，或者它们用不了时（例如通过 SSH 登录、没有图形界面的 Linux 服务器，或 SSH 会话里锁着的钥匙串），存进只有当前账户能读的设置文件，登录时会说明。不想保存时加 `--no-save`，之后用 `CCDT_TOKEN` 环境变量提供。登录过几个服务端时，用 `--server <地址>` 选择。
 
 ## 使用
 

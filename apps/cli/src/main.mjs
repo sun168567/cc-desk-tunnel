@@ -121,8 +121,11 @@ async function login(config, values, url) {
   await service.close();
   const previous = config.server(server.url);
   if (previous) discard(previous.url, previous.token);
-  config.remember(values['no-save'] ? server : { ...server, token: protect(server.url, token) });
-  if (values['no-save']) say('凭据没有保存；之后用 CCDT_TOKEN 环境变量提供。');
+  const kept = values['no-save'] ? undefined : protect(server.url, token);
+  config.remember(kept ? { ...server, token: kept } : server);
+  if (!kept) say('凭据没有保存；之后用 CCDT_TOKEN 环境变量提供。');
+  else if (kept.store === 'file')
+    say(dim(`系统没有可用的密钥服务，凭据存在只有本账号可读的 ${config.path}。`));
 }
 
 function listed(sessions) {

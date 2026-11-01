@@ -196,6 +196,27 @@ jobs:
           path: artifacts/linux/*.png
           if-no-files-found: warn
           retention-days: 3
+  # ccdt for Linux on arm64, such as an ARM server or a Raspberry Pi: there is no desktop package for it.
+  cli-linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      - run: npm run package:cli && tar -xzf artifacts/cli/*.tar.gz -C "$RUNNER_TEMP" && "$RUNNER_TEMP/ccdt/install.sh" && ~/.local/bin/ccdt --version
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-linux-arm64
+          path: artifacts/cli/*.tar.gz
+          if-no-files-found: error
+          retention-days: 3
   server:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -222,7 +243,7 @@ jobs:
   # write to the repository.
   attach:
     if: inputs.release != ''
-    needs: [windows, macos, linux, server]
+    needs: [windows, macos, linux, cli-linux-arm64, server]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -9,6 +17,7 @@ import { Config, directories } from '../src/config.mjs';
 import { proxyFor } from '../src/connection.mjs';
 import { RESTORE, relay } from '../src/terminal.mjs';
 import { readKeys } from '../src/keys.mjs';
+import { protect, reveal } from '../src/secret.mjs';
 
 test('settings live where each system keeps them, beside the desktop client’s', () => {
   assert.deepEqual(directories({ APPDATA: 'C:\\A' }, 'win32', 'C:\\H'), {
@@ -188,3 +197,38 @@ test('reading keys leaves the input open for the terminal shown next', async () 
   input.write('b');
   assert.equal(await again, 'b');
 });
+
+// A Linux server over SSH has the Secret Service's command at times, but no desktop session for it to work in.
+test(
+  'a token goes to the Secret Service where it works, and to the settings file where it does not',
+  {
+    skip: process.platform === 'win32',
+  },
+  (t) => {
+    const directory = mkdtempSync(join(tmpdir(), 'ccdt-secret-'));
+    const path = process.env.PATH;
+    t.after(() => {
+      process.env.PATH = path;
+      rmSync(directory, { recursive: true, force: true });
+    });
+    const tool = join(directory, 'secret-tool');
+    process.env.PATH = `${directory}:${path}`;
+    writeFileSync(
+      tool,
+      '#!/bin/sh\necho "Cannot autolaunch D-Bus without X11 $DISPLAY" >&2\nexit 1\n',
+    );
+    chmodSync(tool, 0o755);
+    assert.deepEqual(protect('wss://a.test/ws', 'token-1', 'linux'), {
+      store: 'file',
+      data: 'token-1',
+    });
+    const kept = join(directory, 'kept');
+    writeFileSync(
+      tool,
+      `#!/bin/sh\ncase "$1" in store) cat > '${kept}';; lookup) cat '${kept}';; esac\n`,
+    );
+    const stored = protect('wss://a.test/ws', 'token-2', 'linux');
+    assert.deepEqual(stored, { store: 'secret-service' });
+    assert.equal(reveal('wss://a.test/ws', stored), 'token-2');
+  },
+);

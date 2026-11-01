@@ -40,6 +40,10 @@ const runtimes = {
     'linux-x64.tar.gz',
     '6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff',
   ],
+  'linux-arm64': [
+    'linux-arm64.tar.gz',
+    '724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5',
+  ],
 };
 const system = `${process.platform}-${process.arch}`;
 if (!runtimes[system]) throw new Error(`No ccdt package for ${system}.`);
@@ -51,6 +55,7 @@ const names = {
   'darwin-arm64': 'mac-arm64',
   'darwin-x64': 'mac-x64',
   'linux-x64': 'linux-x64',
+  'linux-arm64': 'linux-arm64',
 };
 export const packageName = (release, name) =>
   `ccdt-${release}-${name}.${name.startsWith('windows') ? 'zip' : 'tar.gz'}`;

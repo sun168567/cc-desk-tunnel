@@ -18,6 +18,7 @@ export const releaseFiles = (version) => [
   `CC-Desk-Tunnel-${version}-mac-x64.dmg`,
   `ccdt-${version}-windows-x64.zip`,
   `ccdt-${version}-linux-x64.tar.gz`,
+  `ccdt-${version}-linux-arm64.tar.gz`,
   `ccdt-${version}-mac-arm64.tar.gz`,
   `ccdt-${version}-mac-x64.tar.gz`,
 ];
