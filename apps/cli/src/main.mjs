@@ -206,7 +206,7 @@ async function show(config, values, service, session, fresh) {
       return result.code ?? 0;
     }
     if (result.how === 'taken') {
-      await service.close(false);
+      await service.close();
       say('这个会话在另一个窗口里打开了，这里不再显示。');
       return 0;
     }
@@ -276,12 +276,12 @@ export async function main(argv) {
             ? '还没有会话。'
             : '这个目录还没有会话：运行 ccdt 新建一个，或用 ccdt sessions --all 看全部。',
       );
-      await service.close(false);
+      await service.close();
       return 0;
     }
     if (command === 'usage') {
       say(usage(await service.request({ type: 'usage.summary' })));
-      await service.close(false);
+      await service.close();
       return 0;
     }
     let session;
@@ -290,14 +290,14 @@ export async function main(argv) {
       const prefix = rest[0]?.toLowerCase();
       const found = prefix ? all.filter((other) => other.id.startsWith(prefix)) : [];
       if (found.length !== 1) {
-        await service.close(false);
+        await service.close();
         return (say(found.length ? '有几个会话以此开头，请多写几位。' : '没有这个会话。'), 1);
       }
       session = found[0];
     } else if (values.resume) {
       const sessions = newest(values.all ? all : mine);
       if (!sessions.length) {
-        await service.close(false);
+        await service.close();
         return (
           say('这个目录还没有会话：运行 ccdt 新建一个，或用 ccdt -r --all 从全部会话里选。'),
           1
@@ -311,7 +311,7 @@ export async function main(argv) {
         ),
       );
       if (chosen === undefined) {
-        await service.close(false);
+        await service.close();
         return 0;
       }
       session = sessions[chosen];

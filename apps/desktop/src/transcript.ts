@@ -18,7 +18,7 @@ export type TranscriptItem =
       delivery?: string;
       // Stands for the "continue" button: there is no message of the user's to show, edit or copy.
       continued?: boolean;
-      // Asked in a terminal that continued the session; recorded when the terminal ended.
+      // Asked in a terminal that continued the session; recorded as its turn ended.
       terminal?: boolean;
       at: string;
       // A reply: when its last text arrived, which is when it was done (`at` is when it began).
@@ -282,8 +282,8 @@ export function conversation(events: SessionEvent[]): Turn[] {
     return how === 'cancelled' || how === 'failed' ? how : undefined;
   };
   const turns: Turn[] = [];
-  // A terminal's turns are recorded together when it ends, and the terminal may have stood open long after the last
-  // of them: each ends with the last thing recorded of it.
+  // A terminal's turns are all of one run, which goes on while the terminal stays open, long after the last of them
+  // perhaps: each ends with the last thing recorded of it.
   const seen = new Map<Turn, string>();
   const close = (turn: Turn, at: string | undefined) => {
     turn.endedAt = turn.question?.terminal ? (seen.get(turn) ?? at) : at;

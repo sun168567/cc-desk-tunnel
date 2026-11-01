@@ -145,22 +145,22 @@ export class Service extends EventEmitter {
       this.on('message', check);
     });
   }
-  // The bridge tells the service of an end on purpose (`leave`) unless asked not to: then the service keeps what
-  // this computer runs, a terminal among it, for a while, as after a fault on the way.
-  end(lost, leave = !lost) {
+  // ccdt never tells the service it is leaving (`leave`). When ccdt is this computer's last connection, a leave ends
+  // all the service keeps of this computer's while it is away, such as a desktop run waiting for the desktop client
+  // to reconnect, or the terminal of another ccdt window that lost its connection. The terminal ccdt shows is ended
+  // by asking for it (`terminal.close`); anything else is kept for the usual while, as after a fault on the way.
+  end(lost) {
     if (this.ended) return;
     this.ended = true;
     this.lost = lost;
     for (const { reject } of this.waiting.values()) reject(new Error('连接已关闭。'));
     this.waiting.clear();
     this.socket?.terminate();
-    void Promise.resolve(this.bridge?.close(!leave)).finally(() => this.resolveClosed());
+    void Promise.resolve(this.bridge?.close(true)).finally(() => this.resolveClosed());
     this.emit('end', lost);
   }
-  // `leave` tells the service the end is meant: what this computer ran is not kept for it to come back to.
-  async close(leave = true) {
+  async close() {
     if (!this.ended && this.socket?.readyState === WebSocket.OPEN) {
-      if (leave) this.send({ type: 'leave' });
       const socket = this.socket;
       await new Promise((resolve) => {
         const timer = setTimeout(resolve, 1000);
@@ -171,7 +171,7 @@ export class Service extends EventEmitter {
         socket.close();
       });
     }
-    this.end(false, leave);
+    this.end(false);
     await this.closed;
   }
 }
