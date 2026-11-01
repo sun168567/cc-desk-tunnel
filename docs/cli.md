@@ -92,3 +92,12 @@ ccdt login
 - Windows：在一套真实部署上验证过登录、新建与选择会话、与图形客户端交替接续、断网 55 秒后接回、关窗口即结束、请求身份与调用统计；打包、安装脚本与安装后的启动在 GitHub 的 Windows 机器上检查。
 - Linux（x64）：在一台没有图形界面、经 SSH 登录的 Ubuntu 上，用 GitHub 打出的包验证过安装、登录（系统密钥服务用不了时凭据存进设置文件）、新建与选择会话、Claude 的命令经执行通道在这台电脑上运行、终端状态与每一轮的导入、服务端断开 50 秒后接回、关窗口即结束。arm64 的包在 GitHub 的 arm64 机器上打包、安装并启动过。
 - macOS：打包、安装脚本与安装后的启动，钥匙串的保存与读取，以及在真实终端里按键原样传过去（Ctrl+C 交给 Claude Code，不结束 `ccdt`）、窗口尺寸传过去，都在 GitHub 的 Mac 上检查；手头没有 Mac，需要有人操作的部分（连接真实服务端、在“终端”或 iTerm2 里使用、关窗口）没有实际用过。执行通道是与 macOS 图形客户端同一套代码。
+
+## 致谢
+
+`ccdt` 来自社区一次次提出的终端需求，感谢：
+
+- @jiangan-code：[#9](https://github.com/sun168567/cc-desk-tunnel/pull/9) 最早做出了 Linux 上的 `ccdt`，并在自己的分支上继续实践。重新接入时还原整屏、用 hooks 跟踪会话的做法都采纳自那里。
+- @MomentDerek：[#97](https://github.com/sun168567/cc-desk-tunnel/issues/97) 希望像 SSH 上去一样使用完整的 Claude Code。
+- @3558L：[#136](https://github.com/sun168567/cc-desk-tunnel/issues/136) 反馈了经 SDK 运行时 5 小时额度消耗更快，并提出改进原生终端。
+- @Kimi-Bo：[#139](https://github.com/sun168567/cc-desk-tunnel/pull/139) 在 Windows Terminal 里使用服务端的 Claude Code，并接入用量统计（整理后见 [#140](https://github.com/sun168567/cc-desk-tunnel/pull/140)）。

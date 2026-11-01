@@ -1,6 +1,6 @@
 # 独立终端客户端 `ccdt`：设计与任务
 
-2026-11-01 立项。起因是 [#136](https://github.com/sun168567/cc-desk-tunnel/issues/136)：社区实测经 SDK 运行时 5 小时额度消耗更快，使用者希望有一条完整的交互式 CLI 路线。[#139](https://github.com/sun168567/cc-desk-tunnel/pull/139) 给出过一种做法（普通 SSH 加 `docker exec` 进容器），它绕开了现有的 WSS 连接，需要服务器账号与 docker 权限，本方案取代它。
+2026-11-01 立项。起因是 [#136](https://github.com/sun168567/cc-desk-tunnel/issues/136)：社区实测经 SDK 运行时 5 小时额度消耗更快，使用者希望有一条完整的交互式 CLI 路线；更早的 [#97](https://github.com/sun168567/cc-desk-tunnel/issues/97) 也希望像 SSH 上去一样使用完整的 Claude Code。[#139](https://github.com/sun168567/cc-desk-tunnel/pull/139) 给出过一种做法（普通 SSH 加 `docker exec` 进容器），它绕开了现有的 WSS 连接，需要服务器账号与 docker 权限；[#140](https://github.com/sun168567/cc-desk-tunnel/pull/140) 在它的基础上修正后实测可用。本方案取代它，用量接入统计的需求沿用。
 
 jiangan-code 的分支（[jiangan-code/cc-desk-tunnel](https://github.com/jiangan-code/cc-desk-tunnel)，#9 之后在 10-07 的主线上继续做的 Linux 版 `ccdt`）实际解决过其中几个问题，下文采纳的部分注明出处，移植时按当前主线改写并注明作者。它基于旧主线（单执行设备、旧执行通道），不能直接合入。
 
