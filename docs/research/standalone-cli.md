@@ -30,7 +30,7 @@ jiangan-code 的分支（[jiangan-code/cc-desk-tunnel](https://github.com/jianga
 ## 形态与仓库位置
 
 - `apps/cli`：`ccdt` 本体，Node 24，与服务端一样直接运行 TypeScript 源码。
-- 连接桥及其依赖（`proxy-bridge`、`tunnel-channels`、`windows-ssh`、`posix-ssh`、`ssh-keys`、`system-proxy`、`connect-errors` 等）从 `apps/desktop/electron` 移到一个共享包，图形客户端和 `ccdt` 都引用它。这一步只搬代码不改行为，图形客户端的打包配置要跟着改。
+- 连接桥（`apps/desktop/electron/proxy-bridge.mjs` 及其引用的模块）是纯 Node 模块，本来就是给图形端页面中继一条本机 WebSocket。`ccdt` 直接引用它，像页面一样连上去，图形客户端一行不改。原计划把它移到共享包，推迟到定分发形态时再做：那时 `ccdt` 要单独打包，搬迁和打包配置一起改，现在动只会增加图形客户端打包出错的风险。
 - 协议版本必须和服务端一致。本分支改了协议（`terminal.open.continueSession`、`terminal.detach`、`terminal.detached`），发版时 `PROTOCOL_VERSION` 要升一版。`ccdt` 连接时检查版本，不一致时提示升级。它和图形客户端各自升级，互不牵连。
 - 分发形态（npm 包、自带运行时的压缩包或安装包）留到功能可用后再定。Windows 上还要带 OpenSSH 的 sshd，图形客户端安装包现在是自带的。
 
@@ -141,17 +141,17 @@ jiangan-code 分支里另有这些，不进本方案：终端里的 agent 列表
 
 ### 共享组件
 
-- [ ] 连接桥及其依赖移到共享包，图形客户端改为引用；打包与测试通过，行为不变
+- [x] `ccdt` 直接引用图形客户端的连接桥（移到共享包推迟到定分发形态时，见“形态与仓库位置”）
 
 ### `ccdt`
 
-- [ ] `apps/cli` 骨架、命令解析、帮助
-- [ ] `login`/`logout`、多个服务端、Token 保存
-- [ ] 连接与设备身份、执行通道上线
-- [ ] `projects`、`sessions` 列表
-- [ ] `open <会话>`、`new`：raw 模式中继、窗口尺寸、流控确认、退出与清理
-- [ ] `usage`
-- [ ] 协议版本检查
+- [x] `apps/cli` 骨架、命令解析、帮助
+- [x] `login`/`logout`、多个服务端、Token 保存（DPAPI、钥匙串、Secret Service，都没有时存进只有本账号可读的设置文件）
+- [x] 连接与设备身份、执行通道上线
+- [x] `sessions` 列表（当前目录的，或 `--all` 全部）；在项目目录里直接运行 `ccdt` 接着最近的会话
+- [x] `open <会话>`、`new`：raw 模式中继、窗口尺寸、流控确认、Ctrl+Q 留在后台、断线重连后接回、退出时恢复本机终端
+- [x] `usage`（先原样输出统计摘要，排版待定）
+- [x] 协议版本检查：版本不一致时服务端拒绝登录，`ccdt` 显示它给出的原因
 - [ ] Windows、macOS、Linux 上的手动检查
 
 ### 收尾
