@@ -8,6 +8,14 @@
 
 新增独立的终端客户端 `ccdt`：在自己的终端里使用原版 Claude Code，和图形客户端共用会话，两边都能看到对方在做什么。服务端改用 GitHub 上预构建的镜像（x86_64 与 arm64），装好后用 `cc-desk-tunnel` 命令管理。订阅额度改由服务端统一读取，多个会话、多台设备共用一次读取，也可以关掉主动读取。
 
+> **因依赖版本升级（包含一次安全更新），本版需要在服务器上升级服务端一次，客户端里的“升级服务端”按钮这次不可用。** 请登录服务器执行：
+>
+> ```
+> sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+> ```
+>
+> 数据、账号和配置都保留。之后的版本照常在客户端里升级。
+
 ### 新增功能
 
 - 终端客户端 `ccdt`（Windows、macOS、Linux，x64 与 arm64）：登录服务端后，在本机终端里打开服务端上的原版 Claude Code。界面、快捷键和斜杠命令与本地的 `claude` 相同，Claude 的命令经执行通道在这台电脑上运行。
