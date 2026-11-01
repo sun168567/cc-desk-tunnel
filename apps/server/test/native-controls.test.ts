@@ -493,13 +493,35 @@ test('what the replies carry stands in where the quota is not read or does not a
   const stale = new Quotas();
   stale.observe('a', event(0.9, later - 7200), now);
   assert.equal((await stale.through('a', query(false), { now })).rateLimits?.available, false);
-  // A recent read stands over the replies; an old one gives way to newer replies.
+  // The replies since a read replace its windows at once; the rows only a read gives stay.
   const read = new Quotas();
-  read.observe('a', event(0.02), now);
-  assert.deepEqual((await read.through('a', query(true), { now })).rateLimits?.windows, [
-    { name: 'five_hour', utilization: 7, resetsAt: '2026-10-03T02:00:00Z' },
-  ]);
-  read.observe('a', event(0.5), now + 300_000);
-  read.wanted = () => false;
-  assert.equal(read.of('a', now + 300_000)?.windows[0]?.utilization, 50);
+  read.observe('a', event(0.02), now - 1000);
+  const withModels = {
+    ...query(true),
+    async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET() {
+      return {
+        rate_limits_available: true,
+        rate_limits: {
+          five_hour: { utilization: 7, resets_at: '2026-10-03T02:00:00Z' },
+          model_scoped: [{ display_name: 'Fable', utilization: 3, resets_at: null }],
+        },
+      };
+    },
+  } as unknown as Query;
+  assert.deepEqual(
+    (await read.through('a', withModels, { now })).rateLimits?.windows.map(
+      (window) => window.utilization,
+    ),
+    [7, 3],
+    'replies older than the read do not replace it',
+  );
+  read.observe('a', event(0.5), now + 1000);
+  assert.deepEqual(
+    read.of('a', now + 1000)?.windows.map((window) => [window.name, window.utilization]),
+    [
+      ['five_hour', 50],
+      ['seven_day:Fable', 3],
+    ],
+  );
+  assert.equal(read.of('a', now + 1000)?.measuredAt, new Date(now + 1000).toISOString());
 });

@@ -125,11 +125,12 @@ export type QuotaAnswer = {
 };
 
 // The plan quota is the account's, not a session's: the service holds one per login, and every session and device
-// reads it here. Reading it anew is a request of its own to the account's usage endpoint (`GET /api/oauth/usage` in
-// the CLI), which answers each account only so often, so only the service decides when: at most once a minute,
-// through whichever CLI is at hand then, and only while a connected client wants the quota kept current
-// (`wanted`) or the user asks. What the replies carry (`rate_limit_event`) is taken all along and stands in where
-// nothing is read.
+// reads it here. Most of it comes with the replies: the CLI passes on the quota every model response carries
+// (`rate_limit_event`) whenever it moves, at no cost. A read adds what only `/usage` gives (the per-model rows, and
+// whether the plan quota applies at all) and stands in where nothing is being answered. It is a request of its own
+// to the account's usage endpoint (`GET /api/oauth/usage` in the CLI), which answers each account only so often, so
+// only the service decides when: at most once a minute, through whichever CLI is at hand then, and only while a
+// connected client wants the quota kept current (`wanted`) or the user asks.
 export class Quotas {
   wanted: () => boolean = () => true;
   private readonly interval: number;
@@ -173,19 +174,25 @@ export class Quotas {
     }
     return { rateLimits: this.of(login, now) };
   }
-  // A recent read stands; past that, whichever of it and what the replies carried is newer. The replies stand in
-  // as well where the CLI says the plan quota does not apply, as with a login by CLAUDE_CODE_OAUTH_TOKEN.
+  // The windows the replies carried since the last read replace those of the read, which keeps the rest. Where the
+  // CLI says the plan quota does not apply, as with a login by CLAUDE_CODE_OAUTH_TOKEN, the replies are all there is.
   of(login: string, now = Date.now()): Metrics['rateLimits'] {
     const read = this.reads.get(login)?.rateLimits ?? null;
     const observed = unexpired(this.observed.of(login), now);
-    if (
-      read?.available &&
-      (!observed ||
-        now - Date.parse(read.measuredAt!) < 2 * this.interval ||
-        read.measuredAt! >= observed.measuredAt)
-    )
-      return read;
-    return observed ? { available: true, ...observed } : read;
+    if (!observed) return read;
+    if (!read?.available) return { available: true, ...observed };
+    if (observed.measuredAt <= read.measuredAt!) return read;
+    const carried = new Map(observed.windows.map((window) => [window.name, window]));
+    return {
+      available: true,
+      windows: [
+        ...read.windows.map((window) => carried.get(window.name) ?? window),
+        ...observed.windows.filter(
+          (window) => !read.windows.some((row) => row.name === window.name),
+        ),
+      ],
+      measuredAt: observed.measuredAt,
+    };
   }
 }
 
