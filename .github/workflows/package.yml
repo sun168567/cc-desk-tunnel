@@ -269,7 +269,7 @@ jobs:
           path: downloaded
       - run: |
           mkdir release
-          mv downloaded/*.exe downloaded/*.dmg downloaded/*.deb downloaded/*.tar.gz downloaded/*.zip release/
+          mv downloaded/*.exe downloaded/*.dmg downloaded/*.deb downloaded/*.tar.gz downloaded/ccdt-*.zip release/
           node scripts/release-manifest.mjs release
           gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY"
         env:
