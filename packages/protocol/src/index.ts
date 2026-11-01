@@ -625,11 +625,6 @@ export const commandSchema = z.discriminatedUnion('type', [
   z
     .object({ type: z.literal('terminal.close'), ...request, sessionId: id, terminalId: id })
     .strict(),
-  // Stops showing a terminal that continues its session while its CLI goes on; `terminal.open` with
-  // `continueSession` shows it again, on this connection or another.
-  z
-    .object({ type: z.literal('terminal.detach'), ...request, sessionId: id, terminalId: id })
-    .strict(),
   z
     .object({
       type: z.literal('session.subscribe'),
@@ -812,8 +807,14 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     firstRecordAt: timestamp.nullable(),
   }),
   z.object({ type: z.literal('terminal.opened'), sessionId: id, terminalId: id }),
-  // Another connection now shows the terminal; it goes on running.
-  z.object({ type: z.literal('terminal.detached'), sessionId: id, terminalId: id }),
+  // The terminal is no longer shown here and goes on running: another connection shows it (`taken`), or this one
+  // left its output unacknowledged for 30 s (`stalled`) and may open it again.
+  z.object({
+    type: z.literal('terminal.detached'),
+    sessionId: id,
+    terminalId: id,
+    reason: z.enum(['taken', 'stalled']),
+  }),
   z.object({
     type: z.literal('terminal.data'),
     sessionId: id,

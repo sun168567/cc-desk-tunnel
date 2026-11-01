@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -62,6 +62,22 @@ export class Config {
     this.servers = this.servers.filter((server) => server.url !== url);
     if (this.current === url) this.current = this.servers.at(-1)?.url;
     this.save();
+  }
+  // The services the desktop client signs in to, one a connection, for `ccdt login` to offer: the address and the
+  // certificate pin. Its saved tokens are encrypted for the desktop program alone and are not read.
+  desktopLogins() {
+    const connections = join(this.paths.desktop, 'connections');
+    let names = [];
+    try {
+      names = readdirSync(connections);
+    } catch {}
+    const logins = [this.paths.desktop, ...names.map((name) => join(connections, name))]
+      .map((directory) => readJson(join(directory, 'settings.json')).login)
+      .filter((login) => login && typeof login.url === 'string' && login.url.startsWith('wss://'))
+      .map((login) => ({ url: login.url, fingerprint: String(login.fingerprint ?? '') }));
+    return logins.filter(
+      (login, index) => logins.findIndex((other) => other.url === login.url) === index,
+    );
   }
   // The desktop client's ID for this computer when it is installed; ccdt's own otherwise.
   device() {

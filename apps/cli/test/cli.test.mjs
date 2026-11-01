@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { Config, directories } from '../src/config.mjs';
 import { proxyFor } from '../src/connection.mjs';
-import { DETACH, RESTORE, relay } from '../src/terminal.mjs';
+import { RESTORE, relay } from '../src/terminal.mjs';
 
 test('settings live where each system keeps them, beside the desktop client’s', () => {
   assert.deepEqual(directories({ APPDATA: 'C:\\A' }, 'win32', 'C:\\H'), {
@@ -81,7 +81,7 @@ function fakes() {
 test('the terminal is shown as it is: output acknowledged once written, keys and size passed on', async () => {
   const f = fakes();
   const sessionId = 's';
-  const ended = relay(f.service, sessionId, f.input, f.output);
+  const ended = relay(f.service, sessionId, {}, f.input, f.output);
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(f.requests[0], {
     type: 'terminal.open',
@@ -123,26 +123,53 @@ test('the terminal is shown as it is: output acknowledged once written, keys and
   assert.equal(f.input.raw, false);
 });
 
-test('Ctrl+Q leaves the terminal on the service; what was typed before it still goes', async () => {
-  const f = fakes();
-  const ended = relay(f.service, 's', f.input, f.output);
-  f.service.emit('message', { type: 'terminal.opened', sessionId: 's', terminalId: 't' });
-  f.input.write(`ab${DETACH}cd`);
-  assert.deepEqual(await ended, { how: 'detached' });
-  assert.deepEqual(f.sent, [
-    { type: 'terminal.input', sessionId: 's', terminalId: 't', data: 'ab' },
-  ]);
-  assert.deepEqual(f.requests.at(-1), { type: 'terminal.detach', sessionId: 's', terminalId: 't' });
-});
-
-test('a lost connection and a terminal taken elsewhere end the showing, not the terminal', async () => {
+test('a lost connection, a terminal taken elsewhere and output left behind end the showing, not the terminal', async () => {
   const lost = fakes();
-  const one = relay(lost.service, 's', lost.input, lost.output);
+  const one = relay(lost.service, 's', {}, lost.input, lost.output);
   lost.service.emit('end', true);
   assert.deepEqual(await one, { how: 'lost' });
   const taken = fakes();
-  const two = relay(taken.service, 's', taken.input, taken.output);
+  const two = relay(taken.service, 's', {}, taken.input, taken.output);
   taken.service.emit('message', { type: 'terminal.opened', sessionId: 's', terminalId: 't' });
-  taken.service.emit('message', { type: 'terminal.detached', sessionId: 's', terminalId: 't' });
+  taken.service.emit('message', {
+    type: 'terminal.detached',
+    sessionId: 's',
+    terminalId: 't',
+    reason: 'taken',
+  });
   assert.deepEqual(await two, { how: 'taken' });
+  const stalled = fakes();
+  const three = relay(stalled.service, 's', {}, stalled.input, stalled.output);
+  stalled.service.emit('message', { type: 'terminal.opened', sessionId: 's', terminalId: 't' });
+  stalled.service.emit('message', {
+    type: 'terminal.detached',
+    sessionId: 's',
+    terminalId: 'other',
+    reason: 'stalled',
+  });
+  stalled.service.emit('message', {
+    type: 'terminal.detached',
+    sessionId: 's',
+    terminalId: 't',
+    reason: 'stalled',
+  });
+  assert.deepEqual(await three, { how: 'stalled' });
+});
+
+test('ccdt login offers the services the desktop client signs in to, without their tokens', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'ccdt-logins-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = { cli: join(root, 'cli'), desktop: join(root, 'desktop') };
+  mkdirSync(join(paths.desktop, 'connections', 'abcdefgh'), { recursive: true });
+  const login = (url, fingerprint) =>
+    JSON.stringify({ login: { url, fingerprint, token: 'encrypted' } });
+  writeFileSync(join(paths.desktop, 'settings.json'), login('wss://main/ws', 'AA:BB'));
+  writeFileSync(
+    join(paths.desktop, 'connections', 'abcdefgh', 'settings.json'),
+    login('wss://other/ws', ''),
+  );
+  assert.deepEqual(new Config(paths).desktopLogins(), [
+    { url: 'wss://main/ws', fingerprint: 'AA:BB' },
+    { url: 'wss://other/ws', fingerprint: '' },
+  ]);
 });

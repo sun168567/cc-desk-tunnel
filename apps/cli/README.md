@@ -5,9 +5,10 @@
 开发阶段从源码运行，需要 Node.js 24；Windows 上还需要 `npm run prepare:windows` 准备的 OpenSSH 组件。
 
 ```bash
-node apps/cli/bin/ccdt.mjs login wss://example.com:8787/ws --fingerprint <证书指纹>
+node apps/cli/bin/ccdt.mjs login      # 地址和证书指纹取自图形客户端；也可以写 login <wss 地址> --fingerprint <指纹>
 cd D:\work\my-project
-node apps/cli/bin/ccdt.mjs           # 接着这个项目最近的会话；没有就新建
+node apps/cli/bin/ccdt.mjs            # 接着这个项目最近的会话；没有就新建
+node apps/cli/bin/ccdt.mjs -r         # 从这个项目的会话里选一个
 ```
 
-运行 `ccdt --help` 查看全部命令。
+用法和本地的 `claude` 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。运行 `ccdt --help` 查看全部命令。

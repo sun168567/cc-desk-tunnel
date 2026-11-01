@@ -117,7 +117,7 @@ export type Run = {
 type Terminal = {
   id: string;
   sessionId: string;
-  // The connection showing it. A terminal that continues its session goes on with none, until `TERMINAL_IDLE_MS`.
+  // The connection showing it. One that continues its session outlives a lost connection by `graceMs`.
   owner?: Peer;
   device: string;
   process?: NativeTerminal;
@@ -164,8 +164,6 @@ export type ServerOptions = {
 const REMEMBERED = 256;
 // How much unfinished output a run holds before recording it, in characters.
 const OPEN_LIMIT = 64 * 1024;
-// How long a terminal that continues its session runs on with no one showing it.
-const TERMINAL_IDLE_MS = 30 * 60_000;
 // What the "continue" button sends in the user's place. The turn before it was stopped or cut off, and a
 // command that was under way then may or may not have taken effect.
 const CONTINUE =
@@ -767,7 +765,22 @@ export function createProxyServer(options: ServerOptions) {
           cols: command.cols,
           rows: command.rows,
           env: terminalEnvironment(options.claude),
-          ...(current.continued ? { screen: { detached: () => detachTerminal(current) } } : {}),
+          ...(current.continued
+            ? {
+                screen: {
+                  detached: () => {
+                    if (current.owner)
+                      send(current.owner, {
+                        type: 'terminal.detached',
+                        sessionId: current.sessionId,
+                        terminalId: current.id,
+                        reason: 'stalled',
+                      });
+                    detachTerminal(current);
+                  },
+                },
+              }
+            : {}),
         },
         (data, bytes) =>
           current.owner &&
@@ -825,13 +838,14 @@ export function createProxyServer(options: ServerOptions) {
   ) {
     const { sessionId, id: terminalId } = terminal;
     if (terminal.owner && terminal.owner !== peer)
-      send(terminal.owner, { type: 'terminal.detached', sessionId, terminalId });
+      send(terminal.owner, { type: 'terminal.detached', sessionId, terminalId, reason: 'taken' });
     terminal.owner = peer;
     clearTimeout(terminal.idle);
     send(peer, { type: 'terminal.opened', sessionId, terminalId });
     await terminal.process!.attach(command.cols, command.rows);
   }
-  // A terminal that continues its session goes on with no one showing it; with no one back in time it ends.
+  // The connection that showed a terminal that continues its session was lost, or stopped taking its output. As
+  // with a run, the CLI goes on for `graceMs`, for the client to come back and show it again; then it ends.
   function detachTerminal(terminal: Terminal) {
     terminal.owner = undefined;
     terminal.process?.detach();
@@ -839,7 +853,7 @@ export function createProxyServer(options: ServerOptions) {
     terminal.idle = setTimeout(() => {
       const task = terminal.process?.close();
       if (task) track(task);
-    }, TERMINAL_IDLE_MS);
+    }, graceMs);
   }
   // What a terminal that continued its session added to the native session, recorded in the session as the events
   // of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a rewind does too, and is
@@ -1252,14 +1266,6 @@ export function createProxyServer(options: ServerOptions) {
       case 'terminal.close':
         await closeTerminal(peer, command);
         return command.sessionId;
-      case 'terminal.detach': {
-        const terminal = terminals.get(command.sessionId);
-        if (!terminal?.continued || terminal.id !== command.terminalId)
-          throw new DomainError('terminal_inactive', '没有可以留在后台的终端。');
-        if (terminal.owner !== peer) throw new DomainError('not_owner', '原生终端属于另一连接。');
-        detachTerminal(terminal);
-        return command.sessionId;
-      }
       case 'terminal.open':
         await openTerminal(peer, command, session);
         return command.sessionId;
@@ -1612,7 +1618,8 @@ export function createProxyServer(options: ServerOptions) {
     if (login?.owner === peer) login.process.cancel();
     for (const terminal of terminals.values())
       if (terminal.owner !== peer) continue;
-      else if (terminal.continued) detachTerminal(terminal);
+      // A client that said it is leaving closed its window: the terminal ends, as a local CLI's would.
+      else if (terminal.continued && !peer.left) detachTerminal(terminal);
       else {
         const task = terminal.process?.close();
         if (task) track(task);
