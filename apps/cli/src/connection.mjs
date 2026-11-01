@@ -143,14 +143,16 @@ export class Service extends EventEmitter {
       this.on('message', check);
     });
   }
-  end(lost) {
+  // The bridge tells the service of an end on purpose (`leave`) unless asked not to: then the service keeps what
+  // this computer runs, a terminal among it, for a while, as after a fault on the way.
+  end(lost, leave = !lost) {
     if (this.ended) return;
     this.ended = true;
     this.lost = lost;
     for (const { reject } of this.waiting.values()) reject(new Error('连接已关闭。'));
     this.waiting.clear();
     this.socket?.terminate();
-    void Promise.resolve(this.bridge?.close()).finally(() => this.resolveClosed());
+    void Promise.resolve(this.bridge?.close(!leave)).finally(() => this.resolveClosed());
     this.emit('end', lost);
   }
   // `leave` tells the service the end is meant: what this computer ran is not kept for it to come back to.
@@ -167,7 +169,7 @@ export class Service extends EventEmitter {
         socket.close();
       });
     }
-    this.end(false);
+    this.end(false, leave);
     await this.closed;
   }
 }
