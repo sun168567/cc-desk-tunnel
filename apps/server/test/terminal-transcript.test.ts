@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
-import { terminalEvents, terminalSessions, terminalSettings } from '../src/terminal-transcript.ts';
+import {
+  terminalActivity,
+  terminalEvents,
+  terminalHooks,
+  terminalSettings,
+} from '../src/terminal-transcript.ts';
 
 const session = '11111111-2222-4333-8444-555555555555';
 const entry = (uuid: string, type: SessionMessage['type'], message: unknown, extra = {}) =>
@@ -141,7 +153,7 @@ test('a compaction is one mark: the summary, notes and kept messages are not sho
   ]);
 });
 
-test('the terminal settings add the session hook to the provider settings, readable only by the service', (t) => {
+test('the terminal settings add the hooks to the provider settings, readable only by the service', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-terminal-settings-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const provider = join(directory, 'provider.json');
@@ -158,15 +170,48 @@ test('the terminal settings add the session hook to the provider settings, reada
   const written = JSON.parse(readFileSync(settings, 'utf8'));
   assert.equal(written.env.ANTHROPIC_BASE_URL, 'https://example.test');
   assert.equal(written.hooks.SessionStart.length, 2);
-  assert.equal(
-    written.hooks.SessionStart[1].hooks[0].command,
-    `{ cat; echo; } >> '${hooks.replaceAll("'", "'\\''")}'`,
-  );
+  const command = `{ cat; echo; } >> '${hooks.replaceAll("'", "'\\''")}'`;
+  assert.equal(written.hooks.SessionStart[1].hooks[0].command, command);
+  for (const name of ['UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop'])
+    assert.equal(written.hooks[name][0].hooks[0].command, command);
   if (process.platform !== 'win32') assert.equal(statSync(settings).mode & 0o777, 0o600);
-  assert.deepEqual(terminalSessions(hooks), []);
+});
+
+test('the hooks file is read as it grows, and says what the CLI is doing', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-terminal-hooks-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const hooks = join(directory, 'terminal.hooks');
+  assert.deepEqual(terminalHooks(hooks), { hooks: [], offset: 0 });
+  const line = (hook: object) => `${JSON.stringify({ session_id: session, ...hook })}\n`;
   writeFileSync(
     hooks,
-    `${JSON.stringify({ hook_event_name: 'SessionStart', source: 'resume', session_id: session })}\n\nnot json\n${JSON.stringify({ hook_event_name: 'SessionStart', source: 'clear', session_id: 'other' })}\n`,
+    line({ hook_event_name: 'SessionStart', source: 'resume' }) +
+      '\nnot json\n' +
+      line({ hook_event_name: 'UserPromptSubmit', prompt: '你好' }) +
+      '{"hook_event_name":"Sto',
   );
-  assert.deepEqual(terminalSessions(hooks), [session, 'other']);
+  const first = terminalHooks(hooks);
+  assert.deepEqual(
+    first.hooks.map((hook) => [hook.hook_event_name, terminalActivity(hook)]),
+    [
+      ['SessionStart', 'idle'],
+      ['UserPromptSubmit', 'working'],
+    ],
+  );
+  // The line being written is read once it is whole.
+  appendFileSync(
+    hooks,
+    `p"}\n${line({ hook_event_name: 'Notification', notification_type: 'permission_prompt' })}`,
+  );
+  const second = terminalHooks(hooks, first.offset);
+  assert.deepEqual(
+    second.hooks.map((hook) => terminalActivity(hook)),
+    ['idle', 'waiting'],
+  );
+  assert.deepEqual(terminalHooks(hooks, second.offset).hooks, []);
+  assert.equal(
+    terminalActivity({ hook_event_name: 'Notification', notification_type: 'idle_prompt' }),
+    undefined,
+  );
+  assert.equal(terminalActivity({ hook_event_name: 'PostToolUse' }), 'working');
 });

@@ -1,5 +1,5 @@
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, mkdirSync, rmSync } from 'node:fs';
+import { createReadStream, mkdirSync, rmSync, unwatchFile, watchFile } from 'node:fs';
 import { createServer } from 'node:http';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +37,7 @@ import type {
   Command,
   Device,
   EventPayload,
+  TerminalActivity,
   Fragment,
   ServerMessage,
   Session,
@@ -53,7 +54,12 @@ import { completeOnboarding } from './native-onboarding.ts';
 import { readNativeSettings, updateNativeSettings } from './native-settings.ts';
 import { readInstructions, writeInstructions } from './native-instructions.ts';
 import type { NativeTerminal } from './native-terminal.ts';
-import { terminalEvents, terminalSessions, terminalSettings } from './terminal-transcript.ts';
+import {
+  terminalActivity,
+  terminalEvents,
+  terminalHooks,
+  terminalSettings,
+} from './terminal-transcript.ts';
 import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
@@ -122,8 +128,22 @@ type Terminal = {
   device: string;
   process?: NativeTerminal;
   idle?: ReturnType<typeof setTimeout>;
-  // A terminal that continues its session: what the native session held when it opened, and its own files.
-  continued?: { known: Set<string>; settingsPath: string; hooksPath: string; openedAt: string };
+  // A terminal that continues its session: the native session's messages already recorded and the last of them, its
+  // own files and how far its hooks were read, what its CLI was last doing, the time of the last event it recorded,
+  // and whether it moved to another native session (and the session was told).
+  continued?: {
+    known: Set<string>;
+    last?: string;
+    settingsPath: string;
+    hooksPath: string;
+    offset: number;
+    heard: Promise<void>;
+    activity?: TerminalActivity;
+    at: string;
+    connectionId: string;
+    elsewhere?: boolean;
+    toldElsewhere?: boolean;
+  };
 };
 // One of the user's computers, while it is connected or expected back: its connections, the door its commands
 // go through, and the wait that ends its runs if it stays away.
@@ -738,9 +758,14 @@ export function createProxyServer(options: ServerOptions) {
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         current.continued = {
           known: new Set(messages.map((message) => message.uuid)),
+          last: messages.at(-1)?.uuid,
           settingsPath: join(directory, `${current.id}.json`),
           hooksPath: join(directory, `${current.id}.hooks`),
-          openedAt: new Date().toISOString(),
+          offset: 0,
+          heard: Promise.resolve(),
+          activity: 'idle',
+          at: new Date().toISOString(),
+          connectionId: peer.id,
         };
         terminalSettings(
           current.continued.settingsPath,
@@ -794,7 +819,13 @@ export function createProxyServer(options: ServerOptions) {
         async (exitCode) => {
           if (terminals.get(current.sessionId) !== current) return;
           clearTimeout(current.idle);
-          if (current.continued) await recordTerminal(current).catch(() => {});
+          if (current.continued) {
+            const { hooksPath, settingsPath } = current.continued;
+            unwatchFile(hooksPath);
+            await heardTerminal(current, true);
+            rmSync(settingsPath, { force: true });
+            rmSync(hooksPath, { force: true });
+          }
           store.append(current.sessionId, current.id, {
             type: 'run.status',
             status: 'completed',
@@ -816,9 +847,16 @@ export function createProxyServer(options: ServerOptions) {
         type: 'run.status',
         status: 'running',
         surface: 'terminal',
+        ...(current.continued ? { activity: current.continued.activity } : {}),
         connectionId: peer.id,
       });
       updated(command.sessionId);
+      if (current.continued)
+        watchFile(
+          current.continued.hooksPath,
+          { interval: 500 },
+          () => void heardTerminal(current),
+        );
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();
@@ -855,47 +893,83 @@ export function createProxyServer(options: ServerOptions) {
       if (task) track(task);
     }, graceMs);
   }
-  // What a terminal that continued its session added to the native session, recorded in the session as the events
-  // of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a rewind does too, and is
-  // told, as is moving on to another native session, whose turns do not belong here.
-  async function recordTerminal(terminal: Terminal) {
-    const { known, settingsPath, hooksPath, openedAt } = terminal.continued!;
+  // What the hooks of a terminal that continues its session wrote since they were last read: the session shows what
+  // its CLI is doing, and what a turn added, once it ended, is recorded (see `importTerminal`). Reads go one at a time,
+  // and the last, when the terminal `ended`, records what is left.
+  function heardTerminal(terminal: Terminal, ended = false) {
+    const continued = terminal.continued!;
+    const task = continued.heard
+      .then(async () => {
+        const { hooks, offset } = terminalHooks(continued.hooksPath, continued.offset);
+        continued.offset = offset;
+        let activity: TerminalActivity | undefined;
+        for (const hook of hooks) {
+          if (typeof hook.session_id === 'string' && hook.session_id !== terminal.sessionId)
+            continued.elsewhere = true;
+          activity = terminalActivity(hook) ?? activity;
+        }
+        if (ended || hooks.some((hook) => terminalActivity(hook) === 'idle'))
+          await importTerminal(terminal);
+        if (ended || !activity || activity === continued.activity) return;
+        continued.activity = activity;
+        continued.at = record(terminal.sessionId, terminal.id, {
+          type: 'run.status',
+          status: 'running',
+          surface: 'terminal',
+          activity,
+          connectionId: continued.connectionId,
+        }).createdAt;
+        updated(terminal.sessionId);
+      })
+      .catch(() => {});
+    continued.heard = task;
+    return task;
+  }
+  // What a terminal that continued its session added to the native session since it was last looked at, recorded in
+  // the session as the events of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a
+  // rewind does too, and is told, as is moving on to another native session, whose turns do not belong here.
+  async function importTerminal(terminal: Terminal) {
+    const continued = terminal.continued!;
+    const { known } = continued;
     const { sessionId } = terminal;
     const now = new Date().toISOString();
-    // Each at the time the CLI recorded it, within the time the terminal was open.
+    // Each at the time the CLI recorded it, after what the terminal recorded before and no later than now.
     const emit = (payload: EventPayload, at?: string) => {
       const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
-      record(sessionId, terminal.id, payload, time < openedAt ? openedAt : time > now ? now : time);
+      continued.at = time < continued.at ? continued.at : time > now ? now : time;
+      record(sessionId, terminal.id, payload, continued.at);
     };
-    try {
-      const dir = nativeDirectory(store.directory, nativeRoot(sessionId));
-      const messages = await getSessionMessages(sessionId, { dir, includeSystemMessages: true });
-      if (messages.length && !store.hasNativeContext(sessionId)) {
-        const answer = messages.findLast((message) => message.type === 'assistant')?.message as
-          { model?: unknown } | undefined;
-        emit({
-          type: 'native.session',
-          nativeSessionId: sessionId,
-          model: typeof answer?.model === 'string' ? answer.model : '',
-          version: '',
-        });
-      }
-      const last = [...known].at(-1);
-      const compacted = messages.some(
-        (message) =>
-          !known.has(message.uuid) && (message as { isCompactSummary?: boolean }).isCompactSummary,
-      );
-      if (last && !compacted && !messages.some((message) => message.uuid === last))
-        emit({ type: 'native.notice', text: '终端里回退了对话，上面有些内容已不在上下文中。' });
-      terminalEvents(messages, known, emit);
-      if (terminalSessions(hooksPath).some((id) => id !== sessionId))
-        emit({
-          type: 'native.notice',
-          text: '终端里换到了另一段对话（/clear 或 /resume），那之后的内容不在这个会话中。',
-        });
-    } finally {
-      rmSync(settingsPath, { force: true });
-      rmSync(hooksPath, { force: true });
+    const dir = nativeDirectory(store.directory, nativeRoot(sessionId));
+    const messages = await getSessionMessages(sessionId, { dir, includeSystemMessages: true });
+    if (messages.length && !store.hasNativeContext(sessionId)) {
+      const answer = messages.findLast((message) => message.type === 'assistant')?.message as
+        { model?: unknown } | undefined;
+      emit({
+        type: 'native.session',
+        nativeSessionId: sessionId,
+        model: typeof answer?.model === 'string' ? answer.model : '',
+        version: '',
+      });
+    }
+    const compacted = messages.some(
+      (message) =>
+        !known.has(message.uuid) && (message as { isCompactSummary?: boolean }).isCompactSummary,
+    );
+    if (
+      continued.last &&
+      !compacted &&
+      !messages.some((message) => message.uuid === continued.last)
+    )
+      emit({ type: 'native.notice', text: '终端里回退了对话，上面有些内容已不在上下文中。' });
+    terminalEvents(messages, known, emit);
+    for (const message of messages) known.add(message.uuid);
+    continued.last = messages.at(-1)?.uuid ?? continued.last;
+    if (continued.elsewhere && !continued.toldElsewhere) {
+      continued.toldElsewhere = true;
+      emit({
+        type: 'native.notice',
+        text: '终端里换到了另一段对话（/clear 或 /resume），那之后的内容不在这个会话中。',
+      });
     }
   }
   // Rename and delete change the native session first; the proxy record follows only when that succeeded.

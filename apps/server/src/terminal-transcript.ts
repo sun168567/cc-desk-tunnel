@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { EventPayload } from '@cc-desk-tunnel/protocol';
+import type { EventPayload, TerminalActivity } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream, printed } from './claude-stream.ts';
 
 // Fields the CLI's record keeps beside the message, which `getSessionMessages` passes through.
@@ -77,33 +77,66 @@ export function terminalEvents(
   }
 }
 
-// A terminal that continues a session learns from the CLI's SessionStart hook which native session it is in:
-// `/clear` and `/resume` move it to another. The hook appends what it was given to a file of the terminal's own.
+// A terminal that continues a session learns from the CLI's hooks what it is doing and which native session it is
+// in: `/clear` and `/resume` move it to another. Each hook appends what it was given, a line of JSON, to a file of the
+// terminal's own, which the service reads as it grows.
+const HOOKED = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop'];
 export function terminalSettings(path: string, hooksPath: string, settingsPath?: string) {
   const settings = settingsPath ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
   const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
   const quoted = `'${hooksPath.replaceAll("'", "'\\''")}'`;
-  hooks.SessionStart = [
-    ...(Array.isArray(hooks.SessionStart) ? hooks.SessionStart : []),
-    { hooks: [{ type: 'command', command: `{ cat; echo; } >> ${quoted}` }] },
-  ];
+  for (const name of HOOKED)
+    hooks[name] = [
+      ...(Array.isArray(hooks[name]) ? hooks[name] : []),
+      { hooks: [{ type: 'command', command: `{ cat; echo; } >> ${quoted}` }] },
+    ];
   writeFileSync(path, JSON.stringify({ ...settings, hooks }), { mode: 0o600 });
 }
 
-// The native sessions the terminal's CLI started or resumed, in order.
-export function terminalSessions(hooksPath: string) {
-  let text = '';
+export type TerminalHook = {
+  hook_event_name?: unknown;
+  session_id?: unknown;
+  notification_type?: unknown;
+};
+// The hooks written since `offset`, up to the last whole line, and where the next read starts.
+export function terminalHooks(hooksPath: string, offset = 0) {
+  let buffer: Buffer;
   try {
-    text = readFileSync(hooksPath, 'utf8');
+    buffer = readFileSync(hooksPath);
   } catch {
-    return [];
+    return { hooks: [], offset };
   }
-  return text.split('\n').flatMap((line) => {
-    try {
-      const id: unknown = JSON.parse(line).session_id;
-      return typeof id === 'string' ? [id] : [];
-    } catch {
-      return [];
-    }
-  });
+  const end = buffer.lastIndexOf(10) + 1;
+  if (end <= offset) return { hooks: [], offset };
+  const hooks = buffer
+    .subarray(offset, end)
+    .toString('utf8')
+    .split('\n')
+    .flatMap((line): TerminalHook[] => {
+      try {
+        const hook: unknown = JSON.parse(line);
+        return hook && typeof hook === 'object' ? [hook] : [];
+      } catch {
+        return [];
+      }
+    });
+  return { hooks, offset: end };
+}
+
+// What a hook says the CLI is doing: working on a prompt, waiting for the user to allow a tool or answer it, or done
+// with the turn and waiting for the next prompt. A tool that ran was allowed, so the CLI is working again.
+export function terminalActivity(hook: TerminalHook): TerminalActivity | undefined {
+  switch (hook.hook_event_name) {
+    case 'UserPromptSubmit':
+    case 'PostToolUse':
+      return 'working';
+    case 'Notification':
+      return hook.notification_type === 'permission_prompt' ||
+        hook.notification_type === 'elicitation_dialog'
+        ? 'waiting'
+        : undefined;
+    case 'SessionStart':
+    case 'Stop':
+      return 'idle';
+  }
 }

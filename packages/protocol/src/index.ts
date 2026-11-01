@@ -220,6 +220,9 @@ export const runStatusSchema = z.enum([
 // What a run waits for. In `awaiting_approval`: a decision on a tool, or an answer to a question Claude asked.
 // While `running`, `background`: Claude has finished its turn and only the background tasks it started go on.
 export const waitingSchema = z.enum(['approval', 'question', 'background']);
+// What the CLI of a terminal that continues its session is doing, as its hooks report it.
+export const terminalActivitySchema = z.enum(['working', 'waiting', 'idle']);
+export type TerminalActivity = z.infer<typeof terminalActivitySchema>;
 export const terminalStatuses = new Set<RunStatus>(['completed', 'cancelled', 'failed']);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
@@ -250,6 +253,7 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     connectionId: id,
     surface: z.enum(['chat', 'terminal']).optional(),
     waiting: waitingSchema.optional(),
+    activity: terminalActivitySchema.optional(),
     reason: z.string().optional(),
   }),
   z.object({ type: z.literal('text.delta'), messageId: id, text: z.string() }),
@@ -457,6 +461,7 @@ export const sessionSchema = z.object({
       connectionId: id,
       surface: z.enum(['chat', 'terminal']).optional(),
       waiting: waitingSchema.optional(),
+      activity: terminalActivitySchema.optional(),
     })
     .nullable(),
 });

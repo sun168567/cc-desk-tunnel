@@ -315,11 +315,12 @@ export function App({
   // A run is that of the computer its session is on, whichever window of whichever computer started it; any
   // of them answers and stops it while that computer can be reached.
   const ownsRun = !!selected?.activeRun && (!away || remote);
-  // A native run accepts follow-up messages from wherever it can be worked on.
+  // A native run accepts follow-up messages from wherever it can be worked on; a terminal takes them itself.
   const inputDisabled =
     !connected ||
     busy ||
     !!history?.loading ||
+    selected?.activeRun?.surface === 'terminal' ||
     (!!selected?.activeRun && (!nativeMode || !ownsRun)) ||
     refreshing;
   const draft = selected ? (drafts[selected.id] ?? '') : '';

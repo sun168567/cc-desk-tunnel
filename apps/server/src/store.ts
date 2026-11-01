@@ -600,6 +600,7 @@ export class SessionStore {
             connectionId: payload.connectionId,
             ...(payload.surface ? { surface: payload.surface } : {}),
             ...(payload.waiting ? { waiting: payload.waiting } : {}),
+            ...(payload.activity ? { activity: payload.activity } : {}),
           };
     this.database.exec('BEGIN');
     try {
