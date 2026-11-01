@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 
@@ -18,6 +18,15 @@ test(
   { skip: process.platform === 'win32' },
   async (t) => {
     const pty = require('node-pty');
+    // npm unpacks node-pty 1.1.0's helper for macOS without its execute bit, and spawning fails without it.
+    if (process.platform === 'darwin')
+      for (const folder of ['prebuilds/darwin-arm64', 'prebuilds/darwin-x64', 'build/Release'])
+        try {
+          chmodSync(
+            join(dirname(require.resolve('node-pty/package.json')), folder, 'spawn-helper'),
+            0o755,
+          );
+        } catch {}
     const directory = mkdtempSync(join(tmpdir(), 'ccdt-tty-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const sent = join(directory, 'sent.jsonl');
