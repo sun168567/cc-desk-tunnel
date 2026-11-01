@@ -129,8 +129,8 @@ type Terminal = {
   process?: NativeTerminal;
   idle?: ReturnType<typeof setTimeout>;
   // A terminal that continues its session: the native session's messages already recorded and the last of them, its
-  // own files and how far its hooks were read, what its CLI was last doing, the time of the last event it recorded,
-  // and whether it moved to another native session (and the session was told).
+  // own files and how far its hooks were read, what its CLI was last doing, the time of the last of its turns' events
+  // recorded, and whether it moved to another native session (and the session was told).
   continued?: {
     known: Set<string>;
     last?: string;
@@ -926,13 +926,13 @@ export function createProxyServer(options: ServerOptions) {
           await importTerminal(terminal);
         if (ended || !activity || activity === continued.activity) return;
         continued.activity = activity;
-        continued.at = record(terminal.sessionId, terminal.id, {
+        record(terminal.sessionId, terminal.id, {
           type: 'run.status',
           status: 'running',
           surface: 'terminal',
           activity,
           connectionId: continued.connectionId,
-        }).createdAt;
+        });
         updated(terminal.sessionId);
       })
       .catch(() => {});
@@ -959,7 +959,8 @@ export function createProxyServer(options: ServerOptions) {
     const { known } = continued;
     const { sessionId } = terminal;
     const now = new Date().toISOString();
-    // Each at the time the CLI recorded it, after what the terminal recorded before and no later than now.
+    // Each at the time the CLI recorded it, after what was recorded of its turns before and no later than now. What the
+    // terminal was doing is recorded as it happens, and does not move them: a turn keeps the times it took.
     const emit = (payload: EventPayload, at?: string) => {
       const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
       continued.at = time < continued.at ? continued.at : time > now ? now : time;
