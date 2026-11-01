@@ -8,6 +8,7 @@ import { ClaudeStream, printed } from './claude-stream.ts';
 type Entry = SessionMessage & {
   isCompactSummary?: boolean;
   is_meta?: boolean;
+  timestamp?: string;
   origin?: { kind?: string };
 };
 type Block = { type?: unknown; text?: unknown };
@@ -22,12 +23,15 @@ const tag = (text: string, name: string) =>
 export function terminalEvents(
   messages: SessionMessage[],
   known: ReadonlySet<string>,
-  emit: (event: EventPayload) => void,
+  record: (event: EventPayload, at?: string) => void,
 ) {
+  let at: string | undefined;
+  const emit = (event: EventPayload) => record(event, at);
   const stream = new ClaudeStream(emit);
   let answer: unknown;
   for (const entry of messages as Entry[]) {
     if (known.has(entry.uuid) || entry.parent_tool_use_id) continue;
+    at = entry.timestamp;
     if (entry.isCompactSummary) {
       emit({ type: 'native.compact', trigger: 'unknown', previousTokens: null });
       continue;

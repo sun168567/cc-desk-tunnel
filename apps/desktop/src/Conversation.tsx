@@ -431,6 +431,11 @@ function Message({
       </div>
       {user && (
         <div className="message-footer">
+          {item.terminal && (
+            <span className="message-delivery" title="在终端里问的，终端结束时记入这个会话">
+              终端
+            </span>
+          )}
           {item.delivery && (
             <span
               className={`message-delivery${item.delivery === '原生已接收' ? '' : ' unsettled'}`}

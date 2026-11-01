@@ -575,13 +575,19 @@ export class SessionStore {
     };
   }
 
-  append(sessionId: string, runId: string, payload: EventPayload): SessionEvent {
+  // `createdAt` is given for what happened before it is recorded, such as a terminal's turns.
+  append(
+    sessionId: string,
+    runId: string,
+    payload: EventPayload,
+    createdAt = new Date().toISOString(),
+  ): SessionEvent {
     const { session } = this.get(sessionId);
     const event: SessionEvent = {
       sessionId,
       runId,
       sequence: this.lastSequence(sessionId) + 1,
-      createdAt: new Date().toISOString(),
+      createdAt,
       payload,
     };
     if (!stateReadings.has(payload.type)) session.updatedAt = event.createdAt;

@@ -120,7 +120,7 @@ type Terminal = {
   owner: Peer;
   process?: NativeTerminal;
   // A terminal that continues its session: what the native session held when it opened, and its own files.
-  continued?: { known: Set<string>; settingsPath: string; hooksPath: string };
+  continued?: { known: Set<string>; settingsPath: string; hooksPath: string; openedAt: string };
 };
 // One of the user's computers, while it is connected or expected back: its connections, the door its commands
 // go through, and the wait that ends its runs if it stays away.
@@ -418,10 +418,10 @@ export function createProxyServer(options: ServerOptions) {
   }
 
   // Stores an event and sends it to the session's subscribers; quota readings also drive the usage periods.
-  function record(sessionId: string, runId: string, payload: EventPayload) {
+  function record(sessionId: string, runId: string, payload: EventPayload, createdAt?: string) {
     if (payload.type === 'native.metrics' && payload.rateLimits?.available)
       usage.observe(payload.rateLimits);
-    const event = store.append(sessionId, runId, payload);
+    const event = store.append(sessionId, runId, payload, createdAt);
     broadcast({ type: 'session.event', event }, sessionId);
     return event;
   }
@@ -729,6 +729,7 @@ export function createProxyServer(options: ServerOptions) {
           known: new Set(messages.map((message) => message.uuid)),
           settingsPath: join(directory, `${current.id}.json`),
           hooksPath: join(directory, `${current.id}.hooks`),
+          openedAt: new Date().toISOString(),
         };
         terminalSettings(
           current.continued.settingsPath,
@@ -803,9 +804,14 @@ export function createProxyServer(options: ServerOptions) {
   // of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a rewind does too, and is
   // told, as is moving on to another native session, whose turns do not belong here.
   async function recordTerminal(terminal: Terminal) {
-    const { known, settingsPath, hooksPath } = terminal.continued!;
+    const { known, settingsPath, hooksPath, openedAt } = terminal.continued!;
     const { sessionId } = terminal;
-    const emit = (payload: EventPayload) => record(sessionId, terminal.id, payload);
+    const now = new Date().toISOString();
+    // Each at the time the CLI recorded it, within the time the terminal was open.
+    const emit = (payload: EventPayload, at?: string) => {
+      const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
+      record(sessionId, terminal.id, payload, time < openedAt ? openedAt : time > now ? now : time);
+    };
     try {
       const dir = nativeDirectory(store.directory, nativeRoot(sessionId));
       const messages = await getSessionMessages(sessionId, { dir, includeSystemMessages: true });

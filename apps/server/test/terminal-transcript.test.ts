@@ -62,6 +62,24 @@ test('a terminal turn comes back as the events of a chat run, without what was t
   assert.notEqual(first.messageId, second.messageId);
 });
 
+test('each event keeps the time the CLI recorded it at', () => {
+  const times: (string | undefined)[] = [];
+  terminalEvents(
+    [
+      entry(
+        'q',
+        'user',
+        { role: 'user', content: '问' },
+        { timestamp: '2026-11-01T02:00:00.000Z' },
+      ),
+      answer('a', 'msg_1', [{ type: 'text', text: '答' }]),
+    ],
+    new Set(),
+    (_, at) => times.push(at),
+  );
+  assert.deepEqual(times, ['2026-11-01T02:00:00.000Z', undefined]);
+});
+
 test('a compaction is one mark: the summary, notes and kept messages are not shown as turns', () => {
   const events: EventPayload[] = [];
   terminalEvents(
