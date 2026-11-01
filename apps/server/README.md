@@ -18,7 +18,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 原生连接
 
-`scripts/install-linux.sh` 为普通用户准备 Node 24.21.0、官方 Claude Code 2.1.293。CLI 使用官方 npm 发布包，无二进制修改。
+`scripts/install-linux.sh` 为普通用户准备 Node 24.22.2、官方 Claude Code 2.1.293。CLI 使用官方 npm 发布包，无二进制修改。
 
 开发部署用 `scripts/deploy-linux.mjs`：通过可信 SSH 传输应用与私有配置，生成 IP 可用的固定自签证书，原生服务 WSS 监听 `PROXY_PORT`。生产只需放行这一个端口，通往 Windows 的 SSH 端口只监听 Linux `127.0.0.1`。
 

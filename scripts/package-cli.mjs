@@ -24,25 +24,25 @@ import { copyDependency, posixService } from './package-desktop.mjs';
 // It is started at the end as a check.
 const root = fileURLToPath(new URL('..', import.meta.url));
 const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
-const NODE = '24.21.0';
-// From https://nodejs.org/dist/v24.21.0/SHASUMS256.txt.
+const NODE = '24.22.2';
+// From https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.
 const runtimes = {
-  'win32-x64': ['win-x64.zip', '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541'],
+  'win32-x64': ['win-x64.zip', 'ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2'],
   'darwin-arm64': [
     'darwin-arm64.tar.gz',
-    'bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057',
+    'aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a',
   ],
   'darwin-x64': [
     'darwin-x64.tar.gz',
-    '1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097',
+    'd5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52',
   ],
   'linux-x64': [
     'linux-x64.tar.gz',
-    '6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff',
+    '361718c444e49af2ca5a110c83ba6a8901143f23ab285ebbef0341f391f482a9',
   ],
   'linux-arm64': [
     'linux-arm64.tar.gz',
-    '724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5',
+    '95c264150aceb7f3437a29fd6984924f5f8d1511ea3cbd6c508b83f6c555dae2',
   ],
 };
 const system = `${process.platform}-${process.arch}`;
