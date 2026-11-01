@@ -11,7 +11,7 @@ if [ "$here" != "$target" ]; then
 fi
 mkdir -p "$HOME/.local/bin"
 ln -sf "$target/bin/ccdt" "$HOME/.local/bin/ccdt"
-echo "ccdt 已安装到 $target，命令为 ~/.local/bin/ccdt。"
+echo "ccdt 已安装到 ${target}，命令为 ~/.local/bin/ccdt。"
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *) echo "~/.local/bin 不在 PATH 里：把 export PATH=\"\$HOME/.local/bin:\$PATH\" 加入 shell 的配置文件。" ;;
