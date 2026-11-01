@@ -96,7 +96,11 @@ jiangan-code 的分支（[jiangan-code/cc-desk-tunnel](https://github.com/jianga
 
 同一个会话同一时间只能在一处使用，服务端本来就互斥（终端占着会话，图形客户端发消息会被拒绝；图形客户端在运行时，终端打不开）。只靠拒绝，使用者要发出去才知道，所以两边事先显示：
 
-- 终端的 CLI 用 hooks 报告它在做什么，写进终端自己的 hooks 文件，服务端边写边读（每 0.5 秒查一次）：`UserPromptSubmit` 与 `PostToolUse` 表示运行中，`Notification` 的 `permission_prompt`、`elicitation_dialog` 表示等你确认，`Stop` 与 `SessionStart` 表示空闲。状态记在 `run.status.activity`，会话摘要的 `activeRun.activity` 同步。
+- 终端的 CLI 用 hooks 报告它在做什么，写进终端自己的 hooks 文件，服务端边写边读（每 0.5 秒查一次）。状态记在 `run.status.activity`，会话摘要的 `activeRun.activity` 同步：
+  - 运行中：`UserPromptSubmit`，以及工具跑完的 `PostToolUse`、`PostToolUseFailure`（确认过了，接着运行）。
+  - 等你确认：`PermissionRequest`。CLI 2.1.293 弹出确认时只运行它，不发 `Notification`（`permission_prompt`），后者仍按“等你”处理，以防别的版本发。
+  - 空闲：`Stop`、`SessionStart`，以及 `Notification` 的 `idle_prompt`。
+  - 中断：使用者按 Esc 或 Ctrl+C 中断一轮时，CLI 不运行任何 hook，记录里也不留痕迹（实测：被中断的提示之后直接是下一条提示，没有 `turn_duration`，也没有“interrupted”字样；`idle_prompt` 等了 80 秒也没有来）。所以服务端在“运行中”时看终端输入：单独的 Esc 或 Ctrl+C（含 kitty 键盘协议的写法）之后 2 秒内没有新的 hook，就当作这一轮已中断，回到空闲并导入。
 - 图形客户端：会话列表和对话底部显示“终端运行中”“终端等你确认”“终端打开中”，输入框变灰并提示关掉终端后可以接着聊，停止按钮不显示（终端的运行由终端自己中断）。
 - `ccdt`：`sessions` 与 `-r` 标出谁在用这个会话；会话正在图形客户端里运行，或开着图形客户端的内嵌终端时，不去打开，直接说明原因。另一个 `ccdt` 窗口开着的照旧接过来。
 
@@ -232,3 +236,12 @@ jiangan-code 分支里另有这些，不进本方案：终端里的 agent 列表
 过程中修了一处：`-r` 的列表和输入凭据用 `for await` 读键盘，读完时 stdin 被一并关闭，进入的终端收不到按键。改为按事件读取，读完后保持打开。
 
 测试资源已清理。
+
+### 2026-11-01：终端状态与逐轮导入（第三次端到端，用打好的 Windows 包）
+
+在 devbox 上新部署一套（模拟的 Messages API 可以返回需要确认的工具调用、也可以延迟 20 秒回答），用 `npm run package:cli` 打出的 Windows 包登录和打开终端，另开一个客户端连接记录它看到的事件：
+
+- 每一轮结束即导入：一轮的提示、工具调用与结果、回答在 Stop 之后不到 1 秒出现在另一个客户端，不再等终端结束。
+- 状态：打开时“空闲”；发出提示后“运行中”；弹出确认时“等你确认”（`PermissionRequest`）；这一轮结束回到“空闲”；Esc 中断后 2 秒回到“空闲”，被中断的提示也导入了。CLI 中断后补写的 “No response requested.”（`model` 为 `<synthetic>`）不导入。
+- 反方向：会话正在图形客户端里运行时，`ccdt sessions` 标出“图形客户端运行中”，`ccdt` 不打开它并说明原因；那一轮结束后标记消失。
+- 图形客户端的显示由界面测试 `terminal-held.spec.ts` 覆盖：对话底部和列表显示终端在做什么，输入框变灰并说明原因，停止按钮不显示，终端关闭后恢复。
