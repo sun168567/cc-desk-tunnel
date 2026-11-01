@@ -119,6 +119,37 @@ test('control terminal launches the official CLI directly with remote guidance a
   );
 });
 
+test('a terminal that continues its session resumes or creates it under the session ID, with its own settings', () => {
+  const session = {
+    id: '11111111-2222-4333-8444-555555555555',
+    projectPath: 'D:\\test',
+    permissionMode: 'auto',
+  } as Session;
+  const options = { executable: 'claude', settingsPath: '/private/provider.json' };
+  const resumed = terminalArguments(
+    options,
+    session,
+    { configPath: '/ssh' },
+    { resume: true, settingsPath: '/t.json' },
+  );
+  assert.deepEqual(resumed.slice(0, 2), ['--resume', session.id]);
+  assert.deepEqual(resumed.slice(-2), ['--settings', '/t.json']);
+  assert.ok(!resumed.includes('/private/provider.json'));
+  const created = terminalArguments(options, session, undefined, {
+    resume: false,
+    settingsPath: '/t.json',
+  });
+  assert.deepEqual(created.slice(0, 2), ['--session-id', session.id]);
+});
+
+test('a terminal never passes for an SDK process, whatever the service inherited', () => {
+  const env = terminalEnvironment(
+    { executable: 'claude', environment: { CLAUDE_AGENT_SDK_VERSION: '0.3.286' } },
+    { CLAUDE_CODE_ENTRYPOINT: 'sdk-ts', CLAUDE_AGENT_SDK_CLIENT_APP: 'x', LANG: 'C.UTF-8' },
+  );
+  assert.deepEqual(Object.keys(env).sort(), ['LANG', 'TERM']);
+});
+
 test('terminal provider environment stays inside the child process and does not mutate the proxy', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-terminal-env-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

@@ -12,9 +12,9 @@ const { options, native, port } = environmentConfig(
 const programDir = process.env.PROXY_PROGRAM_DIR;
 if (native) removeFrpLeftovers();
 clearServiceVariables(process.env);
-// What a process that did not get to close left of its connections and of the doors of their devices.
+// What a process that did not get to close left of its connections, the doors of their devices and its terminals.
 if (native)
-  for (const name of ['connections', 'devices'])
+  for (const name of ['connections', 'devices', 'terminals'])
     rmSync(join(options.dataDir, name), { recursive: true, force: true });
 const server = createProxyServer(options);
 console.log(`Proxy ${native ? 'native' : 'simulation'} service: ${await server.listen(port)}`);

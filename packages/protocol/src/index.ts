@@ -616,6 +616,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('terminal.open'),
       ...request,
       sessionId: id,
+      // The terminal continues the session's conversation, and what it adds is recorded in the session afterwards.
+      continueSession: z.boolean().optional(),
       cols: z.number().int().min(20).max(400),
       rows: z.number().int().min(5).max(160),
     })

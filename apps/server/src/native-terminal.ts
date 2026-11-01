@@ -26,7 +26,17 @@ export function terminalEnvironment(
       for (const [key, value] of Object.entries(settings.env))
         if (typeof value === 'string') env[key] = value;
   }
-  return { ...env, ...options.environment, TERM: 'xterm-256color' };
+  const result: Record<string, string> = {
+    ...env,
+    ...options.environment,
+    TERM: 'xterm-256color',
+  };
+  // The CLI reports what started it from these. A terminal runs the interactive CLI and must never pass for an SDK
+  // process, whatever this process inherited.
+  for (const name of Object.keys(result))
+    if (name === 'CLAUDE_CODE_ENTRYPOINT' || name.startsWith('CLAUDE_AGENT_SDK_'))
+      delete result[name];
+  return result;
 }
 
 type TerminalProcess = Pick<
@@ -39,8 +49,18 @@ export type TerminalSpawner = (
   options: { cwd: string; cols: number; rows: number; env: Record<string, string>; name: string },
 ) => TerminalProcess;
 
-export function terminalArguments(options: ClaudeOptions, session: Session, ssh?: SshConnection) {
+// A terminal that continues the session works in the same native session as its chat runs: it resumes it, or
+// creates it under the session's ID when there is none yet. `settingsPath` replaces the provider's settings then,
+// with the terminal's hooks added to them.
+export function terminalArguments(
+  options: ClaudeOptions,
+  session: Session,
+  ssh?: SshConnection,
+  continued?: { resume: boolean; settingsPath: string },
+) {
+  const settingsPath = continued?.settingsPath ?? options.settingsPath;
   return [
+    ...(continued ? [continued.resume ? '--resume' : '--session-id', session.id] : []),
     '--permission-mode',
     session.permissionMode === 'default' ? 'manual' : session.permissionMode,
     ...(ssh
@@ -51,7 +71,7 @@ export function terminalArguments(options: ClaudeOptions, session: Session, ssh?
       : []),
     ...((session.model ?? options.model) ? ['--model', session.model ?? options.model!] : []),
     ...(session.effort ? ['--effort', session.effort] : []),
-    ...(options.settingsPath ? ['--settings', options.settingsPath] : []),
+    ...(settingsPath ? ['--settings', settingsPath] : []),
   ];
 }
 
@@ -73,7 +93,7 @@ export class NativeTerminal {
     args: string[],
     options: { cwd: string; cols: number; rows: number; env: Record<string, string> },
     data: (text: string, bytes: number) => void,
-    exit: (code: number | null) => void,
+    exit: (code: number | null) => void | Promise<void>,
     spawn: TerminalSpawner = spawnPty,
   ) {
     this.cols = options.cols;
@@ -112,11 +132,11 @@ export class NativeTerminal {
       }
       clearTimeout(this.killTimer);
       clearTimeout(this.ackTimer);
-      try {
-        exit(exitCode);
-      } finally {
-        this.resolveClosed();
-      }
+      // What the end leads to may take a while, such as recording what the terminal added; closing waits for it.
+      void Promise.resolve()
+        .then(() => exit(exitCode))
+        .catch(() => {})
+        .finally(() => this.resolveClosed());
     });
   }
   write(text: string) {

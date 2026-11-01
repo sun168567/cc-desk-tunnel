@@ -18,7 +18,7 @@
 - `session.configure` 保存原生 `auto/default/plan/acceptEdits`、model / effort 偏好，新会话默认 auto，运行中不可更改。`native.session` 分别回传请求 / 实际模式与 effort；`native.capabilities` 传原生模型目录、命名账号字段及命令名；`native.metrics` 分开当前上下文摘要、累计用量估算和订阅额度，不可用为 null / unavailable。`native.compact` 是实际压缩边界，不是代理摘要。
 - `native.context` 报告官方原生会话存储检查结果，不传输私有 JSONL 或将镜像作为模型输入。改名 / 删除先更新官方原生记录，失败保留代理镜像；禁止与运行并发管理。
 - `session.status` 无模型提示，读取原生公开控制状态。`native.metrics.errors` 区分上下文 / 用量失败；额度标注测量时间。`native.title` 只同步未被用户改名的自动标题；旧会话默认不自动覆盖。
-- `terminal.open/close` 为带 requestId 的操作，`terminal.opened/data/closed` 仅发所属连接；独立的 terminalId，摘要 `activeRun.surface=terminal` 表示互斥占用，不意味着终端上下文与图形 session 相同。终端原始文本不存入 session.event。
+- `terminal.open/close` 为带 requestId 的操作，`terminal.opened/data/closed` 仅发所属连接；独立的 terminalId，摘要 `activeRun.surface=terminal` 表示互斥占用。默认终端是独立的原生会话；`terminal.open.continueSession` 让终端接续这个 session 的原生会话（`--resume`/`--session-id` 为 session ID），终端结束后把新增的对话按图形运行的事件格式记入 session。终端原始文本不存入 session.event。
 - `terminal.input/resize/ack` 无逐键请求响应；校验归属、terminalId 和大小。`ack.bytes` 是 xterm 已渲染的 UTF-8 字节数，控制 PTY 背压；不能超过服务尚未确认的输出。原始数据帧按 16384 个 UTF-16 code units 分片且不切开 surrogate pair。
 
 ## 浏览器连接
