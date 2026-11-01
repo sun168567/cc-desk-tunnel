@@ -84,7 +84,7 @@ process.stdout.write('DONE ' + result.how + '\\r\\n');
     const messages = sentOf();
     const typed = messages.filter((m) => m.type === 'terminal.input').map((m) => m.data);
     // Keys typed together may arrive together.
-  assert.equal(typed.join(''), 'a\x03q');
+    assert.equal(typed.join(''), 'a\x03q');
     assert.ok(messages.some((m) => m.type === 'terminal.ack' && m.bytes === 7));
     assert.ok(
       messages.some((m) => m.type === 'terminal.resize' && m.cols === 100 && m.rows === 30),
