@@ -17,6 +17,7 @@ import { Config, directories } from '../src/config.mjs';
 import { proxyFor } from '../src/connection.mjs';
 import { RESTORE, relay } from '../src/terminal.mjs';
 import { readKeys } from '../src/keys.mjs';
+import { fit } from '../src/picker.mjs';
 import { protect, reveal } from '../src/secret.mjs';
 
 test('settings live where each system keeps them, beside the desktop client’s', () => {
@@ -232,3 +233,9 @@ test(
     assert.equal(reveal('wss://a.test/ws', stored), 'token-2');
   },
 );
+
+test('a list entry is cut to the terminal, Chinese taking two columns and colours none', () => {
+  assert.equal(fit('今天 10:00  会话', 40), '今天 10:00  会话');
+  assert.equal(fit('项目项目项目', 8), '项目项\x1b[0m…');
+  assert.equal(fit('ab\x1b[2mcdef\x1b[0m', 5), 'ab\x1b[2mcd\x1b[0m…');
+});
