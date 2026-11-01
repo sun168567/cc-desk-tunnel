@@ -852,11 +852,7 @@ export function createProxyServer(options: ServerOptions) {
       });
       updated(command.sessionId);
       if (current.continued)
-        watchFile(
-          current.continued.hooksPath,
-          { interval: 500 },
-          () => void heardTerminal(current),
-        );
+        watchFile(current.continued.hooksPath, { interval: 500 }, () => void heardTerminal(current));
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();

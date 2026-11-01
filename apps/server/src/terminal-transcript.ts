@@ -41,6 +41,14 @@ export function terminalEvents(
     if (entry.origin?.kind && entry.origin.kind !== 'human') continue;
     const message = entry.message as { id?: unknown; content?: unknown };
     if (entry.type === 'assistant') {
+      // What the CLI writes in place of an answer to a turn the user interrupted.
+      const blocks = message.content as Block[] | undefined;
+      if (
+        (message as { model?: unknown }).model === '<synthetic>' &&
+        blocks?.length === 1 &&
+        blocks[0]?.text === 'No response requested.'
+      )
+        continue;
       // One answer is recorded as a message per content block, all with the answer's ID.
       if (message.id !== answer) {
         answer = message.id;
@@ -80,7 +88,15 @@ export function terminalEvents(
 // A terminal that continues a session learns from the CLI's hooks what it is doing and which native session it is
 // in: `/clear` and `/resume` move it to another. Each hook appends what it was given, a line of JSON, to a file of the
 // terminal's own, which the service reads as it grows.
-const HOOKED = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop'];
+const HOOKED = [
+  'SessionStart',
+  'UserPromptSubmit',
+  'PermissionRequest',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'Notification',
+  'Stop',
+];
 export function terminalSettings(path: string, hooksPath: string, settingsPath?: string) {
   const settings = settingsPath ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
   const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
@@ -124,13 +140,20 @@ export function terminalHooks(hooksPath: string, offset = 0) {
 }
 
 // What a hook says the CLI is doing: working on a prompt, waiting for the user to allow a tool or answer it, or done
-// with the turn and waiting for the next prompt. A tool that ran was allowed, so the CLI is working again.
+// with the turn and waiting for the next prompt. A tool that ran, or failed, was allowed, so the CLI is working again.
+// The CLI 2.1.293 runs PermissionRequest as the dialog opens, and no Notification for it. A turn the user interrupts
+// runs no hook and leaves nothing in the CLI's record; the CLI tells it has been waiting for a prompt a while later
+// (`idle_prompt`), or the next prompt does.
 export function terminalActivity(hook: TerminalHook): TerminalActivity | undefined {
   switch (hook.hook_event_name) {
     case 'UserPromptSubmit':
     case 'PostToolUse':
+    case 'PostToolUseFailure':
       return 'working';
+    case 'PermissionRequest':
+      return 'waiting';
     case 'Notification':
+      if (hook.notification_type === 'idle_prompt') return 'idle';
       return hook.notification_type === 'permission_prompt' ||
         hook.notification_type === 'elicitation_dialog'
         ? 'waiting'

@@ -56,6 +56,13 @@ test('a terminal turn comes back as the events of a chat run, without what was t
       }),
       answer('new-5', 'msg_2', [{ type: 'text', text: '有一个文件' }]),
       entry('new-6', 'system', undefined),
+      // What the CLI writes after a turn the user interrupted.
+      entry('new-7', 'assistant', {
+        id: 'msg_3',
+        role: 'assistant',
+        model: '<synthetic>',
+        content: [{ type: 'text', text: 'No response requested.' }],
+      }),
     ],
     new Set(['old-1', 'old-2']),
     (event) => events.push(event),
@@ -172,7 +179,7 @@ test('the terminal settings add the hooks to the provider settings, readable onl
   assert.equal(written.hooks.SessionStart.length, 2);
   const command = `{ cat; echo; } >> '${hooks.replaceAll("'", "'\\''")}'`;
   assert.equal(written.hooks.SessionStart[1].hooks[0].command, command);
-  for (const name of ['UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop'])
+  for (const name of ['UserPromptSubmit', 'PermissionRequest', 'PostToolUse', 'Stop'])
     assert.equal(written.hooks[name][0].hooks[0].command, command);
   if (process.platform !== 'win32') assert.equal(statSync(settings).mode & 0o777, 0o600);
 });
@@ -211,7 +218,8 @@ test('the hooks file is read as it grows, and says what the CLI is doing', (t) =
   assert.deepEqual(terminalHooks(hooks, second.offset).hooks, []);
   assert.equal(
     terminalActivity({ hook_event_name: 'Notification', notification_type: 'idle_prompt' }),
-    undefined,
+    'idle',
   );
   assert.equal(terminalActivity({ hook_event_name: 'PostToolUse' }), 'working');
+  assert.equal(terminalActivity({ hook_event_name: 'PermissionRequest' }), 'waiting');
 });
