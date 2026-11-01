@@ -79,3 +79,48 @@ test('"continue" takes the stopped turn up again instead of starting one of its 
   assert.equal(turn.stats.outputTokens, 400);
   assert.equal(turn.stats.outputPerSecond, 100);
 });
+
+test("a terminal's turns are marked, and each ends with the last thing recorded of it, not with the terminal", () => {
+  const turns = conversation([
+    event('terminal', 0, {
+      type: 'run.status',
+      status: 'running',
+      surface: 'terminal',
+      connectionId: 'c',
+    }),
+    event('terminal', 10, {
+      type: 'message.user',
+      messageId: 'first',
+      text: '终端里问的',
+      scenario: 'chat',
+    }),
+    said('terminal', 12, 'one', '第一个回答'),
+    event('terminal', 20, {
+      type: 'message.user',
+      messageId: 'second',
+      text: '再问',
+      scenario: 'chat',
+    }),
+    said('terminal', 25, 'two', '第二个回答'),
+    event('terminal', 59, {
+      type: 'run.status',
+      status: 'completed',
+      surface: 'terminal',
+      connectionId: 'c',
+    }),
+    event('chat', 59, {
+      type: 'message.user',
+      messageId: 'chat',
+      text: '图形界面里问的',
+      scenario: 'chat',
+    }),
+  ]);
+  assert.deepEqual(
+    turns.map((turn) => [turn.question.terminal ?? false, turn.endedAt, turn.answer?.text]),
+    [
+      [true, at(12), '第一个回答'],
+      [true, at(25), '第二个回答'],
+      [false, undefined, undefined],
+    ],
+  );
+});

@@ -51,6 +51,7 @@ This repository publishes all of its own client, server, build and deployment so
 | **Projects and sessions** | Grouped by Windows folder; create, rename, delete, search, fork; edit and resend any of your own messages |
 | **The conversation** | Streaming replies, thinking summaries, tool calls with their input and results; add messages during a run, stop at any time |
 | **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; an embedded native terminal when you need it |
+| **Terminal client** | `ccdt` opens the official Claude Code in your own terminal, sharing sessions, context and usage statistics with the desktop client |
 | **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics |
 | **Scheduled tasks** | Send a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
 | **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
@@ -86,6 +87,8 @@ Download `CC-Desk-Tunnel-Setup-<version>-x64.exe` from the [releases page](https
 Expect a SmartScreen prompt on first run; see [Antivirus and SmartScreen](#antivirus-and-smartscreen).
 
 Packages for macOS and Linux are on the same releases page; see [macOS client](docs/macos.md) and [Linux client](docs/linux.md) (in Chinese). They are experimental, unsigned, and upgraded by downloading and installing the new package.
+
+If you prefer the terminal, the same page has packages of the terminal client `ccdt` for Windows, macOS and Linux, which can be installed and used on their own; see [Terminal client](docs/cli.md) (in Chinese).
 
 ### 3. Sign in to Claude
 
@@ -166,6 +169,7 @@ When connecting through a proxy or a reverse proxy, make sure it does not cut co
 | [Architecture](docs/architecture.md) | Components, how a connection is established, key design decisions |
 | [Native runtime and session storage](docs/native-runtime.md) | How the official CLI is driven, who owns context, approvals, retention |
 | [Windows client](apps/desktop/README.md) · [Linux service](apps/server/README.md) · [Message contract](packages/protocol/README.md) | Implementation notes per module |
+| [Terminal client `ccdt`](docs/cli.md) | Installation, sign-in, commands, sessions shared with the desktop client |
 | [Roadmap and status](docs/roadmap.md) · [Changelog](CHANGELOG.md) | Done, unverified and planned; changes per version |
 | [Development conventions](docs/development.md) | Branches, commits, checks, releases |
 

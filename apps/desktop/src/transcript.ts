@@ -18,6 +18,8 @@ export type TranscriptItem =
       delivery?: string;
       // Stands for the "continue" button: there is no message of the user's to show, edit or copy.
       continued?: boolean;
+      // Asked in a terminal that continued the session; recorded as its turn ended.
+      terminal?: boolean;
       at: string;
       // A reply: when its last text arrived, which is when it was done (`at` is when it began).
       doneAt?: string;
@@ -62,11 +64,13 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
   const byId = new Map<string, TranscriptItem>();
   const byApproval = new Map<string, Extract<TranscriptItem, { kind: 'tool' }>>();
   let compacting: Compact | undefined;
+  const terminals = new Set<string>();
   function add(item: TranscriptItem) {
     items.push(item);
     byId.set(item.id, item);
   }
   for (const { runId, sequence, payload, createdAt: at } of events) {
+    if (payload.type === 'run.status' && payload.surface === 'terminal') terminals.add(runId);
     // What the "continue" button sent is no words of the user's: the turn it starts shows a mark for it.
     if (payload.type === 'message.user')
       add({
@@ -75,6 +79,7 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
         runId,
         text: payload.continued ? '继续' : payload.text,
         ...(payload.continued ? { continued: true } : {}),
+        ...(terminals.has(runId) ? { terminal: true } : {}),
         at,
       });
     if (payload.type === 'message.delivery') {
@@ -277,6 +282,12 @@ export function conversation(events: SessionEvent[]): Turn[] {
     return how === 'cancelled' || how === 'failed' ? how : undefined;
   };
   const turns: Turn[] = [];
+  // A terminal's turns are all of one run, which goes on while the terminal stays open, long after the last of them
+  // perhaps: each ends with the last thing recorded of it.
+  const seen = new Map<Turn, string>();
+  const close = (turn: Turn, at: string | undefined) => {
+    turn.endedAt = turn.question?.terminal ? (seen.get(turn) ?? at) : at;
+  };
   let runId = '';
   for (const item of transcript(events)) {
     let turn = turns.at(-1);
@@ -296,9 +307,9 @@ export function conversation(events: SessionEvent[]): Turn[] {
       // last stopped working, or else at the question; how the run ends later belongs to the turn it ends in.
       if (turn && !turn.endedAt && joined) {
         const from = turn.startedAt;
-        turn.endedAt = stops.get(runId)?.findLast((at) => at >= from && at <= item.at) ?? item.at;
+        close(turn, stops.get(runId)?.findLast((at) => at >= from && at <= item.at) ?? item.at);
       } else if (turn && !turn.endedAt) {
-        turn.endedAt = ended.get(runId) ?? item.at;
+        close(turn, ended.get(runId) ?? item.at);
         turn.outcome = outcome(runId);
       }
       turn = {
@@ -314,6 +325,14 @@ export function conversation(events: SessionEvent[]): Turn[] {
       turns.push(turn);
     }
     runId = item.runId;
+    const at = [
+      item.at,
+      'doneAt' in item ? item.doneAt : undefined,
+      'endedAt' in item ? item.endedAt : undefined,
+    ]
+      .filter((value): value is string => !!value)
+      .reduce((a, b) => (a > b ? a : b));
+    if (!seen.has(turn) || seen.get(turn)! < at) seen.set(turn, at);
     if (item.kind === 'user') turn.question = item;
     else if (item.kind === 'notice') turn.notices.push(item);
     else if (item.kind === 'assistant' || item.kind === 'note' || item.kind === 'compact')
@@ -326,9 +345,9 @@ export function conversation(events: SessionEvent[]): Turn[] {
     }
   }
   const last = turns.at(-1);
-  if (last && !last.endedAt) {
-    last.endedAt = ended.get(runId);
-    if (last.endedAt) last.outcome = outcome(runId);
+  if (last && !last.endedAt && ended.has(runId)) {
+    close(last, ended.get(runId));
+    last.outcome = outcome(runId);
   }
   // A page of history may start after the question a report belongs to. A turn taken up again is reported once
   // for each of its messages, and each report may come several times: the last one counts.

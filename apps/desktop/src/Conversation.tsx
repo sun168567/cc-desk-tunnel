@@ -34,7 +34,7 @@ import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
 import type { HistoryState, TaskProgress } from './client.ts';
-import { RunStatus, TaskLine } from './RunStatus.tsx';
+import { RunStatus, TaskLine, terminalState } from './RunStatus.tsx';
 import type { Clock } from './RunStatus.tsx';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
 import { conversation } from './transcript.ts';
@@ -431,6 +431,11 @@ function Message({
       </div>
       {user && (
         <div className="message-footer">
+          {item.terminal && (
+            <span className="message-delivery" title="在终端里问的，终端结束时记入这个会话">
+              终端
+            </span>
+          )}
           {item.delivery && (
             <span
               className={`message-delivery${item.delivery === '原生已接收' ? '' : ' unsettled'}`}
@@ -1141,7 +1146,19 @@ export default function Conversation({
                 )}
               </div>
             )}
+            {/* A terminal holds the session: what it does is recorded here as each of its turns ends. */}
+            {session.activeRun?.surface === 'terminal' && (
+              <div className="run-indicator" role="status">
+                <span
+                  className={`running-dot${session.activeRun.activity === 'working' && connected ? ' breathing' : ''}`}
+                />
+                {session.activeRun.activity
+                  ? `${terminalState(session.activeRun.activity)} · 每一轮结束后显示在这里，关闭终端后可以在这里接着聊`
+                  : '原生终端打开中'}
+              </div>
+            )}
             {session.activeRun &&
+              session.activeRun.surface !== 'terminal' &&
               !background &&
               (session.activeRun.status !== 'awaiting_approval' ? (
                 <RunStatus

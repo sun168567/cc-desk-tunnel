@@ -1,0 +1,15 @@
+{
+  "name": "@cc-desk-tunnel/cli",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "ccdt: the official Claude Code terminal of a CC Desk Tunnel service, in your own terminal",
+  "bin": {
+    "ccdt": "bin/ccdt.mjs"
+  },
+  "dependencies": {
+    "@cc-desk-tunnel/protocol": "0.0.0",
+    "ws": "8.22.0"
+  }
+}

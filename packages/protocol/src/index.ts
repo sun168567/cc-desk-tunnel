@@ -220,6 +220,9 @@ export const runStatusSchema = z.enum([
 // What a run waits for. In `awaiting_approval`: a decision on a tool, or an answer to a question Claude asked.
 // While `running`, `background`: Claude has finished its turn and only the background tasks it started go on.
 export const waitingSchema = z.enum(['approval', 'question', 'background']);
+// What the CLI of a terminal that continues its session is doing, as its hooks report it.
+export const terminalActivitySchema = z.enum(['working', 'waiting', 'idle']);
+export type TerminalActivity = z.infer<typeof terminalActivitySchema>;
 export const terminalStatuses = new Set<RunStatus>(['completed', 'cancelled', 'failed']);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
@@ -250,6 +253,7 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     connectionId: id,
     surface: z.enum(['chat', 'terminal']).optional(),
     waiting: waitingSchema.optional(),
+    activity: terminalActivitySchema.optional(),
     reason: z.string().optional(),
   }),
   z.object({ type: z.literal('text.delta'), messageId: id, text: z.string() }),
@@ -457,6 +461,7 @@ export const sessionSchema = z.object({
       connectionId: id,
       surface: z.enum(['chat', 'terminal']).optional(),
       waiting: waitingSchema.optional(),
+      activity: terminalActivitySchema.optional(),
     })
     .nullable(),
 });
@@ -616,6 +621,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('terminal.open'),
       ...request,
       sessionId: id,
+      // The terminal continues the session's conversation, and what it adds is recorded in the session afterwards.
+      continueSession: z.boolean().optional(),
       cols: z.number().int().min(20).max(400),
       rows: z.number().int().min(5).max(160),
     })
@@ -805,6 +812,14 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     firstRecordAt: timestamp.nullable(),
   }),
   z.object({ type: z.literal('terminal.opened'), sessionId: id, terminalId: id }),
+  // The terminal is no longer shown here and goes on running: another connection shows it (`taken`), or this one
+  // left its output unacknowledged for 30 s (`stalled`) and may open it again.
+  z.object({
+    type: z.literal('terminal.detached'),
+    sessionId: id,
+    terminalId: id,
+    reason: z.enum(['taken', 'stalled']),
+  }),
   z.object({
     type: z.literal('terminal.data'),
     sessionId: id,

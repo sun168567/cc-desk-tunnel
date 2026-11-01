@@ -1,5 +1,5 @@
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, rmSync } from 'node:fs';
+import { createReadStream, mkdirSync, rmSync, unwatchFile, watchFile } from 'node:fs';
 import { createServer } from 'node:http';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import {
   deleteSession,
   forkSession,
+  getSessionInfo,
   getSessionMessages,
   renameSession,
 } from '@anthropic-ai/claude-agent-sdk';
@@ -36,6 +37,7 @@ import type {
   Command,
   Device,
   EventPayload,
+  TerminalActivity,
   Fragment,
   ServerMessage,
   Session,
@@ -52,6 +54,12 @@ import { completeOnboarding } from './native-onboarding.ts';
 import { readNativeSettings, updateNativeSettings } from './native-settings.ts';
 import { readInstructions, writeInstructions } from './native-instructions.ts';
 import type { NativeTerminal } from './native-terminal.ts';
+import {
+  terminalActivity,
+  terminalEvents,
+  terminalHooks,
+  terminalSettings,
+} from './terminal-transcript.ts';
 import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
@@ -112,7 +120,34 @@ export type Run = {
   // Turn figures are reported one after another, so a later report for the same question never lands before an earlier one.
   stats: ReturnType<typeof inOrder>;
 };
-type Terminal = { id: string; sessionId: string; owner: Peer; process?: NativeTerminal };
+type Terminal = {
+  id: string;
+  sessionId: string;
+  // The connection showing it. One that continues its session outlives a lost connection by `graceMs`.
+  owner?: Peer;
+  device: string;
+  process?: NativeTerminal;
+  idle?: ReturnType<typeof setTimeout>;
+  // A terminal that continues its session: the native session's messages already recorded and the last of them, its
+  // own files and how far its hooks were read, what its CLI was last doing, the time of the last of its turns' events
+  // recorded, and whether it moved to another native session (and the session was told).
+  continued?: {
+    known: Set<string>;
+    last?: string;
+    settingsPath: string;
+    hooksPath: string;
+    offset: number;
+    heard: Promise<void>;
+    activity?: TerminalActivity;
+    at: string;
+    connectionId: string;
+    elsewhere?: boolean;
+    toldElsewhere?: boolean;
+    // The native session held no message when last looked at.
+    empty?: boolean;
+  };
+};
+const INTERRUPTS = new Set(['\x1b', '\x03', '\x1b[27u', '\x1b[99;5u']);
 // One of the user's computers, while it is connected or expected back: its connections, the door its commands
 // go through, and the wait that ends its runs if it stays away.
 type Seat = {
@@ -409,10 +444,10 @@ export function createProxyServer(options: ServerOptions) {
   }
 
   // Stores an event and sends it to the session's subscribers; quota readings also drive the usage periods.
-  function record(sessionId: string, runId: string, payload: EventPayload) {
+  function record(sessionId: string, runId: string, payload: EventPayload, createdAt?: string) {
     if (payload.type === 'native.metrics' && payload.rateLimits?.available)
       usage.observe(payload.rateLimits);
-    const event = store.append(sessionId, runId, payload);
+    const event = store.append(sessionId, runId, payload, createdAt);
     broadcast({ type: 'session.event', event }, sessionId);
     return event;
   }
@@ -695,6 +730,9 @@ export function createProxyServer(options: ServerOptions) {
   // The terminal occupies its session like a run does, so other connections see it as busy.
   async function openTerminal(peer: Peer, command: CommandOf<'terminal.open'>, session: Session) {
     if (!options.claude) throw new DomainError('native_unavailable', '离线模拟不启动原生终端。');
+    const running = terminals.get(command.sessionId);
+    if (running?.continued && running.process && command.continueSession)
+      return attachTerminal(peer, running, command);
     if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
       throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
     const device = target(peer, session);
@@ -702,11 +740,48 @@ export function createProxyServer(options: ServerOptions) {
     if (!ssh && device !== serverDevice.id)
       throw new DomainError('execution_offline', '本机的执行通道尚未就绪。');
     room();
-    const current: Terminal = { id: randomUUID(), sessionId: command.sessionId, owner: peer };
+    const current: Terminal = {
+      id: randomUUID(),
+      sessionId: command.sessionId,
+      owner: peer,
+      device,
+    };
     terminals.set(current.sessionId, current);
     try {
       const { NativeTerminal, terminalArguments, terminalEnvironment } =
         await import('./native-terminal.ts');
+      const cwd = prepareNativeDirectory(options.claude, store.directory, nativeRoot(session.id));
+      let continued: Parameters<typeof terminalArguments>[3];
+      if (command.continueSession) {
+        const resume = !!(await getSessionInfo(session.id, { dir: cwd }));
+        const messages = await getSessionMessages(session.id, {
+          dir: cwd,
+          includeSystemMessages: true,
+        }).catch(() => []);
+        // A record of the session with nothing in it, which a terminal that ended without a word left when it could
+        // not clear it away (see the end below), makes the CLI refuse the session's ID as one in use.
+        if (!resume && !messages.length)
+          await deleteSession(session.id, { dir: cwd }).catch(() => {});
+        const directory = join(store.directory, 'terminals');
+        mkdirSync(directory, { recursive: true, mode: 0o700 });
+        current.continued = {
+          known: new Set(messages.map((message) => message.uuid)),
+          last: messages.at(-1)?.uuid,
+          settingsPath: join(directory, `${current.id}.json`),
+          hooksPath: join(directory, `${current.id}.hooks`),
+          offset: 0,
+          heard: Promise.resolve(),
+          activity: 'idle',
+          at: new Date().toISOString(),
+          connectionId: peer.id,
+        };
+        terminalSettings(
+          current.continued.settingsPath,
+          current.continued.hooksPath,
+          options.claude.settingsPath,
+        );
+        continued = { resume, settingsPath: current.continued.settingsPath };
+      }
       if (closing || peer.socket.readyState !== WebSocket.OPEN)
         throw new Error('Connection closed');
       completeOnboarding();
@@ -716,23 +791,53 @@ export function createProxyServer(options: ServerOptions) {
           options.claude,
           session,
           ssh ? sessionSsh(store.directory, session.id, ssh) : undefined,
+          continued,
         ),
         {
-          cwd: prepareNativeDirectory(options.claude, store.directory, nativeRoot(session.id)),
+          cwd,
           cols: command.cols,
           rows: command.rows,
           env: terminalEnvironment(options.claude),
+          ...(current.continued
+            ? {
+                screen: {
+                  detached: () => {
+                    if (current.owner)
+                      send(current.owner, {
+                        type: 'terminal.detached',
+                        sessionId: current.sessionId,
+                        terminalId: current.id,
+                        reason: 'stalled',
+                      });
+                    detachTerminal(current);
+                  },
+                },
+              }
+            : {}),
         },
         (data, bytes) =>
-          send(peer, {
+          current.owner &&
+          send(current.owner, {
             type: 'terminal.data',
             sessionId: current.sessionId,
             terminalId: current.id,
             data,
             bytes,
           }),
-        (exitCode) => {
+        async (exitCode) => {
           if (terminals.get(current.sessionId) !== current) return;
+          clearTimeout(current.idle);
+          if (current.continued) {
+            const { hooksPath, settingsPath } = current.continued;
+            unwatchFile(hooksPath);
+            await heardTerminal(current, true);
+            // A terminal that said nothing leaves no native session: its record, with nothing in it, would keep the
+            // session's ID from a chat run or the next terminal, which the CLI refuses it to as one in use.
+            if (current.continued.empty)
+              await deleteSession(current.sessionId, { dir: cwd }).catch(() => {});
+            rmSync(settingsPath, { force: true });
+            rmSync(hooksPath, { force: true });
+          }
           store.append(current.sessionId, current.id, {
             type: 'run.status',
             status: 'completed',
@@ -740,12 +845,13 @@ export function createProxyServer(options: ServerOptions) {
             connectionId: peer.id,
           });
           updated(current.sessionId);
-          send(peer, {
-            type: 'terminal.closed',
-            sessionId: current.sessionId,
-            terminalId: current.id,
-            exitCode,
-          });
+          if (current.owner)
+            send(current.owner, {
+              type: 'terminal.closed',
+              sessionId: current.sessionId,
+              terminalId: current.id,
+              exitCode,
+            });
           terminals.delete(current.sessionId);
         },
       );
@@ -753,14 +859,145 @@ export function createProxyServer(options: ServerOptions) {
         type: 'run.status',
         status: 'running',
         surface: 'terminal',
+        ...(current.continued ? { activity: current.continued.activity } : {}),
         connectionId: peer.id,
       });
       updated(command.sessionId);
+      if (current.continued)
+        watchFile(
+          current.continued.hooksPath,
+          { interval: 500 },
+          () => void heardTerminal(current),
+        );
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();
+      if (current.continued && !current.process) {
+        rmSync(current.continued.settingsPath, { force: true });
+        rmSync(current.continued.hooksPath, { force: true });
+      }
       if (terminals.get(current.sessionId) === current) terminals.delete(current.sessionId);
       throw new DomainError('terminal_failed', '原生终端启动失败，请检查 Linux PTY 组件与 CLI。');
+    }
+  }
+  // Another look at a terminal that keeps running. The connection that showed it is told it no longer does.
+  async function attachTerminal(
+    peer: Peer,
+    terminal: Terminal,
+    command: CommandOf<'terminal.open'>,
+  ) {
+    const { sessionId, id: terminalId } = terminal;
+    if (terminal.owner && terminal.owner !== peer)
+      send(terminal.owner, { type: 'terminal.detached', sessionId, terminalId, reason: 'taken' });
+    terminal.owner = peer;
+    clearTimeout(terminal.idle);
+    send(peer, { type: 'terminal.opened', sessionId, terminalId });
+    await terminal.process!.attach(command.cols, command.rows);
+  }
+  // The connection that showed a terminal that continues its session was lost, or stopped taking its output. As
+  // with a run, the CLI goes on for `graceMs`, for the client to come back and show it again; then it ends.
+  function detachTerminal(terminal: Terminal) {
+    terminal.owner = undefined;
+    terminal.process?.detach();
+    clearTimeout(terminal.idle);
+    terminal.idle = setTimeout(() => {
+      const task = terminal.process?.close();
+      if (task) track(task);
+    }, graceMs);
+  }
+  // What the hooks of a terminal that continues its session wrote since they were last read: the session shows what
+  // its CLI is doing, and what a turn added, once it ended, is recorded (see `importTerminal`). Reads go one at a time,
+  // and the last, when the terminal `ended`, records what is left.
+  function heardTerminal(terminal: Terminal, ended = false, interrupted = false) {
+    const continued = terminal.continued!;
+    const task = continued.heard
+      .then(async () => {
+        const { hooks, offset } = terminalHooks(continued.hooksPath, continued.offset);
+        continued.offset = offset;
+        let activity: TerminalActivity | undefined;
+        for (const hook of hooks) {
+          if (typeof hook.session_id === 'string' && hook.session_id !== terminal.sessionId)
+            continued.elsewhere = true;
+          activity = terminalActivity(hook) ?? activity;
+        }
+        interrupted &&= !hooks.length && continued.activity === 'working';
+        if (interrupted) activity = 'idle';
+        if (ended || interrupted || hooks.some((hook) => terminalActivity(hook) === 'idle'))
+          await importTerminal(terminal);
+        if (ended || !activity || activity === continued.activity) return;
+        continued.activity = activity;
+        record(terminal.sessionId, terminal.id, {
+          type: 'run.status',
+          status: 'running',
+          surface: 'terminal',
+          activity,
+          connectionId: continued.connectionId,
+        });
+        updated(terminal.sessionId);
+      })
+      .catch(() => {});
+    continued.heard = task;
+    return task;
+  }
+  // A turn the user interrupts runs no hook and leaves nothing in the CLI's record (CLI 2.1.293). A key that
+  // interrupts it, typed while the CLI works, with no hook after it in a while, is taken for the end of the turn:
+  // Esc and Ctrl+C, as they arrive plain or in the kitty keyboard protocol.
+  function interruptingTerminal(terminal: Terminal, data: string) {
+    const continued = terminal.continued!;
+    if (continued.activity !== 'working' || !INTERRUPTS.has(data)) return;
+    const { offset } = continued;
+    setTimeout(() => {
+      if (continued.activity === 'working' && continued.offset === offset)
+        void heardTerminal(terminal, false, true);
+    }, 2000).unref();
+  }
+  // What a terminal that continued its session added to the native session since it was last looked at, recorded in
+  // the session as the events of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a
+  // rewind does too, and is told, as is moving on to another native session, whose turns do not belong here.
+  async function importTerminal(terminal: Terminal) {
+    const continued = terminal.continued!;
+    const { known } = continued;
+    const { sessionId } = terminal;
+    const now = new Date().toISOString();
+    // Each at the time the CLI recorded it, after what was recorded of its turns before and no later than now. What the
+    // terminal was doing is recorded as it happens, and does not move them: a turn keeps the times it took.
+    const emit = (payload: EventPayload, at?: string) => {
+      const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
+      continued.at = time < continued.at ? continued.at : time > now ? now : time;
+      record(sessionId, terminal.id, payload, continued.at);
+    };
+    const dir = nativeDirectory(store.directory, nativeRoot(sessionId));
+    const messages = await getSessionMessages(sessionId, { dir, includeSystemMessages: true });
+    continued.empty = !messages.length;
+    if (messages.length && !store.hasNativeContext(sessionId)) {
+      const answer = messages.findLast((message) => message.type === 'assistant')?.message as
+        { model?: unknown } | undefined;
+      emit({
+        type: 'native.session',
+        nativeSessionId: sessionId,
+        model: typeof answer?.model === 'string' ? answer.model : '',
+        version: '',
+      });
+    }
+    const compacted = messages.some(
+      (message) =>
+        !known.has(message.uuid) && (message as { isCompactSummary?: boolean }).isCompactSummary,
+    );
+    if (
+      continued.last &&
+      !compacted &&
+      !messages.some((message) => message.uuid === continued.last)
+    )
+      emit({ type: 'native.notice', text: '终端里回退了对话，上面有些内容已不在上下文中。' });
+    terminalEvents(messages, known, emit);
+    for (const message of messages) known.add(message.uuid);
+    continued.last = messages.at(-1)?.uuid ?? continued.last;
+    if (continued.elsewhere && !continued.toldElsewhere) {
+      continued.toldElsewhere = true;
+      emit({
+        type: 'native.notice',
+        text: '终端里换到了另一段对话（/clear 或 /resume），那之后的内容不在这个会话中。',
+      });
     }
   }
   // Rename and delete change the native session first; the proxy record follows only when that succeeded.
@@ -1384,8 +1621,10 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     try {
-      if (control.type === 'terminal.input') current.process?.write(control.data);
-      else if (control.type === 'terminal.resize')
+      if (control.type === 'terminal.input') {
+        current.process?.write(control.data);
+        if (current.continued) interruptingTerminal(current, control.data);
+      } else if (control.type === 'terminal.resize')
         current.process?.resize(control.cols, control.rows);
       else current.process?.acknowledge(control.bytes);
     } catch {
@@ -1467,6 +1706,11 @@ export function createProxyServer(options: ServerOptions) {
     if (seats.get(seat.device) !== seat) return;
     seats.delete(seat.device);
     for (const run of runs.values()) if (run.device === seat.device) cancel(run, reason);
+    for (const terminal of terminals.values())
+      if (terminal.continued && terminal.device === seat.device) {
+        const task = terminal.process?.close();
+        if (task) track(task);
+      }
     if (seat.door) track(seat.door.close(), tunnelTasks);
     announce();
   }
@@ -1477,7 +1721,10 @@ export function createProxyServer(options: ServerOptions) {
     peers.delete(peer);
     if (login?.owner === peer) login.process.cancel();
     for (const terminal of terminals.values())
-      if (terminal.owner === peer) {
+      if (terminal.owner !== peer) continue;
+      // A client that said it is leaving closed its window: the terminal ends, as a local CLI's would.
+      else if (terminal.continued && !peer.left) detachTerminal(terminal);
+      else {
         const task = terminal.process?.close();
         if (task) track(task);
       }
@@ -1486,7 +1733,11 @@ export function createProxyServer(options: ServerOptions) {
       if (seat.door?.uses(peer.tunnel))
         seat.door.use([...seat.peers].findLast((other) => other.tunnel?.ssh)?.tunnel);
       if (!seat.peers.size) {
-        const waiting = [...runs.values()].some((run) => run.device === seat.device);
+        const waiting =
+          [...runs.values()].some((run) => run.device === seat.device) ||
+          [...terminals.values()].some(
+            (terminal) => terminal.continued && terminal.device === seat.device,
+          );
         const gone = options.claude
           ? '连接断开，运行未重放；在途命令结果可能未知。'
           : '连接断开，运行未重放。';

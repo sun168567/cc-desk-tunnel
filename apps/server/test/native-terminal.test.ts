@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-function fixture() {
+function fixture(screen?: { detached: () => void }) {
   let onData!: (text: string) => void, onExit!: (event: { exitCode: number }) => void;
   let paused = 0,
     resumed = 0,
@@ -48,7 +48,7 @@ function fixture() {
   const terminal = new NativeTerminal(
     'claude',
     [],
-    { cwd: '.', cols: 80, rows: 24, env: {} },
+    { cwd: '.', cols: 80, rows: 24, env: {}, ...(screen ? { screen } : {}) },
     (text, bytes) => output.push({ text, bytes }),
     () => {},
     spawn,
@@ -87,6 +87,32 @@ test('native terminal forwards exact UTF-8 data with bounded frames and pauses u
   assert.equal(f.output.map((frame) => frame.text).join(''), text);
 });
 
+test('a terminal that keeps running shows its current screen to a client that attaches, then the live output', async () => {
+  let detached = 0;
+  const f = fixture({ detached: () => detached++ });
+  f.data('\x1b[?1049h\x1b[>1u第一屏');
+  f.terminal.detach();
+  f.data('\r\n看不到的时候');
+  assert.deepEqual(
+    f.output.map((frame) => frame.text),
+    ['\x1b[?1049h\x1b[>1u第一屏'],
+  );
+  f.output.length = 0;
+  await f.terminal.attach(100, 30);
+  assert.deepEqual(f.sizes, [[100, 30]]);
+  const [snapshot] = f.output;
+  assert.ok(snapshot.text.startsWith('\x1b[?25h'));
+  assert.ok(snapshot.text.includes('第一屏') && snapshot.text.includes('看不到的时候'));
+  assert.ok(snapshot.text.includes('\x1b[>1u'));
+  f.data('之后');
+  assert.equal(f.output.at(-1)!.text, '之后');
+  // Acknowledgments of what was sent before an attach may still come; they do not fail the terminal.
+  f.terminal.acknowledge(10 ** 6);
+  assert.equal(f.terminal.outstanding, 0);
+  assert.equal(detached, 0);
+  await f.terminal.close();
+});
+
 test('control terminal launches the official CLI directly with remote guidance and no shell, MCP or bypass', () => {
   const args = terminalArguments(
     { executable: '/native/claude', model: 'provider', settingsPath: '/private/provider.json' },
@@ -117,6 +143,37 @@ test('control terminal launches the official CLI directly with remote guidance a
     )[1],
     'bypassPermissions',
   );
+});
+
+test('a terminal that continues its session resumes or creates it under the session ID, with its own settings', () => {
+  const session = {
+    id: '11111111-2222-4333-8444-555555555555',
+    projectPath: 'D:\\test',
+    permissionMode: 'auto',
+  } as Session;
+  const options = { executable: 'claude', settingsPath: '/private/provider.json' };
+  const resumed = terminalArguments(
+    options,
+    session,
+    { configPath: '/ssh' },
+    { resume: true, settingsPath: '/t.json' },
+  );
+  assert.deepEqual(resumed.slice(0, 2), ['--resume', session.id]);
+  assert.deepEqual(resumed.slice(-2), ['--settings', '/t.json']);
+  assert.ok(!resumed.includes('/private/provider.json'));
+  const created = terminalArguments(options, session, undefined, {
+    resume: false,
+    settingsPath: '/t.json',
+  });
+  assert.deepEqual(created.slice(0, 2), ['--session-id', session.id]);
+});
+
+test('a terminal never passes for an SDK process, whatever the service inherited', () => {
+  const env = terminalEnvironment(
+    { executable: 'claude', environment: { CLAUDE_AGENT_SDK_VERSION: '0.3.286' } },
+    { CLAUDE_CODE_ENTRYPOINT: 'sdk-ts', CLAUDE_AGENT_SDK_CLIENT_APP: 'x', LANG: 'C.UTF-8' },
+  );
+  assert.deepEqual(Object.keys(env).sort(), ['LANG', 'TERM']);
 });
 
 test('terminal provider environment stays inside the child process and does not mutate the proxy', (t) => {

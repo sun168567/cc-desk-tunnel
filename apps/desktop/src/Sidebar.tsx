@@ -21,15 +21,19 @@ import { ago, folderName, isInside, pathKey } from './paths.ts';
 import { setPrefs, toggled, usePrefs } from './prefs.ts';
 import { useConnectionName } from './shared.ts';
 import { IconButton } from './ui.tsx';
+import { terminalState } from './RunStatus.tsx';
 import type { MenuPosition } from './ui.tsx';
 
 function activity(session: Session) {
   if (!session.activeRun) return ago(Date.parse(session.updatedAt));
-  if (session.activeRun.surface === 'terminal') return '原生终端';
+  if (session.activeRun.surface === 'terminal') return terminalState(session.activeRun.activity);
   if (session.activeRun.waiting === 'background') return '后台任务';
   if (session.activeRun.status !== 'awaiting_approval') return '运行中';
   return session.activeRun.waiting === 'question' ? '等待回答' : '等待审批';
 }
+
+const breathing = (run: NonNullable<Session['activeRun']>) =>
+  run.activity ? run.activity === 'working' : run.status !== 'awaiting_approval';
 
 // A list of sessions shows its latest few until it is listed in full.
 const PAGE = 5;
@@ -275,9 +279,7 @@ export default function Sidebar({
         >
           <strong>{session.title}</strong>
           {session.activeRun && (
-            <span
-              className={`running-dot${session.activeRun.status === 'awaiting_approval' ? '' : ' breathing'}`}
-            />
+            <span className={`running-dot${breathing(session.activeRun) ? ' breathing' : ''}`} />
           )}
           <small>{activity(session)}</small>
         </button>
