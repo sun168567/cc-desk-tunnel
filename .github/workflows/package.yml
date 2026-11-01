@@ -31,14 +31,14 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       # Electron and the packaging tools, kept from one run to the next: they are fetched from release pages
       # that now and then time out, and change only with the versions the lock file names.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/AppData/Local/electron/Cache
@@ -58,7 +58,7 @@ jobs:
       # Ends with the packaged program started offline; a package that does not start fails here.
       - run: npm run package:windows || (sleep 60 && npm run package:windows)
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x64
           path: artifacts/windows/*.exe
@@ -76,7 +76,7 @@ jobs:
           ccdt --version
           if ($LASTEXITCODE) { throw 'The installed ccdt did not start.' }
         shell: pwsh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-windows-x64
           path: artifacts/cli/*.zip
@@ -94,14 +94,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       # Electron and the packaging tools, kept from one run to the next: they are fetched from release pages
       # that now and then time out, and change only with the versions the lock file names.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/AppData/Local/electron/Cache
@@ -119,7 +119,7 @@ jobs:
         shell: bash
         env:
           SMOKE_SCREENSHOT: artifacts/macos/window-${{ matrix.arch }}.png
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}
           path: |
@@ -129,14 +129,14 @@ jobs:
           retention-days: 3
       - run: npm run package:cli && tar -xzf artifacts/cli/*.tar.gz -C "$RUNNER_TEMP" && "$RUNNER_TEMP/ccdt/install.sh" && ~/.local/bin/ccdt --version
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-macos-${{ matrix.arch }}
           path: artifacts/cli/*.tar.gz
           if-no-files-found: error
           retention-days: 3
       # By itself, so that it can be looked at without fetching the package.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-window
           path: artifacts/macos/*.png
@@ -148,15 +148,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb imagemagick
       # Electron and the packaging tools, kept from one run to the next: they are fetched from release pages
       # that now and then time out, and change only with the versions the lock file names.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/AppData/Local/electron/Cache
@@ -176,7 +176,7 @@ jobs:
       - run: xvfb-run -a -s "-screen 0 1280x900x24" node scripts/smoke-posix-package.mjs "/opt/CC Desk Tunnel/cc-desk-tunnel"
         env:
           SMOKE_SCREENSHOT: artifacts/linux/window-x64.png
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-x64
           path: artifacts/linux/*.deb
@@ -184,13 +184,13 @@ jobs:
           retention-days: 3
       - run: npm run package:cli && tar -xzf artifacts/cli/*.tar.gz -C "$RUNNER_TEMP" && "$RUNNER_TEMP/ccdt/install.sh" && ~/.local/bin/ccdt --version
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-linux-x64
           path: artifacts/cli/*.tar.gz
           if-no-files-found: error
           retention-days: 3
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-x64-window
           path: artifacts/linux/*.png
@@ -201,8 +201,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -211,7 +211,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       - run: npm run package:cli && tar -xzf artifacts/cli/*.tar.gz -C "$RUNNER_TEMP" && "$RUNNER_TEMP/ccdt/install.sh" && ~/.local/bin/ccdt --version
         shell: bash
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-linux-arm64
           path: artifacts/cli/*.tar.gz
@@ -221,8 +221,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: npm ci --include=dev --workspace=@cc-desk-tunnel/desktop --workspace=@cc-desk-tunnel/protocol
@@ -232,7 +232,7 @@ jobs:
           version="$(node -p "require('./apps/desktop/package.json').version")"
           mkdir -p artifacts/server
           node scripts/package-server.mjs "artifacts/server/cc-desk-tunnel-server-$version.tar.gz"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: server
           path: artifacts/server/*.tar.gz
@@ -249,11 +249,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: '{windows-x64,macos-arm64,macos-x64,linux-x64,server,cli-*}'
           merge-multiple: true

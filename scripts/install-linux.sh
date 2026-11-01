@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NODE_VERSION=v24.21.0
+NODE_VERSION=v24.22.2
 CLAUDE_VERSION=2.1.293
 RUNTIME="${CC_DESK_TUNNEL_RUNTIME:-$HOME/.local/share/cc-desk-tunnel/runtime}"
 case "$(uname -m)" in
