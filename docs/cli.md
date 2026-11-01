@@ -30,7 +30,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 **升级**：服务端升级后，下载同一版本的包，再运行一次安装脚本。版本不一致时 `ccdt` 会拒绝连接，并给出该下载的版本。
 
-**卸载**：删除安装目录（Windows 还要从用户 PATH 去掉它；macOS、Linux 还有 `~/.local/bin/ccdt`）。设置与保存的登录在 `%APPDATA%\ccdt`（Windows）、`~/Library/Application Support/ccdt`（macOS）或 `~/.config/ccdt`（Linux）。
+**卸载**：删除安装目录（Windows 还要从用户 PATH 去掉它；macOS、Linux 还有 `~/.local/bin/ccdt`）。设置与保存的登录在 `%APPDATA%\ccdt`（Windows）、`~/Library/Application Support/ccdt`（macOS）或 `~/.config/ccdt`（Linux）。设置里有这台电脑的设备 ID（装有图形客户端时用它的）：删掉设置再登录，服务端会把它当作另一台电脑，原来在这台电脑上的会话要在图形客户端里接到本机才能继续用。升级或重新安装不会动设置。
 
 ## 登录
 

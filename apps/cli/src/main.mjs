@@ -190,8 +190,15 @@ async function show(config, values, service, session, fresh) {
     return 1;
   }
   for (;;) {
-    await service.channel();
-    const result = await relay(service, session.id, shown);
+    let result;
+    try {
+      await service.channel();
+      result = await relay(service, session.id, shown);
+    } catch (error) {
+      // Nothing to show, such as a terminal the service would not open: the connection is let go, for ccdt to end.
+      await service.close().catch(() => {});
+      throw error;
+    }
     log(`Terminal shown no longer: ${result.how}.`);
     if (result.how === 'exited') {
       await service.close();
@@ -242,6 +249,7 @@ export async function main(argv) {
   const { values, positionals } = parsed;
   const [command, ...rest] = positionals;
   const config = new Config();
+  let service;
   try {
     if (values.help || command === 'help') return (say(HELP), 0);
     if (values.version) return (process.stdout.write(`ccdt ${version}\n`), 0);
@@ -255,7 +263,7 @@ export async function main(argv) {
     }
     if (command && !['new', 'open', 'sessions', 'usage'].includes(command))
       return (say(`没有这个命令：${command}\n\n${HELP}`), 2);
-    const service = await signIn(config, values);
+    service = await signIn(config, values);
     const here = process.cwd();
     const all = [...service.sessions.values()];
     const mine = all.filter((session) => sameDirectory(session.projectPath, here));
@@ -323,6 +331,7 @@ export async function main(argv) {
     }
     return await show(config, values, service, session, fresh);
   } catch (error) {
+    await service?.close().catch(() => {});
     say(error instanceof Error ? error.message : String(error));
     // ccdt speaks the protocol of its own release, as the desktop client does.
     if (error.code === 'version_mismatch' && error.service)
