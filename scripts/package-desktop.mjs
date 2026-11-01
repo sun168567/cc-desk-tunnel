@@ -14,7 +14,7 @@ import { build as viteBuild } from 'vite';
 // A package the program loads by name while it runs, copied with what it depends on. Compiled add-ons are
 // left out: they are optional speed-ups built for the Node of the machine that installed them, not for the
 // Electron of the package, and the package falls back to its JavaScript.
-function copyDependency(root, app, name, copied = new Set()) {
+export function copyDependency(root, app, name, copied = new Set()) {
   if (copied.has(name)) return;
   copied.add(name);
   const source = dirname(createRequire(join(root, 'package.json')).resolve(`${name}/package.json`));

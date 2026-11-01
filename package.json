@@ -35,6 +35,7 @@
     "package:windows": "node scripts/package-windows.mjs",
     "package:macos": "node scripts/package-macos.mjs",
     "package:linux": "node scripts/package-linux.mjs",
+    "package:cli": "node scripts/package-cli.mjs",
     "release": "node scripts/release.mjs",
     "desktop": "npm run start --workspace @cc-desk-tunnel/desktop"
   },

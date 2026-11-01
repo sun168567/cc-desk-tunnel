@@ -6,6 +6,7 @@ import { Service } from './connection.mjs';
 import { readKeys } from './keys.mjs';
 import { pick } from './picker.mjs';
 import { discard, protect, reveal } from './secret.mjs';
+import { releasePage, version } from './runtime.mjs';
 import { relay } from './terminal.mjs';
 
 const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的原版 Claude Code，与图形客户端共用会话。
@@ -20,6 +21,7 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
                          --token-stdin 从标准输入读凭据，--no-save 不保存
   ccdt logout            退出当前服务端
   ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用
+  ccdt --version         版本，须与服务端相同
 
 选项：--server <wss 地址> 在登录过的几个服务端里选一个。
 
@@ -211,6 +213,7 @@ export async function main(argv) {
         'no-save': { type: 'boolean' },
         all: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'v' },
       },
     });
   } catch (error) {
@@ -222,6 +225,7 @@ export async function main(argv) {
   const config = new Config();
   try {
     if (values.help || command === 'help') return (say(HELP), 0);
+    if (values.version) return (process.stdout.write(`ccdt ${version}\n`), 0);
     if (command === 'login') return (await login(config, values, rest[0]), 0);
     if (command === 'logout') {
       const server = config.server(values.server);
@@ -301,6 +305,9 @@ export async function main(argv) {
     return await show(config, values, service, session, fresh);
   } catch (error) {
     say(error instanceof Error ? error.message : String(error));
+    // ccdt speaks the protocol of its own release, as the desktop client does.
+    if (error.code === 'version_mismatch' && error.service)
+      say(`这个 ccdt 是 ${version}；请安装与服务端相同版本的 ccdt：${releasePage(error.service)}`);
     return 1;
   }
 }

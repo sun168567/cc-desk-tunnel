@@ -1,14 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { hostname } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 // The desktop client's connection: the same certificate checks, execution channel and SSH server for Claude's
 // commands. It relays a local WebSocket to the service, as it does for the desktop page.
 import { openProxyBridge } from '../../desktop/electron/proxy-bridge.mjs';
-
-const desktop = fileURLToPath(new URL('../../desktop/', import.meta.url));
+import { components } from './runtime.mjs';
 
 // The proxy for an address, as the desktop client gets it from the system, from the usual variables here. Only
 // HTTP CONNECT proxies are used; loopback and `no_proxy` addresses connect directly.
@@ -43,8 +41,7 @@ export class Service extends EventEmitter {
     service.bridge = await openProxyBridge(
       { url, fingerprint },
       {
-        openssh: process.env.CCDT_OPENSSH_DIR ?? `${desktop}vendor/openssh`,
-        powershell: process.env.CCDT_POWERSHELL ?? 'pwsh.exe',
+        ...components(),
         environment: {},
         log,
         resolveProxy: async (target) => proxyFor(target),
@@ -91,7 +88,12 @@ export class Service extends EventEmitter {
           resolve();
         } else if (message.type === 'connection.error') {
           this.error = message;
-          reject(Object.assign(new Error(message.message), { code: message.code }));
+          reject(
+            Object.assign(new Error(message.message), {
+              code: message.code,
+              service: message.service,
+            }),
+          );
         } else if (message.type === 'session.updated')
           this.sessions.set(message.session.id, message.session);
         else if (message.type === 'session.deleted') this.sessions.delete(message.sessionId);

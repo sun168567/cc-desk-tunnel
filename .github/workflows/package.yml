@@ -1,5 +1,5 @@
 # Builds the release files on GitHub's machines instead of a maintainer's own: the Windows installer, the
-# macOS and Linux packages and the server bundle, each client started as a check. This is where a release
+# macOS and Linux packages, the terminal client ccdt and the server bundle, each client started as a check. This is where a release
 # is built: the release script names its draft in `release`, and the files are attached to it with their
 # hashes. Nothing is signed with a certificate. Otherwise the files are kept with the run for 3 days; it
 # runs when asked for, and by itself when what does the packaging changes on a dev branch.
@@ -18,6 +18,7 @@ on:
       - scripts/release-manifest.mjs
       - scripts/smoke-posix-package.mjs
       - scripts/prepare-windows.ps1
+      - apps/cli/install/**
 permissions:
   contents: read
 concurrency:
@@ -63,6 +64,24 @@ jobs:
           path: artifacts/windows/*.exe
           if-no-files-found: error
           retention-days: 3
+      # The terminal client with the same bundled components, installed the way a user installs it and started
+      # from where it went.
+      - run: npm run package:cli
+        shell: bash
+      - run: |
+          $folder = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\ccdt"
+          tar -xf (Get-Item artifacts/cli/*.zip).FullName -C $folder
+          & "$folder\ccdt\install.ps1"
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
+          ccdt --version
+          if ($LASTEXITCODE) { throw 'The installed ccdt did not start.' }
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-windows-x64
+          path: artifacts/cli/*.zip
+          if-no-files-found: error
+          retention-days: 3
   # One package for each kind of Mac, each built and started on a machine of its own kind. The picture is of
   # the window as the system draws it there.
   macos:
@@ -106,6 +125,14 @@ jobs:
           path: |
             artifacts/macos/*.dmg
             artifacts/macos/*.zip
+          if-no-files-found: error
+          retention-days: 3
+      - run: npm run package:cli && tar -xzf artifacts/cli/*.tar.gz -C "$RUNNER_TEMP" && "$RUNNER_TEMP/ccdt/install.sh" && ~/.local/bin/ccdt --version
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-macos-${{ matrix.arch }}
+          path: artifacts/cli/*.tar.gz
           if-no-files-found: error
           retention-days: 3
       # By itself, so that it can be looked at without fetching the package.
@@ -155,6 +182,14 @@ jobs:
           path: artifacts/linux/*.deb
           if-no-files-found: error
           retention-days: 3
+      - run: npm run package:cli && tar -xzf artifacts/cli/*.tar.gz -C "$RUNNER_TEMP" && "$RUNNER_TEMP/ccdt/install.sh" && ~/.local/bin/ccdt --version
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-linux-x64
+          path: artifacts/cli/*.tar.gz
+          if-no-files-found: error
+          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x64-window
@@ -199,12 +234,12 @@ jobs:
           node-version: 24
       - uses: actions/download-artifact@v4
         with:
-          pattern: '{windows-x64,macos-arm64,macos-x64,linux-x64,server}'
+          pattern: '{windows-x64,macos-arm64,macos-x64,linux-x64,server,cli-*}'
           merge-multiple: true
           path: downloaded
       - run: |
           mkdir release
-          mv downloaded/*.exe downloaded/*.dmg downloaded/*.deb downloaded/*.tar.gz release/
+          mv downloaded/*.exe downloaded/*.dmg downloaded/*.deb downloaded/*.tar.gz downloaded/*.zip release/
           node scripts/release-manifest.mjs release
           gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY"
         env:
