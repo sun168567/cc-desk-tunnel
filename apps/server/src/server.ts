@@ -145,6 +145,7 @@ type Terminal = {
     toldElsewhere?: boolean;
   };
 };
+const INTERRUPTS = new Set(['\x1b', '\x03', '\x1b[27u', '\x1b[99;5u']);
 // One of the user's computers, while it is connected or expected back: its connections, the door its commands
 // go through, and the wait that ends its runs if it stays away.
 type Seat = {
@@ -852,7 +853,11 @@ export function createProxyServer(options: ServerOptions) {
       });
       updated(command.sessionId);
       if (current.continued)
-        watchFile(current.continued.hooksPath, { interval: 500 }, () => void heardTerminal(current));
+        watchFile(
+          current.continued.hooksPath,
+          { interval: 500 },
+          () => void heardTerminal(current),
+        );
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();
@@ -892,7 +897,7 @@ export function createProxyServer(options: ServerOptions) {
   // What the hooks of a terminal that continues its session wrote since they were last read: the session shows what
   // its CLI is doing, and what a turn added, once it ended, is recorded (see `importTerminal`). Reads go one at a time,
   // and the last, when the terminal `ended`, records what is left.
-  function heardTerminal(terminal: Terminal, ended = false) {
+  function heardTerminal(terminal: Terminal, ended = false, interrupted = false) {
     const continued = terminal.continued!;
     const task = continued.heard
       .then(async () => {
@@ -904,7 +909,9 @@ export function createProxyServer(options: ServerOptions) {
             continued.elsewhere = true;
           activity = terminalActivity(hook) ?? activity;
         }
-        if (ended || hooks.some((hook) => terminalActivity(hook) === 'idle'))
+        interrupted &&= !hooks.length && continued.activity === 'working';
+        if (interrupted) activity = 'idle';
+        if (ended || interrupted || hooks.some((hook) => terminalActivity(hook) === 'idle'))
           await importTerminal(terminal);
         if (ended || !activity || activity === continued.activity) return;
         continued.activity = activity;
@@ -920,6 +927,18 @@ export function createProxyServer(options: ServerOptions) {
       .catch(() => {});
     continued.heard = task;
     return task;
+  }
+  // A turn the user interrupts runs no hook and leaves nothing in the CLI's record (CLI 2.1.293). A key that
+  // interrupts it, typed while the CLI works, with no hook after it in a while, is taken for the end of the turn:
+  // Esc and Ctrl+C, as they arrive plain or in the kitty keyboard protocol.
+  function interruptingTerminal(terminal: Terminal, data: string) {
+    const continued = terminal.continued!;
+    if (continued.activity !== 'working' || !INTERRUPTS.has(data)) return;
+    const { offset } = continued;
+    setTimeout(() => {
+      if (continued.activity === 'working' && continued.offset === offset)
+        void heardTerminal(terminal, false, true);
+    }, 2000).unref();
   }
   // What a terminal that continued its session added to the native session since it was last looked at, recorded in
   // the session as the events of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a
@@ -1589,8 +1608,10 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     try {
-      if (control.type === 'terminal.input') current.process?.write(control.data);
-      else if (control.type === 'terminal.resize')
+      if (control.type === 'terminal.input') {
+        current.process?.write(control.data);
+        if (current.continued) interruptingTerminal(current, control.data);
+      } else if (control.type === 'terminal.resize')
         current.process?.resize(control.cols, control.rows);
       else current.process?.acknowledge(control.bytes);
     } catch {
