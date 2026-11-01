@@ -159,6 +159,10 @@ fetch_release() {
 }
 # `sudo cc-desk-tunnel COMMAND` from anywhere, for the installation managed with the default configuration.
 COMMAND_LINK="${CC_DESK_TUNNEL_COMMAND:-/usr/local/bin/cc-desk-tunnel}"
+# How the administrator runs this script: the command, where it is this installation's.
+self() {
+  if grep -qF "'$ROOT/deploy/manage.sh'" "$COMMAND_LINK" 2>/dev/null; then echo cc-desk-tunnel; else echo "bash $ROOT/deploy/manage.sh"; fi
+}
 link_command() {
   [[ "$(id -u)" = 0 && -z "${PROXY_DEPLOY_CONFIG:-}" ]] && safe_value "$ROOT" || return 0
   { printf '#!/usr/bin/env bash\n# CC Desk Tunnel management; written by the deploy/manage.sh it runs.\n'
@@ -196,7 +200,8 @@ summary() {
   echo "  1. 云防火墙只放行上面“需放行端口”一项；本项目不需要其他入站端口。"
   echo "  2. Windows 客户端填入服务地址、指纹和凭据并连接。"
   echo "  3. 在客户端账号页登录 Claude 账号。"
-  echo "  使用第三方 API 时编辑 $DATA_DIR/config/provider.json 后执行 manage.sh restart。"
+  echo "  使用第三方 API 时编辑 $DATA_DIR/config/provider.json 后执行 sudo $(self) restart。"
+  echo "  日常管理：sudo $(self) status | logs | upgrade | help"
   echo "以上凭据等同于服务器登录权限，请勿外传。"
   echo "======================================================="
 }

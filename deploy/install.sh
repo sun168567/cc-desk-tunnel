@@ -115,8 +115,8 @@ NOTICE
     echo "Windows 客户端安装包：https://github.com/$REPO/releases/latest"
   else
     echo "下一步：按需编辑 provider 配置，然后执行 sudo cc-desk-tunnel up。"
+    echo "日常管理：sudo cc-desk-tunnel status | logs | upgrade | help"
   fi
-  echo "日常管理：sudo cc-desk-tunnel status | logs | upgrade | help"
   echo "本脚本没有修改防火墙、nginx 或 SSH 配置，也没有安装系统软件。"
 }
 main "$@"
