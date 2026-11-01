@@ -169,9 +169,12 @@ async function show(config, values, service, session, fresh) {
     await service.close().catch(() => {});
     process.exit(129);
   };
-  // Windows sends SIGHUP when the console window is closed, and waits a few seconds before ending the process.
+  // Windows sends SIGHUP when the console window is closed, and waits a few seconds before ending the process. On
+  // Linux and macOS the terminal is gone with the window, and writing to it or reading from it fails, at times
+  // before the signal arrives: that is the window closing too.
   process.once('SIGHUP', close);
   process.once('SIGTERM', close);
+  for (const stream of [process.stdin, process.stdout]) stream.on('error', close);
   say(
     `${dim('项目')} ${session.projectPath}  ${dim('会话')} ${session.title}${fresh ? dim('（新建）') : ''}`,
   );
