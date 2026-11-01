@@ -75,10 +75,21 @@ The script:
 
 1. Checks for Docker, Docker Compose and a few tools. If something is missing it tells you the command to install it; it does not install system software itself.
 2. Downloads the newest server archive from this repository's releases, verifies it and unpacks it to `/opt/cc-desk-tunnel`.
-3. Asks for the public address, certificate mode, ports and data directory (every question has a default), then builds the image and starts it.
+3. Asks for the public address, certificate mode, ports and data directory (every question has a default), then pulls the image of that version and starts it.
 4. Prints what the client needs — **service address, certificate fingerprint, service token** — and the TCP port to open in the firewall (8787 by default, the only one).
 
-There is no prebuilt image yet: the image is built from source on your server, which takes a few minutes the first time. The script does not touch the firewall, nginx or SSH. Running the same command again upgrades an existing deployment. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
+The image is prebuilt on GitHub (`ghcr.io/sun168567/cc-desk-tunnel`, x86_64 or arm64 as your server needs), so installing takes a few minutes. If the server cannot reach ghcr.io, the script builds the image on the server instead, which takes a few minutes more the first time. The script does not touch the firewall, nginx or SSH.
+
+Once installed, manage the service with the `cc-desk-tunnel` command, from any directory:
+
+```sh
+sudo cc-desk-tunnel status    # is it running
+sudo cc-desk-tunnel logs      # follow the log (Ctrl+C to stop)
+sudo cc-desk-tunnel upgrade   # upgrade to the newest release; data, accounts and settings stay
+sudo cc-desk-tunnel help      # every command: new token, backup and restore, certificates
+```
+
+Usually you do not need the server for upgrades: the client's Settings → About and updates upgrades the service too. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
 
 ### 2. Install the Windows client
 

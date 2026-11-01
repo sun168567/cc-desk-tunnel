@@ -64,10 +64,21 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-t
 
 1. 检查 Docker、Docker Compose 等依赖。缺少时只告诉你安装命令，不会替你安装系统软件。
 2. 从本仓库的发布页下载最新的服务端程序包并校验，解压到 `/opt/cc-desk-tunnel`。
-3. 询问公网地址、证书方式、端口和数据目录（都有默认值，一路回车即可），然后构建镜像并启动。
+3. 询问公网地址、证书方式、端口和数据目录（都有默认值，一路回车即可），然后拉取这个版本的镜像并启动。
 4. 打印客户端要填的**服务地址、证书指纹、服务凭据**，以及需要在防火墙放行的 TCP 端口（默认 8787，只有这一个）。
 
-目前不提供现成镜像，镜像在你的服务器上从源码构建，首次需要几分钟。脚本不会修改防火墙、nginx 或 SSH 配置。再次运行同一条命令可以升级已有部署。手动安装、三种证书方式、备份恢复等见[部署操作手册](deploy/README.md)；已有 nginx 和域名时见[用 nginx 反代](deploy/nginx.md)。
+镜像是 GitHub 上预先构建好的（`ghcr.io/sun168567/cc-desk-tunnel`，x86_64 和 arm64 自动选择），几分钟内就能装好。服务器连不上 ghcr.io 时，脚本会改为在服务器上构建，首次需要多等几分钟。脚本不会修改防火墙、nginx 或 SSH 配置。
+
+装好后，日常管理用 `cc-desk-tunnel` 命令，在任何目录下都能运行：
+
+```sh
+sudo cc-desk-tunnel status    # 运行状态
+sudo cc-desk-tunnel logs      # 查看日志（Ctrl+C 退出）
+sudo cc-desk-tunnel upgrade   # 升级到最新版本；数据、账号和配置保留
+sudo cc-desk-tunnel help      # 全部命令：更换凭据、备份恢复、证书等
+```
+
+一般不需要上服务器升级：客户端的“设置 → 关于与更新”里可以直接升级服务端。手动安装、三种证书方式、备份恢复等见[部署操作手册](deploy/README.md)；已有 nginx 和域名时见[用 nginx 反代](deploy/nginx.md)。
 
 ### 2. 安装 Windows 客户端
 

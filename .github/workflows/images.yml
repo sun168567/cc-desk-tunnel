@@ -1,0 +1,132 @@
+# The server image of a release, for amd64 and arm64: each is built on its own architecture, deployed the ways
+# deploy/test.sh and deploy/test-image.sh go through, and only then pushed; the two become one tag,
+# ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z. The package workflow runs this for a release. By hand, an empty tag only
+# builds and tests, and a tag verify-NAME publishes a test image apart from the released ones.
+name: images
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Empty to build and test only; vX.Y.Z for the release of this version; verify-NAME for a test image
+        default: ''
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: images-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: meta
+        env:
+          REQUESTED: ${{ inputs.tag }}
+        run: |
+          version="$(node -p "require('./apps/desktop/package.json').version")"
+          tag="${REQUESTED#v}"
+          if [[ "$REQUESTED" == verify-* ]]; then
+            tag="$REQUESTED"
+            [[ "$tag" =~ ^verify-[a-zA-Z0-9_.-]+$ ]]
+          elif [[ -n "$tag" && "$tag" != "$version" ]]; then
+            echo "The tag $REQUESTED is not this commit's version $version." >&2
+            exit 1
+          fi
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          load: true
+          tags: cc-desk-tunnel:local
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=image-${{ matrix.arch }}
+      - run: sudo bash deploy/test.sh
+      - run: sudo bash deploy/test-image.sh
+      - if: needs.prepare.outputs.tag != ''
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The same build again, every step from the cache, pushed by its digest alone: no tag is left behind for
+      # each architecture, and the release tag is made from the two digests below.
+      - if: needs.prepare.outputs.tag != ''
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+      - if: needs.prepare.outputs.tag != ''
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: echo "$DIGEST" > "digest-${{ matrix.arch }}.txt"
+      - if: needs.prepare.outputs.tag != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digest-*.txt
+          retention-days: 3
+  publish:
+    if: needs.prepare.outputs.tag != ''
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: digests
+      - env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          target="$IMAGE:$TAG"
+          # A released tag is never moved. Run again for the same commit, it is checked and left as it is.
+          if [[ "$TAG" != verify-* ]] && docker buildx imagetools inspect "$target" > /dev/null 2>&1; then
+            for arch in amd64 arm64; do
+              docker pull --platform "linux/$arch" "$target"
+              test "$(docker inspect --format '{{.Architecture}}' "$target")" = "$arch"
+              test "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$target")" = "$GITHUB_SHA"
+            done
+          else
+            docker buildx imagetools create --tag "$target" $(sed "s|^|$IMAGE@|" digests/digest-*.txt)
+          fi
+          docker buildx imagetools inspect "$target"
+          # Deployments pull without logging in. The package is public; this fails if it ever is not.
+          mkdir -p /tmp/anonymous
+          DOCKER_CONFIG=/tmp/anonymous docker manifest inspect "$target" > /dev/null

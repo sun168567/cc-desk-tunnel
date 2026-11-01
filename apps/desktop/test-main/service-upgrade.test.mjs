@@ -52,7 +52,7 @@ test('a newer client signs in to an older service with its protocol version and 
 });
 
 test('a service that cannot upgrade from here says why', async () => {
-  assert.match((await upgrade('manual')).result.message, /manage\.sh upgrade/);
+  assert.match((await upgrade('manual')).result.message, /cc-desk-tunnel upgrade/);
   assert.match((await upgrade('idle')).result.message, /没有找到/);
   assert.match((await upgrade('available', '0.1.0')).result.message, /太旧/);
 });
