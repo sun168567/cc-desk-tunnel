@@ -363,6 +363,16 @@ export class SessionStore {
       )
       .get(sessionId);
   }
+  // The session's last reading of its native state.
+  lastMetrics(sessionId: string) {
+    const row = this.database
+      .prepare(
+        "SELECT data FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') = 'native.metrics' ORDER BY sequence DESC LIMIT 1",
+      )
+      .get(sessionId);
+    const payload = row ? (JSON.parse(String(row.data)) as SessionEvent).payload : undefined;
+    return payload?.type === 'native.metrics' ? payload : null;
+  }
   userMessage(sessionId: string, messageId: string) {
     const row = this.database
       .prepare(

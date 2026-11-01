@@ -73,6 +73,7 @@ export class RequestInterruptedError extends Error {
       'account.status',
       'usage.summary',
       'usage.query',
+      'quota.watch',
       'session.stats',
       'settings.get',
       'instructions.get',

@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import type { Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import {
   nativeCapabilities,
-  nativeContextRefresh,
   nativeMetrics,
   loginOf,
   observedQuota,
   ObservedQuotas,
+  Quotas,
   unexpired,
   resultUsage,
 } from '../src/native-controls.ts';
@@ -184,40 +184,65 @@ test('native additive quota arrays cannot hide all account and context metrics',
   assert.equal(metrics.rateLimits?.windows[0].utilization, 3);
 });
 
-test('a mid-turn refresh updates only context and keeps the last native quota reading', async () => {
-  let usageReads = 0,
-    total = 1000;
+test('the service reads the quota once a minute for every run under a login, and only while it is wanted', async () => {
+  let reads = 0,
+    spent = 0;
+  let answer = () => {};
   const query = {
     async getContextUsage() {
-      return {
-        model: 'opus',
-        totalTokens: total,
-        rawMaxTokens: 10000,
-        percentage: total / 100,
-        categories: [],
-      };
+      throw new Error('unsupported');
     },
     async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET() {
-      usageReads++;
+      reads++;
+      await new Promise<void>((resolve) => (answer = resolve));
       return {
         rate_limits_available: true,
         rate_limits: { five_hour: { utilization: 24, resets_at: '2026-10-05T20:20:00Z' } },
+        session: { total_cost_usd: ++spent, model_usage: {} },
       };
     },
   } as unknown as Query;
-  const first = await nativeMetrics(query);
-  assert.ok(first.type === 'native.metrics');
-  total = 4000;
-  const refreshed = await nativeContextRefresh(query, first);
-  assert.equal(refreshed?.context?.usedTokens, 4000);
-  assert.deepEqual(refreshed?.rateLimits, first.rateLimits);
-  assert.equal(usageReads, 1);
-  const failing = {
-    async getContextUsage() {
-      throw new Error('busy');
-    },
-  } as unknown as Query;
-  assert.equal(await nativeContextRefresh(failing, first), null);
+  // The CLI is asked a moment after the read starts.
+  const settle = async () => {
+    await new Promise((resolve) => setImmediate(resolve));
+    answer();
+  };
+  const quotas = new Quotas(60_000);
+  const first = quotas.through('a', query, { now: 0 });
+  const joined = quotas.through('a', query, { now: 10, asked: true });
+  await settle();
+  assert.equal((await first).usage?.session?.total_cost_usd, 1);
+  assert.equal((await joined).usage, undefined, 'a read under way is waited for, not repeated');
+  assert.equal((await joined).rateLimits?.windows[0]?.utilization, 24);
+  assert.equal((await quotas.through('a', query, { now: 30_000 })).usage, undefined);
+  assert.equal(reads, 1, 'one read a minute serves every run');
+  const other = quotas.through('b', query, { now: 30_000 });
+  await settle();
+  await other;
+  assert.equal(reads, 2, 'another login has its own');
+  quotas.wanted = () => false;
+  assert.equal((await quotas.through('a', query, { now: 120_000 })).usage, undefined);
+  assert.equal(reads, 2, 'no client wants it kept current');
+  const asked = quotas.through('a', query, { now: 120_000, asked: true });
+  await settle();
+  assert.ok((await asked).usage, 'the user asked');
+  assert.equal(reads, 3);
+  // Totals come only with this CLI's own answer; otherwise the session keeps those it had.
+  const previous = {
+    costUsd: 9,
+    inputTokens: 1,
+    outputTokens: 1,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    measuredAt: '2026-10-03T00:00:00Z',
+  };
+  const kept = await nativeMetrics(query, undefined, {
+    quota: (query) => quotas.through('a', query, { now: 130_000 }),
+    previous,
+  });
+  assert.ok(kept.type === 'native.metrics');
+  assert.deepEqual(kept.usage, previous);
+  assert.equal(kept.rateLimits?.windows[0]?.utilization, 24);
 });
 
 test('a resolved native model remains native instead of appearing as provider configuration', () => {
@@ -432,7 +457,7 @@ test('another login, an API key or a different account, is told apart from the o
   );
 });
 
-test('the observed quota stands in only when the CLI says the plan quota does not apply', async () => {
+test('what the replies carry stands in where the quota is not read or does not apply', async () => {
   const query = (available: boolean) =>
     ({
       async getContextUsage() {
@@ -447,37 +472,34 @@ test('the observed quota stands in only when the CLI says the plan quota does no
         };
       },
     }) as unknown as Query;
-  const later = Math.floor(Date.now() / 1000) + 3600;
-  const observed = observedQuota(
-    rateLimitEvent({
-      status: 'allowed',
-      unifiedWindows: { five_hour: { utilization: 0.02, resetsAt: later } },
-    }),
-    null,
-    0,
-  );
-  const filled = await nativeMetrics(query(false), undefined, { observed });
-  assert.ok(filled.type === 'native.metrics');
-  assert.deepEqual(filled.rateLimits, { available: true, ...observed });
+  const now = Date.now();
+  const later = Math.floor(now / 1000) + 3600;
+  const event = (utilization: number, resetsAt = later) =>
+    rateLimitEvent({ status: 'allowed', unifiedWindows: { five_hour: { utilization, resetsAt } } });
+  // Not read: only what the replies carried, or nothing.
+  const passive = new Quotas();
+  passive.wanted = () => false;
+  assert.equal((await passive.through('a', query(true), { now })).rateLimits, null);
+  passive.observe('a', event(0.02), now);
+  const carried = (await passive.through('a', query(true), { now })).rateLimits;
+  assert.deepEqual(carried?.windows, [
+    { name: 'five_hour', utilization: 2, resetsAt: new Date(later * 1000).toISOString() },
+  ]);
+  // The CLI says the plan quota does not apply, as with a long-lived token: the replies stand in.
+  const token = new Quotas();
+  token.observe('a', event(0.02), now);
+  assert.equal((await token.through('a', query(false), { now })).rateLimits?.available, true);
   // A reading whose windows have all reset leaves the native answer as it is.
-  const stale = await nativeMetrics(query(false), undefined, {
-    observed: observedQuota(
-      rateLimitEvent({
-        status: 'allowed',
-        unifiedWindows: { five_hour: { utilization: 0.9, resetsAt: later - 7200 } },
-      }),
-      null,
-      0,
-    ),
-  });
-  assert.ok(stale.type === 'native.metrics');
-  assert.equal(stale.rateLimits?.available, false);
-  const native = await nativeMetrics(query(true), undefined, { observed });
-  assert.ok(native.type === 'native.metrics');
-  assert.deepEqual(native.rateLimits?.windows, [
+  const stale = new Quotas();
+  stale.observe('a', event(0.9, later - 7200), now);
+  assert.equal((await stale.through('a', query(false), { now })).rateLimits?.available, false);
+  // A recent read stands over the replies; an old one gives way to newer replies.
+  const read = new Quotas();
+  read.observe('a', event(0.02), now);
+  assert.deepEqual((await read.through('a', query(true), { now })).rateLimits?.windows, [
     { name: 'five_hour', utilization: 7, resetsAt: '2026-10-03T02:00:00Z' },
   ]);
-  const none = await nativeMetrics(query(false));
-  assert.ok(none.type === 'native.metrics');
-  assert.equal(none.rateLimits?.available, false);
+  read.observe('a', event(0.5), now + 300_000);
+  read.wanted = () => false;
+  assert.equal(read.of('a', now + 300_000)?.windows[0]?.utilization, 50);
 });

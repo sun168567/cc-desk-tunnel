@@ -19,7 +19,8 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
-import { IconButton } from './ui.tsx';
+import { IconButton, Switch } from './ui.tsx';
+import { setPrefs, usePrefs } from './prefs.ts';
 import { copyText } from './copy.tsx';
 
 export default function AccountPanel({
@@ -42,6 +43,7 @@ export default function AccountPanel({
   refresh: () => void;
 }) {
   const account = capabilities?.account;
+  const { quotaReads } = usePrefs();
   const [working, setWorking] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -315,6 +317,19 @@ export default function AccountPanel({
               (metrics?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
           </p>
         )}
+        <div className="quota-live">
+          <span>
+            运行中每分钟读取一次额度
+            <small>
+              关闭后只记录回复里自带的额度，上方的刷新仍会读取；与“常规”里的是同一个设置
+            </small>
+          </span>
+          <Switch
+            label="运行中每分钟读取一次额度"
+            checked={quotaReads}
+            onChange={(value) => setPrefs((prefs) => ({ ...prefs, quotaReads: value }))}
+          />
+        </div>
         <h2 className="account-section-title">
           <ShieldCheck />
           当前会话

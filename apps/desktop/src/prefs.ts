@@ -44,6 +44,9 @@ export type Prefs = {
   stats: { enabled: boolean; summary: Record<string, boolean> };
   // Whether the quota used is shown beside the message box.
   quota: boolean;
+  // Whether the service is to keep the plan quota current while runs go on, reading it once a minute; off, the
+  // quota shown is what the replies carry (see `quota.watch`).
+  quotaReads: boolean;
   // How much of the work behind a reply is shown.
   view: TranscriptView;
   // The strip under the input box with the whole session's figures; chosen the same way.
@@ -74,6 +77,7 @@ const defaults: Prefs = {
   bypassPermissions: false,
   stats: { enabled: false, summary: {} },
   quota: false,
+  quotaReads: true,
   view: defaultView,
   sessionBar: { enabled: false, summary: {} },
   theme: 'system',
@@ -121,6 +125,7 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
       ) as ConnectionWaits,
       bypassPermissions: saved.bypassPermissions === true,
       quota: saved.quota === true,
+      quotaReads: saved.quotaReads !== false,
       view: {
         mode: viewModes.find((entry) => entry.mode === saved.view?.mode)?.mode ?? defaultView.mode,
       },

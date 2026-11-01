@@ -483,7 +483,7 @@ function General({
   chooseWorkspace: (reset: boolean) => void;
 }) {
   const [closeToTray, setCloseToTray] = useState<boolean | null>(null);
-  const { connection, bypassPermissions, quota } = usePrefs();
+  const { connection, bypassPermissions, quota, quotaReads } = usePrefs();
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
   }, []);
@@ -493,6 +493,19 @@ function General({
         <h1 className="page-title">常规</h1>
         <ThemeSettings />
         {web && <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />}
+        <h2 className="page-heading">额度</h2>
+        <div className="card">
+          <Row
+            title="运行中每分钟读取一次额度"
+            detail="让服务端在有任务运行时每分钟向官方读取一次 5 小时与每周额度，同一账号的各会话、各设备共用这一次读取。关闭后只记录 Claude 回复里自带的额度，不另发请求；“账号与额度”里的刷新仍会读取。所有连接的客户端都关闭时，服务端才停止读取"
+          >
+            <Switch
+              label="运行中每分钟读取一次额度"
+              checked={quotaReads}
+              onChange={(value) => setPrefs((prefs) => ({ ...prefs, quotaReads: value }))}
+            />
+          </Row>
+        </div>
         {!window.desktop && !browser && (
           <p className="muted">窗口、会话和连接的设置只在桌面客户端里有。</p>
         )}

@@ -12,13 +12,7 @@ import type {
 import { deviceTerms } from './device-terms.ts';
 import { ClaudeStream } from './claude-stream.ts';
 import type { SshConnection } from './tunnel.ts';
-import {
-  loginOf,
-  nativeCapabilities,
-  nativeContextRefresh,
-  nativeMetrics,
-  ObservedQuotas,
-} from './native-controls.ts';
+import { loginOf, nativeCapabilities, nativeMetrics, Quotas } from './native-controls.ts';
 import type { NativeInput } from './native-input.ts';
 import { readNativeSettings } from './native-settings.ts';
 import { questionTally } from './question.ts';
@@ -79,15 +73,18 @@ export type ClaudeRun = {
   // Filled in while the CLI is running, so the service can ask it for fresh account quota mid-run and end
   // one of its background tasks.
   controls: {
-    refresh?: () => Promise<void>;
+    // `asked`: the user asked on the account page, which reads the quota anew.
+    refresh?: (asked?: boolean) => Promise<void>;
     stopTask?: (taskId: string) => Promise<void>;
     backgroundTask?: (toolId: string) => Promise<boolean>;
   };
 };
-// The plan quota the CLI last passed on in its message stream. One account serves every session, so the reading of
-// any of them stands for all those signed in the same way, and a session that has not made a request yet shows the
-// last one known.
-const observed = new ObservedQuotas();
+// The plan quota, held by login for every session and device; the service tells it which clients want it current.
+export const quotas = new Quotas();
+const quotaOf =
+  (login: string, asked = false) =>
+  (query: Query) =>
+    quotas.through(login, query, { asked });
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
 export function remotePrompt(
   projectPath: string,
@@ -255,16 +252,15 @@ export async function runClaude(
     let metrics: NativeMetrics | undefined;
     let refresh: Promise<void> | undefined;
     let refreshedAt = 0;
-    let quotaAt = Date.now();
     const running = session;
     run.controls.stopTask = (taskId) => running.stopTask(taskId);
     run.controls.backgroundTask = (toolId) => running.backgroundTasks(toolId);
-    run.controls.refresh = async () => {
+    run.controls.refresh = async (asked) => {
       const payload = await nativeMetrics(running, undefined, {
-        observed: observed.of(login),
+        quota: quotaOf(login, asked),
+        previous: metrics?.usage,
       });
       if (payload.type === 'native.metrics') metrics = payload;
-      quotaAt = Date.now();
       if (!run.signal.aborted) run.emit(payload);
     };
     // Background Bash tasks and subagents live in the CLI process, and the completion of one starts a turn of
@@ -277,7 +273,7 @@ export async function runClaude(
     // What each background task last said of itself, and when it was passed on.
     const progress = new Map<string, { said: string; at: number }>();
     for await (const message of session) {
-      if (message.type === 'rate_limit_event') observed.observe(login, message);
+      if (message.type === 'rate_limit_event') quotas.observe(login, message);
       if (message.type === 'system' && message.subtype === 'init') {
         terminal = message.terminal_slash_commands ?? [];
         offer();
@@ -347,14 +343,11 @@ export async function runClaude(
         Date.now() - refreshedAt >= 5000
       ) {
         refreshedAt = Date.now();
-        // Quota moves slowly; a long turn rereads it once a minute and the context every few seconds.
-        const full = !metrics || refreshedAt - quotaAt >= 60000;
-        if (full) quotaAt = refreshedAt;
-        refresh = (
-          full
-            ? nativeMetrics(session, undefined, { observed: observed.of(login) })
-            : nativeContextRefresh(session, metrics!)
-        )
+        // The quota comes as the service holds it, which reads it anew only when due (see `Quotas`).
+        refresh = nativeMetrics(session, undefined, {
+          quota: quotaOf(login),
+          previous: metrics?.usage,
+        })
           .then(
             (payload) => {
               if (payload?.type !== 'native.metrics' || !payload.context || run.signal.aborted)
@@ -398,9 +391,7 @@ export async function runClaude(
         promptIds = [];
         if (!run.signal.aborted) {
           try {
-            const payload = await nativeMetrics(session, message, {
-              observed: observed.of(login),
-            });
+            const payload = await nativeMetrics(session, message, { quota: quotaOf(login) });
             if (payload.type === 'native.metrics') metrics = payload;
             run.emit(payload);
           } catch {
@@ -465,6 +456,8 @@ export async function readNativeStatus(
   nativeRoot: string,
   sessionId: string,
   signal: AbortSignal,
+  // The user asked on the account page; `previous` is the session's last totals, kept if no new ones come.
+  { asked = false, previous = null }: { asked?: boolean; previous?: NativeMetrics['usage'] } = {},
 ) {
   const cwd = prepareNativeDirectory(options, dataDir, nativeRoot);
   const saved = await getSessionInfo(sessionId, { dir: cwd });
@@ -510,7 +503,7 @@ export async function readNativeStatus(
         initialized.commands,
         options.model,
       ),
-      await nativeMetrics(process, undefined, { observed: observed.of(login) }),
+      await nativeMetrics(process, undefined, { quota: quotaOf(login, asked), previous }),
     ];
   } finally {
     clearTimeout(timer);

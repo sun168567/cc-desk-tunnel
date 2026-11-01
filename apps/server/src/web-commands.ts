@@ -21,6 +21,7 @@ export const browserCommands = new Set<Command['type']>([
   'terminal.close',
   'usage.summary',
   'usage.query',
+  'quota.watch',
   'account.status',
   'web.settings.get',
   'web.settings.update',
