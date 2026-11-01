@@ -117,8 +117,11 @@ export type Run = {
 type Terminal = {
   id: string;
   sessionId: string;
-  owner: Peer;
+  // The connection showing it. A terminal that continues its session goes on with none, until `TERMINAL_IDLE_MS`.
+  owner?: Peer;
+  device: string;
   process?: NativeTerminal;
+  idle?: ReturnType<typeof setTimeout>;
   // A terminal that continues its session: what the native session held when it opened, and its own files.
   continued?: { known: Set<string>; settingsPath: string; hooksPath: string; openedAt: string };
 };
@@ -161,6 +164,8 @@ export type ServerOptions = {
 const REMEMBERED = 256;
 // How much unfinished output a run holds before recording it, in characters.
 const OPEN_LIMIT = 64 * 1024;
+// How long a terminal that continues its session runs on with no one showing it.
+const TERMINAL_IDLE_MS = 30 * 60_000;
 // What the "continue" button sends in the user's place. The turn before it was stopped or cut off, and a
 // command that was under way then may or may not have taken effect.
 const CONTINUE =
@@ -704,6 +709,9 @@ export function createProxyServer(options: ServerOptions) {
   // The terminal occupies its session like a run does, so other connections see it as busy.
   async function openTerminal(peer: Peer, command: CommandOf<'terminal.open'>, session: Session) {
     if (!options.claude) throw new DomainError('native_unavailable', '离线模拟不启动原生终端。');
+    const running = terminals.get(command.sessionId);
+    if (running?.continued && running.process && command.continueSession)
+      return attachTerminal(peer, running, command);
     if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
       throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
     const device = target(peer, session);
@@ -711,7 +719,12 @@ export function createProxyServer(options: ServerOptions) {
     if (!ssh && device !== serverDevice.id)
       throw new DomainError('execution_offline', '本机的执行通道尚未就绪。');
     room();
-    const current: Terminal = { id: randomUUID(), sessionId: command.sessionId, owner: peer };
+    const current: Terminal = {
+      id: randomUUID(),
+      sessionId: command.sessionId,
+      owner: peer,
+      device,
+    };
     terminals.set(current.sessionId, current);
     try {
       const { NativeTerminal, terminalArguments, terminalEnvironment } =
@@ -754,9 +767,11 @@ export function createProxyServer(options: ServerOptions) {
           cols: command.cols,
           rows: command.rows,
           env: terminalEnvironment(options.claude),
+          ...(current.continued ? { screen: { detached: () => detachTerminal(current) } } : {}),
         },
         (data, bytes) =>
-          send(peer, {
+          current.owner &&
+          send(current.owner, {
             type: 'terminal.data',
             sessionId: current.sessionId,
             terminalId: current.id,
@@ -765,6 +780,7 @@ export function createProxyServer(options: ServerOptions) {
           }),
         async (exitCode) => {
           if (terminals.get(current.sessionId) !== current) return;
+          clearTimeout(current.idle);
           if (current.continued) await recordTerminal(current).catch(() => {});
           store.append(current.sessionId, current.id, {
             type: 'run.status',
@@ -773,12 +789,13 @@ export function createProxyServer(options: ServerOptions) {
             connectionId: peer.id,
           });
           updated(current.sessionId);
-          send(peer, {
-            type: 'terminal.closed',
-            sessionId: current.sessionId,
-            terminalId: current.id,
-            exitCode,
-          });
+          if (current.owner)
+            send(current.owner, {
+              type: 'terminal.closed',
+              sessionId: current.sessionId,
+              terminalId: current.id,
+              exitCode,
+            });
           terminals.delete(current.sessionId);
         },
       );
@@ -799,6 +816,30 @@ export function createProxyServer(options: ServerOptions) {
       if (terminals.get(current.sessionId) === current) terminals.delete(current.sessionId);
       throw new DomainError('terminal_failed', '原生终端启动失败，请检查 Linux PTY 组件与 CLI。');
     }
+  }
+  // Another look at a terminal that keeps running. The connection that showed it is told it no longer does.
+  async function attachTerminal(
+    peer: Peer,
+    terminal: Terminal,
+    command: CommandOf<'terminal.open'>,
+  ) {
+    const { sessionId, id: terminalId } = terminal;
+    if (terminal.owner && terminal.owner !== peer)
+      send(terminal.owner, { type: 'terminal.detached', sessionId, terminalId });
+    terminal.owner = peer;
+    clearTimeout(terminal.idle);
+    send(peer, { type: 'terminal.opened', sessionId, terminalId });
+    await terminal.process!.attach(command.cols, command.rows);
+  }
+  // A terminal that continues its session goes on with no one showing it; with no one back in time it ends.
+  function detachTerminal(terminal: Terminal) {
+    terminal.owner = undefined;
+    terminal.process?.detach();
+    clearTimeout(terminal.idle);
+    terminal.idle = setTimeout(() => {
+      const task = terminal.process?.close();
+      if (task) track(task);
+    }, TERMINAL_IDLE_MS);
   }
   // What a terminal that continued its session added to the native session, recorded in the session as the events
   // of a chat run; see terminal-transcript.ts. A compaction can leave out what was there; a rewind does too, and is
@@ -1211,6 +1252,14 @@ export function createProxyServer(options: ServerOptions) {
       case 'terminal.close':
         await closeTerminal(peer, command);
         return command.sessionId;
+      case 'terminal.detach': {
+        const terminal = terminals.get(command.sessionId);
+        if (!terminal?.continued || terminal.id !== command.terminalId)
+          throw new DomainError('terminal_inactive', '没有可以留在后台的终端。');
+        if (terminal.owner !== peer) throw new DomainError('not_owner', '原生终端属于另一连接。');
+        detachTerminal(terminal);
+        return command.sessionId;
+      }
       case 'terminal.open':
         await openTerminal(peer, command, session);
         return command.sessionId;
@@ -1547,6 +1596,11 @@ export function createProxyServer(options: ServerOptions) {
     if (seats.get(seat.device) !== seat) return;
     seats.delete(seat.device);
     for (const run of runs.values()) if (run.device === seat.device) cancel(run, reason);
+    for (const terminal of terminals.values())
+      if (terminal.continued && terminal.device === seat.device) {
+        const task = terminal.process?.close();
+        if (task) track(task);
+      }
     if (seat.door) track(seat.door.close(), tunnelTasks);
     announce();
   }
@@ -1557,7 +1611,9 @@ export function createProxyServer(options: ServerOptions) {
     peers.delete(peer);
     if (login?.owner === peer) login.process.cancel();
     for (const terminal of terminals.values())
-      if (terminal.owner === peer) {
+      if (terminal.owner !== peer) continue;
+      else if (terminal.continued) detachTerminal(terminal);
+      else {
         const task = terminal.process?.close();
         if (task) track(task);
       }
@@ -1566,7 +1622,11 @@ export function createProxyServer(options: ServerOptions) {
       if (seat.door?.uses(peer.tunnel))
         seat.door.use([...seat.peers].findLast((other) => other.tunnel?.ssh)?.tunnel);
       if (!seat.peers.size) {
-        const waiting = [...runs.values()].some((run) => run.device === seat.device);
+        const waiting =
+          [...runs.values()].some((run) => run.device === seat.device) ||
+          [...terminals.values()].some(
+            (terminal) => terminal.continued && terminal.device === seat.device,
+          );
         const gone = options.claude
           ? '连接断开，运行未重放；在途命令结果可能未知。'
           : '连接断开，运行未重放。';

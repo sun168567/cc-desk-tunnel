@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-function fixture() {
+function fixture(screen?: { detached: () => void }) {
   let onData!: (text: string) => void, onExit!: (event: { exitCode: number }) => void;
   let paused = 0,
     resumed = 0,
@@ -48,7 +48,7 @@ function fixture() {
   const terminal = new NativeTerminal(
     'claude',
     [],
-    { cwd: '.', cols: 80, rows: 24, env: {} },
+    { cwd: '.', cols: 80, rows: 24, env: {}, ...(screen ? { screen } : {}) },
     (text, bytes) => output.push({ text, bytes }),
     () => {},
     spawn,
@@ -85,6 +85,32 @@ test('native terminal forwards exact UTF-8 data with bounded frames and pauses u
   f.data('late');
   assert.equal(f.counts().killed, 1);
   assert.equal(f.output.map((frame) => frame.text).join(''), text);
+});
+
+test('a terminal that keeps running shows its current screen to a client that attaches, then the live output', async () => {
+  let detached = 0;
+  const f = fixture({ detached: () => detached++ });
+  f.data('\x1b[?1049h\x1b[>1u第一屏');
+  f.terminal.detach();
+  f.data('\r\n看不到的时候');
+  assert.deepEqual(
+    f.output.map((frame) => frame.text),
+    ['\x1b[?1049h\x1b[>1u第一屏'],
+  );
+  f.output.length = 0;
+  await f.terminal.attach(100, 30);
+  assert.deepEqual(f.sizes, [[100, 30]]);
+  const [snapshot] = f.output;
+  assert.ok(snapshot.text.startsWith('\x1b[?25h'));
+  assert.ok(snapshot.text.includes('第一屏') && snapshot.text.includes('看不到的时候'));
+  assert.ok(snapshot.text.includes('\x1b[>1u'));
+  f.data('之后');
+  assert.equal(f.output.at(-1)!.text, '之后');
+  // Acknowledgments of what was sent before an attach may still come; they do not fail the terminal.
+  f.terminal.acknowledge(10 ** 6);
+  assert.equal(f.terminal.outstanding, 0);
+  assert.equal(detached, 0);
+  await f.terminal.close();
 });
 
 test('control terminal launches the official CLI directly with remote guidance and no shell, MCP or bypass', () => {

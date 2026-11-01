@@ -31,7 +31,7 @@ jiangan-code 的分支（[jiangan-code/cc-desk-tunnel](https://github.com/jianga
 
 - `apps/cli`：`ccdt` 本体，Node 24，与服务端一样直接运行 TypeScript 源码。
 - 连接桥及其依赖（`proxy-bridge`、`tunnel-channels`、`windows-ssh`、`posix-ssh`、`ssh-keys`、`system-proxy`、`connect-errors` 等）从 `apps/desktop/electron` 移到一个共享包，图形客户端和 `ccdt` 都引用它。这一步只搬代码不改行为，图形客户端的打包配置要跟着改。
-- 协议版本必须和服务端一致。`ccdt` 连接时检查版本，不一致时提示升级。它和图形客户端各自升级，互不牵连。
+- 协议版本必须和服务端一致。本分支改了协议（`terminal.open.continueSession`、`terminal.detach`、`terminal.detached`），发版时 `PROTOCOL_VERSION` 要升一版。`ccdt` 连接时检查版本，不一致时提示升级。它和图形客户端各自升级，互不牵连。
 - 分发形态（npm 包、自带运行时的压缩包或安装包）留到功能可用后再定。Windows 上还要带 OpenSSH 的 sshd，图形客户端安装包现在是自带的。
 
 ## 连接、登录与设备身份
@@ -86,7 +86,8 @@ jiangan-code 的分支（[jiangan-code/cc-desk-tunnel](https://github.com/jianga
 - 服务端给每个终端维护一份屏幕状态（`@xterm/headless` 加 serialize 插件）。客户端接入时先发当前整屏，再接实时输出；同时恢复键盘模式（kitty 键盘协议、modifyOtherKeys）、鼠标编码和光标显示。
 - 客户端 30 秒不确认输出，或者连接断开，只断开显示，CLI 继续运行；之后任何一端都可以重新接入。只有明确结束（`/exit` 或关闭命令）才结束 CLI。
 - 状态由 `Notification`（权限确认、提问）和 `Stop` hooks 得出：运行中、等你、空闲。图形客户端可以据此显示终端会话的状态。
-- 常驻要设上限和回收：没有任何客户端接入的终端，空闲多久后结束，推进时定。
+- 回收：没有客户端接入的终端 30 分钟后结束；终端所在的设备离线时，和运行一样等宽限期（默认 5 分钟），过后结束。
+- 接入：对一个已有常驻终端的会话再发带 `continueSession` 的 `terminal.open`，就是接入它；原来显示它的连接收到 `terminal.detached`。`terminal.detach` 主动停止显示。
 - 这些只对 `ccdt` 打开的终端生效。内嵌终端仍然随页面关闭而结束。
 
 `ccdt` 本地还要做到：异常退出时恢复本机终端的状态（光标、括号粘贴、鼠标与焦点上报、备用屏幕）；输出接管道时不被截断（该分支修过 64 KB 截断）。
@@ -117,7 +118,6 @@ jiangan-code 分支里另有这些，不进本方案：终端里的 agent 列表
 
 - 运行中的前缀键，比如用来分离终端或切换会话；具体要哪些功能。jiangan-code 分支用 Ctrl+Q 回到列表，要确认不和 Claude Code 自己的按键冲突。
 - 在项目目录里直接运行 `ccdt` 时，按真实路径找到这个项目最近的会话（该分支的做法），还是总要显式指定。
-- 无人接入的终端保留多久。
 - 复用图形客户端登录的做法；Token 在三个系统上的保存方式。
 - 分发形态与升级方式。
 - `ccdt` 可用后，内嵌原生终端是否由它取代。
@@ -136,7 +136,8 @@ jiangan-code 分支里另有这些，不进本方案：终端里的 agent 列表
 - [x] 终端建立原生会话时补记 `native.session`
 - [x] 终端结束时导入新增的对话；切换、回退、压缩三种情形的处理与提示（单元测试按实测的记录格式；整条路径在收尾时实测）
 - [x] 图形客户端显示“来自终端”的标记；导入的事件保留 CLI 记录的时间，终端里的每一轮以它最后记下的内容结束
-- [ ] 终端常驻：屏幕状态、断开显示与重新接入、状态 hooks、无人接入时的回收
+- [x] 终端常驻：屏幕状态、断开显示与重新接入（`terminal.detach`、`terminal.detached`）、无人接入时的回收
+- [ ] 终端状态（运行中、等你、空闲）由 hooks 报告，给 `ccdt` 的列表和图形客户端
 
 ### 共享组件
 
