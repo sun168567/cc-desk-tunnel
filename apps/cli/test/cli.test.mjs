@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { Config, directories } from '../src/config.mjs';
 import { proxyFor } from '../src/connection.mjs';
 import { RESTORE, relay } from '../src/terminal.mjs';
+import { readKeys } from '../src/keys.mjs';
 
 test('settings live where each system keeps them, beside the desktop client’s', () => {
   assert.deepEqual(directories({ APPDATA: 'C:\\A' }, 'win32', 'C:\\H'), {
@@ -172,4 +173,18 @@ test('ccdt login offers the services the desktop client signs in to, without the
     { url: 'wss://main/ws', fingerprint: 'AA:BB' },
     { url: 'wss://other/ws', fingerprint: '' },
   ]);
+});
+
+test('reading keys leaves the input open for the terminal shown next', async () => {
+  const input = new PassThrough();
+  input.setRawMode = (on) => (input.raw = on);
+  const reading = readKeys(input, (key) => (key === '\r' ? 'chosen' : undefined));
+  input.write('a');
+  input.write('\r');
+  assert.equal(await reading, 'chosen');
+  assert.equal(input.raw, false);
+  assert.equal(input.destroyed, false);
+  const again = readKeys(input, (key) => key);
+  input.write('b');
+  assert.equal(await again, 'b');
 });

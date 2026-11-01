@@ -1,7 +1,9 @@
+import { appendFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Config } from './config.mjs';
 import { Service } from './connection.mjs';
+import { readKeys } from './keys.mjs';
 import { pick } from './picker.mjs';
 import { discard, protect, reveal } from './secret.mjs';
 import { relay } from './terminal.mjs';
@@ -25,6 +27,11 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
 终端里聊的内容会记入这个会话，图形客户端里也能看到。`;
 
 const say = (text) => process.stderr.write(`${text}\n`);
+// `CCDT_LOG` names a file for what the connection did, for finding out why it failed.
+const log = (line) => {
+  if (process.env.CCDT_LOG)
+    appendFileSync(process.env.CCDT_LOG, `${new Date().toISOString()} ${line}\n`);
+};
 const dim = (text) => (process.stderr.isTTY ? `\x1b[2m${text}\x1b[0m` : text);
 
 // The session's project directory as the desktop client records it, compared without the case on Windows.
@@ -57,21 +64,16 @@ async function readSecret(prompt) {
     return text.trim();
   }
   process.stderr.write(prompt);
-  input.setRawMode(true);
-  input.setEncoding('utf8');
   let text = '';
   try {
-    for await (const chunk of input) {
+    return await readKeys(input, (chunk) => {
       for (const key of chunk) {
         if (key === '\r' || key === '\n') return text;
         if (key === '\u0003') throw new Error('已取消。');
         text = key === '\u007f' || key === '\b' ? text.slice(0, -1) : text + key;
       }
-    }
-    return text;
+    });
   } finally {
-    input.setRawMode(false);
-    input.pause();
     process.stderr.write('\n');
   }
 }
@@ -83,7 +85,7 @@ async function signIn(config, values, quiet = false) {
   if (!token)
     throw new Error('没有保存这个服务端的凭据：运行 ccdt login 重新登录，或设置 CCDT_TOKEN。');
   if (!quiet) say(dim(`正在连接 ${server.url} ……`));
-  return Service.connect({ ...server, token, deviceId: config.device() });
+  return Service.connect({ ...server, token, deviceId: config.device(), log });
 }
 
 async function login(config, values, url) {
@@ -135,8 +137,10 @@ function usage(summary) {
     const reset = window.resetsAt ? `，${when(window.resetsAt)} 重置` : '';
     return `${(names[window.name] ?? window.name).padEnd(8)} 已用 ${used}${reset} · ${window.requests} 次请求 · 约 $${window.costUsd.toFixed(2)}`;
   });
+  if (!lines.length)
+    return '没有订阅额度数据：使用 API Key 或第三方接口时没有额度，用量见图形客户端的统计页。';
   return [
-    ...(lines.length ? lines : ['还没有额度记录。']),
+    ...lines,
     dim('金额是按 API 价格估算的等价消耗，不是订阅账单。完整的图表在图形客户端的统计页。'),
   ].join('\n');
 }
@@ -167,6 +171,7 @@ async function show(config, values, service, session, fresh) {
   for (;;) {
     await service.channel();
     const result = await relay(service, session.id, shown);
+    log(`Terminal shown no longer: ${result.how}.`);
     if (result.how === 'exited') {
       await service.close();
       say(dim('已退出。对话记录在这个会话里，在这个目录运行 ccdt 可以接着聊。'));
