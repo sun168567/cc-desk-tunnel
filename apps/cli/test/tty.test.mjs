@@ -83,7 +83,8 @@ process.stdout.write('DONE ' + result.how + '\\r\\n');
     assert.equal((await exited).exitCode, 0);
     const messages = sentOf();
     const typed = messages.filter((m) => m.type === 'terminal.input').map((m) => m.data);
-    assert.deepEqual(typed.slice(0, 2), ['a', '\x03']);
+    // Keys typed together may arrive together.
+  assert.equal(typed.join(''), 'a\x03q');
     assert.ok(messages.some((m) => m.type === 'terminal.ack' && m.bytes === 7));
     assert.ok(
       messages.some((m) => m.type === 'terminal.resize' && m.cols === 100 && m.rows === 30),
