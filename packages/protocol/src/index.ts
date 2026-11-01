@@ -615,7 +615,18 @@ export const commandSchema = z.discriminatedUnion('type', [
       projectPath: z.string().trim().min(1).max(2048).optional(),
     })
     .strict(),
-  z.object({ type: z.literal('session.status'), ...request, sessionId: id }).strict(),
+  z
+    .object({
+      type: z.literal('session.status'),
+      ...request,
+      sessionId: id,
+      // Asked for on the account page: the plan quota is read anew.
+      quota: z.boolean().optional(),
+    })
+    .strict(),
+  // Whether this client keeps the plan quota current on its screen. While any connected client does, the service
+  // reads it once a minute during runs; otherwise only what the replies carry is taken.
+  z.object({ type: z.literal('quota.watch'), ...request, active: z.boolean() }).strict(),
   z
     .object({
       type: z.literal('terminal.open'),

@@ -520,6 +520,11 @@ export function App({
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
+  // Each connection tells the service anew whether this client wants the quota kept current.
+  useEffect(() => {
+    if (nativeMode && connected)
+      void client.request({ type: 'quota.watch', active: prefs.quotaReads }).catch(() => {});
+  }, [nativeMode, connected, prefs.quotaReads]);
   useEffect(() => {
     if (
       !accountOpen ||
@@ -644,11 +649,12 @@ export function App({
       section = 'general';
     visit({ page, section, sessionId: client.state.selectedId });
   };
-  async function refreshStatus(sessionId = selected?.id ?? sessions[0]?.id) {
+  // `quota`: asked for on the account page, which reads the plan quota anew.
+  async function refreshStatus(sessionId = selected?.id ?? sessions[0]?.id, quota = false) {
     if (!sessionId || refreshing) return;
     setRefreshing(true);
     try {
-      await client.request({ type: 'session.status', sessionId });
+      await client.request({ type: 'session.status', sessionId, ...(quota ? { quota } : {}) });
     } catch (error) {
       setError(
         error instanceof RequestInterruptedError
@@ -1452,7 +1458,7 @@ export function App({
               disabled={!state.sessions.length || !connected || refreshing || anyTerminal}
               error={currentError}
               refresh={() => {
-                void refreshStatus();
+                void refreshStatus(undefined, true);
               }}
             />
           }

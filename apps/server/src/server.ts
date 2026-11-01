@@ -44,7 +44,13 @@ import type {
   TerminalControl,
   TunnelCredentials,
 } from '@cc-desk-tunnel/protocol';
-import { runClaude, nativeDirectory, prepareNativeDirectory, readNativeStatus } from './claude.ts';
+import {
+  runClaude,
+  nativeDirectory,
+  prepareNativeDirectory,
+  quotas,
+  readNativeStatus,
+} from './claude.ts';
 import type { ClaudeOptions } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
@@ -88,6 +94,8 @@ type Peer = {
   registering: boolean;
   // The client said it was closing the connection: nothing is kept for it to come back to.
   left: boolean;
+  // The client keeps the plan quota current on its screen, so the service reads it while runs go on.
+  quotaWanted?: boolean;
   subscriptions: Set<string>;
   responses: Map<string, { command: string; response: Promise<ServerMessage> }>;
 };
@@ -113,7 +121,7 @@ export type Run = {
   open?: Fragment;
   input?: NativeInput;
   controls: {
-    refresh?: () => Promise<void>;
+    refresh?: (asked?: boolean) => Promise<void>;
     stopTask?: (taskId: string) => Promise<void>;
     backgroundTask?: (toolId: string) => Promise<boolean>;
   };
@@ -203,6 +211,7 @@ export function createProxyServer(options: ServerOptions) {
   const usage = new UsageLog(store.database);
   const usageReceiver = options.claude ? createUsageReceiver(usage) : undefined;
   const peers = new Set<Peer>();
+  quotas.wanted = () => [...peers].some((peer) => peer.quotaWanted);
   // One run or one terminal per session, each a CLI process of its own in the session's directory. What reads
   // or changes the state the CLI keeps for all of them — a status read or session change (`mutations`), an
   // account change — waits until none is going.
@@ -692,7 +701,7 @@ export function createProxyServer(options: ServerOptions) {
     const active =
       runs.get(command.sessionId) ?? [...runs.values()].find((run) => run.controls.refresh);
     if (active?.controls.refresh && !mutations.size) {
-      await active.controls.refresh();
+      await active.controls.refresh(command.quota);
       return;
     }
     if (terminals.size || runs.size || mutations.size)
@@ -708,6 +717,7 @@ export function createProxyServer(options: ServerOptions) {
         nativeRoot(command.sessionId),
         command.sessionId,
         controller.signal,
+        { asked: command.quota, previous: store.lastMetrics(command.sessionId)?.usage },
       );
       for (const payload of events) {
         const event = record(command.sessionId, command.requestId, payload);
@@ -1299,6 +1309,9 @@ export function createProxyServer(options: ServerOptions) {
       }
       case 'usage.summary':
         send(peer, { type: 'usage.summary', requestId: command.requestId, ...usage.summary() });
+        return undefined;
+      case 'quota.watch':
+        peer.quotaWanted = command.active;
         return undefined;
       case 'session.stats':
         store.get(command.sessionId);

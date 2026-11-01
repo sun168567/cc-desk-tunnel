@@ -2953,6 +2953,18 @@ details[open] > summary > .fold-chevron {
   color: var(--faint);
   font-size: 11px;
 }
+.quota-live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.quota-live small {
+  display: block;
+  color: var(--faint);
+  font-size: 11px;
+}
 .account-section-title .button {
   margin-left: auto;
   min-height: 28px;
