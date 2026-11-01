@@ -143,6 +143,8 @@ type Terminal = {
     connectionId: string;
     elsewhere?: boolean;
     toldElsewhere?: boolean;
+    // The native session held no message when last looked at.
+    empty?: boolean;
   };
 };
 const INTERRUPTS = new Set(['\x1b', '\x03', '\x1b[27u', '\x1b[99;5u']);
@@ -752,9 +754,14 @@ export function createProxyServer(options: ServerOptions) {
       let continued: Parameters<typeof terminalArguments>[3];
       if (command.continueSession) {
         const resume = !!(await getSessionInfo(session.id, { dir: cwd }));
-        const messages = resume
-          ? await getSessionMessages(session.id, { dir: cwd, includeSystemMessages: true })
-          : [];
+        const messages = await getSessionMessages(session.id, {
+          dir: cwd,
+          includeSystemMessages: true,
+        }).catch(() => []);
+        // A record of the session with nothing in it, which a terminal that ended without a word left when it could
+        // not clear it away (see the end below), makes the CLI refuse the session's ID as one in use.
+        if (!resume && !messages.length)
+          await deleteSession(session.id, { dir: cwd }).catch(() => {});
         const directory = join(store.directory, 'terminals');
         mkdirSync(directory, { recursive: true, mode: 0o700 });
         current.continued = {
@@ -824,6 +831,10 @@ export function createProxyServer(options: ServerOptions) {
             const { hooksPath, settingsPath } = current.continued;
             unwatchFile(hooksPath);
             await heardTerminal(current, true);
+            // A terminal that said nothing leaves no native session: its record, with nothing in it, would keep the
+            // session's ID from a chat run or the next terminal, which the CLI refuses it to as one in use.
+            if (current.continued.empty)
+              await deleteSession(current.sessionId, { dir: cwd }).catch(() => {});
             rmSync(settingsPath, { force: true });
             rmSync(hooksPath, { force: true });
           }
@@ -956,6 +967,7 @@ export function createProxyServer(options: ServerOptions) {
     };
     const dir = nativeDirectory(store.directory, nativeRoot(sessionId));
     const messages = await getSessionMessages(sessionId, { dir, includeSystemMessages: true });
+    continued.empty = !messages.length;
     if (messages.length && !store.hasNativeContext(sessionId)) {
       const answer = messages.findLast((message) => message.type === 'assistant')?.message as
         { model?: unknown } | undefined;
