@@ -27,7 +27,7 @@ jobs:
       image: ${{ steps.meta.outputs.image }}
       tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: meta
         env:
           REQUESTED: ${{ inputs.tag }}
@@ -54,9 +54,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile
@@ -67,7 +67,7 @@ jobs:
       - run: sudo bash deploy/test.sh
       - run: sudo bash deploy/test-image.sh
       - if: needs.prepare.outputs.tag != ''
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -76,7 +76,7 @@ jobs:
       # each architecture, and the release tag is made from the two digests below.
       - if: needs.prepare.outputs.tag != ''
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile
@@ -90,7 +90,7 @@ jobs:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: echo "$DIGEST" > "digest-${{ matrix.arch }}.txt"
       - if: needs.prepare.outputs.tag != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}
           path: digest-*.txt
@@ -100,13 +100,13 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-24.04
     steps:
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           merge-multiple: true
