@@ -303,7 +303,8 @@ export function App({
       : (metrics ?? state.metrics);
   const canCompact = !!latest(events, 'native.context')?.persisted;
   // A native terminal anywhere keeps what the CLI holds for all sessions, the account and its status, from
-  // being read or changed; this window's own terminal, `terminalSessionId`, also takes the window.
+  // being read or changed, save the quota the account page asks for; this window's own terminal,
+  // `terminalSessionId`, also takes the window.
   const anyTerminal = state.sessions.some((session) => session.activeRun?.surface === 'terminal');
   const controlsDisabled =
     !connected ||
@@ -1455,7 +1456,7 @@ export function App({
               capabilities={signedOut ? null : capabilities}
               metrics={signedOut ? null : accountMetrics}
               refreshing={refreshing}
-              disabled={!state.sessions.length || !connected || refreshing || anyTerminal}
+              disabled={!state.sessions.length || !connected || refreshing}
               error={currentError}
               refresh={() => {
                 void refreshStatus(undefined, true);

@@ -1,5 +1,5 @@
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, mkdirSync, rmSync, unwatchFile, watchFile } from 'node:fs';
+import { createReadStream, mkdirSync, readFileSync, rmSync, unwatchFile, watchFile } from 'node:fs';
 import { createServer } from 'node:http';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
@@ -56,6 +56,7 @@ import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import type { NativeLogin } from './native-account.ts';
 import { NativeInput } from './native-input.ts';
+import { statusLineQuota } from './native-controls.ts';
 import { completeOnboarding } from './native-onboarding.ts';
 import { readNativeSettings, updateNativeSettings } from './native-settings.ts';
 import { readInstructions, writeInstructions } from './native-instructions.ts';
@@ -144,6 +145,9 @@ type Terminal = {
     last?: string;
     settingsPath: string;
     hooksPath: string;
+    // What its CLI last showed in the status line, and the quota last heard from it.
+    statusPath: string;
+    quota?: string;
     offset: number;
     heard: Promise<void>;
     activity?: TerminalActivity;
@@ -704,8 +708,12 @@ export function createProxyServer(options: ServerOptions) {
       await active.controls.refresh(command.quota);
       return;
     }
-    if (terminals.size || runs.size || mutations.size)
+    // A terminal keeps the CLI's state from being read, except for the quota the user asks for, which a CLI of its
+    // own reads without taking up the session of a terminal (its figures stay as they were).
+    if ((terminals.size && !command.quota) || runs.size || mutations.size)
       throw new DomainError('native_busy', '运行结束后再刷新原生状态。');
+    const resume = !terminals.has(command.sessionId);
+    const last = resume ? null : store.lastMetrics(command.sessionId);
     mutations.add(command.sessionId);
     const controller = new AbortController();
     const closed = () => controller.abort();
@@ -717,9 +725,13 @@ export function createProxyServer(options: ServerOptions) {
         nativeRoot(command.sessionId),
         command.sessionId,
         controller.signal,
-        { asked: command.quota, previous: store.lastMetrics(command.sessionId)?.usage },
+        { asked: command.quota, previous: store.lastMetrics(command.sessionId)?.usage, resume },
       );
-      for (const payload of events) {
+      for (const read of events) {
+        const payload: EventPayload =
+          resume || read.type !== 'native.metrics'
+            ? read
+            : { ...read, context: last?.context ?? null, usage: last?.usage ?? null };
         const event = record(command.sessionId, command.requestId, payload);
         if (!peer.subscriptions.has(command.sessionId))
           send(peer, { type: 'session.event', event });
@@ -779,6 +791,7 @@ export function createProxyServer(options: ServerOptions) {
           last: messages.at(-1)?.uuid,
           settingsPath: join(directory, `${current.id}.json`),
           hooksPath: join(directory, `${current.id}.hooks`),
+          statusPath: join(directory, `${current.id}.status`),
           offset: 0,
           heard: Promise.resolve(),
           activity: 'idle',
@@ -789,6 +802,7 @@ export function createProxyServer(options: ServerOptions) {
           current.continued.settingsPath,
           current.continued.hooksPath,
           options.claude.settingsPath,
+          current.continued.statusPath,
         );
         continued = { resume, settingsPath: current.continued.settingsPath };
       }
@@ -838,8 +852,9 @@ export function createProxyServer(options: ServerOptions) {
           if (terminals.get(current.sessionId) !== current) return;
           clearTimeout(current.idle);
           if (current.continued) {
-            const { hooksPath, settingsPath } = current.continued;
+            const { hooksPath, settingsPath, statusPath } = current.continued;
             unwatchFile(hooksPath);
+            unwatchFile(statusPath);
             await heardTerminal(current, true);
             // A terminal that said nothing leaves no native session: its record, with nothing in it, would keep the
             // session's ID from a chat run or the next terminal, which the CLI refuses it to as one in use.
@@ -847,6 +862,7 @@ export function createProxyServer(options: ServerOptions) {
               await deleteSession(current.sessionId, { dir: cwd }).catch(() => {});
             rmSync(settingsPath, { force: true });
             rmSync(hooksPath, { force: true });
+            rmSync(statusPath, { force: true });
           }
           store.append(current.sessionId, current.id, {
             type: 'run.status',
@@ -873,18 +889,21 @@ export function createProxyServer(options: ServerOptions) {
         connectionId: peer.id,
       });
       updated(command.sessionId);
-      if (current.continued)
+      if (current.continued) {
         watchFile(
           current.continued.hooksPath,
           { interval: 500 },
           () => void heardTerminal(current),
         );
+        watchFile(current.continued.statusPath, { interval: 1000 }, () => terminalQuota(current));
+      }
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();
       if (current.continued && !current.process) {
         rmSync(current.continued.settingsPath, { force: true });
         rmSync(current.continued.hooksPath, { force: true });
+        rmSync(current.continued.statusPath, { force: true });
       }
       if (terminals.get(current.sessionId) === current) terminals.delete(current.sessionId);
       throw new DomainError('terminal_failed', '原生终端启动失败，请检查 Linux PTY 组件与 CLI。');
@@ -948,6 +967,30 @@ export function createProxyServer(options: ServerOptions) {
       .catch(() => {});
     continued.heard = task;
     return task;
+  }
+  // The quota a terminal's CLI showed in its status line, its replies' as a chat run's stream would carry it: it goes
+  // to the account's quota, and every connection is told, as the quota is the account's, not the session's.
+  function terminalQuota(terminal: Terminal) {
+    const continued = terminal.continued!;
+    let windows;
+    try {
+      windows = statusLineQuota(JSON.parse(readFileSync(continued.statusPath, 'utf8')));
+    } catch {
+      return;
+    }
+    const heard = JSON.stringify(windows);
+    if (!windows.length || heard === continued.quota) return;
+    continued.quota = heard;
+    const last = store.lastMetrics(terminal.sessionId);
+    const rateLimits = quotas.observeTerminal(windows);
+    if (rateLimits?.available) usage.observe(rateLimits);
+    const event = store.append(terminal.sessionId, terminal.id, {
+      type: 'native.metrics',
+      context: last?.context ?? null,
+      usage: last?.usage ?? null,
+      rateLimits,
+    });
+    broadcast({ type: 'session.event', event });
   }
   // A turn the user interrupts runs no hook and leaves nothing in the CLI's record (CLI 2.1.293). A key that
   // interrupts it, typed while the CLI works, with no hook after it in a while, is taken for the end of the turn:

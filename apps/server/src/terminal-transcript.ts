@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { EventPayload, TerminalActivity } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream, printed } from './claude-stream.ts';
+import { settingsPath as userSettingsPath } from './native-settings.ts';
 
 // Fields the CLI's record keeps beside the message, which `getSessionMessages` passes through.
 type Entry = SessionMessage & {
@@ -97,16 +98,42 @@ const HOOKED = [
   'Notification',
   'Stop',
 ];
-export function terminalSettings(path: string, hooksPath: string, settingsPath?: string) {
+// Its status line command also keeps the last of what the CLI hands it at `statusPath`, which carries the quota its
+// replies were answered with (see `statusLineQuota`). A status line of the user's own, from these settings or the user
+// settings these take the place of, is still run on the same input and shows as before.
+export function terminalSettings(
+  path: string,
+  hooksPath: string,
+  settingsPath?: string,
+  statusPath?: string,
+  ownSettingsPath = userSettingsPath(),
+) {
   const settings = settingsPath ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
   const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
-  const quoted = `'${hooksPath.replaceAll("'", "'\\''")}'`;
+  const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
   for (const name of HOOKED)
     hooks[name] = [
       ...(Array.isArray(hooks[name]) ? hooks[name] : []),
-      { hooks: [{ type: 'command', command: `{ cat; echo; } >> ${quoted}` }] },
+      { hooks: [{ type: 'command', command: `{ cat; echo; } >> ${quote(hooksPath)}` }] },
     ];
-  writeFileSync(path, JSON.stringify({ ...settings, hooks }), { mode: 0o600 });
+  let statusLine = settings.statusLine;
+  if (statusPath) {
+    const own = [settings.statusLine, userStatusLine(ownSettingsPath)].find(
+      (line) => line?.type === 'command' && typeof line.command === 'string',
+    );
+    const keep = `s=$(cat); printf '%s\\n' "$s" > ${quote(`${statusPath}.new`)} && mv -f ${quote(`${statusPath}.new`)} ${quote(statusPath)}`;
+    statusLine = own
+      ? { ...own, command: `${keep}; printf '%s' "$s" | {\n${own.command}\n}` }
+      : { type: 'command', command: keep };
+  }
+  writeFileSync(path, JSON.stringify({ ...settings, hooks, statusLine }), { mode: 0o600 });
+}
+function userStatusLine(path: string) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')).statusLine;
+  } catch {
+    return undefined;
+  }
 }
 
 export type TerminalHook = {
