@@ -23,6 +23,18 @@ Claude Code (CC for short) runs on a Linux server; your code, compilers and tool
 | Use the CLI on the server through remote desktop or an SSH terminal | Lag, awkward input methods and copy-paste, long output that is hard to read back | A local desktop app with native input, scrolling and copying |
 | Use the command-line interface as it is | Several projects and sessions are hard to keep apart; tool calls and thinking scroll by in one stream of text | Sessions grouped by project; the process folded into summaries you can expand |
 
+## Screenshots
+
+Desktop client: sessions grouped by project, including sessions from another computer that you can pick up here.
+
+![Desktop client: sessions grouped by project and sessions on other devices on the left, the conversation and input box on the right](docs/images/desktop-client.png)
+
+Terminal client `ccdt`: the official Claude Code in your own terminal, sharing sessions with the desktop client (its interface is in Chinese).
+
+![ccdt help: commands to continue or create a session, list sessions, show usage, sign in and sign out](docs/images/ccdt-help.png)
+
+![In ccdt, Claude Code creates and runs a PowerShell script in a local project directory](docs/images/ccdt-session.png)
+
 ## How it works
 
 ```text
