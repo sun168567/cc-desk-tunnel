@@ -4,7 +4,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { upgradeService } from '../electron/service-upgrade.mjs';
 
 // A 0.3.2 service: signs in only a client of protocol 17, and answers an update check with `found`.
-async function upgrade(found, service = '0.3.2') {
+async function upgrade(found, service = '0.3.2', confirm) {
   const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   await new Promise((resolve) => server.once('listening', resolve));
   const received = [];
@@ -29,7 +29,7 @@ async function upgrade(found, service = '0.3.2') {
   try {
     const result = await upgradeService(
       { url, fingerprint: '', token: 'a'.repeat(32), deviceName: '这台电脑', service },
-      { open: () => new WebSocket(url), onUpdate: (update) => updates.push(update.state) },
+      { open: () => new WebSocket(url), onUpdate: (update) => updates.push(update.state), confirm },
     ).catch((error) => error);
     return { result, received, updates };
   } finally {
@@ -52,7 +52,21 @@ test('a newer client signs in to an older service with its protocol version and 
 });
 
 test('a service that cannot upgrade from here says why', async () => {
-  assert.match((await upgrade('manual')).result.message, /cc-desk-tunnel upgrade/);
-  assert.match((await upgrade('idle')).result.message, /没有找到/);
+  const manual = (await upgrade('manual')).result;
+  assert.match(manual.message, /cc-desk-tunnel upgrade/);
+  assert.equal(manual.code, 'manual');
+  const idle = (await upgrade('idle')).result;
+  assert.match(idle.message, /没有找到/);
+  assert.equal(idle.code, 'current');
   assert.match((await upgrade('available', '0.1.0')).result.message, /太旧/);
+});
+
+test('the install waits for a yes, and a no leaves the service as it is', async () => {
+  const asked = [];
+  const yes = await upgrade('available', '0.3.2', async (latest) => (asked.push(latest), true));
+  assert.equal(yes.result, '0.3.4');
+  assert.deepEqual(asked, ['0.3.4']);
+  const no = await upgrade('available', '0.3.2', async () => false);
+  assert.equal(no.result.code, 'declined');
+  assert.ok(!no.received.some((message) => message.type === 'service.update.install'));
 });

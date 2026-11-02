@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as viteBuild } from 'vite';
+import { packageName } from '../apps/cli/src/runtime.mjs';
 import { copyDependency, posixService } from './package-desktop.mjs';
 
 // The ccdt package of the system this runs on, a folder `ccdt` in a .zip (Windows) or .tar.gz (macOS, Linux): the
@@ -50,17 +51,8 @@ if (!runtimes[system]) throw new Error(`No ccdt package for ${system}.`);
 const windows = process.platform === 'win32';
 // The system's own tar, which reads and writes .zip on Windows; a shell may put another one first on the PATH.
 const tar = windows ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
-const names = {
-  'win32-x64': 'windows-x64',
-  'darwin-arm64': 'mac-arm64',
-  'darwin-x64': 'mac-x64',
-  'linux-x64': 'linux-x64',
-  'linux-arm64': 'linux-arm64',
-};
-export const packageName = (release, name) =>
-  `ccdt-${release}-${name}.${name.startsWith('windows') ? 'zip' : 'tar.gz'}`;
 const output = join(root, 'artifacts/cli');
-const archive = join(output, packageName(version, names[system]));
+const archive = join(output, packageName(version, system));
 const vendor = join(root, 'apps/desktop/vendor');
 if (windows)
   for (const file of ['openssh/sshd.exe', 'openssh/ssh-keygen.exe', 'pwsh/pwsh.exe'])

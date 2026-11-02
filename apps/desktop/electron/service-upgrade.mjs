@@ -5,7 +5,9 @@ import { certificateMatches, connectService } from './proxy-bridge.mjs';
 
 // Has a service older than this client, which refuses it at sign-in, upgrade itself the way its own clients
 // do: sign in with the protocol version of its release, ask it to check for the newest release and install
-// it, and follow its progress until it restarts. Resolves to the version installed.
+// it, and follow its progress until it restarts. Resolves to the version installed. `confirm`, given the version found,
+// can decline the install. An error says why in its `code` where there is nothing to do: `current` (no newer
+// release), `manual` (the release needs the server's image updated), `declined`.
 export function upgradeService({ url, fingerprint, token, deviceName, service }, options = {}) {
   const protocolVersion = Object.entries(PROTOCOL_HISTORY).findLast(
     ([release]) => release.localeCompare(service, undefined, { numeric: true }) <= 0,
@@ -29,9 +31,9 @@ export function upgradeService({ url, fingerprint, token, deviceName, service },
     });
   const send = (message) => remote.send(JSON.stringify({ requestId: randomUUID(), ...message }));
   return new Promise((resolve, reject) => {
-    const end = (error, version) => {
+    const end = (error, version, code) => {
       remote.close();
-      if (error) reject(new Error(error));
+      if (error) reject(Object.assign(new Error(error), code ? { code } : {}));
       else resolve(version);
     };
     remote.on('open', () => {
@@ -53,14 +55,23 @@ export function upgradeService({ url, fingerprint, token, deviceName, service },
       else if (message.type === 'service.update') {
         options.onUpdate?.(message);
         if (message.state === 'available')
-          send({ type: 'service.update.install', version: message.latest });
+          Promise.resolve(options.confirm?.(message.latest) ?? true).then(
+            (yes) =>
+              yes
+                ? send({ type: 'service.update.install', version: message.latest })
+                : end('没有升级服务端。', undefined, 'declined'),
+            (error) => end(error.message, undefined, 'declined'),
+          );
         else if (message.state === 'restarting') end(null, message.latest);
         else if (message.state === 'failed') end(message.detail ?? '服务端升级失败。');
         else if (message.state === 'manual')
           end(
             `服务端 ${message.latest} 需要更新镜像，请在服务器上执行 sudo cc-desk-tunnel upgrade；没有这个命令的旧部署重新运行安装命令即可。`,
+            undefined,
+            'manual',
           );
-        else if (message.state === 'idle') end('服务端没有找到更新的正式版本。');
+        else if (message.state === 'idle')
+          end('服务端没有找到更新的正式版本。', undefined, 'current');
       }
     });
     remote.on('close', () => end('与服务端的连接断开了；稍后重新连接，查看它是否已经升级。'));
