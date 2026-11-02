@@ -456,11 +456,16 @@ export async function readNativeStatus(
   nativeRoot: string,
   sessionId: string,
   signal: AbortSignal,
-  // The user asked on the account page; `previous` is the session's last totals, kept if no new ones come.
-  { asked = false, previous = null }: { asked?: boolean; previous?: NativeMetrics['usage'] } = {},
+  // The user asked on the account page; `previous` is the session's last totals, kept if no new ones come. Without
+  // `resume` the CLI does not take up the native session, which a terminal may hold.
+  {
+    asked = false,
+    previous = null,
+    resume = true,
+  }: { asked?: boolean; previous?: NativeMetrics['usage']; resume?: boolean } = {},
 ) {
   const cwd = prepareNativeDirectory(options, dataDir, nativeRoot);
-  const saved = await getSessionInfo(sessionId, { dir: cwd });
+  const saved = resume && (await getSessionInfo(sessionId, { dir: cwd }));
   let release!: () => void;
   const waiting = new Promise<void>((resolve) => {
     release = resolve;

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   mkdtempSync,
@@ -182,6 +183,41 @@ test('the terminal settings add the hooks to the provider settings, readable onl
   for (const name of ['UserPromptSubmit', 'PermissionRequest', 'PostToolUse', 'Stop'])
     assert.equal(written.hooks[name][0].hooks[0].command, command);
   if (process.platform !== 'win32') assert.equal(statSync(settings).mode & 0o777, 0o600);
+  assert.equal(written.statusLine, undefined);
+});
+
+test("the terminal status line keeps what the CLI hands it, and still shows the user's own", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-terminal-status-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const settings = join(directory, 'terminal.json');
+  const status = join(directory, "it's.status");
+  const user = join(directory, 'user.json');
+  const input = JSON.stringify({
+    rate_limits: { five_hour: { used_percentage: 12, resets_at: 1 } },
+  });
+  const run = (command: string) =>
+    execFileSync('sh', ['-c', command], { input, encoding: 'utf8', cwd: directory });
+  // Nothing of the user's: the line shows nothing, and the input is kept.
+  terminalSettings(settings, join(directory, 'terminal.hooks'), undefined, status, user);
+  const plain = JSON.parse(readFileSync(settings, 'utf8')).statusLine;
+  assert.equal(plain.type, 'command');
+  if (process.platform !== 'win32') {
+    assert.equal(run(plain.command), '');
+    assert.equal(readFileSync(status, 'utf8'), `${input}\n`);
+  }
+  // The user's own status line, with its padding, gets the same input and prints what it did.
+  writeFileSync(
+    user,
+    JSON.stringify({ statusLine: { type: 'command', command: 'wc -c # count', padding: 2 } }),
+  );
+  terminalSettings(settings, join(directory, 'terminal.hooks'), undefined, status, user);
+  const own = JSON.parse(readFileSync(settings, 'utf8')).statusLine;
+  assert.equal(own.padding, 2);
+  if (process.platform !== 'win32') {
+    rmSync(status);
+    assert.equal(run(own.command).trim(), String(input.length));
+    assert.equal(readFileSync(status, 'utf8'), `${input}\n`);
+  }
 });
 
 test('the hooks file is read as it grows, and says what the CLI is doing', (t) => {
