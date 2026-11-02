@@ -9,6 +9,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -18,7 +20,9 @@ import { proxyFor } from '../src/connection.mjs';
 import { RESTORE, relay } from '../src/terminal.mjs';
 import { readKeys } from '../src/keys.mjs';
 import { fit } from '../src/picker.mjs';
+import { packageName } from '../src/runtime.mjs';
 import { protect, reveal } from '../src/secret.mjs';
+import { download, install } from '../src/upgrade.mjs';
 
 test('settings live where each system keeps them, beside the desktop client’s', () => {
   assert.deepEqual(directories({ APPDATA: 'C:\\A' }, 'win32', 'C:\\H'), {
@@ -238,4 +242,91 @@ test('a list entry is cut to the terminal, Chinese taking two columns and colour
   assert.equal(fit('今天 10:00  会话', 40), '今天 10:00  会话');
   assert.equal(fit('项目项目项目', 8), '项目项\x1b[0m…');
   assert.equal(fit('ab\x1b[2mcdef\x1b[0m', 5), 'ab\x1b[2mcd\x1b[0m…');
+});
+
+test('each system has the ccdt package of its own name on the release page', () => {
+  assert.equal(packageName('0.3.9', 'win32-x64'), 'ccdt-0.3.9-windows-x64.zip');
+  assert.equal(packageName('0.3.9', 'darwin-arm64'), 'ccdt-0.3.9-mac-arm64.tar.gz');
+  assert.equal(packageName('0.3.9', 'linux-arm64'), 'ccdt-0.3.9-linux-arm64.tar.gz');
+  assert.equal(packageName('0.3.9', 'win32-arm64'), undefined);
+});
+
+test("a downloaded package is used only when it matches the release's checksum", async () => {
+  const body = Buffer.from('package');
+  const name = 'ccdt-0.3.9-linux-x64.tar.gz';
+  const sum = createHash('sha256').update(body).digest('hex');
+  const asked = [];
+  const release =
+    (sums, served = body) =>
+    async (url) => {
+      asked.push(url);
+      return url.endsWith('/SHA256SUMS')
+        ? new Response(sums)
+        : url.endsWith(`/${name}`)
+          ? new Response(served)
+          : new Response('', { status: 404 });
+    };
+  const fetched = await download('0.3.9', {
+    system: 'linux-x64',
+    get: release(`${'0'.repeat(64)}  other.zip\n${sum}  ${name}\n`),
+  });
+  assert.equal(fetched.name, name);
+  assert.deepEqual(fetched.body, body);
+  assert.match(asked[0], /\/releases\/download\/v0\.3\.9\/SHA256SUMS$/);
+  await assert.rejects(
+    download('0.3.9', { system: 'linux-x64', get: release(`${sum}  ${name}\n`, 'tampered') }),
+    /校验不符/,
+  );
+  await assert.rejects(
+    download('0.3.9', { system: 'linux-x64', get: release(`${sum}  other.zip\n`) }),
+    /没有/,
+  );
+  await assert.rejects(
+    download('0.3.9', { system: 'win32-arm64', get: release('') }),
+    /没有这个系统/,
+  );
+});
+
+test('the package is put in place by the install script it carries', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'ccdt-upgrade-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const marker = join(root, 'installed');
+  mkdirSync(join(root, 'ccdt'));
+  const windows = process.platform === 'win32';
+  const tar = windows
+    ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
+  const name = windows ? 'ccdt.zip' : 'ccdt.tar.gz';
+  // A stand-in for the script, which tells how it was run.
+  if (windows)
+    writeFileSync(
+      join(root, 'ccdt', 'install.ps1'),
+      `Set-Content -LiteralPath '${marker.replaceAll("'", "''")}' -Value ran`,
+    );
+  else {
+    writeFileSync(join(root, 'ccdt', 'install.sh'), `#!/bin/sh\necho ran > '${marker}'\n`);
+    chmodSync(join(root, 'ccdt', 'install.sh'), 0o755);
+  }
+  execFileSync(
+    tar,
+    windows
+      ? ['-a', '-cf', join(root, name), '-C', root, 'ccdt']
+      : ['-czf', join(root, name), '-C', root, 'ccdt'],
+  );
+  install({ name, body: readFileSync(join(root, name)) });
+  assert.equal(readFileSync(marker, 'utf8').trim(), 'ran');
+  // A script that fails says so.
+  if (windows) writeFileSync(join(root, 'ccdt', 'install.ps1'), "throw 'in use'");
+  else writeFileSync(join(root, 'ccdt', 'install.sh'), "#!/bin/sh\necho 'in use' >&2\nexit 1\n");
+  rmSync(join(root, name));
+  execFileSync(
+    tar,
+    windows
+      ? ['-a', '-cf', join(root, name), '-C', root, 'ccdt']
+      : ['-czf', join(root, name), '-C', root, 'ccdt'],
+  );
+  assert.throws(
+    () => install({ name, body: readFileSync(join(root, name)) }),
+    /没有装上：[\s\S]*in use/,
+  );
 });

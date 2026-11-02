@@ -1,13 +1,16 @@
 import { appendFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
 import { Config } from './config.mjs';
-import { Service } from './connection.mjs';
+import { Service, proxyFor } from './connection.mjs';
 import { readKeys } from './keys.mjs';
 import { pick } from './picker.mjs';
 import { discard, protect, reveal } from './secret.mjs';
-import { releasePage, version } from './runtime.mjs';
+import { bundled, releasePage, version } from './runtime.mjs';
 import { relay } from './terminal.mjs';
+import { FIRST_UPGRADABLE, download, install } from './upgrade.mjs';
 
 const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的原版 Claude Code，与图形客户端共用会话。
 
@@ -21,6 +24,7 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
                          --token-stdin 从标准输入读凭据，--no-save 不保存
   ccdt logout            退出当前服务端
   ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用
+  ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本
   ccdt --version         版本，须与服务端相同
 
 选项：--server <wss 地址> 在登录过的几个服务端里选一个。
@@ -82,12 +86,17 @@ async function readSecret(prompt) {
   }
 }
 
-async function signIn(config, values, quiet = false) {
+function credentials(config, values) {
   const server = config.server(values.server);
   if (!server) throw new Error('还没有登录服务端：先运行 ccdt login。');
   const token = process.env.CCDT_TOKEN || reveal(server.url, server.token);
   if (!token)
     throw new Error('没有保存这个服务端的凭据：运行 ccdt login 重新登录，或设置 CCDT_TOKEN。');
+  return { server, token };
+}
+
+async function signIn(config, values, quiet = false) {
+  const { server, token } = credentials(config, values);
   if (!quiet) say(dim(`正在连接 ${server.url} ……`));
   return Service.connect({ ...server, token, deviceId: config.device(), log });
 }
@@ -126,6 +135,83 @@ async function login(config, values, url) {
   if (!kept) say('凭据没有保存；之后用 CCDT_TOKEN 环境变量提供。');
   else if (kept.store === 'file')
     say(dim(`系统没有可用的密钥服务，凭据存在只有本账号可读的 ${config.path}。`));
+}
+
+const older = (a, b) => a.localeCompare(b, undefined, { numeric: true }) < 0;
+
+// The service first, the way the desktop client upgrades it: it fetches its newest release and restarts. Then ccdt
+// becomes the release of the service, which is what it can speak to: newer, or older where ccdt was ahead of it.
+async function upgrade(config, values) {
+  const { server, token } = credentials(config, values);
+  let current;
+  try {
+    const service = await signIn(config, values);
+    current = service.version;
+    await service.close();
+  } catch (error) {
+    // A service of another release says which it is.
+    if (error.code !== 'version_mismatch' || !error.service) throw error;
+    current = error.service;
+  }
+  let target = current;
+  // A service newer than ccdt is not asked: this ccdt cannot tell which protocol it speaks.
+  if (!older(version, current)) {
+    say(dim(`服务端是 ${current}，正在检查新版本……`));
+    let installing = false;
+    try {
+      target = await upgradeService(
+        {
+          url: server.url,
+          fingerprint: server.fingerprint,
+          token,
+          deviceName: hostname(),
+          service: current,
+        },
+        {
+          resolveProxy: async (address) => proxyFor(address),
+          confirm: async (latest) => {
+            if (values.yes) return true;
+            if (!process.stdin.isTTY)
+              throw new Error('升级服务端要先确认：在终端里运行 ccdt upgrade，或加 --yes。');
+            return (
+              (await pick(
+                `服务端有新版本 ${latest}（现在是 ${current}）。升级时服务端会重启，进行中的运行和终端要先结束。`,
+                ['升级服务端', '不升级'],
+              )) === 0
+            );
+          },
+          onUpdate: (update) => {
+            if (update.state === 'installing' && !installing) say(dim('服务端正在下载并安装……'));
+            installing ||= update.state === 'installing';
+          },
+        },
+      );
+      say(`服务端已升级到 ${target}，正在重启，约一分钟后可以连接。`);
+    } catch (error) {
+      if (error.code === 'current') say(`服务端已是最新的正式版本 ${current}。`);
+      else if (error.code === 'declined' || error.code === 'manual') say(error.message);
+      else throw error;
+    }
+  }
+  if (target === version) {
+    say(`ccdt 是 ${version}，与服务端相同。`);
+    return 0;
+  }
+  if (older(target, FIRST_UPGRADABLE)) {
+    say(
+      `ccdt 不能自己换成 ${FIRST_UPGRADABLE} 以前的版本：到 ${releasePage(target)} 下载 ccdt ${target}，运行其中的安装脚本。`,
+    );
+    return 1;
+  }
+  if (!bundled) {
+    say(`从源码运行的 ccdt 不自行更新：服务端是 ${target}，请换到这个版本的源码。`);
+    return 1;
+  }
+  say(dim(`正在下载 ccdt ${target}……`));
+  install(await download(target));
+  say(`ccdt 已换成 ${target}。`);
+  say(dim('其他已打开的 ccdt 窗口仍是原来的版本，关掉重开即可。'));
+  return 0;
 }
 
 function listed(sessions) {
@@ -238,6 +324,7 @@ export async function main(argv) {
         'token-stdin': { type: 'boolean' },
         'no-save': { type: 'boolean' },
         all: { type: 'boolean' },
+        yes: { type: 'boolean', short: 'y' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },
@@ -254,6 +341,7 @@ export async function main(argv) {
     if (values.help || command === 'help') return (say(HELP), 0);
     if (values.version) return (process.stdout.write(`ccdt ${version}\n`), 0);
     if (command === 'login') return (await login(config, values, rest[0]), 0);
+    if (command === 'upgrade') return await upgrade(config, values);
     if (command === 'logout') {
       const server = config.server(values.server);
       if (!server) return (say('没有登录任何服务端。'), 0);
@@ -335,7 +423,9 @@ export async function main(argv) {
     say(error instanceof Error ? error.message : String(error));
     // ccdt speaks the protocol of its own release, as the desktop client does.
     if (error.code === 'version_mismatch' && error.service)
-      say(`这个 ccdt 是 ${version}；请安装与服务端相同版本的 ccdt：${releasePage(error.service)}`);
+      say(
+        `这个 ccdt 是 ${version}，服务端是 ${error.service}：运行 ccdt upgrade 升级，或安装与服务端相同版本的 ccdt：${releasePage(error.service)}`,
+      );
     return 1;
   }
 }
