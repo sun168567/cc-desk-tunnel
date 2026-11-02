@@ -536,10 +536,7 @@ test("a terminal's status line carries the session and weekly windows of its rep
         spend_limit: { used_percentage: 90, resets_at: 1793325600 },
       },
     }),
-    [
-      { name: 'five_hour', utilization: 23.5, resetsAt: new Date(1793325600 * 1000).toISOString() },
-      { name: 'seven_day', utilization: 41, resetsAt: null },
-    ],
+    [{ name: 'five_hour', utilization: 23.5, resetsAt: new Date(1793325600 * 1000).toISOString() }],
   );
   assert.deepEqual(statusLineQuota({ model: {} }), []);
   assert.deepEqual(statusLineQuota(null), []);

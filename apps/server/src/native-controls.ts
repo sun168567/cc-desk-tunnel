@@ -78,21 +78,21 @@ function merged(windows: Windows, previous: ObservedQuota | null, now: number) {
 }
 
 // The quota the CLI hands its status line (`rate_limits`, CLI 2.1.293), from the same replies as `rate_limit_event`:
-// the session and weekly windows, in percent, with resets in Unix seconds. A terminal has no message stream to carry
-// the event, so this is how its replies' quota is heard (see `terminalSettings`).
+// the session and weekly windows, in percent, with resets in Unix seconds; one without a reset could not be told from
+// one that has passed (see `unexpired`). A terminal has no message stream to carry the event, so this is how its
+// replies' quota is heard (see `terminalSettings`).
 export function statusLineQuota(status: unknown): Windows {
   const limits = (status as { rate_limits?: Record<string, unknown> } | null)?.rate_limits;
   return ['five_hour', 'seven_day'].flatMap((name) => {
     const window = limits?.[name] as { used_percentage?: unknown; resets_at?: unknown } | undefined;
-    return typeof window?.used_percentage === 'number' && Number.isFinite(window.used_percentage)
+    return typeof window?.used_percentage === 'number' &&
+      Number.isFinite(window.used_percentage) &&
+      typeof window.resets_at === 'number'
       ? [
           {
             name,
             utilization: Math.max(0, window.used_percentage),
-            resetsAt:
-              typeof window.resets_at === 'number'
-                ? new Date(window.resets_at * 1000).toISOString()
-                : null,
+            resetsAt: new Date(window.resets_at * 1000).toISOString(),
           },
         ]
       : [];

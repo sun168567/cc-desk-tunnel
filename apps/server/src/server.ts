@@ -983,7 +983,9 @@ export function createProxyServer(options: ServerOptions) {
     continued.quota = heard;
     const last = store.lastMetrics(terminal.sessionId);
     const rateLimits = quotas.observeTerminal(windows);
-    if (rateLimits?.available) usage.observe(rateLimits);
+    // Nothing the status line showed still holds: the quota the clients have is left as it is.
+    if (!rateLimits?.available) return;
+    usage.observe(rateLimits);
     const event = store.append(terminal.sessionId, terminal.id, {
       type: 'native.metrics',
       context: last?.context ?? null,
