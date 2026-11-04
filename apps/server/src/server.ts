@@ -55,6 +55,7 @@ import type { ClaudeOptions } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import type { NativeLogin } from './native-account.ts';
+import { IdleCompactions } from './idle-compaction.ts';
 import { NativeInput } from './native-input.ts';
 import { statusLineQuota } from './native-controls.ts';
 import { completeOnboarding } from './native-onboarding.ts';
@@ -223,6 +224,8 @@ export function createProxyServer(options: ServerOptions) {
   const mutations = new Set<string>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
+  const compactions = new IdleCompactions(store.directory, compactIdle);
+  armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
   let login: Login | undefined;
   // Each run or terminal is a CLI process that keeps some 250 MB; more of them than the memory holds would
@@ -462,7 +465,37 @@ export function createProxyServer(options: ServerOptions) {
       usage.observe(payload.rateLimits);
     const event = store.append(sessionId, runId, payload, createdAt);
     broadcast({ type: 'session.event', event }, sessionId);
+    if (payload.type === 'native.metrics' && payload.cacheTtl)
+      compactions.arm(sessionId, Date.parse(event.createdAt), payload);
+    else if (payload.type === 'message.user') compactions.cancel(sessionId);
     return event;
+  }
+  // Each session's last turn sets when it is compacted while idle, as after the service starts or the setting changes.
+  function armCompactions() {
+    if (!compactions.settings.enabled) return;
+    for (const session of store.list()) {
+      const turn = !session.activeRun && store.lastCachedTurn(session.id);
+      if (turn) compactions.arm(session.id, turn.endedAt, turn.metrics);
+    }
+  }
+  // Compacts an idle session before its prompt cache lapses, as the compact button does; see idle-compaction.ts. It
+  // runs here whether or not a window or the session's computer is there. A session that runs, or that a terminal
+  // holds, is left alone: either keeps its cache current.
+  function compactIdle(sessionId: string) {
+    if (closing || !options.claude) return;
+    try {
+      const { session } = store.get(sessionId);
+      if (session.activeRun || terminals.has(sessionId) || !session.device) return;
+      submit(undefined, { type: 'session.compact', requestId: randomUUID(), sessionId }, session);
+      const run = runs.get(sessionId);
+      if (run)
+        emit(run, {
+          type: 'native.notice',
+          text: `上一轮结束已 ${compactions.settings.afterMinutes} 分钟，提示缓存即将过期：按设置自动压缩上下文，压缩读取的是缓存。`,
+        });
+    } catch {
+      // As many runs as the service holds are going, or the session's native record is gone: left as it is.
+    }
   }
   // Records what has arrived of the output the run is in the middle of.
   function settle(run: Run) {
@@ -572,7 +605,15 @@ export function createProxyServer(options: ServerOptions) {
   async function native(run: Run) {
     try {
       const { session } = store.get(run.sessionId);
-      const ssh = run.device === serverDevice.id ? undefined : seats.get(run.device)!.door!.ssh!;
+      // The session's SSH configuration is named the same in the system prompt whether or not its computer is there
+      // (see `sessionSsh`): a compaction, which runs no command, reads the same prompt cache while it is away.
+      const door = seats.get(run.device)?.door?.ssh;
+      const ssh =
+        run.device === serverDevice.id
+          ? undefined
+          : door
+            ? sessionSsh(store.directory, run.sessionId, door)
+            : { configPath: sessionSshPath(store.directory, run.sessionId) };
       const said = store.promptValues(run.sessionId);
       const status = await runClaude(options.claude!, {
         sessionId: run.sessionId,
@@ -595,7 +636,7 @@ export function createProxyServer(options: ServerOptions) {
         dataDir: store.directory,
         resume: store.hasNativeContext(run.sessionId),
         signal: run.controller.signal,
-        ssh: ssh ? sessionSsh(store.directory, run.sessionId, ssh) : undefined,
+        ssh,
         emit: (event) => emit(run, event),
         approve: (toolId, waiting) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
@@ -754,6 +795,8 @@ export function createProxyServer(options: ServerOptions) {
     const running = terminals.get(command.sessionId);
     if (running?.continued && running.process && command.continueSession)
       return attachTerminal(peer, running, command);
+    // The terminal's own CLI takes care of the session while it is held.
+    compactions.cancel(command.sessionId);
     if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
       throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
     const device = target(peer, session);
@@ -1152,9 +1195,10 @@ export function createProxyServer(options: ServerOptions) {
     }
   }
   // A message starts a run on the computer the session is on, or joins the native run going there. Compacting
-  // is the native /compact command sent as a message.
+  // is the native /compact command sent as a message. The service compacts an idle session from no connection
+  // (`peer` absent; see `compactIdle`).
   function submit(
-    peer: Peer,
+    peer: Peer | undefined,
     command: CommandOf<'message.send' | 'session.compact' | 'run.continue'>,
     session: Session,
   ) {
@@ -1181,21 +1225,21 @@ export function createProxyServer(options: ServerOptions) {
       if (active.controller.signal.aborted)
         throw new DomainError('run_finishing', '原生运行正在停止，请稍后发送。');
       active.input.assertWritable();
-      peer.subscriptions.add(command.sessionId);
+      peer?.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
       active.input.submit(command.requestId, store.notice(command.sessionId) + text);
       return;
     }
     if (options.claude && mutations.size)
       throw new DomainError('native_busy', '原生状态正在读取，请稍后发送。');
-    const device = target(peer, session);
+    const device = peer ? target(peer, session) : session.device!.id;
     room();
-    peer.subscriptions.add(command.sessionId);
+    peer?.subscriptions.add(command.sessionId);
     const run: Run = {
       id: randomUUID(),
       sessionId: command.sessionId,
       device,
-      connectionId: peer.id,
+      connectionId: peer?.id ?? serverDevice.id,
       controller: new AbortController(),
       toolFinished: false,
       approvals: new Map(),
@@ -1334,6 +1378,19 @@ export function createProxyServer(options: ServerOptions) {
             '原生设置文件无法读取或写入；请在原生终端用 /config 检查。',
           );
         }
+        return undefined;
+      }
+      case 'compaction.get':
+        send(peer, {
+          type: 'compaction.state',
+          requestId: command.requestId,
+          values: compactions.settings,
+        });
+        return undefined;
+      case 'compaction.update': {
+        const values = compactions.update(command.values);
+        armCompactions();
+        broadcast({ type: 'compaction.state', requestId: command.requestId, values });
         return undefined;
       }
       case 'instructions.get':
@@ -1659,7 +1716,7 @@ export function createProxyServer(options: ServerOptions) {
             message:
               platformOf(peer.device) === 'win32'
                 ? '服务端经隧道连不上本机的 SSH 服务。\n隧道已经建立，但探测命令没有得到应答：常见于安全软件拦截了内置的 sshd.exe 或 PowerShell，请检查保护记录后重新连接。'
-                : '服务端经隧道连不上本机的 SSH 服务。\n隧道已经建立，但探测命令没有得到应答：请重新连接；反复出现时在“设置 → 常规”里打开连接日志查看原因。',
+                : '服务端经隧道连不上本机的 SSH 服务。\n隧道已经建立，但探测命令没有得到应答：请重新连接；反复出现时在“设置 → 关于与更新”里打开连接日志查看原因。',
           });
           peer.socket.close(4003, 'SSH probe failed');
         }),
@@ -2022,6 +2079,7 @@ export function createProxyServer(options: ServerOptions) {
       );
       for (const run of runs.values()) cancel(run, '服务停止，运行未重放。');
       for (const seat of seats.values()) clearTimeout(seat.away);
+      compactions.clear();
       const cleanup = [
         ...[...peers].map((peer) => peer.tunnel?.close()),
         ...[...seats.values()].map((seat) => seat.door?.close()),

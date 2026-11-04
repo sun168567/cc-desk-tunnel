@@ -2,6 +2,60 @@ import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
 
+// A settings page: its title, a line on what its settings apply to, and its sections.
+export function Page({
+  title,
+  label = title,
+  intro,
+  actions,
+  children,
+}: {
+  title: string;
+  label?: string;
+  intro?: ReactNode;
+  // Beside the title, for what acts on the whole page.
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  const heading = <h1 className="page-title">{title}</h1>;
+  return (
+    <section className="page" aria-label={label}>
+      <div className="page-body">
+        {actions ? (
+          <header className="page-header">
+            {heading}
+            {actions}
+          </header>
+        ) : (
+          heading
+        )}
+        {intro && <p className="muted page-intro">{intro}</p>}
+        {children}
+      </div>
+    </section>
+  );
+}
+// One setting: what it is and does on the left, its control on the right.
+export function Row({
+  title,
+  detail,
+  children,
+}: {
+  title: string;
+  detail?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="setting-row">
+      <span>
+        <strong>{title}</strong>
+        {detail && <small>{detail}</small>}
+      </span>
+      {children}
+    </div>
+  );
+}
+
 export function IconButton({
   title,
   onClick,

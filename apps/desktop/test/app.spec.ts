@@ -635,7 +635,11 @@ test('usage log: period-independent totals, chart hover, model filter and table'
   await expect(pager.getByLabel('页码')).toHaveValue('3');
   await page.screenshot({ path: resolve(screenshots, 'usage-pages.png'), fullPage: true });
   await page.getByRole('button', { name: '返回账号', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '账号', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: '账号信息' })
+      .getByRole('heading', { name: '账号与额度', exact: true }),
+  ).toBeVisible();
 });
 
 test('Electron remembers the sign-in, connects on the next launch and stays in the tray when closed', async () => {

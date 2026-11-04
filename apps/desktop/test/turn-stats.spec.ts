@@ -186,6 +186,10 @@ test('the line is off until the setting is switched on', async ({ page }) => {
   await expect(page.locator('.turn-stats')).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', { name: '本机设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '外观', exact: true })
+    .click();
   await expect(page.getByRole('switch', { name: '显示回复小结' })).not.toBeChecked();
 });
 
@@ -193,6 +197,10 @@ test('the settings choose which figures the line shows, or hide it', async ({ pa
   await switchOn(page);
   await page.goto('/');
   await page.getByRole('button', { name: '本机设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '外观', exact: true })
+    .click();
   const choice = (name: string) =>
     page.getByRole('group', { name: '小结里显示' }).getByRole('button', { name, exact: true });
   await expect(choice('平均首字')).toHaveAttribute('aria-pressed', 'true');

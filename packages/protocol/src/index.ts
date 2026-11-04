@@ -112,6 +112,15 @@ export const nativeSettingsSchema = z.object({
   toolSearch: toggle,
 });
 export type NativeSettings = z.infer<typeof nativeSettingsSchema>;
+// The service's own setting, not the CLI's: before the prompt cache of an idle session lapses, it compacts the session
+// with /compact, as the compact button does, so that the summary reads the cache instead of the whole context anew.
+// Only a session whose last turn wrote a one-hour cache and holds `minTokens` or more, `afterMinutes` after that turn.
+export const idleCompactionSchema = z.object({
+  enabled: z.boolean(),
+  afterMinutes: z.number().int().min(10).max(55),
+  minTokens: z.number().int().min(20_000).max(1_000_000),
+});
+export type IdleCompaction = z.infer<typeof idleCompactionSchema>;
 export const contextUsageSchema = z.object({
   model: z.string(),
   usedTokens: z.number().nonnegative(),
@@ -303,6 +312,9 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     context: contextUsageSchema.nullable(),
     usage: nativeUsageSchema.nullable(),
     rateLimits: rateLimitsSchema.nullable(),
+    // How long the prompt cache the turn wrote lasts, as its requests were billed; only on a turn's end, and only when
+    // it wrote one.
+    cacheTtl: z.enum(['5m', '1h']).optional(),
     errors: z.object({ context: z.string().optional(), usage: z.string().optional() }).optional(),
   }),
   z.object({ type: z.literal('native.title'), title: z.string().min(1).max(120) }),
@@ -531,6 +543,14 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('settings.update'),
       ...request,
       values: nativeSettingsSchema.partial().strict(),
+    })
+    .strict(),
+  z.object({ type: z.literal('compaction.get'), ...request }).strict(),
+  z
+    .object({
+      type: z.literal('compaction.update'),
+      ...request,
+      values: idleCompactionSchema.partial().strict(),
     })
     .strict(),
   z.object({ type: z.literal('instructions.get'), ...request }).strict(),
@@ -797,6 +817,12 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('account.state'), ...accountStateSchema.shape }),
   z.object({ type: z.literal('settings.state'), requestId: id, values: nativeSettingsSchema }),
+  // Sent to every connection when it changes; the one that asked finds its request ID.
+  z.object({
+    type: z.literal('compaction.state'),
+    requestId: id.optional(),
+    values: idleCompactionSchema,
+  }),
   z.object({
     type: z.literal('instructions.state'),
     requestId: id,

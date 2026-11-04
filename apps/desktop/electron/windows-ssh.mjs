@@ -167,7 +167,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
     }
     if (!ready)
       throw new Error(
-        `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。这台电脑启动较慢时，可在“设置 → 常规”里调大等待时间。`,
+        `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。这台电脑启动较慢时，可在“设置 → 连接”里调大等待时间。`,
       );
     return {
       port,

@@ -23,6 +23,7 @@ export const browserCommands = new Set<Command['type']>([
   'usage.query',
   'quota.watch',
   'account.status',
+  'compaction.get',
   'web.settings.get',
   'web.settings.update',
   'web.sessions.revoke',

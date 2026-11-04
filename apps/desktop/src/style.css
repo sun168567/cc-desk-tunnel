@@ -1202,10 +1202,34 @@ dialog:has(.release-notes) {
   font-weight: 600;
   margin: 0 0 22px;
 }
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.page-header .page-title {
+  margin: 0;
+}
 .page-heading {
   font-size: 14px;
   font-weight: 600;
   margin: 30px 0 12px;
+}
+/* What the page's settings apply to, under its title. */
+.page-intro {
+  margin: -12px 0 26px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.page-intro + .page-heading {
+  margin-top: 0;
+}
+.page-section-note {
+  margin: -4px 0 12px;
+  font-size: 13px;
+  line-height: 1.7;
 }
 .page-body > .button {
   margin-top: 18px;
@@ -1264,6 +1288,13 @@ dialog:has(.release-notes) {
 .setting-row strong,
 .settings-list strong {
   font-weight: 500;
+}
+/* The controls keep their line; the words beside them wrap instead. */
+.setting-row > .setting-actions,
+.setting-row > .button,
+.setting-actions .button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .setting-row small,
 .settings-list small {
@@ -2814,7 +2845,8 @@ details[open] > summary > .fold-chevron {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-bottom: 25px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 .account-avatar {
   display: grid;
@@ -2853,7 +2885,7 @@ details[open] > summary > .fold-chevron {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin: -8px 0 22px;
+  margin: 14px 0;
   padding: 12px 14px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-s);
@@ -2868,7 +2900,7 @@ details[open] > summary > .fold-chevron {
   display: grid;
   gap: 10px;
   max-width: 520px;
-  margin: -8px 0 26px;
+  margin: 14px 0;
   padding: 16px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-s);
@@ -2901,33 +2933,24 @@ details[open] > summary > .fold-chevron {
   justify-content: flex-end;
   margin: 4px 0 0;
 }
-.account-details {
-  margin: 0;
-}
-.account-details > div {
-  display: grid;
-  grid-template-columns: 155px minmax(0, 1fr);
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line-soft);
-  gap: 18px;
-  font-size: 12px;
-}
-.account-details dt {
-  color: var(--muted);
-}
-.account-details dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
+/* A section heading with what acts on that section beside it. */
 .account-section-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  font-size: 14px;
-  margin: 32px 0 18px;
+}
+.account-section-title h2 {
+  margin: 0;
+  font: inherit;
+}
+.account-card > p {
+  margin: 15px 0;
+  font-size: 13px;
 }
 .quota-row {
-  margin: 0 0 22px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 .quota-row > div {
   display: flex;
@@ -2953,20 +2976,7 @@ details[open] > summary > .fold-chevron {
   color: var(--faint);
   font-size: 11px;
 }
-.quota-live {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-}
-.quota-live small {
-  display: block;
-  color: var(--faint);
-  font-size: 11px;
-}
 .account-section-title .button {
-  margin-left: auto;
   min-height: 28px;
   font-size: 12px;
   font-weight: 400;
@@ -3547,10 +3557,6 @@ dialog::backdrop {
   .account-body {
     padding: 24px 18px;
   }
-  .account-details > div {
-    grid-template-columns: 100px minmax(0, 1fr);
-    gap: 12px;
-  }
   .quota-row > div {
     flex-wrap: wrap;
     gap: 5px;
@@ -3598,6 +3604,14 @@ dialog {
 }
 .account-body {
   padding-top: 26px;
+}
+/* The current value under what a setting does, on a line of its own. */
+.setting-path {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 .setting-actions code {
   align-self: center;

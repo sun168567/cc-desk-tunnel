@@ -63,7 +63,11 @@ test('Claude Code settings load from the service and save each change at once', 
   await page.getByRole('button', { name: '连接', exact: true }).click();
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Claude Code 设置' });
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: 'CLI 设置', exact: true })
+    .click();
+  const panel = page.getByRole('region', { name: 'CLI 设置' });
   await expect(panel.getByLabel('自动压缩窗口', { exact: true })).toHaveValue('250000');
   await expect(panel.getByLabel('快速模式', { exact: true })).toHaveValue('false');
   await panel.getByLabel('自动压缩窗口', { exact: true }).selectOption('1000000');
@@ -103,6 +107,7 @@ test('the settings of this computer open from the login page without a connectio
   await page.getByRole('button', { name: '本机设置', exact: true }).click();
   await expect(page.getByRole('navigation', { name: '设置分类' }).getByRole('button')).toHaveText([
     '常规',
+    '外观',
     '通知',
     '快捷键',
   ]);
@@ -158,7 +163,10 @@ test('the global CLAUDE.md is edited here and saved only over what was read', as
   await page.getByRole('button', { name: '连接', exact: true }).click();
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
-  // The other settings of the page are not answered here.
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '全局说明', exact: true })
+    .click();
   const panel = page.locator('.instructions-card');
   const editor = panel.getByLabel('全局说明', { exact: true });
   const save = panel.getByRole('button', { name: '保存', exact: true });

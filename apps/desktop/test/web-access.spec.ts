@@ -184,6 +184,10 @@ test('production browser logs in with TOTP, sends no desktop identity, and expos
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: /^账号/ })).toHaveCount(0);
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '浏览器访问', exact: true })
+    .click();
   await expect(page.getByRole('switch', { name: '启用 Web 访问' })).toHaveCount(0);
   await expect(page.getByText('已登录浏览器')).toBeVisible();
   await page.getByText('已登录浏览器').click();
@@ -232,21 +236,33 @@ test('mainline themes and browser access settings coexist and retain the chosen 
   page,
 }) => {
   await browserFixture(page, true);
+  const sections = page.getByRole('navigation', { name: '设置分类' });
+  // The theme is chosen on its own page and shows on every one, the service's browser access among them.
+  async function theme() {
+    await sections.getByRole('button', { name: '外观', exact: true }).click();
+    await expect(page.getByRole('radiogroup', { name: '主题', exact: true })).toBeVisible();
+  }
+  async function web() {
+    await sections.getByRole('button', { name: '浏览器访问', exact: true }).click();
+    await expect(page.getByRole('region', { name: '浏览器访问' })).toBeVisible();
+  }
   async function openSettings() {
     await expect(page.locator('.shell')).toBeVisible();
     await page.getByRole('button', { name: '设置与账号', exact: true }).click();
     await page.getByRole('menuitem', { name: '设置', exact: true }).click();
-    await expect(page.getByRole('radiogroup', { name: '主题', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '浏览器访问', exact: true })).toBeVisible();
+    await theme();
   }
   await openSettings();
   await page.getByRole('radio', { name: '浅色', exact: true }).click();
+  await web();
   await expect(page.locator('.web-access-settings')).toHaveCSS(
     'background-color',
     'rgb(255, 255, 255)',
   );
+  await theme();
   await page.getByRole('radio', { name: '深色', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await web();
   await expect(page.locator('.web-access-settings')).toHaveCSS(
     'background-color',
     'rgb(30, 31, 35)',
@@ -272,11 +288,14 @@ test('mainline themes and browser access settings coexist and retain the chosen 
     'aria-checked',
     'true',
   );
+  await web();
   await expect(page.locator('.web-access-settings')).toHaveCSS(
     'background-color',
     'rgb(30, 31, 35)',
   );
+  await theme();
   await page.getByRole('radio', { name: '跟随系统', exact: true }).click();
+  await web();
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('.web-access-settings')).toHaveCSS(
     'background-color',
@@ -675,6 +694,10 @@ test('browser path changes submit only the path with fresh proof and navigate on
   await expect(page.locator('.shell')).toBeVisible();
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '浏览器访问', exact: true })
+    .click();
   await page
     .locator('.setting-row')
     .filter({ hasText: '访问设置' })

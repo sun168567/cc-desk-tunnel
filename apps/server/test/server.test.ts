@@ -8,6 +8,7 @@ import type { TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION, serverMessageSchema } from '@cc-desk-tunnel/protocol';
 import type { ServerMessage, SessionEvent } from '@cc-desk-tunnel/protocol';
+import { readIdleCompaction } from '../src/idle-compaction.ts';
 import { createProxyServer } from '../src/server.ts';
 import { SessionStore } from '../src/store.ts';
 import { serviceVersion } from '../src/updates.ts';
@@ -1043,4 +1044,30 @@ test('a project moves to another folder of its computer with all its sessions, a
     f.server.store.get(next.sessionId).session.nativeRoot,
     f.server.store.get(ids[0]!).session.nativeRoot,
   );
+});
+
+test('the idle compaction setting is read, changed for every window and kept with the sessions', async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const other = await f.connect({ id: randomUUID(), name: '另一台' });
+  await client.request({ type: 'compaction.get' });
+  const read = await client.wait((message) => message.type === 'compaction.state');
+  assert.ok(read.type === 'compaction.state');
+  assert.deepEqual(read.values, { enabled: false, afterMinutes: 50, minTokens: 100_000 });
+  const changed = await client.request({
+    type: 'compaction.update',
+    values: { enabled: true, minTokens: 150_000 },
+  });
+  assert.ok(changed.type === 'response' && changed.ok);
+  const told = await other.wait((message) => message.type === 'compaction.state');
+  assert.ok(told.type === 'compaction.state');
+  assert.deepEqual(told.values, { enabled: true, afterMinutes: 50, minTokens: 150_000 });
+  // Past the hour the cache has lapsed: refused, and nothing changes.
+  other.send({ type: 'compaction.update', requestId: randomUUID(), values: { afterMinutes: 60 } });
+  assert.equal(
+    (await other.wait((message) => message.type === 'connection.error')).type,
+    'connection.error',
+  );
+  // Kept with the sessions, for the service as it starts again.
+  assert.equal(readIdleCompaction(f.directory).minTokens, 150_000);
 });
