@@ -46,6 +46,7 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import {
   runClaude,
+  nativeContext,
   nativeDirectory,
   prepareNativeDirectory,
   quotas,
@@ -902,6 +903,15 @@ export function createProxyServer(options: ServerOptions) {
             // session's ID from a chat run or the next terminal, which the CLI refuses it to as one in use.
             if (current.continued.empty)
               await deleteSession(current.sessionId, { dir: cwd }).catch(() => {});
+            else
+              record(
+                current.sessionId,
+                current.id,
+                nativeContext(
+                  current.sessionId,
+                  await getSessionInfo(current.sessionId, { dir: cwd }).catch(() => undefined),
+                ),
+              );
             rmSync(settingsPath, { force: true });
             rmSync(hooksPath, { force: true });
             rmSync(statusPath, { force: true });
