@@ -105,18 +105,18 @@ Usually you do not need the server for upgrades: the client's Settings → About
 
 ### 2. Install a client
 
-There are two clients; install either or both. Each must be the same version as the service; the links below are the newest release.
+There are two clients; install either or both. Each must be the same version as the service.
 
 - **Desktop client**: a desktop app that groups sessions by project and folds each conversation's work into summaries you can expand.
 - **Terminal client `ccdt`**: the official Claude Code in your own terminal, sharing sessions with the desktop client.
 
 #### Desktop client
 
-| System | Download |
-| --- | --- |
-| Windows 10 / 11 x64 | [CC-Desk-Tunnel-Setup-0.3.9-x64.exe](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-Setup-0.3.9-x64.exe) |
-| macOS (experimental) | [Apple silicon](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-arm64.dmg) · [Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-x64.dmg); see [macOS client](docs/macos.md) (in Chinese) |
-| Linux x64 (experimental) | [.deb](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-linux-amd64.deb); see [Linux client](docs/linux.md) (in Chinese) |
+Download it from the [latest release](https://github.com/sun168567/cc-desk-tunnel/releases/latest); the table at the top of the page lists the installer for each system, one click each:
+
+- Windows 10 / 11 x64: the `.exe` installer.
+- macOS (experimental): the Apple silicon or Intel `.dmg`; see [macOS client](docs/macos.md) (in Chinese).
+- Linux x64 (experimental): the `.deb`; see [Linux client](docs/linux.md) (in Chinese).
 
 The Windows installer bundles PowerShell 7 and OpenSSH; nothing else is needed. Start it, enter the three values from step 1 and connect. Expect a SmartScreen prompt on first run; see [Antivirus and SmartScreen](#antivirus-and-smartscreen). The macOS and Linux clients are unsigned and upgraded by downloading and installing the new package.
 
@@ -134,7 +134,7 @@ On macOS and Linux (experimental):
 curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
 ```
 
-The script downloads the newest release, checks it against `SHA256SUMS`, installs it for the current user and puts `ccdt` on the PATH; no administrator rights are needed. Then run `ccdt login`. If the service is not on the newest release, install the same version as the service; see [Terminal client](docs/cli.md#安装) (in Chinese). Packages to download by hand: [Windows x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-windows-x64.zip) · [macOS Apple silicon](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-arm64.tar.gz) · [macOS Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-x64.tar.gz) · [Linux x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-x64.tar.gz) · [Linux arm64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-arm64.tar.gz).
+The script downloads the newest release, checks it against `SHA256SUMS`, installs it for the current user and puts `ccdt` on the PATH; no administrator rights are needed. Then run `ccdt login`. If the service is not on the newest release, install the same version as the service; see [Terminal client](docs/cli.md#安装) (in Chinese).
 
 ### 3. Sign in to Claude
 

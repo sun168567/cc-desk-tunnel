@@ -94,18 +94,18 @@ sudo cc-desk-tunnel help      # 全部命令：更换凭据、备份恢复、证
 
 ### 2. 安装客户端
 
-客户端有两种，可以只装一种，也可以都装；都要与服务端同一版本，下面的链接都是最新的正式版。
+客户端有两种，可以只装一种，也可以都装；都要与服务端同一版本。
 
 - **图形客户端**：桌面应用，按项目管理会话，对话过程折叠成摘要、可逐级展开。
 - **终端客户端 `ccdt`**：在自己的终端里使用原版 Claude Code，与图形客户端共用会话。
 
 #### 图形客户端
 
-| 系统 | 下载 |
-| --- | --- |
-| Windows 10 / 11 x64 | [CC-Desk-Tunnel-Setup-0.3.9-x64.exe](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-Setup-0.3.9-x64.exe) |
-| macOS（实验性） | [Apple 芯片](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-arm64.dmg) · [Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-x64.dmg)，见 [macOS 客户端](docs/macos.md) |
-| Linux x64（实验性） | [.deb](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-linux-amd64.deb)，见 [Linux 客户端](docs/linux.md) |
+从[最新发布页](https://github.com/sun168567/cc-desk-tunnel/releases/latest)下载，页面开头的表格按系统列出了安装包，点击即下载：
+
+- Windows 10 / 11 x64：`.exe` 安装包。
+- macOS（实验性）：Apple 芯片或 Intel 的 `.dmg`，见 [macOS 客户端](docs/macos.md)。
+- Linux x64（实验性）：`.deb`，见 [Linux 客户端](docs/linux.md)。
 
 Windows 安装包自带 PowerShell 7 和 OpenSSH，不需要另装任何东西。启动后填入上一步的三项信息并连接。首次运行会遇到 SmartScreen 提示，处理方法见[杀毒软件与 SmartScreen](#杀毒软件与-smartscreen)。macOS 与 Linux 的客户端没有签名，升级时需要重新下载安装。
 
@@ -123,7 +123,7 @@ macOS、Linux（实验性）：
 curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
 ```
 
-脚本从发布页下载最新的正式版，按 `SHA256SUMS` 校验后只为当前用户安装，并把 `ccdt` 加入 PATH，不需要管理员权限。装好后运行 `ccdt login` 登录服务端。服务端不是最新版时，先指定与它相同的版本，见[终端客户端](docs/cli.md#安装)。也可以手动下载：[Windows x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-windows-x64.zip) · [macOS Apple 芯片](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-arm64.tar.gz) · [macOS Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-x64.tar.gz) · [Linux x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-x64.tar.gz) · [Linux arm64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-arm64.tar.gz)。
+脚本从发布页下载最新的正式版，按 `SHA256SUMS` 校验后只为当前用户安装，并把 `ccdt` 加入 PATH，不需要管理员权限。装好后运行 `ccdt login` 登录服务端。服务端不是最新版时，先指定与它相同的版本，见[终端客户端](docs/cli.md#安装)。
 
 ### 3. 登录 Claude
 
