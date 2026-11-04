@@ -3,7 +3,7 @@ import { hostname } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
-import { Config } from './config.mjs';
+import { Config, hostOf } from './config.mjs';
 import { Service, proxyFor } from './connection.mjs';
 import { readKeys } from './keys.mjs';
 import { pad, pick } from './picker.mjs';
@@ -24,15 +24,19 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
   ccdt usage             订阅额度与调用统计
   ccdt config            查看和修改设置：在终端里用方向键逐项选择
   ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认
-  ccdt login [wss 地址]  登录服务端；不写地址时用图形客户端保存的。--fingerprint 证书指纹，
+  ccdt server            已登录的服务端：选一个作为默认连接的，或登录新的
+  ccdt login [wss 地址]  登录服务端；不写地址时从图形客户端保存的里选。--fingerprint 证书指纹，
                          --token-stdin 从标准输入读凭据，--no-save 不保存
-  ccdt logout            退出当前服务端
+  ccdt logout            退出一个服务端（登录了几个时先选），其他的不受影响
   ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用
   ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本
   ccdt upgrade --check   只检查有没有新版本
   ccdt --version         版本，须与服务端相同
 
-选项：--server <wss 地址> 在登录过的几个服务端里选一个。
+选项：
+  -s                     先选服务端，再做后面的事，如 ccdt -s -r
+  --server <名称>        直接指定服务端：图形客户端里的连接名、主机名或地址，写出能区分的一段即可
+不指定时连接上一次连接的服务端。
 
 用法和本地的 claude 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。
 终端里聊的内容会记入这个会话，图形客户端里也能看到。`;
@@ -123,39 +127,149 @@ async function readLine(prompt, text = '') {
   }
 }
 
-function credentials(config, values) {
-  const server = config.server(values.server);
-  if (!server) throw new Error('还没有登录服务端：先运行 ccdt login。');
+// What a service is called here: the desktop client's name for the connection to it, else its host.
+const called = (server, names) => names.get(server.url) ?? hostOf(server.url);
+// The services signed in to, the one connected to last first, each line its name, when it was last used and its
+// address; the one used when none is named is marked.
+function serverLines(config, names) {
+  const servers = config.servers.toSorted((a, b) => (b.usedAt ?? '').localeCompare(a.usedAt ?? ''));
+  return {
+    servers,
+    lines: servers.map(
+      (server) =>
+        `${pad(called(server, names), 18)}${pad(server.usedAt ? when(server.usedAt) : '', 14)}${dim(server.url)}${server.url === config.server()?.url ? '  （当前）' : ''}`,
+    ),
+  };
+}
+
+// The service a command goes to: the one `--server` names, one chosen with -s, else the one connected to last. It is
+// chosen once and kept in `values`, for connecting again after a lost connection to go back to it.
+async function target(config, values) {
+  if (!config.servers.length) {
+    if (values.server || !process.stdin.isTTY)
+      throw new Error('还没有登录服务端：先运行 ccdt login。');
+    say('还没有登录服务端，先登录一个。');
+    await login(config, values);
+  }
+  const names = config.names();
+  let server = config.server();
+  if (values.server) {
+    const found = config.find(values.server, names);
+    if (found.length > 1)
+      throw new Error(
+        `有几个服务端都符合 ${values.server}：${found.map((other) => called(other, names)).join('、')}，请写得更具体。`,
+      );
+    if (!found.length)
+      throw new Error(
+        `没有登录过 ${values.server}：运行 ccdt server 查看已登录的服务端，或运行 ccdt login 登录。`,
+      );
+    server = found[0];
+  } else if (values.select) {
+    if (!process.stdin.isTTY) throw new Error('选服务端需要在终端里运行；也可以用 --server 指定。');
+    const { servers, lines } = serverLines(config, names);
+    const chosen = await pick('连接哪个服务端：', lines, process.stdin, process.stderr, {
+      at: servers.indexOf(server),
+      hint: '↑↓ 选择 · Enter 连接 · Esc 取消',
+      clear: true,
+    });
+    if (chosen === undefined) throw new Error('已取消。');
+    server = servers[chosen];
+  }
+  values.server = server.url;
+  values.select = false;
+  return server;
+}
+
+function credentials(server) {
   const token = process.env.CCDT_TOKEN || reveal(server.url, server.token);
   if (!token)
     throw new Error('没有保存这个服务端的凭据：运行 ccdt login 重新登录，或设置 CCDT_TOKEN。');
-  return { server, token };
+  return token;
 }
 
+// A service connected to becomes the one used when none is named.
 async function signIn(config, values, quiet = false) {
-  const { server, token } = credentials(config, values);
-  if (!quiet) say(dim(`正在连接 ${server.url} ……`));
-  return Service.connect({ ...server, token, deviceId: config.device(), waits: config.waits, log });
+  const server = await target(config, values);
+  const token = credentials(server);
+  if (!quiet) say(dim(`正在连接 ${called(server, config.names())} ……`));
+  const service = await Service.connect({
+    ...server,
+    token,
+    deviceId: config.device(),
+    waits: config.waits,
+    log,
+  });
+  config.use(server.url);
+  return service;
 }
 
+// `ccdt server`: the services signed in to; the one chosen is connected to when none is named.
+async function chooseServer(config, values) {
+  const names = config.names();
+  const { servers, lines } = serverLines(config, names);
+  if (!process.stdin.isTTY) return (say(lines.join('\n') || '还没有登录服务端。'), 0);
+  const chosen = await pick(
+    '已登录的服务端：',
+    [...lines, '登录新的服务端…'],
+    process.stdin,
+    process.stderr,
+    {
+      at: Math.max(0, servers.indexOf(config.server())),
+      hint: '↑↓ 选择 · Enter 设为默认 · Esc 退出',
+    },
+  );
+  if (chosen === undefined) return 0;
+  if (chosen === servers.length) return (await login(config, values), 0);
+  config.use(servers[chosen].url, false);
+  say(`之后默认连接 ${called(servers[chosen], names)}。`);
+  return 0;
+}
+
+async function logout(config, values) {
+  if (!config.servers.length) return (say('没有登录任何服务端。'), 0);
+  values.select ||= !values.server && config.servers.length > 1 && process.stdin.isTTY;
+  const server = await target(config, values);
+  discard(server.url, server.token);
+  config.forget(server.url);
+  say(`已退出 ${called(server, config.names())}。`);
+  return 0;
+}
+
+// Without an address the service is one of the desktop client's, or one typed in.
 async function login(config, values, url) {
   let server = url ? { url, fingerprint: values.fingerprint ?? '' } : undefined;
   if (!server) {
     const saved = config.desktopLogins();
-    if (!saved.length) throw new Error('用法：ccdt login <wss 地址> [--fingerprint 证书指纹]');
-    const chosen =
-      saved.length === 1
-        ? 0
-        : await pick(
-            '图形客户端保存了这几个服务端，选一个：',
-            saved.map((login) => login.url),
-          );
-    if (chosen === undefined) throw new Error('已取消。');
-    server = {
-      ...saved[chosen],
-      ...(values.fingerprint ? { fingerprint: values.fingerprint } : {}),
-    };
-    say(`服务端：${server.url}（取自图形客户端）`);
+    let chosen = saved.length === 1 ? 0 : undefined;
+    if (process.stdin.isTTY) {
+      chosen = await pick(
+        '登录哪个服务端：',
+        [
+          ...saved.map(
+            (login) =>
+              `${pad(login.name, 18)}${dim(login.url)}${config.servers.some((server) => server.url === login.url) ? '  （已登录）' : ''}`,
+          ),
+          '输入其他地址…',
+        ],
+        process.stdin,
+        process.stderr,
+        { hint: '↑↓ 选择 · Enter 登录 · Esc 取消', clear: true },
+      );
+      if (chosen === undefined) throw new Error('已取消。');
+    }
+    if (chosen === undefined)
+      throw new Error('用法：ccdt login <wss 地址> [--fingerprint 证书指纹]');
+    if (chosen < saved.length) {
+      server = {
+        url: saved[chosen].url,
+        fingerprint: values.fingerprint ?? saved[chosen].fingerprint,
+      };
+      say(`服务端：${saved[chosen].name}（${server.url}，取自图形客户端）`);
+    } else {
+      const typed = (await readLine('服务端地址（wss://…）：'))?.trim();
+      if (!typed) throw new Error('已取消。');
+      server = { url: typed, fingerprint: values.fingerprint ?? '' };
+    }
   }
   const token = values['token-stdin']
     ? await readSecret('')
@@ -184,7 +298,8 @@ const older = (a, b) => a.localeCompare(b, undefined, { numeric: true }) < 0;
 // The service first, the way the desktop client upgrades it: it fetches its newest release and restarts. Then ccdt
 // becomes the release of the service, which is what it can speak to: newer, or older where ccdt was ahead of it.
 async function upgrade(config, values) {
-  const { server, token } = credentials(config, values);
+  const server = await target(config, values);
+  const token = credentials(server);
   let current;
   try {
     const service = await signIn(config, values);
@@ -519,6 +634,7 @@ export async function main(argv) {
       options: {
         resume: { type: 'boolean', short: 'r' },
         server: { type: 'string' },
+        select: { type: 'boolean', short: 's' },
         fingerprint: { type: 'string' },
         'token-stdin': { type: 'boolean' },
         'no-save': { type: 'boolean' },
@@ -543,13 +659,8 @@ export async function main(argv) {
     if (command === 'login') return (await login(config, values, rest[0]), 0);
     if (command === 'upgrade') return await (values.check ? check : upgrade)(config, values);
     if (command === 'config') return await configure(config, values, rest);
-    if (command === 'logout') {
-      const server = config.server(values.server);
-      if (!server) return (say('没有登录任何服务端。'), 0);
-      discard(server.url, server.token);
-      config.forget(server.url);
-      return (say(`已退出 ${server.url}。`), 0);
-    }
+    if (command === 'logout') return await logout(config, values);
+    if (command === 'server') return await chooseServer(config, values);
     if (command && !['new', 'open', 'sessions', 'usage'].includes(command))
       return (say(`没有这个命令：${command}\n\n${HELP}`), 2);
     service = await signIn(config, values);
