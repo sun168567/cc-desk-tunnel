@@ -302,10 +302,11 @@ export function App({
       ? { ...(metrics ?? state.metrics)!, rateLimits: quota.rateLimits }
       : (metrics ?? state.metrics);
   const canCompact = !!latest(events, 'native.context')?.persisted;
-  // A native terminal anywhere keeps what the CLI holds for all sessions, the account and its status, from
-  // being read or changed, save the quota the account page asks for; this window's own terminal,
-  // `terminalSessionId`, also takes the window.
-  const anyTerminal = state.sessions.some((session) => session.activeRun?.surface === 'terminal');
+  // A chat run holds the CLI's state while it goes; a terminal holds only its own session, and this window's own
+  // terminal, `terminalSessionId`, also takes the window.
+  const anyChat = state.sessions.some(
+    (session) => session.activeRun && session.activeRun.surface !== 'terminal',
+  );
   const controlsDisabled =
     !connected ||
     busy ||
@@ -511,13 +512,13 @@ export function App({
       !connected ||
       history?.loading ||
       selected.activeRun ||
-      anyTerminal ||
+      anyChat ||
       refreshed.current.has(selected.id)
     )
       return;
     refreshed.current.add(selected.id);
     void refreshStatus(selected.id);
-  }, [nativeMode, selected?.id, connected, history?.loading, selected?.activeRun, anyTerminal]);
+  }, [nativeMode, selected?.id, connected, history?.loading, selected?.activeRun, anyChat]);
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
@@ -534,7 +535,7 @@ export function App({
       state.capabilities ||
       state.account?.loggedIn !== true ||
       refreshing ||
-      state.sessions.some((session) => session.activeRun)
+      anyChat
     )
       return;
     void refreshStatus();
@@ -848,7 +849,6 @@ export function App({
   }
   function sessionMenu(session: Session): MenuItem[] {
     const idle = connected && !busy && !terminalSessionId;
-    const anyRun = state.sessions.some((item) => !!item.activeRun);
     const pinned = prefs.pinnedSessions.includes(session.id);
     return [
       {
@@ -920,7 +920,7 @@ export function App({
             {
               label: '刷新状态',
               icon: <RefreshCw />,
-              disabled: !idle || anyRun || refreshing || !!history?.loading,
+              disabled: !idle || anyChat || refreshing || !!history?.loading,
               run: () => {
                 void refreshStatus(session.id);
               },
