@@ -708,9 +708,8 @@ export function createProxyServer(options: ServerOptions) {
       await active.controls.refresh(command.quota);
       return;
     }
-    // A terminal keeps the CLI's state from being read, except for the quota the user asks for, which a CLI of its
-    // own reads without taking up the session of a terminal (its figures stay as they were).
-    if ((terminals.size && !command.quota) || runs.size || mutations.size)
+    // A terminal's session is read by a CLI of its own that does not take it up (its figures stay as they were).
+    if (runs.size || mutations.size)
       throw new DomainError('native_busy', '运行结束后再刷新原生状态。');
     const resume = !terminals.has(command.sessionId);
     const last = resume ? null : store.lastMetrics(command.sessionId);

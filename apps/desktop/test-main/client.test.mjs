@@ -268,6 +268,34 @@ test('late responses cannot restore an evicted session or seed a cursor from uns
   snapshot(sessions[0], []);
 });
 
+test('an event of a session not shown, as the quota of a terminal sent to all, leaves its cached history to be fetched', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  const [held, shown] = sessions;
+  client.select(held.id);
+  snapshot(held, [event(held.id, 1)]);
+  client.select(shown.id);
+  snapshot(shown, []);
+  // While another session is shown, the terminal's turn is recorded (2) and its quota sent to every connection (3).
+  socket.message({
+    type: 'session.event',
+    event: {
+      ...event(held.id, 3),
+      payload: { type: 'native.metrics', context: null, usage: null, rateLimits: null },
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(
+    client.state.events[held.id].map((item) => item.sequence),
+    [1],
+  );
+  client.select(held.id);
+  assert.equal(socket.sent.at(-1).afterSequence, 1);
+  snapshot(held, [event(held.id, 2), event(held.id, 3)], { mode: 'append' });
+  assert.deepEqual(
+    client.state.events[held.id].map((item) => item.sequence),
+    [1, 2, 3],
+  );
+});
 test('terminal frames bypass conversation caches and are never stored as display history', (t) => {
   const { client, socket, sessions } = fixture(t);
   const terminalId = randomUUID();

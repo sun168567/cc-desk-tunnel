@@ -556,7 +556,10 @@ export class ProxyClient {
           this.activity.set(message.event.sessionId, at);
         if (payload.type === 'native.capabilities') this.update({ capabilities: payload });
         if (payload.type === 'native.metrics') this.update({ metrics: payload });
-        if (!this.cacheOrder.includes(message.event.sessionId)) return;
+        // The service streams the shown session's events, and only some events of the others (a terminal's quota goes
+        // to every connection): one of those in a cached history would move its cursor past what was never received,
+        // and showing that session again would not fetch it.
+        if (message.event.sessionId !== this.state.selectedId) return;
         this.streamEvents.push(message.event);
         this.streamTimer ??= setTimeout(() => this.flushStream(), 32);
       } else if (message.type === 'session.fragment') {
