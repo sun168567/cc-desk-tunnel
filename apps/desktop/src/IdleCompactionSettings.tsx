@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { IdleCompaction } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import { idleCompactionFields as fields } from './setting-fields.ts';
 import { Row, Switch } from './ui.tsx';
-
-const minutes = [30, 40, 45, 50, 55];
-const sizes = [50_000, 100_000, 150_000, 200_000, 300_000];
 
 // The service's own setting, kept with its sessions and not in the CLI's file: before an idle session's one-hour prompt
 // cache lapses, the service compacts it as the compact button does. Each change is saved at once.
@@ -48,9 +46,9 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
       )}
       {values && (
         <div className="settings-list card">
-          <Row title="自动压缩" detail="只对写入了 1 小时缓存的会话生效，订阅账号默认如此">
+          <Row title={fields.enabled.title} detail={fields.enabled.detail}>
             <Switch
-              label="自动压缩"
+              label={fields.enabled.title}
               checked={values.enabled}
               disabled={saving}
               onChange={(enabled) => void save({ enabled })}
@@ -58,16 +56,16 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
           </Row>
           <label>
             <span>
-              <strong>空闲多久后压缩</strong>
-              <small>从最后一轮结束算起；关闭自动压缩时，到这个时间起提醒</small>
+              <strong>{fields.afterMinutes.title}</strong>
+              <small>{fields.afterMinutes.detail}</small>
             </span>
             <select
-              aria-label="空闲多久后压缩"
+              aria-label={fields.afterMinutes.title}
               disabled={saving}
               value={String(values.afterMinutes)}
               onChange={({ target }) => void save({ afterMinutes: Number(target.value) })}
             >
-              {[...new Set([...minutes, values.afterMinutes])]
+              {[...new Set([...fields.afterMinutes.options, values.afterMinutes])]
                 .sort((a, b) => a - b)
                 .map((value) => (
                   <option key={value} value={value}>
@@ -78,16 +76,16 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
           </label>
           <label>
             <span>
-              <strong>上下文至少</strong>
-              <small>小于这个大小的会话不压缩，也不提醒</small>
+              <strong>{fields.minTokens.title}</strong>
+              <small>{fields.minTokens.detail}</small>
             </span>
             <select
-              aria-label="上下文至少"
+              aria-label={fields.minTokens.title}
               disabled={saving}
               value={String(values.minTokens)}
               onChange={({ target }) => void save({ minTokens: Number(target.value) })}
             >
-              {[...new Set([...sizes, values.minTokens])]
+              {[...new Set([...fields.minTokens.options, values.minTokens])]
                 .sort((a, b) => a - b)
                 .map((value) => (
                   <option key={value} value={value}>

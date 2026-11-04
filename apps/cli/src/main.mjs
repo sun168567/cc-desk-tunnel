@@ -6,11 +6,13 @@ import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
 import { Config } from './config.mjs';
 import { Service, proxyFor } from './connection.mjs';
 import { readKeys } from './keys.mjs';
-import { pick } from './picker.mjs';
+import { pad, pick } from './picker.mjs';
+import { choices, entries, parse, readRemote, save, shown } from './settings.mjs';
 import { discard, protect, reveal } from './secret.mjs';
 import { bundled, releasePage, version } from './runtime.mjs';
 import { relay } from './terminal.mjs';
 import { FIRST_UPGRADABLE, download, install } from './upgrade.mjs';
+import { UPDATE_TICK_MS, lookDue } from '../../desktop/src/update-check.ts';
 
 const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的原版 Claude Code，与图形客户端共用会话。
 
@@ -20,11 +22,14 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
   ccdt new [标题]        在当前目录新建会话
   ccdt sessions [--all]  列出当前项目的会话；--all 列出全部
   ccdt usage             订阅额度与调用统计
+  ccdt config            查看和修改设置：在终端里用方向键逐项选择
+  ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认
   ccdt login [wss 地址]  登录服务端；不写地址时用图形客户端保存的。--fingerprint 证书指纹，
                          --token-stdin 从标准输入读凭据，--no-save 不保存
   ccdt logout            退出当前服务端
   ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用
   ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本
+  ccdt upgrade --check   只检查有没有新版本
   ccdt --version         版本，须与服务端相同
 
 选项：--server <wss 地址> 在登录过的几个服务端里选一个。
@@ -39,6 +44,15 @@ const log = (line) => {
     appendFileSync(process.env.CCDT_LOG, `${new Date().toISOString()} ${line}\n`);
 };
 const dim = (text) => (process.stderr.isTTY ? `\x1b[2m${text}\x1b[0m` : text);
+const notice = (text) => (process.stderr.isTTY ? `\x1b[33m${text}\x1b[0m` : text);
+// What the service last found of a newer release, said before the terminal is shown and after it ends: the screen
+// in between is Claude Code's own.
+const newer = (update) =>
+  update?.state === 'available'
+    ? `服务端有新版本 ${update.latest}：运行 ccdt upgrade 升级服务端和 ccdt。`
+    : update?.state === 'manual'
+      ? `服务端有新版本 ${update.latest}，要在服务器上重新运行安装命令升级。`
+      : undefined;
 
 // The session's project directory as the desktop client records it, compared without the case on Windows.
 const sameDirectory = (a, b) => {
@@ -86,6 +100,29 @@ async function readSecret(prompt) {
   }
 }
 
+// A line typed in, shown as it is typed and starting from `text`; Esc gives up (undefined).
+async function readLine(prompt, text = '') {
+  const draw = () => process.stderr.write(`\r\x1b[K${prompt}${text}`);
+  draw();
+  try {
+    const line = await readKeys(process.stdin, (chunk) => {
+      if (chunk === '\x1b') return null;
+      // Arrows and other keys that send a sequence change nothing here.
+      if (chunk.startsWith('\x1b')) return undefined;
+      for (const key of chunk) {
+        if (key === '\r' || key === '\n') return text;
+        if (key === '\u0003') return null;
+        if (key === '\u007f' || key === '\b') text = [...text].slice(0, -1).join('');
+        else if (key >= ' ') text += key;
+      }
+      draw();
+    });
+    return line ?? undefined;
+  } finally {
+    process.stderr.write('\n');
+  }
+}
+
 function credentials(config, values) {
   const server = config.server(values.server);
   if (!server) throw new Error('还没有登录服务端：先运行 ccdt login。');
@@ -98,7 +135,7 @@ function credentials(config, values) {
 async function signIn(config, values, quiet = false) {
   const { server, token } = credentials(config, values);
   if (!quiet) say(dim(`正在连接 ${server.url} ……`));
-  return Service.connect({ ...server, token, deviceId: config.device(), log });
+  return Service.connect({ ...server, token, deviceId: config.device(), waits: config.waits, log });
 }
 
 async function login(config, values, url) {
@@ -125,7 +162,12 @@ async function login(config, values, url) {
     : process.env.CCDT_TOKEN ||
       (await readSecret('服务凭据（与图形客户端填的相同，输入时不显示）：'));
   say(dim('正在验证……'));
-  const service = await Service.connect({ ...server, token, deviceId: config.device() });
+  const service = await Service.connect({
+    ...server,
+    token,
+    deviceId: config.device(),
+    waits: config.waits,
+  });
   say(`已登录 ${server.url}（服务端版本 ${service.version}）。`);
   await service.close();
   const previous = config.server(server.url);
@@ -214,6 +256,145 @@ async function upgrade(config, values) {
   return 0;
 }
 
+// Asks the service to look for a newer release now and says what it found, for both sides.
+async function check(config, values) {
+  const service = await signIn(config, values, true);
+  try {
+    await service.request({ type: 'service.update.check' });
+  } finally {
+    await service.close();
+  }
+  const { update } = service;
+  if (update?.state === 'failed') return (say(`检查新版本失败：${update.detail ?? '原因不明'}`), 1);
+  const found = newer(update);
+  say(
+    found
+      ? `服务端和 ccdt 现在是 ${version}。${found}`
+      : `服务端和 ccdt 都是 ${version}，已是最新的正式版本。`,
+  );
+  return 0;
+}
+
+// `ccdt config`: every setting with its value; with a name, that one; with a value too, sets it. In a terminal and
+// without a name the list is gone through with the arrow keys, each value chosen or typed there.
+async function configure(config, values, [name, ...words]) {
+  let service;
+  let remote = {};
+  // This computer's own settings need no service; the others are read from it.
+  if (!name?.startsWith('connection.'))
+    try {
+      service = await signIn(config, values, true);
+      remote = await readRemote(service);
+    } catch (error) {
+      if (name) throw error;
+      say(dim(`连不上服务端，只能改本机的设置：${error.message}`));
+    }
+  const list = () => entries({ waits: config.waits, ...remote });
+  try {
+    if (name) {
+      const entry = list().find((item) => item.name === name);
+      if (!entry) throw new Error(`没有这个设置：${name}。运行 ccdt config 查看全部。`);
+      if (!words.length) {
+        say(described(entry));
+        return 0;
+      }
+      const value = parse(entry, words.join(' '));
+      await save(entry, value, { config, service });
+      say(`${entry.title}：${shown({ ...entry, value })}`);
+      return 0;
+    }
+    if (!process.stdin.isTTY) {
+      say(table(list()));
+      return 0;
+    }
+    for (let at = 0; ;) {
+      const all = list();
+      const chosen = await pick(
+        'ccdt 设置',
+        all.map((entry) => `${pad(entry.title, 34)}${pad(shown(entry), 18)}${dim(entry.group)}`),
+        process.stdin,
+        process.stderr,
+        { at, hint: '↑↓ 选择 · Enter 修改 · Esc 退出', clear: true },
+      );
+      if (chosen === undefined) return 0;
+      at = chosen;
+      const entry = all[chosen];
+      if (entry.kind === 'pending') {
+        say(`${entry.title}暂不支持在 ccdt 里设置：${entry.where}`);
+        continue;
+      }
+      let value;
+      const options = choices(entry);
+      if (options) {
+        const index = await pick(
+          `${entry.title}${entry.detail ? dim(`  ${entry.detail}`) : ''}`,
+          options.map(([, words]) => words),
+          process.stdin,
+          process.stderr,
+          {
+            at: Math.max(
+              0,
+              options.findIndex(([option]) => option === (entry.value ?? null)),
+            ),
+            hint: '↑↓ 选择 · Enter 确定 · Esc 返回',
+            clear: true,
+          },
+        );
+        if (index === undefined) continue;
+        value = options[index][0];
+      } else {
+        if (entry.detail) say(dim(entry.detail));
+        const typed = await readLine(
+          `${entry.title}（写 default 恢复默认，Esc 返回）：`,
+          entry.kind === 'seconds' ? String(entry.value ?? '') : entry.write(entry.value),
+        );
+        // The question goes from the screen once answered, as the lists do.
+        process.stderr.write(`\x1b[${entry.detail ? 2 : 1}A\x1b[J`);
+        if (typed === undefined) continue;
+        try {
+          value = parse(entry, typed);
+        } catch (error) {
+          say(error.message);
+          continue;
+        }
+      }
+      try {
+        await save(entry, value, { config, service });
+        if (service && !entry.name.startsWith('connection.')) remote = await readRemote(service);
+      } catch (error) {
+        say(`没有保存：${error.message}`);
+      }
+    }
+  } finally {
+    await service?.close().catch(() => {});
+  }
+}
+
+// One setting, for `ccdt config <name>`: its value, what it does and what it can be.
+function described(entry) {
+  const options = choices(entry);
+  return [
+    `${entry.title}：${shown(entry)}`,
+    entry.detail && dim(entry.detail),
+    entry.kind === 'pending' && entry.where,
+    options &&
+      `可选：${options.map(([value, words]) => `${value === null ? 'default' : typeof value === 'boolean' ? (value ? 'on' : 'off') : value}（${words}）`).join('、')}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+// Every setting by its group, with the name to change it by.
+function table(list) {
+  const lines = [];
+  for (const entry of list) {
+    if (entry.group !== lines.group)
+      lines.push(`${lines.length ? '\n' : ''}${(lines.group = entry.group)}`);
+    lines.push(`  ${entry.name.padEnd(34)} ${entry.title}：${shown(entry)}`);
+  }
+  return [...lines, '', dim('改一项：ccdt config <名称> <值>；值写 default 恢复默认。')].join('\n');
+}
+
 function listed(sessions) {
   return newest(sessions)
     .map(
@@ -264,6 +445,7 @@ async function show(config, values, service, session, fresh) {
   say(
     `${dim('项目')} ${session.projectPath}  ${dim('会话')} ${session.title}${fresh ? dim('（新建）') : ''}`,
   );
+  if (newer(service.update)) say(notice(newer(service.update)));
   // A terminal of ccdt is taken over; anything else using the session has to finish first.
   const run = service.sessions.get(session.id)?.activeRun;
   if (run && !(run.surface === 'terminal' && run.activity)) {
@@ -275,37 +457,54 @@ async function show(config, values, service, session, fresh) {
     );
     return 1;
   }
-  for (;;) {
-    let result;
-    try {
-      await service.channel();
-      result = await relay(service, session.id, shown);
-    } catch (error) {
-      // Nothing to show, such as a terminal the service would not open: the connection is let go, for ccdt to end.
-      await service.close().catch(() => {});
-      throw error;
-    }
-    log(`Terminal shown no longer: ${result.how}.`);
-    if (result.how === 'exited') {
-      await service.close();
-      say(dim('已退出。对话记录在这个会话里，在这个目录运行 ccdt 可以接着聊。'));
-      return result.code ?? 0;
-    }
-    if (result.how === 'taken') {
-      await service.close();
-      say('这个会话在另一个窗口里打开了，这里不再显示。');
-      return 0;
-    }
-    if (result.how === 'stalled') continue;
-    process.stdout.write('\x1b]0;ccdt：连接断开，正在重连\x07');
-    say(dim('\r\n连接断开，正在重连……Claude Code 在服务端继续运行。'));
-    for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
-      await new Promise((resolve) => setTimeout(resolve, wait));
+  // While the terminal is shown the service looks for a new release at least hourly, as for a desktop window in use;
+  // what it finds is said when the terminal ends.
+  const look = () => {
+    if (lookDue(service.update, Date.now()))
+      void service.request({ type: 'service.update.check' }).catch(() => {});
+  };
+  look();
+  const looking = setInterval(look, UPDATE_TICK_MS);
+  looking.unref();
+  try {
+    return await showing();
+  } finally {
+    clearInterval(looking);
+  }
+  async function showing() {
+    for (;;) {
+      let result;
       try {
-        service = await signIn(config, values, true);
-        break;
+        await service.channel();
+        result = await relay(service, session.id, shown);
       } catch (error) {
-        if (error.code === 'unauthorized' || error.code === 'version_mismatch') throw error;
+        // Nothing to show, such as a terminal the service would not open: the connection is let go, for ccdt to end.
+        await service.close().catch(() => {});
+        throw error;
+      }
+      log(`Terminal shown no longer: ${result.how}.`);
+      if (result.how === 'exited') {
+        await service.close();
+        say(dim('已退出。对话记录在这个会话里，在这个目录运行 ccdt 可以接着聊。'));
+        if (newer(service.update)) say(notice(newer(service.update)));
+        return result.code ?? 0;
+      }
+      if (result.how === 'taken') {
+        await service.close();
+        say('这个会话在另一个窗口里打开了，这里不再显示。');
+        return 0;
+      }
+      if (result.how === 'stalled') continue;
+      process.stdout.write('\x1b]0;ccdt：连接断开，正在重连\x07');
+      say(dim('\r\n连接断开，正在重连……Claude Code 在服务端继续运行。'));
+      for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        try {
+          service = await signIn(config, values, true);
+          break;
+        } catch (error) {
+          if (error.code === 'unauthorized' || error.code === 'version_mismatch') throw error;
+        }
       }
     }
   }
@@ -324,6 +523,7 @@ export async function main(argv) {
         'token-stdin': { type: 'boolean' },
         'no-save': { type: 'boolean' },
         all: { type: 'boolean' },
+        check: { type: 'boolean' },
         yes: { type: 'boolean', short: 'y' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
@@ -341,7 +541,8 @@ export async function main(argv) {
     if (values.help || command === 'help') return (say(HELP), 0);
     if (values.version) return (process.stdout.write(`ccdt ${version}\n`), 0);
     if (command === 'login') return (await login(config, values, rest[0]), 0);
-    if (command === 'upgrade') return await upgrade(config, values);
+    if (command === 'upgrade') return await (values.check ? check : upgrade)(config, values);
+    if (command === 'config') return await configure(config, values, rest);
     if (command === 'logout') {
       const server = config.server(values.server);
       if (!server) return (say('没有登录任何服务端。'), 0);
@@ -421,11 +622,33 @@ export async function main(argv) {
   } catch (error) {
     await service?.close().catch(() => {});
     say(error instanceof Error ? error.message : String(error));
-    // ccdt speaks the protocol of its own release, as the desktop client does.
-    if (error.code === 'version_mismatch' && error.service)
+    // ccdt speaks the protocol of its own release, as the desktop client does. In a terminal it offers to become the
+    // release of the service, or to upgrade the service first where ccdt is ahead of it.
+    if (error.code === 'version_mismatch' && error.service) {
+      if (process.stdin.isTTY && command !== 'upgrade') {
+        const chosen = await pick(
+          `这个 ccdt 是 ${version}，服务端是 ${error.service}，两边要同一版本才能连接。`,
+          [
+            older(version, error.service)
+              ? `把 ccdt 换成 ${error.service}`
+              : `升级服务端，再把 ccdt 换成同一版本`,
+            '暂不升级',
+          ],
+        ).catch(() => undefined);
+        if (chosen === 0)
+          try {
+            const code = await upgrade(config, values);
+            if (!code) say('重新运行 ccdt 即可接着用。');
+            return code;
+          } catch (failure) {
+            say(failure instanceof Error ? failure.message : String(failure));
+            return 1;
+          }
+      }
       say(
         `这个 ccdt 是 ${version}，服务端是 ${error.service}：运行 ccdt upgrade 升级，或安装与服务端相同版本的 ccdt：${releasePage(error.service)}`,
       );
+    }
     return 1;
   }
 }

@@ -22,7 +22,8 @@ import Help from './Help.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
 import { connectionWaits, setPrefs, themes, usePrefs, waitRange } from './prefs.ts';
 import { viewModes } from './transcriptView.ts';
-import type { ConnectionWaits, NotifyKind } from './prefs.ts';
+import type { NotifyKind } from './prefs.ts';
+import { waitFields } from './setting-fields.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
@@ -146,19 +147,6 @@ const kinds: { key: NotifyKind; title: string; detail: string }[] = [
   { key: 'connection', title: '连接中断', detail: '与服务的连接意外断开' },
 ];
 
-const waits: { step: keyof ConnectionWaits; title: string; detail: string }[] = [
-  { step: 'connect', title: '连接服务器', detail: '与服务端建立网络连接' },
-  {
-    step: 'ssh',
-    title: '本机 SSH 服务启动',
-    detail: '域账号连不上域控制器、或安全软件扫描较慢时，启动会久一些',
-  },
-  {
-    step: 'ready',
-    title: '执行通道就绪',
-    detail: '从连上服务端到隧道接通的总时间；至少比上一项多 35 秒',
-  },
-];
 // How much of the work behind a reply is shown is a choice of this computer's window too.
 function ThemeSettings() {
   const { theme } = usePrefs();
@@ -649,7 +637,7 @@ function ConnectionSettings({
       <Connections />
       <h2 className="page-heading">连接等待时间</h2>
       <div className="card">
-        {waits.map(({ step, title, detail }) => (
+        {waitFields.map(({ step, title, detail }) => (
           <Row key={step} title={title} detail={`${detail}。默认 ${connectionWaits[step]} 秒`}>
             <Seconds
               label={title}
@@ -667,7 +655,7 @@ function ConnectionSettings({
           <button
             type="button"
             className="button"
-            disabled={waits.every(({ step }) => connection[step] === connectionWaits[step])}
+            disabled={waitFields.every(({ step }) => connection[step] === connectionWaits[step])}
             onClick={() => setPrefs((prefs) => ({ ...prefs, connection: connectionWaits }))}
           >
             恢复默认

@@ -22,6 +22,7 @@ import { readKeys } from '../src/keys.mjs';
 import { fit } from '../src/picker.mjs';
 import { packageName } from '../src/runtime.mjs';
 import { protect, reveal } from '../src/secret.mjs';
+import { choices, entries, parse, save, shown } from '../src/settings.mjs';
 import { download, install } from '../src/upgrade.mjs';
 
 test('settings live where each system keeps them, beside the desktop client’s', () => {
@@ -328,5 +329,71 @@ test('the package is put in place by the install script it carries', (t) => {
   assert.throws(
     () => install({ name, body: readFileSync(join(root, name)) }),
     /没有装上：[\s\S]*in use/,
+  );
+});
+
+test('ccdt’s settings: its own waits, the service’s and Claude Code’s with the desktop client’s words', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'ccdt-settings-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const config = new Config({ cli: join(root, 'cli'), desktop: join(root, 'desktop') });
+  const remote = {
+    compaction: { enabled: false, afterMinutes: 50, minTokens: 100_000 },
+    cli: { autoCompactEnabled: null, autoCompactWindow: 250_000, fallbackModel: ['sonnet'] },
+    web: { enabled: true, url: 'https://work.example.com/desk/' },
+  };
+  const list = entries({ waits: { ssh: 20 }, ...remote });
+  const named = (name) => list.find((entry) => entry.name === name);
+  // The groups in the desktop client's order, each item once, and what is not here yet said so.
+  assert.deepEqual(
+    [...new Set(list.map((entry) => entry.group.split(' · ')[0]))],
+    ['本机', '服务端', 'Claude Code'],
+  );
+  assert.equal(new Set(list.map((entry) => entry.name)).size, list.length);
+  assert.equal(shown(named('connection.ssh')), '20 秒');
+  assert.equal(shown(named('connection.ready')), '45 秒（默认）');
+  assert.equal(shown(named('compaction.enabled')), '关闭');
+  assert.equal(shown(named('compaction.minTokens')), '100K tokens');
+  assert.equal(shown(named('web.enabled')), '开启');
+  assert.equal(shown(named('cli.autoCompactEnabled')), '默认');
+  // A value set by hand that is not among the choices is still one of them.
+  assert.equal(shown(named('cli.autoCompactWindow')), '250K tokens');
+  assert.equal(shown(named('cli.fallbackModel')), 'sonnet');
+  assert.equal(shown(named('cli.instructions')), '暂不支持');
+  assert.deepEqual(
+    choices(named('cli.autoCompactEnabled')).map(([value]) => value),
+    [null, true, false],
+  );
+  // What is written on the command line, in either language, and what will not do.
+  assert.equal(parse(named('compaction.enabled'), 'on'), true);
+  assert.equal(parse(named('cli.autoCompactEnabled'), '关闭'), false);
+  assert.equal(parse(named('cli.autoCompactEnabled'), 'default'), null);
+  assert.equal(parse(named('compaction.afterMinutes'), '45'), 45);
+  assert.equal(parse(named('connection.ssh'), '30'), 30);
+  assert.deepEqual(parse(named('cli.fallbackModel'), 'sonnet， haiku'), ['sonnet', 'haiku']);
+  assert.throws(() => parse(named('compaction.enabled'), 'default'), /on 或 off/);
+  assert.throws(() => parse(named('connection.ssh'), '3'), /5–600/);
+  assert.throws(() => parse(named('compaction.afterMinutes'), '42'), /可选/);
+  assert.throws(() => parse(named('cli.instructions'), 'x'), /\/memory/);
+  // ccdt keeps its waits; the rest goes to the service as the desktop client sends it.
+  const requests = [];
+  const service = { request: async (command) => (requests.push(command), { type: 'response' }) };
+  await save(named('connection.connect'), 30, { config, service });
+  await save(named('connection.connect'), null, { config, service });
+  await save(named('connection.ready'), 90, { config, service });
+  assert.deepEqual(JSON.parse(readFileSync(config.path, 'utf8')).waits, { ready: 90 });
+  await save(named('compaction.afterMinutes'), 45, { config, service });
+  await save(named('web.enabled'), false, { config, service });
+  await save(named('cli.autoCompactEnabled'), null, { config, service });
+  assert.deepEqual(requests, [
+    { type: 'compaction.update', values: { afterMinutes: 45 } },
+    { type: 'web.settings.update', values: { enabled: false } },
+    { type: 'settings.update', values: { autoCompactEnabled: null } },
+  ]);
+  // Without a service only this computer's settings are listed.
+  assert.deepEqual(
+    entries({})
+      .filter((entry) => entry.kind !== 'pending')
+      .map((entry) => entry.name),
+    ['connection.connect', 'connection.ssh', 'connection.ready'],
   );
 });

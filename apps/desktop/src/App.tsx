@@ -60,6 +60,7 @@ import { onSharedChange, saveShared, shared, useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
 import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
 import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
+import { UPDATE_TICK_MS, lookDue } from './update-check.ts';
 import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
 import Rail from './Rail.tsx';
@@ -382,11 +383,38 @@ export function App({
     });
   };
 
-  // A check or an upgrade of the service that failed says why.
-  const update = state.update;
+  // A check or an upgrade of the service that failed says why to whoever asked for it. The checks a window makes by
+  // itself while it is in use fail quietly, to be made again within the hour.
+  const live = state.update;
+  const asked = useRef(false);
   useEffect(() => {
-    if (update?.state === 'failed' && update.detail) setError(update.detail);
-  }, [update]);
+    if (live?.state === 'failed' && live.detail && asked.current) setError(live.detail);
+    if (live && !['checking', 'installing'].includes(live.state)) asked.current = false;
+  }, [live]);
+  // While the service looks again, the release it found last stays offered.
+  const [settled, setSettled] = useState(live);
+  useEffect(() => {
+    if (live?.state !== 'checking') setSettled(live);
+  }, [live]);
+  const update =
+    live?.state === 'checking' && settled && ['available', 'manual'].includes(settled.state)
+      ? settled
+      : live;
+  // While this window is shown, the service looks for a new release at least hourly (see update-check.ts).
+  useEffect(() => {
+    if (!host.serviceManagement || !nativeMode || !connected) return;
+    const look = () => {
+      if (!document.hidden && lookDue(client.state.update, Date.now()))
+        void client.request({ type: 'service.update.check' }).catch(() => {});
+    };
+    look();
+    const timer = setInterval(look, UPDATE_TICK_MS);
+    document.addEventListener('visibilitychange', look);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', look);
+    };
+  }, [client, nativeMode, connected]);
   const serviceUpdate = !nativeMode
     ? null
     : update?.state === 'available'
@@ -401,6 +429,7 @@ export function App({
               )
             )
               void act(async () => {
+                asked.current = true;
                 await client.request({ type: 'service.update.install', version: update.latest! });
               });
           },
@@ -430,6 +459,7 @@ export function App({
               disabled: busy || update?.state === 'checking',
               run: () => {
                 void act(async () => {
+                  asked.current = true;
                   await client.request({ type: 'service.update.check' });
                 });
               },
