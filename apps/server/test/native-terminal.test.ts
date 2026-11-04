@@ -91,6 +91,9 @@ test('a terminal that keeps running shows its current screen to a client that at
   let detached = 0;
   const f = fixture({ detached: () => detached++ });
   f.data('\x1b[?1049h\x1b[>1u第一屏');
+  // A small write is gathered for a few milliseconds before it goes.
+  assert.equal(f.output.length, 0);
+  await delay(20);
   f.terminal.detach();
   f.data('\r\n看不到的时候');
   assert.deepEqual(
@@ -105,7 +108,9 @@ test('a terminal that keeps running shows its current screen to a client that at
   assert.ok(snapshot.text.includes('第一屏') && snapshot.text.includes('看不到的时候'));
   assert.ok(snapshot.text.includes('\x1b[>1u'));
   f.data('之后');
-  assert.equal(f.output.at(-1)!.text, '之后');
+  f.data('，再之后');
+  await delay(20);
+  assert.equal(f.output.at(-1)!.text, '之后，再之后');
   // Acknowledgments of what was sent before an attach may still come; they do not fail the terminal.
   f.terminal.acknowledge(10 ** 6);
   assert.equal(f.terminal.outstanding, 0);
