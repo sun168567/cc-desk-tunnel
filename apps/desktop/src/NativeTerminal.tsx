@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { X, SquareTerminal } from 'lucide-react';
 import type { ProxyClient } from './client.ts';
 import { IconButton } from './ui.tsx';
@@ -31,6 +32,13 @@ export default function NativeTerminal({
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host.current!);
+    // The GPU draws the screen, far cheaper than the DOM for a CLI that redraws as often as Claude Code does. Without
+    // WebGL, or once its context is lost, xterm's own DOM renderer draws it.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      terminal.loadAddon(webgl);
+    } catch {}
     fit.fit();
     let id: string | null = null,
       disposed = false,
