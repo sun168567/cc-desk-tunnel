@@ -34,7 +34,8 @@ function writeJson(path, value) {
   renameSync(temporary, path);
 }
 
-// `servers` are the services signed in to, by address; `current` is the one used when none is named.
+// `servers` are the services signed in to, by address; `current` is the one used when none is named. `waits` are the
+// seconds each step of connecting may take where they are not the defaults (see `ccdt config`).
 export class Config {
   constructor(paths = directories()) {
     this.paths = paths;
@@ -43,9 +44,15 @@ export class Config {
     this.servers = Array.isArray(value.servers) ? value.servers : [];
     this.current = typeof value.current === 'string' ? value.current : undefined;
     this.deviceId = typeof value.deviceId === 'string' ? value.deviceId : undefined;
+    this.waits = value.waits && typeof value.waits === 'object' ? value.waits : {};
   }
   save() {
-    writeJson(this.path, { servers: this.servers, current: this.current, deviceId: this.deviceId });
+    writeJson(this.path, {
+      servers: this.servers,
+      current: this.current,
+      deviceId: this.deviceId,
+      ...(Object.keys(this.waits).length ? { waits: this.waits } : {}),
+    });
   }
   server(url) {
     const wanted = url ?? this.current;

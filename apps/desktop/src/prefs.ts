@@ -7,11 +7,10 @@ import type { TranscriptView } from './transcriptView.ts';
 // here, which events raise a notification, and the keyboard shortcuts. The windows of the computer's
 // connections share them (see shared.ts).
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
-// How many seconds each step of connecting may take. The defaults suit most computers; a domain account whose
-// domain controller is out of reach, or slow security software, can need more.
-export type ConnectionWaits = { connect: number; ssh: number; ready: number };
-export const connectionWaits: ConnectionWaits = { connect: 15, ssh: 10, ready: 45 };
-export const waitRange = { min: 5, max: 600 };
+import { connectionWaits, waitRange } from './setting-fields.ts';
+import type { ConnectionWaits } from './setting-fields.ts';
+export { connectionWaits, waitRange };
+export type { ConnectionWaits };
 // The colours: the system's light or dark, or always one of them. The page shows the choice as `data-theme` on
 // its root (see main.tsx and the top of style.css), and the desktop window's own parts follow it (main.cjs).
 export const themes = [
