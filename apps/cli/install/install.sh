@@ -15,8 +15,21 @@ if [ "$(uname -s)" = Darwin ]; then xattr -dr com.apple.quarantine "$target" 2>/
 mkdir -p "$HOME/.local/bin"
 ln -sf "$target/bin/ccdt" "$HOME/.local/bin/ccdt"
 echo "ccdt 已安装到 ${target}，命令为 ~/.local/bin/ccdt。"
+# ~/.local/bin is not on the PATH everywhere, never on macOS by default: the line that puts it there goes once into
+# the configuration file of the user's shell, marked as ccdt's, for every shell started from now on.
 case ":$PATH:" in
-  *":$HOME/.local/bin:"*) ;;
-  *) echo "~/.local/bin 不在 PATH 里：把 export PATH=\"\$HOME/.local/bin:\$PATH\" 加入 shell 的配置文件。" ;;
+  *":$HOME/.local/bin:"*) echo "运行 ccdt login 登录服务端。" ;;
+  *)
+    line='export PATH="$HOME/.local/bin:$PATH"'
+    case "${SHELL:-}" in
+      */zsh) rc="$HOME/.zshrc" ;;
+      */bash) if [ "$(uname -s)" = Darwin ]; then rc="$HOME/.bash_profile"; else rc="$HOME/.bashrc"; fi ;;
+      *) rc="$HOME/.profile" ;;
+    esac
+    if ! grep -qsF "$line" "$rc"; then
+      printf '\n# ccdt\n%s\n' "$line" >>"$rc"
+      echo "已把 ~/.local/bin 加入 PATH（写在 $rc）。"
+    fi
+    echo "打开一个新的终端窗口后运行 ccdt login 登录服务端；在这个窗口里先运行 $line。"
+    ;;
 esac
-echo "运行 ccdt login 登录服务端。"

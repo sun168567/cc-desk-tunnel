@@ -35,11 +35,54 @@ const section = new RegExp(
   .trim();
 if (!section) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
 const repository = 'https://github.com/sun168567/cc-desk-tunnel';
-const [installer, server, ...others] = releaseFiles(version);
-// Every release reads the same way: what the project is, this version's section of the change log with its
-// headings one level up, then how to get and upgrade to it. A preview carries the same text, so that making
-// it the release later changes nothing a reader has seen.
+const [
+  installer,
+  server,
+  deb,
+  macArm,
+  macIntel,
+  cliWindows,
+  cliLinux,
+  cliLinuxArm,
+  cliMacArm,
+  cliMacIntel,
+] = releaseFiles(version);
+// A file of this release, downloaded by following the link.
+const file = (name) => `${repository}/releases/download/${tag}/${name}`;
+const link = (words, name) => `[${words}](${file(name)})`;
+const raw = 'https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy';
+// Every release reads the same way: how to get and upgrade to it first, each file a link that downloads it; then
+// what the project is, this version's section of the change log with its headings one level up, and where each
+// system stands. A preview carries the same text, so that making it the release later changes nothing a reader has
+// seen.
 const notes = [
+  '## 下载与升级',
+  '',
+  '客户端有两种，可以只装一种，也可以都装，都要与服务端同一版本：**图形客户端**是桌面应用；**终端客户端 `ccdt`** 在自己的终端里使用原版 Claude Code，与图形客户端共用会话。',
+  '',
+  '| | Windows | macOS（实验性） | Linux（实验性） |',
+  '| --- | --- | --- | --- |',
+  `| **图形客户端** | ${link('x64 安装包', installer)} | ${link('Apple 芯片', macArm)} · ${link('Intel', macIntel)} | ${link('x64 .deb', deb)} |`,
+  `| **终端客户端 ccdt** | ${link('x64', cliWindows)} | ${link('Apple 芯片', cliMacArm)} · ${link('Intel', cliMacIntel)} | ${link('x64', cliLinux)} · ${link('arm64', cliLinuxArm)} |`,
+  '',
+  `**一键安装 \`ccdt\`**：装的是最新的正式版；要装这一版时先指定 \`CCDT_VERSION=${version}\`，见[终端客户端](${repository}/blob/main/docs/cli.md#安装)。`,
+  '',
+  '```powershell',
+  '# Windows，在 PowerShell 里运行',
+  `irm ${raw}/install-ccdt.ps1 | iex`,
+  '```',
+  '',
+  '```sh',
+  '# macOS、Linux',
+  `curl -fsSL ${raw}/install-ccdt.sh | sh`,
+  '```',
+  '',
+  '- **已在使用**：在图形客户端的“设置 → 关于与更新”里先升级服务端，再按提示升级客户端；`ccdt` 运行 `ccdt upgrade`，服务端与它自己一起升级。',
+  `- **新部署服务端**：在服务器上用一条命令安装，见[快速开始](${repository}#快速开始)；镜像为 \`ghcr.io/sun168567/cc-desk-tunnel:${version}\`，${link('服务端程序包', server)}是安装和升级时下载的。`,
+  `- **校验**：${link('SHA256SUMS', 'SHA256SUMS')} · ${link('release.json', 'release.json')}。Windows 安装包没有代码签名，SmartScreen 与杀毒软件的提示见[说明](${repository}#杀毒软件与-smartscreen)。`,
+  '',
+  '---',
+  '',
   '> 用桌面客户端驱动云端的 Claude Code，经反向隧道在你自己的电脑上执行。',
   '',
   // The change log links to files beside it; on the release page those links need the whole address.
@@ -47,15 +90,9 @@ const notes = [
     .replace(/^### /gm, '## ')
     .replace(/\]\((?![a-z]+:|#)([^)]+)\)/g, `](${repository}/blob/main/$1)`),
   '',
-  '---',
+  '## 平台支持',
   '',
-  '## 下载与升级',
-  '',
-  '- **已在使用**：在客户端的“设置 → 关于与更新”里先升级服务端，再按提示升级客户端；两端需要同一版本。',
-  `- **Windows 客户端**：下载 \`${installer}\` 并安装。安装包没有代码签名，SmartScreen 与杀毒软件的提示见[说明](${repository}#杀毒软件与-smartscreen)。`,
-  `- **服务端**：新部署按[快速开始](${repository}#快速开始)用一条命令安装，镜像为 \`ghcr.io/sun168567/cc-desk-tunnel:${version}\`；\`${server}\` 是安装和升级时下载的程序包。`,
-  `- **macOS 与 Linux 客户端（实验性）**：${others.map((name) => `\`${name}\``).join('、')}。没有签名，也不带应用内更新，升级时重新下载安装；安装与首次打开见 [macOS 说明](${repository}/blob/main/docs/macos.md)与 [Linux 说明](${repository}/blob/main/docs/linux.md)。`,
-  '- **校验**：各文件的 SHA256 在 `SHA256SUMS` 与 `release.json` 中。',
+  `Windows 上的图形客户端和 \`ccdt\` 是主要支持的平台。macOS 与 Linux 上的图形客户端和 \`ccdt\` 都是实验性支持：没有代码签名，实际使用的人还少；图形客户端不带应用内升级，升级时重新下载安装，\`ccdt\` 照常用 \`ccdt upgrade\`。安装与首次打开见 [macOS 说明](${repository}/blob/main/docs/macos.md)、[Linux 说明](${repository}/blob/main/docs/linux.md)与[终端客户端](${repository}/blob/main/docs/cli.md)。服务端在 x86_64 上是主要支持，arm64 是实验性支持。`,
   '',
   `文档：[部署手册](${repository}/blob/main/deploy/README.md) · [变更记录](${repository}/blob/main/CHANGELOG.md) · [安全须知](${repository}#安全须知)`,
 ].join('\n');
