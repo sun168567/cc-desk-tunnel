@@ -6,13 +6,15 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { login, send, settled } from './helpers.ts';
 
-async function general(page: Page) {
+const section = (page: Page, name: string) =>
+  page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name, exact: true })
+    .click();
+async function settings(page: Page, name: string) {
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
-  await page
-    .getByRole('navigation', { name: '设置分类' })
-    .getByRole('button', { name: '常规', exact: true })
-    .click();
+  await section(page, name);
 }
 const title = (application: ElectronApplication) =>
   application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
@@ -44,7 +46,7 @@ test('Electron: a second connection is a window of its own and shares what is th
     // One connection has no name to show.
     await expect(page.locator('.brand-connection')).toHaveCount(0);
     expect(await title(first)).toBe('CC Desk Tunnel');
-    await general(page);
+    await settings(page, '连接');
     await page.getByRole('textbox', { name: '新连接的名称', exact: true }).fill('工作');
     await page.getByRole('button', { name: '新建并打开', exact: true }).click();
     const list = resolve(profile, 'shared/connections.json');
@@ -112,18 +114,21 @@ test('Electron: a second connection is a window of its own and shares what is th
     await expect(other.locator('.elsewhere-bar')).toHaveCount(0);
 
     // A choice made in one window is the other's within seconds; how the window closes is the computer's too.
-    await general(other);
+    await settings(other, '外观');
     const stats = (target: Page) =>
       target.getByRole('switch', { name: '显示回复小结', exact: true });
     await expect(stats(other)).not.toBeChecked();
+    await section(page, '外观');
     await stats(page).click();
     await expect(stats(other)).toBeChecked();
+    await section(other, '常规');
     await other.getByRole('switch', { name: '关闭窗口时留在后台', exact: true }).click();
     await expect
       .poll(() => JSON.parse(readFileSync(resolve(profile, 'settings.json'), 'utf8')).closeToTray)
       .toBe(false);
     // The connection's own settings hold its sign-in and nothing of the computer's.
     expect(JSON.parse(readFileSync(resolve(own, 'settings.json'), 'utf8'))).toEqual({});
+    await section(other, '连接');
     await other.getByRole('button', { name: '改名 主连接', exact: true }).click();
     await other.getByRole('textbox', { name: '连接的名称', exact: true }).fill('个人');
     await other.getByRole('button', { name: '保存', exact: true }).click();
@@ -131,6 +136,7 @@ test('Electron: a second connection is a window of its own and shares what is th
 
     await second.close();
     second = undefined;
+    await section(page, '连接');
     await expect(row).toContainText('未打开');
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('button', { name: '删除 工作', exact: true }).click();

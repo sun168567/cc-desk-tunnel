@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { IdleCompaction } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import { Row, Switch } from './ui.tsx';
 
 const minutes = [30, 40, 45, 50, 55];
 const sizes = [50_000, 100_000, 150_000, 200_000, 300_000];
@@ -35,8 +36,8 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
   return (
     <>
       <h2 className="page-heading">缓存过期前自动压缩</h2>
-      <p className="muted">
-        本项目服务端的设置，不写入 CLI 设置文件。提示缓存在最后一次请求后 1
+      <p className="muted page-section-note">
+        提示缓存在最后一次请求后 1
         小时过期，过期后压缩要按全价重读整段上下文。开启后，会话空闲到设定时间时，服务端用当前模型执行
         /compact，与手动点“压缩”相同，读取的是缓存；不需要客户端或会话所在电脑在线。这是一次真实请求，会计入额度。关闭时，会话里会在过期前提醒。
       </p>
@@ -47,21 +48,14 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
       )}
       {values && (
         <div className="settings-list card">
-          <label>
-            <span>
-              <strong>自动压缩</strong>
-              <small>只对写入了 1 小时缓存的会话生效（订阅账号默认如此）</small>
-            </span>
-            <select
-              aria-label="自动压缩"
+          <Row title="自动压缩" detail="只对写入了 1 小时缓存的会话生效，订阅账号默认如此">
+            <Switch
+              label="自动压缩"
+              checked={values.enabled}
               disabled={saving}
-              value={String(values.enabled)}
-              onChange={({ target }) => void save({ enabled: target.value === 'true' })}
-            >
-              <option value="false">关闭</option>
-              <option value="true">开启</option>
-            </select>
-          </label>
+              onChange={(enabled) => void save({ enabled })}
+            />
+          </Row>
           <label>
             <span>
               <strong>空闲多久后压缩</strong>

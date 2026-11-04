@@ -60,7 +60,9 @@ test('the client tells the service whether to keep the quota current, from eithe
   await page.getByRole('button', { name: '刷新账号信息', exact: true }).click();
   await expect.poll(() => statuses.at(-1)).toBe(true);
 
+  // Kept when the page is left and opened again.
   await sections.getByRole('button', { name: '常规', exact: true }).click();
+  await sections.getByRole('button', { name: '账号与额度', exact: true }).click();
   await expect(page.getByRole('switch', name)).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('switch', name).click();
   await expect.poll(() => watched).toEqual([true, false, true]);

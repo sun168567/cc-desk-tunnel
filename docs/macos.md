@@ -30,7 +30,7 @@ macOS 上的客户端与 Windows 上的是同一套界面和同一条连接，�
 | 快捷键 | Ctrl | Command；后退、前进是 ⌘[ 和 ⌘] |
 | 升级 | 应用内 | 手动下载安装 |
 
-shell 的启动脚本（`.zprofile`、`.zshrc` 等）在连接时执行一次。它等待输入或很久不结束时，连接会在“设置 → 常规”里的 SSH 等待时间之后失败并说明原因。改了启动脚本后重新连接才生效。
+shell 的启动脚本（`.zprofile`、`.zshrc` 等）在连接时执行一次。它等待输入或很久不结束时，连接会在“设置 → 连接”里的 SSH 等待时间之后失败并说明原因。改了启动脚本后重新连接才生效。
 
 ## 文件夹授权
 
@@ -85,4 +85,4 @@ npm run package:macos     # 打出本机架构的 dmg 与 zip，在 artifacts/ma
 - 大小写敏感的磁盘、外接与网络磁盘上的项目。
 - 一个会话在 Windows 与 Mac 之间接管、分叉后的表现。
 
-遇到问题请到 [#18](https://github.com/sun168567/cc-desk-tunnel/issues/18) 反馈，附上“设置 → 常规”里的连接日志。
+遇到问题请到 [#18](https://github.com/sun168567/cc-desk-tunnel/issues/18) 反馈，附上“设置 → 关于与更新”里的连接日志。

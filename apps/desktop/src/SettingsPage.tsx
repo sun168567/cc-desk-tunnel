@@ -3,11 +3,16 @@ import type { ReactNode } from 'react';
 import {
   ArrowLeft,
   Bell,
+  Cable,
   CircleHelp,
+  FileText,
+  Globe,
+  Hourglass,
   Info,
   Keyboard,
+  Palette,
   Search,
-  Settings2,
+  Settings,
   SlidersHorizontal,
   UserRound,
 } from 'lucide-react';
@@ -21,52 +26,101 @@ import type { ConnectionWaits, NotifyKind } from './prefs.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
+import GlobalInstructions from './GlobalInstructions.tsx';
+import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
 import { useShared } from './shared.ts';
 import type { ListedConnection } from './shared.ts';
 import ShortcutSettings from './ShortcutSettings.tsx';
-import { IconButton, Switch } from './ui.tsx';
+import { IconButton, Page, Row, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
 export type Section =
-  'account' | 'claude' | 'general' | 'notifications' | 'shortcuts' | 'help' | 'about';
-// `words` is what the search box matches besides the name: the settings found inside.
+  | 'general'
+  | 'appearance'
+  | 'connection'
+  | 'notifications'
+  | 'shortcuts'
+  | 'context'
+  | 'web'
+  | 'account'
+  | 'claude'
+  | 'instructions'
+  | 'help'
+  | 'about';
+// The groups say where their settings are kept and what they apply to: this computer, the service (for every device
+// connected to it), or Claude Code's own files on the cloud host. `words` is what the search box matches besides the
+// name: the settings found inside.
 const sections: { id: Section; name: string; group: string; icon: typeof Bell; words: string }[] = [
-  {
-    id: 'account',
-    name: '账号与额度',
-    group: 'Claude Code',
-    icon: UserRound,
-    words: '登录 退出 订阅 用量 调用日志 重置',
-  },
-  {
-    id: 'claude',
-    name: 'Claude Code',
-    group: 'Claude Code',
-    icon: Settings2,
-    words: '自动压缩 思考 快速模式 记忆 检查点 缓存 语言 额度 模型',
-  },
   {
     id: 'general',
     name: '常规',
-    group: '客户端',
-    icon: SlidersHorizontal,
-    words:
-      '额度 输入框 托盘 后台 记住凭据 自动登录 启动 普通会话 文件夹 连接 超时 等待 SSH 回复小结 会话栏 用量 首字 速度 缓存 多开 多个连接 窗口 服务端',
+    group: '本机',
+    icon: Settings,
+    words: '窗口 托盘 后台 启动 普通会话 文件夹 审批 绕过权限',
+  },
+  {
+    id: 'appearance',
+    name: '外观',
+    group: '本机',
+    icon: Palette,
+    words: '主题 深色 浅色 工作步骤 回复小结 会话栏 输入框 额度 用量 首字 速度 缓存',
+  },
+  {
+    id: 'connection',
+    name: '连接',
+    group: '本机',
+    icon: Cable,
+    words: '记住凭据 自动登录 多开 多个连接 窗口 服务端 等待 超时 SSH 执行通道',
   },
   {
     id: 'notifications',
     name: '通知',
-    group: '客户端',
+    group: '本机',
     icon: Bell,
     words: '提醒 完成 失败 审批 提问 定时任务 连接 提示音',
   },
   {
     id: 'shortcuts',
     name: '快捷键',
-    group: '客户端',
+    group: '本机',
     icon: Keyboard,
     words: '键盘 组合键 热键 后退 前进 侧栏 缩放',
+  },
+  {
+    id: 'context',
+    name: '上下文与缓存',
+    group: '服务端',
+    icon: Hourglass,
+    words: '自动压缩 提示缓存 过期 空闲 上下文 compact',
+  },
+  {
+    id: 'web',
+    name: '浏览器访问',
+    group: '服务端',
+    icon: Globe,
+    words: 'Web 网页 证书 域名 两步验证 反向代理 浏览器登录',
+  },
+  {
+    id: 'account',
+    name: '账号与额度',
+    group: 'Claude Code',
+    icon: UserRound,
+    words: '登录 退出 订阅 用量 调用日志 重置 读取额度',
+  },
+  {
+    id: 'claude',
+    name: 'CLI 设置',
+    group: 'Claude Code',
+    icon: SlidersHorizontal,
+    words: '自动压缩 思考 快速模式 记忆 检查点 缓存 语言 模型 备用模型 署名 工具搜索',
+  },
+  {
+    id: 'instructions',
+    name: '全局说明',
+    group: 'Claude Code',
+    icon: FileText,
+    words: 'CLAUDE.md AGENTS.md 提示词 说明',
   },
   { id: 'help', name: '帮助', group: '其他', icon: CircleHelp, words: '说明 常见问题' },
   {
@@ -77,6 +131,12 @@ const sections: { id: Section; name: string; group: string; icon: typeof Bell; w
     words: '版本 升级 检查更新 项目主页 日志 排查 断开 开发者工具 控制台',
   },
 ];
+// What a page's settings apply to, said under its title.
+const here = (browser: boolean) =>
+  browser
+    ? '只保存在这个浏览器里，只影响在这里打开的页面。'
+    : '只保存在这台电脑，只影响这个客户端。';
+const everyDevice = '保存在服务端，对所有连接到它的设备生效。';
 const kinds: { key: NotifyKind; title: string; detail: string }[] = [
   { key: 'done', title: '任务完成', detail: 'Claude Code 做完了一轮任务' },
   { key: 'failed', title: '任务失败', detail: '一轮任务因错误而结束' },
@@ -85,18 +145,6 @@ const kinds: { key: NotifyKind; title: string; detail: string }[] = [
   { key: 'schedule', title: '定时任务未发出', detail: '到点的任务发送失败或被跳过' },
   { key: 'connection', title: '连接中断', detail: '与服务的连接意外断开' },
 ];
-
-function Row({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
-  return (
-    <div className="setting-row">
-      <span>
-        <strong>{title}</strong>
-        {detail && <small>{detail}</small>}
-      </span>
-      {children}
-    </div>
-  );
-}
 
 const waits: { step: keyof ConnectionWaits; title: string; detail: string }[] = [
   { step: 'connect', title: '连接服务器', detail: '与服务端建立网络连接' },
@@ -116,7 +164,7 @@ function ThemeSettings() {
   const { theme } = usePrefs();
   return (
     <>
-      <h2 className="page-heading">外观</h2>
+      <h2 className="page-heading">主题</h2>
       <div className="card">
         <div className="setting-row stat-picks">
           <span>
@@ -466,234 +514,226 @@ function Connections() {
 }
 
 function General({
-  client,
   browser,
-  web,
-  form,
-  changeForm,
   workspaceRoot,
   chooseWorkspace,
 }: {
-  client: ProxyClient;
   browser: boolean;
-  web: boolean;
-  form: ConnectionForm;
-  changeForm: (values: Partial<ConnectionForm>) => void;
   workspaceRoot: string;
   chooseWorkspace: (reset: boolean) => void;
 }) {
   const [closeToTray, setCloseToTray] = useState<boolean | null>(null);
-  const { connection, bypassPermissions, quota, quotaReads } = usePrefs();
+  const { bypassPermissions } = usePrefs();
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
   }, []);
   return (
-    <section className="page" aria-label="常规">
-      <div className="page-body">
-        <h1 className="page-title">常规</h1>
-        <ThemeSettings />
-        {web && <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />}
-        <h2 className="page-heading">额度</h2>
-        <div className="card">
-          <Row
-            title="运行中每分钟读取一次额度"
-            detail="让服务端在有任务运行时每分钟向官方读取一次 5 小时与每周额度，同一账号的各会话、各设备共用这一次读取。关闭后只记录 Claude 回复里自带的额度，不另发请求；“账号与额度”里的刷新仍会读取。所有连接的客户端都关闭时，服务端才停止读取"
-          >
-            <Switch
-              label="运行中每分钟读取一次额度"
-              checked={quotaReads}
-              onChange={(value) => setPrefs((prefs) => ({ ...prefs, quotaReads: value }))}
-            />
-          </Row>
-        </div>
-        {!window.desktop && !browser && (
-          <p className="muted">窗口、会话和连接的设置只在桌面客户端里有。</p>
-        )}
-        {window.desktop && (
-          <>
-            <h2 className="page-heading">窗口</h2>
-            <div className="card">
-              <Row
-                title="关闭窗口时留在后台"
-                detail="关闭只是收到托盘，连接和运行中的任务继续；在托盘图标上选“退出”才结束"
-              >
-                <Switch
-                  label="关闭窗口时留在后台"
-                  checked={closeToTray ?? true}
-                  disabled={closeToTray === null}
-                  onChange={(value) => {
-                    setCloseToTray(value);
-                    void window.desktop!.setWindowSettings({ closeToTray: value });
-                  }}
-                />
-              </Row>
-            </div>
-            <h2 className="page-heading">会话</h2>
-            <div className="card">
-              <Row
-                title="普通会话的文件夹"
-                detail="不属于任何项目的新会话在这里各得一个工作目录；已有的会话留在原处"
-              >
-                <span className="setting-actions">
-                  <code className="setting-value">{workspaceRoot}</code>
-                  <button type="button" className="button" onClick={() => chooseWorkspace(false)}>
-                    更改
-                  </button>
-                  <button type="button" className="button" onClick={() => chooseWorkspace(true)}>
-                    恢复默认
-                  </button>
-                </span>
-              </Row>
-            </div>
-            <h2 className="page-heading">输入框</h2>
-            <div className="card">
-              <Row
-                title="在输入框旁显示额度"
-                detail="5 小时和每周额度的已用比例，取自最近一次读数；点它打开“账号与额度”"
-              >
-                <Switch
-                  label="在输入框旁显示额度"
-                  checked={quota}
-                  onChange={(value) => setPrefs((prefs) => ({ ...prefs, quota: value }))}
-                />
-              </Row>
-            </div>
-            <h2 className="page-heading">连接</h2>
-            <div className="card">
-              <Row title="记住凭据" detail="服务凭据经当前系统账户加密后保存在本机">
-                <Switch
-                  label="记住凭据"
-                  checked={form.remember}
-                  onChange={(remember) =>
-                    changeForm({ remember, autoLogin: remember && form.autoLogin })
-                  }
-                />
-              </Row>
-              <Row title="自动登录" detail="启动客户端后直接连接上次的服务">
-                <Switch
-                  label="自动登录"
-                  checked={form.autoLogin}
-                  onChange={(autoLogin) =>
-                    changeForm({ autoLogin, remember: autoLogin || form.remember })
-                  }
-                />
-              </Row>
-            </div>
-            <Connections />
-            <h2 className="page-heading">连接等待时间</h2>
-            <div className="card">
-              {waits.map(({ step, title, detail }) => (
-                <Row
-                  key={step}
-                  title={title}
-                  detail={`${detail}。默认 ${connectionWaits[step]} 秒`}
-                >
-                  <Seconds
-                    label={title}
-                    value={connection[step]}
-                    change={(seconds) =>
-                      setPrefs((prefs) => ({
-                        ...prefs,
-                        connection: { ...prefs.connection, [step]: seconds },
-                      }))
-                    }
-                  />
-                </Row>
-              ))}
-              <Row title="恢复默认" detail="下次连接时生效；连接正常时不需要改">
-                <button
-                  type="button"
-                  className="button"
-                  disabled={waits.every(({ step }) => connection[step] === connectionWaits[step])}
-                  onClick={() => setPrefs((prefs) => ({ ...prefs, connection: connectionWaits }))}
-                >
+    <Page title="常规" intro={here(browser)}>
+      {window.desktop && (
+        <>
+          <h2 className="page-heading">窗口</h2>
+          <div className="card">
+            <Row
+              title="关闭窗口时留在后台"
+              detail="关闭只是收到托盘，连接和运行中的任务继续；在托盘图标上选“退出”才结束"
+            >
+              <Switch
+                label="关闭窗口时留在后台"
+                checked={closeToTray ?? true}
+                disabled={closeToTray === null}
+                onChange={(value) => {
+                  setCloseToTray(value);
+                  void window.desktop!.setWindowSettings({ closeToTray: value });
+                }}
+              />
+            </Row>
+          </div>
+          <h2 className="page-heading">会话</h2>
+          <div className="card">
+            <Row
+              title="普通会话的文件夹"
+              detail={
+                <>
+                  不属于任何项目的新会话在这里各得一个工作目录；已有的会话留在原处
+                  <code className="setting-path">{workspaceRoot}</code>
+                </>
+              }
+            >
+              <span className="setting-actions">
+                <button type="button" className="button" onClick={() => chooseWorkspace(false)}>
+                  更改
+                </button>
+                <button type="button" className="button" onClick={() => chooseWorkspace(true)}>
                   恢复默认
                 </button>
-              </Row>
-            </div>
-          </>
-        )}
-        <h2 className="page-heading">审批</h2>
-        <div className="card">
-          <Row
-            title="允许绕过权限"
-            detail="审批模式里多出“绕过权限”：Claude 做任何事都不再询问，包括在你的电脑上执行命令。只建议在测试机或虚拟机里打开"
-          >
-            <Switch
-              label="允许绕过权限"
-              checked={bypassPermissions}
-              onChange={(value) => setPrefs((prefs) => ({ ...prefs, bypassPermissions: value }))}
-            />
-          </Row>
-        </div>
-        <TranscriptViewSettings />
-        <ReplyStats />
-        <SessionBarSettings />
+              </span>
+            </Row>
+          </div>
+        </>
+      )}
+      <h2 className="page-heading">审批</h2>
+      <div className="card">
+        <Row
+          title="允许绕过权限"
+          detail="审批模式里多出“绕过权限”：Claude 做任何事都不再询问，包括在你的电脑上执行命令。只建议在测试机或虚拟机里打开"
+        >
+          <Switch
+            label="允许绕过权限"
+            checked={bypassPermissions}
+            onChange={(value) => setPrefs((prefs) => ({ ...prefs, bypassPermissions: value }))}
+          />
+        </Row>
       </div>
-    </section>
+    </Page>
   );
 }
 
+function Appearance({ browser }: { browser: boolean }) {
+  const { quota } = usePrefs();
+  return (
+    <Page title="外观" intro={here(browser)}>
+      <ThemeSettings />
+      {window.desktop && (
+        <>
+          <h2 className="page-heading">输入框</h2>
+          <div className="card">
+            <Row
+              title="在输入框旁显示额度"
+              detail="5 小时和每周额度的已用比例，取自最近一次读数；点它打开“账号与额度”"
+            >
+              <Switch
+                label="在输入框旁显示额度"
+                checked={quota}
+                onChange={(value) => setPrefs((prefs) => ({ ...prefs, quota: value }))}
+              />
+            </Row>
+          </div>
+        </>
+      )}
+      <TranscriptViewSettings />
+      <ReplyStats />
+      <SessionBarSettings />
+    </Page>
+  );
+}
+
+function ConnectionSettings({
+  form,
+  changeForm,
+}: {
+  form: ConnectionForm;
+  changeForm: (values: Partial<ConnectionForm>) => void;
+}) {
+  const { connection } = usePrefs();
+  return (
+    <Page title="连接" intro={here(false)}>
+      <h2 className="page-heading">登录</h2>
+      <div className="card">
+        <Row title="记住凭据" detail="服务凭据经当前系统账户加密后保存在本机">
+          <Switch
+            label="记住凭据"
+            checked={form.remember}
+            onChange={(remember) => changeForm({ remember, autoLogin: remember && form.autoLogin })}
+          />
+        </Row>
+        <Row title="自动登录" detail="启动客户端后直接连接上次的服务">
+          <Switch
+            label="自动登录"
+            checked={form.autoLogin}
+            onChange={(autoLogin) =>
+              changeForm({ autoLogin, remember: autoLogin || form.remember })
+            }
+          />
+        </Row>
+      </div>
+      <Connections />
+      <h2 className="page-heading">连接等待时间</h2>
+      <div className="card">
+        {waits.map(({ step, title, detail }) => (
+          <Row key={step} title={title} detail={`${detail}。默认 ${connectionWaits[step]} 秒`}>
+            <Seconds
+              label={title}
+              value={connection[step]}
+              change={(seconds) =>
+                setPrefs((prefs) => ({
+                  ...prefs,
+                  connection: { ...prefs.connection, [step]: seconds },
+                }))
+              }
+            />
+          </Row>
+        ))}
+        <Row title="恢复默认" detail="下次连接时生效；连接正常时不需要改">
+          <button
+            type="button"
+            className="button"
+            disabled={waits.every(({ step }) => connection[step] === connectionWaits[step])}
+            onClick={() => setPrefs((prefs) => ({ ...prefs, connection: connectionWaits }))}
+          >
+            恢复默认
+          </button>
+        </Row>
+      </div>
+    </Page>
+  );
+}
 function Notices() {
   const { notify } = usePrefs();
   const set = (values: Partial<typeof notify>) =>
     setPrefs((prefs) => ({ ...prefs, notify: { ...prefs.notify, ...values } }));
   return (
-    <section className="page" aria-label="通知">
-      <div className="page-body">
-        <h1 className="page-title">通知</h1>
-        <p className="muted">
-          窗口收在托盘或不在前台时，用系统通知提醒需要你知道的事；点通知回到对应的会话。正在看的会话不会重复提醒。
-        </p>
-        <div className="card">
-          <Row title="开启通知" detail="关闭后既不弹出系统通知，也不记入通知列表">
-            <Switch
-              label="开启通知"
-              checked={notify.enabled}
-              onChange={(enabled) => set({ enabled })}
-            />
-          </Row>
-          <Row title="提示音" detail="弹出系统通知时播放系统的通知声音">
-            <Switch
-              label="提示音"
-              checked={notify.sound}
-              disabled={!notify.enabled}
-              onChange={(sound) => set({ sound })}
-            />
-          </Row>
-        </div>
-        <h2 className="page-heading">提醒哪些事</h2>
-        <div className="card">
-          {kinds.map(({ key, title, detail }) => (
-            <Row key={key} title={title} detail={detail}>
-              <Switch
-                label={title}
-                checked={notify[key]}
-                disabled={!notify.enabled}
-                onChange={(value) => set({ [key]: value })}
-              />
-            </Row>
-          ))}
-        </div>
-        {window.desktop && (
-          <button
-            type="button"
-            className="button"
-            onClick={() =>
-              void window.desktop!.notify({
-                title: '测试通知',
-                body: '通知工作正常。',
-                sessionId: null,
-                silent: !notify.sound,
-                always: true,
-              })
-            }
-          >
-            发送一条测试通知
-          </button>
-        )}
+    <Page
+      title="通知"
+      intro="窗口收在托盘或不在前台时，用系统通知提醒需要你知道的事；点通知回到对应的会话。正在看的会话不会重复提醒。"
+    >
+      <div className="card">
+        <Row title="开启通知" detail="关闭后既不弹出系统通知，也不记入通知列表">
+          <Switch
+            label="开启通知"
+            checked={notify.enabled}
+            onChange={(enabled) => set({ enabled })}
+          />
+        </Row>
+        <Row title="提示音" detail="弹出系统通知时播放系统的通知声音">
+          <Switch
+            label="提示音"
+            checked={notify.sound}
+            disabled={!notify.enabled}
+            onChange={(sound) => set({ sound })}
+          />
+        </Row>
       </div>
-    </section>
+      <h2 className="page-heading">提醒哪些事</h2>
+      <div className="card">
+        {kinds.map(({ key, title, detail }) => (
+          <Row key={key} title={title} detail={detail}>
+            <Switch
+              label={title}
+              checked={notify[key]}
+              disabled={!notify.enabled}
+              onChange={(value) => set({ [key]: value })}
+            />
+          </Row>
+        ))}
+      </div>
+      {window.desktop && (
+        <button
+          type="button"
+          className="button"
+          onClick={() =>
+            void window.desktop!.notify({
+              title: '测试通知',
+              body: '通知工作正常。',
+              sessionId: null,
+              silent: !notify.sound,
+              always: true,
+            })
+          }
+        >
+          发送一条测试通知
+        </button>
+      )}
+    </Page>
   );
 }
 
@@ -711,94 +751,91 @@ function About({
   showNotes: (version: string) => void;
 }) {
   return (
-    <section className="page" aria-label="关于与更新">
-      <div className="page-body">
-        <h1 className="page-title">关于与更新</h1>
-        <div className="card">
-          <Row title="客户端版本">
-            <span className="setting-actions">
-              <span className="setting-value">{version || '浏览器开发入口'}</span>
-              {version && (
-                <button type="button" className="button" onClick={() => showNotes(version)}>
-                  这一版的更新内容
-                </button>
-              )}
-            </span>
-          </Row>
-          <Row title="服务端版本">
-            <span className="setting-value">{service ?? '未知'}</span>
-          </Row>
-          <Row title="运行方式">
-            <span className="setting-value">{adapterName}</span>
-          </Row>
-        </div>
-        <h2 className="page-heading">更新</h2>
-        <div className="card">
-          <Row
-            title="客户端与服务端需要同一版本"
-            detail="服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级"
-          >
-            <span className="setting-actions">
-              {updates.map((item) => (
-                <button
-                  type="button"
-                  className="button"
-                  key={item.label}
-                  disabled={item.disabled}
-                  onClick={item.run}
-                >
-                  {item.icon}
-                  {item.label}
-                </button>
-              ))}
-              {updates.length === 0 && <span className="setting-value">没有可用的更新操作</span>}
-            </span>
-          </Row>
-        </div>
-        {window.desktop && (
-          <>
-            <h2 className="page-heading">排查</h2>
-            <div className="card">
-              <Row
-                title="连接日志"
-                detail="记录每次连接何时建立、何时断开、是哪一方先断开及原因，保存在本机；不含服务凭据、对话和命令内容。连接无故中断时可以对照服务端日志查看"
-              >
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => void window.desktop!.openLogs()}
-                >
-                  打开日志文件夹
-                </button>
-              </Row>
-              <Row
-                title="开发者工具"
-                detail="查看界面的控制台报错、检查元素或录制性能记录，反馈界面问题时用得上。在单独的窗口里打开；其中能看到当前页面的全部内容，包括对话，不要按他人的要求在里面粘贴代码"
-              >
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => void window.desktop!.openDevTools()}
-                >
-                  打开开发者工具
-                </button>
-              </Row>
-            </div>
-          </>
-        )}
-        {project.url && (
-          <button type="button" className="button" onClick={openProject}>
-            <GithubMark />
-            项目主页 · {project.name}
-          </button>
-        )}
+    <Page title="关于与更新">
+      <div className="card">
+        <Row title="客户端版本">
+          <span className="setting-actions">
+            <span className="setting-value">{version || '浏览器开发入口'}</span>
+            {version && (
+              <button type="button" className="button" onClick={() => showNotes(version)}>
+                这一版的更新内容
+              </button>
+            )}
+          </span>
+        </Row>
+        <Row title="服务端版本">
+          <span className="setting-value">{service ?? '未知'}</span>
+        </Row>
+        <Row title="运行方式">
+          <span className="setting-value">{adapterName}</span>
+        </Row>
       </div>
-    </section>
+      <h2 className="page-heading">更新</h2>
+      <div className="card">
+        <Row
+          title="客户端与服务端需要同一版本"
+          detail="服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级"
+        >
+          <span className="setting-actions">
+            {updates.map((item) => (
+              <button
+                type="button"
+                className="button"
+                key={item.label}
+                disabled={item.disabled}
+                onClick={item.run}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+            {updates.length === 0 && <span className="setting-value">没有可用的更新操作</span>}
+          </span>
+        </Row>
+      </div>
+      {window.desktop && (
+        <>
+          <h2 className="page-heading">排查</h2>
+          <div className="card">
+            <Row
+              title="连接日志"
+              detail="记录每次连接何时建立、何时断开、是哪一方先断开及原因，保存在本机；不含服务凭据、对话和命令内容。连接无故中断时可以对照服务端日志查看"
+            >
+              <button
+                type="button"
+                className="button"
+                onClick={() => void window.desktop!.openLogs()}
+              >
+                打开日志文件夹
+              </button>
+            </Row>
+            <Row
+              title="开发者工具"
+              detail="查看界面的控制台报错、检查元素或录制性能记录，反馈界面问题时用得上。在单独的窗口里打开；其中能看到当前页面的全部内容，包括对话，不要按他人的要求在里面粘贴代码"
+            >
+              <button
+                type="button"
+                className="button"
+                onClick={() => void window.desktop!.openDevTools()}
+              >
+                打开开发者工具
+              </button>
+            </Row>
+          </div>
+        </>
+      )}
+      {project.url && (
+        <button type="button" className="button" onClick={openProject}>
+          <GithubMark />
+          项目主页 · {project.name}
+        </button>
+      )}
+    </Page>
   );
 }
 
-// Settings in one place, sorted by whose they are: Claude Code's own (kept on the cloud host) and this
-// client's (kept on this computer).
+// Settings in one place, sorted by where they are kept: this computer, the service, or Claude Code's own files on the
+// cloud host.
 export default function SettingsPage({
   client,
   section,
@@ -838,10 +875,15 @@ export default function SettingsPage({
 }) {
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
+  // Before a connection only this computer's; in a browser no computer's own nor Claude Code's files; the service's
+  // where there is one to keep them. A page with nothing to set where it is shown is not listed.
   const shown = sections.filter(
     (item) =>
-      (!back || item.group === '客户端') &&
-      (!browser || !['account', 'claude'].includes(item.id)) &&
+      (!back || item.group === '本机') &&
+      (item.id !== 'connection' || window.desktop) &&
+      (!browser || !['context', 'account', 'claude', 'instructions'].includes(item.id)) &&
+      (item.id !== 'context' || native) &&
+      (item.id !== 'web' || native || browser) &&
       `${item.name} ${item.words}`.toLowerCase().includes(term),
   );
   return (
@@ -891,23 +933,35 @@ export default function SettingsPage({
           native ? (
             <SettingsPanel client={client} />
           ) : (
-            <section className="page" aria-label="Claude Code 设置">
-              <div className="page-body">
-                <h1 className="page-title">Claude Code</h1>
-                <p className="muted">离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。</p>
-              </div>
-            </section>
+            <Page
+              title="CLI 设置"
+              intro="离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。"
+            />
           )
+        ) : section === 'instructions' ? (
+          native ? (
+            <GlobalInstructions client={client} />
+          ) : (
+            <Page title="全局说明" intro="离线模拟没有全局说明；连接远程代理后在这里修改。" />
+          )
+        ) : section === 'context' ? (
+          <Page title="上下文与缓存" intro={everyDevice}>
+            <IdleCompactionSettings client={client} />
+          </Page>
+        ) : section === 'web' ? (
+          <Page title="浏览器访问" intro={everyDevice}>
+            <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
+          </Page>
         ) : section === 'general' ? (
           <General
-            client={client}
             browser={browser}
-            web={!back && (native || browser)}
-            form={form}
-            changeForm={changeForm}
             workspaceRoot={workspaceRoot}
             chooseWorkspace={chooseWorkspace}
           />
+        ) : section === 'appearance' ? (
+          <Appearance browser={browser} />
+        ) : section === 'connection' ? (
+          <ConnectionSettings form={form} changeForm={changeForm} />
         ) : section === 'notifications' ? (
           <Notices />
         ) : section === 'shortcuts' ? (

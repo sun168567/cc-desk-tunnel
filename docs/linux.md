@@ -39,4 +39,4 @@ npm run package:linux     # 在 artifacts/linux/ 生成 deb
 
 尚未验证，需要真机：在真实的桌面（GNOME、KDE，X11 与 Wayland）上的窗口、标题栏按钮、托盘、通知和输入法；密钥环；连接真实的服务端由 Claude 完成任务。
 
-遇到问题请到[议题](https://github.com/sun168567/cc-desk-tunnel/issues)反馈，附上“设置 → 常规”里的连接日志和桌面环境。
+遇到问题请到[议题](https://github.com/sun168567/cc-desk-tunnel/issues)反馈，附上“设置 → 关于与更新”里的连接日志和桌面环境。

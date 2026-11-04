@@ -23,7 +23,7 @@ export function CertificateWarning() {
   return (
     <p ref={ref} className="web-trust-warning" role="note">
       <ShieldAlert aria-hidden="true" />
-      当前服务使用自签名证书，请确认访问地址可信。建议在桌面端“设置 → 常规 →
+      当前服务使用自签名证书，请确认访问地址可信。建议在桌面端“设置 →
       浏览器访问”导入正规证书，或由反向代理提供 HTTPS。
     </p>
   );

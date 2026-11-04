@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { nativeSettingsSchema, PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
+import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { IdleCompaction, Session } from '@cc-desk-tunnel/protocol';
 import { screenshots } from './helpers.ts';
 
@@ -204,15 +204,7 @@ test('idle compaction is set on the settings page and saved at once', async ({ p
       }
       if (message.type.startsWith('compaction.'))
         send({ type: 'compaction.state', requestId: message.requestId, values });
-      // The CLI's own settings, all unset, around it.
-      if (message.type === 'settings.get')
-        send({
-          type: 'settings.state',
-          requestId: message.requestId,
-          values: Object.fromEntries(
-            Object.keys(nativeSettingsSchema.shape).map((key) => [key, null]),
-          ),
-        });
+
       send({ type: 'response', requestId: message.requestId, ok: true });
     });
   });
@@ -224,12 +216,16 @@ test('idle compaction is set on the settings page and saved at once', async ({ p
   await page.getByRole('button', { name: '连接', exact: true }).click();
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Claude Code 设置' });
-  const heading = panel.getByRole('heading', { name: '缓存过期前自动压缩' });
-  await heading.scrollIntoViewIfNeeded();
-  await expect(panel.getByLabel('自动压缩', { exact: true })).toHaveValue('false');
+  // The service's own, apart from Claude Code's.
+  const sections = page.getByRole('navigation', { name: '设置分类' });
+  await sections.getByRole('button', { name: '上下文与缓存', exact: true }).click();
+  const panel = page.getByRole('region', { name: '上下文与缓存' });
+  await expect(panel).toContainText('保存在服务端');
+  const enabled = panel.getByRole('switch', { name: '自动压缩', exact: true });
+  await expect(enabled).not.toBeChecked();
   await page.screenshot({ path: resolve(shots, 'settings-off.png') });
-  await panel.getByLabel('自动压缩', { exact: true }).selectOption('true');
+  await enabled.click();
+  await expect(enabled).toBeChecked();
   await panel.getByLabel('空闲多久后压缩', { exact: true }).selectOption('45');
   await panel.getByLabel('上下文至少', { exact: true }).selectOption('150000');
   await expect

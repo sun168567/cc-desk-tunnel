@@ -92,7 +92,7 @@ export function channelFailure(seconds, error, target, proxy) {
     process.platform === 'win32'
       ? '请检查安全软件是否拦截了内置的 sshd.exe 或 PowerShell，网络较慢时'
       : '请重新连接；登录 shell 的启动脚本或网络较慢时';
-  return `${head}\n服务凭据已通过，本机的 SSH 服务也已启动，但服务端经执行通道发来的探测命令没有得到应答：${check}可在“设置 → 常规”里调大等待时间。`;
+  return `${head}\n服务凭据已通过，本机的 SSH 服务也已启动，但服务端经执行通道发来的探测命令没有得到应答：${check}可在“设置 → 连接”里调大等待时间。`;
 }
 
 // The component host ended while the connection was wanted. `output` is what it and its components printed,

@@ -652,7 +652,11 @@ export function App({
   const show = (sessionId: string) => visit({ ...place, page: 'chat', sessionId });
   const open = (page: Page, section: Section = place.section) => {
     if (!host.schedules && page === 'schedules') return;
-    if (!host.nativeSettings && (section === 'claude' || section === 'account'))
+    if (
+      (!host.nativeSettings &&
+        ['connection', 'context', 'account', 'claude', 'instructions'].includes(section)) ||
+      (section === 'connection' && !window.desktop)
+    )
       section = 'general';
     visit({ page, section, sessionId: client.state.selectedId });
   };
@@ -1122,7 +1126,7 @@ export function App({
       icon: <Settings />,
       hint: hint('settings'),
       separated: true,
-      run: () => open('settings', nativeMode && host.nativeSettings ? 'claude' : 'general'),
+      run: () => open('settings', 'general'),
     },
     { label: '帮助', icon: <CircleHelp />, run: () => open('settings', 'help') },
     {
@@ -1389,11 +1393,16 @@ export function App({
                     items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
                   };
   const sectionNames: Record<Section, string> = {
-    account: '账号与额度',
-    claude: 'Claude Code 设置',
-    general: '常规设置',
-    notifications: '通知设置',
+    general: '常规',
+    appearance: '外观',
+    connection: '连接',
+    notifications: '通知',
     shortcuts: '快捷键',
+    context: '上下文与缓存',
+    web: '浏览器访问',
+    account: '账号与额度',
+    claude: 'CLI 设置',
+    instructions: '全局说明',
     help: '帮助',
     about: '关于与更新',
   };

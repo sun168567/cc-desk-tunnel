@@ -208,6 +208,10 @@ for (const path of ['', 'private-access'])
         await page.getByRole('button', { name: '设置与账号', exact: true }).click();
         await page.getByRole('menuitem', { name: '设置', exact: true }).click();
         await page
+          .getByRole('navigation', { name: '设置分类' })
+          .getByRole('button', { name: '浏览器访问', exact: true })
+          .click();
+        await page
           .locator('.setting-row')
           .filter({ hasText: '访问设置' })
           .getByRole('button', { name: '设置', exact: true })

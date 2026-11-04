@@ -107,12 +107,16 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
   await shot(page, '07-设置菜单');
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
   const sections = page.getByRole('navigation', { name: '设置分类' });
+  // Grouped by where they are kept; the service's own need a service that keeps them.
+  await expect(page.locator('.sidebar .list-heading')).toHaveText(['本机', 'Claude Code', '其他']);
   for (const [name, heading] of [
-    ['账号与额度', '账号'],
-    ['Claude Code', 'Claude Code'],
     ['常规', '常规'],
+    ['外观', '外观'],
     ['通知', '通知'],
     ['快捷键', '快捷键'],
+    ['账号与额度', '账号与额度'],
+    ['CLI 设置', 'CLI 设置'],
+    ['全局说明', '全局说明'],
     ['帮助', '帮助'],
     ['关于与更新', '关于与更新'],
   ]) {
@@ -579,7 +583,7 @@ test('approval modes are described where they are chosen, and models sit behind 
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Claude Code 设置' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '常规' })).toBeVisible();
 
   // The mode that asks about nothing: offered once allowed in the settings, chosen only after a warning.
   await page

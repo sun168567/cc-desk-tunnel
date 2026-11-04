@@ -8,23 +8,12 @@ import type {
   WebTotpSetup,
 } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
-import { IconButton, Modal, Switch } from './ui.tsx';
+import { IconButton, Modal, Row, Switch } from './ui.tsx';
 import { CopyButton } from './copy.tsx';
 import ReverseProxyHelp from './ReverseProxyHelp.tsx';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : '请求失败，请重试。');
 
-function Row({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
-  return (
-    <div className="setting-row">
-      <span>
-        <strong>{title}</strong>
-        {detail && <small>{detail}</small>}
-      </span>
-      {children}
-    </div>
-  );
-}
 // The service token, and the current authenticator code once two-step verification is on.
 function ProofFields({
   proof,
@@ -216,13 +205,7 @@ export default function WebAccessSettings({
       setError('打开浏览器失败，请复制地址访问。');
     }
   }
-  if (!connected)
-    return (
-      <>
-        <h2 className="page-heading">浏览器访问</h2>
-        <p className="muted">连接服务端后管理浏览器访问。</p>
-      </>
-    );
+  if (!connected) return <p className="muted">连接服务端后管理浏览器访问。</p>;
   const close = () => setDialog(null);
   const own = connection.browser?.sessionId;
   const expires =
@@ -230,7 +213,6 @@ export default function WebAccessSettings({
     Math.ceil((Date.parse(certificate.details.validTo) - Date.now()) / 86400000);
   return (
     <>
-      <h2 className="page-heading">浏览器访问</h2>
       <div className="card web-access-settings" aria-busy={busy}>
         {!values ? (
           <Row title={busy ? '正在读取…' : '读取设置失败'}>

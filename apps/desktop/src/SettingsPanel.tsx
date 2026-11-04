@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { NativeSettings } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
-import GlobalInstructions from './GlobalInstructions.tsx';
-import IdleCompactionSettings from './IdleCompactionSettings.tsx';
+import { Page } from './ui.tsx';
 
 type Key = keyof NativeSettings;
 type Value = NativeSettings[Key];
@@ -303,38 +302,32 @@ export default function SettingsPanel({ client }: { client: ProxyClient }) {
     );
   }
   return (
-    <section className="page" aria-label="Claude Code 设置">
-      <div className="page-body">
-        <h1 className="page-title">Claude Code</h1>
-        <p className="muted">
-          这里修改的是云端官方 CLI 的用户设置文件，从下一次运行起生效；“默认”表示不写入该项，由 CLI
-          自行决定。
+    <Page
+      title="CLI 设置"
+      intro="写入云端 Claude Code 的用户设置文件，从下一次运行起生效；“默认”表示不写入该项，由 CLI 自行决定。"
+    >
+      {failure && (
+        <p className="error-text" role="alert">
+          {failure}
         </p>
-        {failure && (
-          <p className="error-text" role="alert">
-            {failure}
-          </p>
-        )}
-        {values &&
-          groups(values).map((group) => (
-            <div key={group.name}>
-              <h2 className="page-heading">{group.name}</h2>
-              <div className="settings-list card">
-                {group.fields.map((field) => (
-                  <label key={field.key}>
-                    <span>
-                      <strong>{field.title}</strong>
-                      <small>{field.detail}</small>
-                    </span>
-                    {control(field, values[field.key])}
-                  </label>
-                ))}
-              </div>
+      )}
+      {values &&
+        groups(values).map((group) => (
+          <div key={group.name}>
+            <h2 className="page-heading">{group.name}</h2>
+            <div className="settings-list card">
+              {group.fields.map((field) => (
+                <label key={field.key}>
+                  <span>
+                    <strong>{field.title}</strong>
+                    <small>{field.detail}</small>
+                  </span>
+                  {control(field, values[field.key])}
+                </label>
+              ))}
             </div>
-          ))}
-        <IdleCompactionSettings client={client} />
-        <GlobalInstructions client={client} />
-      </div>
-    </section>
+          </div>
+        ))}
+    </Page>
   );
 }

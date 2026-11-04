@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   UserRound,
   RefreshCw,
-  Activity,
-  ShieldCheck,
   LogIn,
   LogOut,
   ExternalLink,
@@ -19,7 +17,7 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
-import { IconButton, Switch } from './ui.tsx';
+import { IconButton, Page, Row, Switch } from './ui.tsx';
 import { setPrefs, usePrefs } from './prefs.ts';
 import { copyText } from './copy.tsx';
 
@@ -78,22 +76,22 @@ export default function AccountPanel({
     }
   }
   return (
-    <section className="account-page" aria-label="账号信息">
-      <header className="account-heading">
-        <h1>
-          <UserRound />
-          账号
-        </h1>
+    <Page
+      title="账号与额度"
+      label="账号信息"
+      intro="云端 Claude Code 登录的账号，与官方读取的订阅额度。"
+      actions={
         <IconButton title="刷新账号信息" disabled={disabled} onClick={refresh}>
           <RefreshCw className={refreshing ? 'spinning' : ''} />
         </IconButton>
-      </header>
-      <div className="account-body">
-        {error && (
-          <p className="error-text" role="alert">
-            {error}
-          </p>
-        )}
+      }
+    >
+      {error && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="card account-card">
         <div className="account-identity">
           <div className="account-avatar">
             <UserRound />
@@ -233,32 +231,30 @@ export default function AccountPanel({
             </div>
           </form>
         )}
-        <dl className="account-details">
-          <div>
-            <dt>组织</dt>
-            <dd>{account?.organization ?? '未提供'}</dd>
-          </div>
-          <div>
-            <dt>模型服务</dt>
-            <dd>
-              {account?.apiProvider === 'firstParty'
-                ? 'Anthropic'
-                : (account?.apiProvider ?? '未读取')}
-            </dd>
-          </div>
-          <div>
-            <dt>认证来源</dt>
-            <dd>{account?.tokenSource ?? account?.apiKeySource ?? '未提供'}</dd>
-          </div>
-        </dl>
-        <h2 className="account-section-title">
-          <Activity />
-          订阅用量
-          <button type="button" className="button secondary" onClick={() => setLog('today')}>
-            <ListOrdered />
-            调用日志
-          </button>
-        </h2>
+        <Row title="组织">
+          <span className="setting-value">{account?.organization ?? '未提供'}</span>
+        </Row>
+        <Row title="模型服务">
+          <span className="setting-value">
+            {account?.apiProvider === 'firstParty'
+              ? 'Anthropic'
+              : (account?.apiProvider ?? '未读取')}
+          </span>
+        </Row>
+        <Row title="认证来源">
+          <span className="setting-value">
+            {account?.tokenSource ?? account?.apiKeySource ?? '未提供'}
+          </span>
+        </Row>
+      </div>
+      <div className="page-heading account-section-title">
+        <h2>订阅用量</h2>
+        <button type="button" className="button secondary" onClick={() => setLog('today')}>
+          <ListOrdered />
+          调用日志
+        </button>
+      </div>
+      <div className="card account-card">
         {metrics?.rateLimits?.available ? (
           <div className="quota-list">
             {metrics.rateLimits.windows.map((window, index) => (
@@ -317,50 +313,41 @@ export default function AccountPanel({
               (metrics?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
           </p>
         )}
-        <div className="quota-live">
-          <span>
-            运行中每分钟读取一次额度
-            <small>
-              关闭后只记录回复里自带的额度，上方的刷新仍会读取；与“常规”里的是同一个设置
-            </small>
-          </span>
+        <Row
+          title="运行中每分钟读取一次额度"
+          detail="让服务端在有任务运行时每分钟向官方读取一次 5 小时与每周额度，各会话、各设备共用这一次读取；关闭后只记录回复里自带的额度，上方的刷新仍会读取"
+        >
           <Switch
             label="运行中每分钟读取一次额度"
             checked={quotaReads}
             onChange={(value) => setPrefs((prefs) => ({ ...prefs, quotaReads: value }))}
           />
-        </div>
-        <h2 className="account-section-title">
-          <ShieldCheck />
-          当前会话
-        </h2>
-        <dl className="account-details">
-          <div>
-            <dt>输入 / 输出</dt>
-            <dd>
-              {metrics?.usage
-                ? `${metrics.usage.inputTokens.toLocaleString()} / ${metrics.usage.outputTokens.toLocaleString()} tokens`
-                : '等待读取'}
-            </dd>
-          </div>
-          <div>
-            <dt>缓存读取 / 写入</dt>
-            <dd>
-              {metrics?.usage
-                ? `${metrics.usage.cacheReadTokens.toLocaleString()} / ${metrics.usage.cacheWriteTokens.toLocaleString()} tokens`
-                : '等待读取'}
-            </dd>
-          </div>
-          <div>
-            <dt>原生费用估算</dt>
-            <dd>
-              {metrics?.usage?.costUsd != null
-                ? `$${metrics.usage.costUsd.toFixed(4)}（非订阅账单）`
-                : '未提供'}
-            </dd>
-          </div>
-        </dl>
+        </Row>
       </div>
-    </section>
+      <h2 className="page-heading">当前会话</h2>
+      <div className="card">
+        <Row title="输入 / 输出">
+          <span className="setting-value">
+            {metrics?.usage
+              ? `${metrics.usage.inputTokens.toLocaleString()} / ${metrics.usage.outputTokens.toLocaleString()} tokens`
+              : '等待读取'}
+          </span>
+        </Row>
+        <Row title="缓存读取 / 写入">
+          <span className="setting-value">
+            {metrics?.usage
+              ? `${metrics.usage.cacheReadTokens.toLocaleString()} / ${metrics.usage.cacheWriteTokens.toLocaleString()} tokens`
+              : '等待读取'}
+          </span>
+        </Row>
+        <Row title="原生费用估算">
+          <span className="setting-value">
+            {metrics?.usage?.costUsd != null
+              ? `${metrics.usage.costUsd.toFixed(4)}（非订阅账单）`
+              : '未提供'}
+          </span>
+        </Row>
+      </div>
+    </Page>
   );
 }
