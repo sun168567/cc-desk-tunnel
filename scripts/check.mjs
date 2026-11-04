@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseFiles } from './release-manifest.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const errors = [];
@@ -64,6 +65,23 @@ for (const path of ['.local/开发调试凭据.txt', '.env', 'config/runtime.loc
   } catch {
     errors.push('应被忽略的路径未被忽略：' + path);
   }
+}
+
+// The READMEs link each client straight to its file in the newest release, whose name holds the version: the links
+// change with the version, or they lead nowhere once it is released.
+const version = JSON.parse(
+  readFileSync(resolve(root, 'apps/desktop/package.json'), 'utf8'),
+).version;
+const released = releaseFiles(version);
+for (const readme of ['README.md', 'README.en.md']) {
+  const content = readFileSync(resolve(root, readme), 'utf8');
+  const names = [...content.matchAll(/\/releases\/latest\/download\/([^)\s]+)/g)].map(
+    ([, name]) => name,
+  );
+  if (!names.length) errors.push('README 没有直接下载的链接：' + readme);
+  for (const name of names)
+    if (!released.includes(name))
+      errors.push(`README 的下载链接不是 ${version} 的文件：${readme} → ${name}`);
 }
 
 const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));

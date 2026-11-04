@@ -6,7 +6,7 @@
 
 Claude Code（简称 CC）运行在一台 Linux 服务器上；项目代码、编译器和各种工具都留在 Windows 本机。CC Desk Tunnel 把两端接起来：服务器上是一个容器，Windows 上是一个桌面客户端，Claude 通过一条加密的反向 SSH 通道在你的电脑上读写文件、执行命令。
 
-[下载](https://github.com/sun168567/cc-desk-tunnel/releases/latest) · [快速开始](#快速开始) · [安全须知](#安全须知) · [文档](#文档) · 许可：[Apache-2.0](LICENSE)
+**下载**：[图形客户端](#图形客户端) · [终端客户端 ccdt](#终端客户端-ccdt) · [服务端](#1-部署服务端) · [全部版本](https://github.com/sun168567/cc-desk-tunnel/releases) | [快速开始](#快速开始) · [安全须知](#安全须知) · [文档](#文档) · 许可：[Apache-2.0](LICENSE)
 
 > [!WARNING]
 > **本项目主要由 AI 编写**，由个人维护，没有经过专业的安全审计，可能存在尚未发现的缺陷。它会让一台服务器获得在你电脑上执行命令的能力，使用前请读完[安全须知](#安全须知)和[账号须知](#账号须知)，并自行评估风险。
@@ -60,7 +60,7 @@ Claude Code（简称 CC）运行在一台 Linux 服务器上；项目代码、�
 
 ## 快速开始
 
-需要：一台有公网 IP 或域名的 Linux 服务器（x86_64；arm64 为实验性支持。推荐 Ubuntu，已安装 Docker），和一台 Windows 10 / 11 x64 电脑。macOS 与 Linux 上也有客户端，目前是实验性支持。
+需要：一台有公网 IP 或域名的 Linux 服务器（x86_64；arm64 为实验性支持。推荐 Ubuntu，已安装 Docker），和一台 Windows 10 / 11 x64 电脑。macOS 与 Linux 上也有图形客户端和 `ccdt`，目前都是实验性支持。
 
 **服务器不需要高配。** 编译、测试和各种开发工具都在 Windows 本机运行，服务器上只有 Claude Code 和一个轻量的代理服务，2 核 1 GB 内存的入门机型就能运行。只有打算让 Claude 直接在服务器上编译或跑重负载时，才需要按那些任务选配置。
 
@@ -92,15 +92,38 @@ sudo cc-desk-tunnel help      # 全部命令：更换凭据、备份恢复、证
 
 一般不需要上服务器升级：客户端的“设置 → 关于与更新”里可以直接升级服务端。手动安装、三种证书方式、备份恢复等见[部署操作手册](deploy/README.md)；已有 nginx 和域名时见[用 nginx 反代](deploy/nginx.md)。
 
-### 2. 安装 Windows 客户端
+### 2. 安装客户端
 
-从[发布页](https://github.com/sun168567/cc-desk-tunnel/releases/latest)下载 `CC-Desk-Tunnel-Setup-<版本>-x64.exe` 并安装。安装包自带 PowerShell 7 和 OpenSSH，不需要另装任何东西。启动后填入上一步的三项信息并连接。
+客户端有两种，可以只装一种，也可以都装；都要与服务端同一版本，下面的链接都是最新的正式版。
 
-首次运行会遇到 SmartScreen 提示，处理方法见[杀毒软件与 SmartScreen](#杀毒软件与-smartscreen)。
+- **图形客户端**：桌面应用，按项目管理会话，对话过程折叠成摘要、可逐级展开。
+- **终端客户端 `ccdt`**：在自己的终端里使用原版 Claude Code，与图形客户端共用会话。
 
-macOS 与 Linux 的安装包在同一个发布页，安装方法见 [macOS 客户端](docs/macos.md)与 [Linux 客户端](docs/linux.md)。它们是实验性支持，没有签名，升级时需要重新下载安装。
+#### 图形客户端
 
-更习惯终端时，同一个发布页还有终端客户端 `ccdt` 的包（Windows、macOS、Linux），可以单独安装使用，见[终端客户端](docs/cli.md)。
+| 系统 | 下载 |
+| --- | --- |
+| Windows 10 / 11 x64 | [CC-Desk-Tunnel-Setup-0.3.9-x64.exe](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-Setup-0.3.9-x64.exe) |
+| macOS（实验性） | [Apple 芯片](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-arm64.dmg) · [Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-x64.dmg)，见 [macOS 客户端](docs/macos.md) |
+| Linux x64（实验性） | [.deb](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-linux-amd64.deb)，见 [Linux 客户端](docs/linux.md) |
+
+Windows 安装包自带 PowerShell 7 和 OpenSSH，不需要另装任何东西。启动后填入上一步的三项信息并连接。首次运行会遇到 SmartScreen 提示，处理方法见[杀毒软件与 SmartScreen](#杀毒软件与-smartscreen)。macOS 与 Linux 的客户端没有签名，升级时需要重新下载安装。
+
+#### 终端客户端 ccdt
+
+Windows，在 PowerShell 里运行：
+
+```powershell
+irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+```
+
+macOS、Linux（实验性）：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
+```
+
+脚本从发布页下载最新的正式版，按 `SHA256SUMS` 校验后只为当前用户安装，并把 `ccdt` 加入 PATH，不需要管理员权限。装好后运行 `ccdt login` 登录服务端。服务端不是最新版时，先指定与它相同的版本，见[终端客户端](docs/cli.md#安装)。也可以手动下载：[Windows x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-windows-x64.zip) · [macOS Apple 芯片](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-arm64.tar.gz) · [macOS Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-x64.tar.gz) · [Linux x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-x64.tar.gz) · [Linux arm64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-arm64.tar.gz)。
 
 ### 3. 登录 Claude
 

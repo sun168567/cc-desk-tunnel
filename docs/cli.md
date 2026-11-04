@@ -6,6 +6,34 @@
 
 ## 安装
 
+用一行命令安装，只为当前用户安装，不需要管理员权限：
+
+```powershell
+# Windows，在 PowerShell 里运行：装到 %LOCALAPPDATA%\Programs\ccdt，并加入当前用户的 PATH
+irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+```
+
+```bash
+# macOS、Linux：装到 ~/.local/share/ccdt，命令为 ~/.local/bin/ccdt
+curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
+```
+
+脚本从发布页下载这个系统的包，按发布页的 `SHA256SUMS` 校验后，运行包里的安装脚本。Windows 上运行命令的窗口装完就能用 `ccdt`；macOS、Linux 上 `~/.local/bin` 不在 PATH 里时，安装脚本把它写进 shell 的配置文件（zsh 为 `~/.zshrc`，bash 为 `~/.bashrc`，macOS 的 bash 为 `~/.bash_profile`，其他为 `~/.profile`），新开的终端窗口就能用。
+
+`ccdt` 要与服务端**同一版本**。脚本默认装最新的正式版；服务端是别的版本时，先指定版本再运行，例如：
+
+```powershell
+$env:CCDT_VERSION = '0.3.9'; irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | CCDT_VERSION=0.3.9 sh
+```
+
+装错了版本也不要紧：连接时 `ccdt` 会提示版本不一致，并问你是否换成服务端的版本。设置 `CCDT_DOWNLOAD_ONLY=1` 时，脚本只把校验过的包解压到当前目录，不安装。
+
+### 手动安装
+
 从[发布页](https://github.com/sun168567/cc-desk-tunnel/releases/latest)下载与服务端**相同版本**的包：
 
 | 系统 | 文件 |
@@ -30,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 
 **升级**：运行 `ccdt upgrade`，见下面的[升级](#升级)。0.3.8 及更早的 `ccdt` 没有这个命令：下载新版本的包，再运行一次安装脚本。
 
-**卸载**：删除安装目录（Windows 还要从用户 PATH 去掉它；macOS、Linux 还有 `~/.local/bin/ccdt`）。设置与保存的登录在 `%APPDATA%\ccdt`（Windows）、`~/Library/Application Support/ccdt`（macOS）或 `~/.config/ccdt`（Linux）。设置里有这台电脑的设备 ID（装有图形客户端时用它的）：删掉设置再登录，服务端会把它当作另一台电脑，原来在这台电脑上的会话要在图形客户端里接到本机才能继续用。升级或重新安装不会动设置。
+**卸载**：删除安装目录（Windows 还要从用户 PATH 去掉它；macOS、Linux 还有 `~/.local/bin/ccdt`，以及 shell 配置文件里标着 `# ccdt` 的那一行，如果安装时加过）。设置与保存的登录在 `%APPDATA%\ccdt`（Windows）、`~/Library/Application Support/ccdt`（macOS）或 `~/.config/ccdt`（Linux）。设置里有这台电脑的设备 ID（装有图形客户端时用它的）：删掉设置再登录，服务端会把它当作另一台电脑，原来在这台电脑上的会话要在图形客户端里接到本机才能继续用。升级或重新安装不会动设置。
 
 ## 登录
 

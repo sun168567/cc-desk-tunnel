@@ -6,7 +6,7 @@ Drive Claude Code in the cloud from a desktop client, and let it work on your Wi
 
 Claude Code (CC for short) runs on a Linux server; your code, compilers and tools stay on Windows. CC Desk Tunnel connects the two: a container on the server, a desktop client on Windows, and an encrypted reverse SSH channel through which Claude reads and writes files and runs commands on your computer.
 
-[Download](https://github.com/sun168567/cc-desk-tunnel/releases/latest) · [Quick start](#quick-start) · [Security](#security) · [Documentation](#documentation) · License: [Apache-2.0](LICENSE)
+**Download**: [Desktop client](#desktop-client) · [Terminal client ccdt](#terminal-client-ccdt) · [Server](#1-deploy-the-service) · [All releases](https://github.com/sun168567/cc-desk-tunnel/releases) | [Quick start](#quick-start) · [Security](#security) · [Documentation](#documentation) · License: [Apache-2.0](LICENSE)
 
 > [!WARNING]
 > **This project is mostly written by AI**, maintained by one person, and has not had a professional security audit. It may contain undiscovered defects. It gives a server the ability to run commands on your computer: read [Security](#security) and [Your account](#your-account) first and judge the risk for yourself.
@@ -71,7 +71,7 @@ This repository publishes all of its own client, server, build and deployment so
 
 ## Quick start
 
-You need a Linux server with a public IP or domain name (x86_64, or arm64 as experimental support; Ubuntu recommended, Docker installed) and a Windows 10 / 11 x64 PC.
+You need a Linux server with a public IP or domain name (x86_64, or arm64 as experimental support; Ubuntu recommended, Docker installed) and a Windows 10 / 11 x64 PC. The desktop client and `ccdt` also run on macOS and Linux, as experimental support.
 
 **The server can be small.** Builds, tests and development tools all run on your Windows PC; the server only hosts Claude Code and a lightweight proxy service, so an entry-level machine with 2 vCPUs and 1 GB of memory is enough. Size it for heavier work only if you plan to have Claude build or run demanding tasks on the server itself.
 
@@ -103,15 +103,38 @@ sudo cc-desk-tunnel help      # every command: new token, backup and restore, ce
 
 Usually you do not need the server for upgrades: the client's Settings → About and updates upgrades the service too. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
 
-### 2. Install the Windows client
+### 2. Install a client
 
-Download `CC-Desk-Tunnel-Setup-<version>-x64.exe` from the [releases page](https://github.com/sun168567/cc-desk-tunnel/releases/latest) and install it. It bundles PowerShell 7 and OpenSSH; nothing else is needed. Start it, enter the three values from step 1 and connect.
+There are two clients; install either or both. Each must be the same version as the service; the links below are the newest release.
 
-Expect a SmartScreen prompt on first run; see [Antivirus and SmartScreen](#antivirus-and-smartscreen).
+- **Desktop client**: a desktop app that groups sessions by project and folds each conversation's work into summaries you can expand.
+- **Terminal client `ccdt`**: the official Claude Code in your own terminal, sharing sessions with the desktop client.
 
-Packages for macOS and Linux are on the same releases page; see [macOS client](docs/macos.md) and [Linux client](docs/linux.md) (in Chinese). They are experimental, unsigned, and upgraded by downloading and installing the new package.
+#### Desktop client
 
-If you prefer the terminal, the same page has packages of the terminal client `ccdt` for Windows, macOS and Linux, which can be installed and used on their own; see [Terminal client](docs/cli.md) (in Chinese).
+| System | Download |
+| --- | --- |
+| Windows 10 / 11 x64 | [CC-Desk-Tunnel-Setup-0.3.9-x64.exe](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-Setup-0.3.9-x64.exe) |
+| macOS (experimental) | [Apple silicon](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-arm64.dmg) · [Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-mac-x64.dmg); see [macOS client](docs/macos.md) (in Chinese) |
+| Linux x64 (experimental) | [.deb](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/CC-Desk-Tunnel-0.3.9-linux-amd64.deb); see [Linux client](docs/linux.md) (in Chinese) |
+
+The Windows installer bundles PowerShell 7 and OpenSSH; nothing else is needed. Start it, enter the three values from step 1 and connect. Expect a SmartScreen prompt on first run; see [Antivirus and SmartScreen](#antivirus-and-smartscreen). The macOS and Linux clients are unsigned and upgraded by downloading and installing the new package.
+
+#### Terminal client ccdt
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+```
+
+On macOS and Linux (experimental):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
+```
+
+The script downloads the newest release, checks it against `SHA256SUMS`, installs it for the current user and puts `ccdt` on the PATH; no administrator rights are needed. Then run `ccdt login`. If the service is not on the newest release, install the same version as the service; see [Terminal client](docs/cli.md#安装) (in Chinese). Packages to download by hand: [Windows x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-windows-x64.zip) · [macOS Apple silicon](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-arm64.tar.gz) · [macOS Intel](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-mac-x64.tar.gz) · [Linux x64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-x64.tar.gz) · [Linux arm64](https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/ccdt-0.3.9-linux-arm64.tar.gz).
 
 ### 3. Sign in to Claude
 
