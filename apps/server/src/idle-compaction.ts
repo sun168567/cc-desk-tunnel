@@ -10,9 +10,10 @@ export const IDLE_COMPACTION: IdleCompaction = {
   afterMinutes: 50,
   minTokens: 100_000,
 };
-// A compaction that comes this much later than it was due, as after the computer slept or the service restarted, may
-// find the cache gone, and would read the whole context anew: it is left out.
-const LATE_MS = 60_000;
+// The one-hour cache lasts from the turn's last request. A compaction is sent with a minute to spare, as after the
+// service restarted late in the hour; past that it would read the whole context anew, and is left out.
+const LASTS_MS = 3_600_000;
+const SPARE_MS = 60_000;
 
 const file = (directory: string) => join(directory, 'idle-compaction.json');
 
@@ -62,14 +63,8 @@ export function compactionDue(settings: IdleCompaction, endedAt: number, metrics
   return endedAt + settings.afterMinutes * 60_000;
 }
 
-// A request the user did not make is not sent when the plan quota is this near its limit, as the CLI's own idle
-// compaction does not.
-export function nearLimit(rateLimits: Metrics['rateLimits']) {
-  return !!rateLimits?.windows.some((window) => (window.utilization ?? 0) >= 90);
-}
-
 // One timer per session, set when a turn ends and cleared by whatever comes first: another message, a terminal, the
-// setting turned off. `fire` compacts the session as the compact button does, if it still may.
+// setting changed. `fire` compacts the session as the compact button does.
 export class IdleCompactions {
   settings: IdleCompaction;
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -88,11 +83,12 @@ export class IdleCompactions {
   arm(sessionId: string, endedAt: number, metrics: Metrics, now = Date.now()) {
     this.cancel(sessionId);
     const due = compactionDue(this.settings, endedAt, metrics);
-    if (due === null || now - due > LATE_MS) return;
+    const lapses = endedAt + LASTS_MS - SPARE_MS;
+    if (due === null || now >= lapses) return;
     const timer = setTimeout(
       () => {
         this.timers.delete(sessionId);
-        if (Date.now() - due <= LATE_MS) this.fire(sessionId);
+        if (Date.now() < lapses) this.fire(sessionId);
       },
       Math.max(0, due - now),
     );

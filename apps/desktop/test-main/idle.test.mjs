@@ -53,22 +53,15 @@ test('nothing is said before the hour when the service compacts, the cache is sh
   assert.equal(idleReminder([turn(0, 50_000)], off, 80 * MINUTE), null);
 });
 
-test('a message or a compaction after the turn, or no turn that wrote a cache, leaves nothing to remind of', () => {
-  const message = event(MINUTE, {
-    type: 'message.user',
-    messageId: 'm',
-    text: '/compact',
-    scenario: 'chat',
+test('the size is the last reading of the context: after a compaction it is small, and nothing is said', () => {
+  // A status read after the turn says nothing of the cache but how big the context is now.
+  const reading = (at, usedTokens) => ({
+    ...turn(at, usedTokens),
+    payload: { ...turn(at, usedTokens).payload, cacheTtl: undefined },
   });
-  const compacted = event(MINUTE, {
-    type: 'native.compact',
-    trigger: 'manual',
-    previousTokens: 150_000,
-  });
-  assert.equal(idleReminder([turn(0), message], off, 52 * MINUTE), null);
-  assert.equal(idleReminder([turn(0), compacted], off, 52 * MINUTE), null);
-  // A status read after the turn does not hide it.
-  const read = { ...turn(MINUTE), payload: { ...turn(MINUTE).payload, cacheTtl: undefined } };
-  assert.equal(idleReminder([turn(0), read], off, 52 * MINUTE).phase, 'before');
-  assert.equal(idleReminder([read], off, 80 * MINUTE), null);
+  assert.equal(idleReminder([turn(0), reading(MINUTE, 160_000)], off, 52 * MINUTE).tokens, 160_000);
+  assert.equal(idleReminder([turn(0), reading(MINUTE, 20_000)], off, 52 * MINUTE), null);
+  assert.equal(idleReminder([turn(0), reading(MINUTE, 20_000)], off, 80 * MINUTE), null);
+  // No turn that wrote a cache: nothing to time it by.
+  assert.equal(idleReminder([reading(0, 160_000)], off, 80 * MINUTE), null);
 });

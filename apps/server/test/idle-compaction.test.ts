@@ -10,7 +10,6 @@ import {
   IdleCompactions,
   cacheTtl,
   compactionDue,
-  nearLimit,
   readIdleCompaction,
   writeIdleCompaction,
 } from '../src/idle-compaction.ts';
@@ -65,20 +64,6 @@ test('an idle session is due afterMinutes after its turn, only with a one-hour c
   assert.equal(compactionDue({ ...on, afterMinutes: 30 }, 0, metrics(100_000, '1h')), 30 * MINUTE);
 });
 
-test('a quota at 90% or more of any window holds an unasked request back', () => {
-  const windows = (utilization: number | null) => ({
-    available: true,
-    windows: [
-      { name: 'five_hour', utilization: 20, resetsAt: null },
-      { name: 'seven_day', utilization, resetsAt: null },
-    ],
-  });
-  assert.equal(nearLimit(null), false);
-  assert.equal(nearLimit(windows(89.9)), false);
-  assert.equal(nearLimit(windows(null)), false);
-  assert.equal(nearLimit(windows(90)), true);
-});
-
 test('the setting is kept with the sessions; a file that cannot be read is the defaults', (t) => {
   const path = directory(t);
   assert.deepEqual(readIdleCompaction(path), IDLE_COMPACTION);
@@ -95,7 +80,7 @@ test('the setting is kept with the sessions; a file that cannot be read is the d
   assert.deepEqual(readIdleCompaction(path), IDLE_COMPACTION);
 });
 
-test('a session is compacted once when due, not after a message, and not when it is too late', (t) => {
+test('a session is compacted once when due, not after a message, and not once its cache is about to lapse', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   const path = directory(t);
   const fired: string[] = [];
@@ -111,12 +96,12 @@ test('a session is compacted once when due, not after a message, and not when it
   t.mock.timers.tick(1);
   assert.deepEqual(fired, ['a']);
   assert.equal(compactions.armed('a'), false);
-  // As after a restart: a turn whose time has long passed is not compacted, one just due is.
-  compactions.arm('late', 0, metrics(150_000, '1h'), 52 * MINUTE);
-  assert.equal(compactions.armed('late'), false);
-  compactions.arm('due', 0, metrics(150_000, '1h'), 50 * MINUTE + 30_000);
+  // As after a restart: past its time but with the cache still there, at once; within a minute of the hour, not at all.
+  compactions.arm('due', 0, metrics(150_000, '1h'), 57 * MINUTE);
   t.mock.timers.tick(0);
   assert.deepEqual(fired, ['a', 'due']);
+  compactions.arm('late', 0, metrics(150_000, '1h'), 59 * MINUTE);
+  assert.equal(compactions.armed('late'), false);
   // Turning it off clears what was set.
   compactions.arm('c', 50 * MINUTE, metrics(150_000, '1h'), 50 * MINUTE);
   compactions.update({ enabled: false });

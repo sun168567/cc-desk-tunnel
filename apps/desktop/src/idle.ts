@@ -12,8 +12,8 @@ export type Reminder = {
   minutes: number;
 };
 
-// What the session's last turn leaves to remind of, `now`: it says when it ended, how long its prompt cache lasts and
-// how big the context is. A message or a compaction after it leaves nothing, nor does a small context. The service
+// What an idle session reminds of, `now`: its last turn that wrote a prompt cache says when the cache was written and
+// how long it lasts, and the last reading of the context how big it is (small again after a compaction). The service
 // compacts by itself before the cache lapses when that is on, so there is then only the reminder after.
 export function idleReminder(
   events: SessionEvent[],
@@ -21,14 +21,15 @@ export function idleReminder(
   now: number,
 ): Reminder | null {
   let turn: SessionEvent | undefined;
+  let tokens: number | undefined;
   for (let index = events.length - 1; index >= 0 && !turn; index--) {
     const { payload } = events[index];
-    if (payload.type === 'message.user' || payload.type === 'native.compact') return null;
-    if (payload.type === 'native.metrics' && payload.cacheTtl) turn = events[index];
+    if (payload.type !== 'native.metrics') continue;
+    tokens ??= payload.context?.usedTokens;
+    if (payload.cacheTtl) turn = events[index];
   }
-  if (turn?.payload.type !== 'native.metrics') return null;
+  if (turn?.payload.type !== 'native.metrics' || tokens === undefined) return null;
   const { enabled, afterMinutes, minTokens } = settings ?? DEFAULTS;
-  const tokens = turn.payload.context?.usedTokens ?? 0;
   if (tokens < minTokens) return null;
   const idle = now - Date.parse(turn.createdAt);
   const lasts = turn.payload.cacheTtl === '1h' ? HOUR : 300_000;

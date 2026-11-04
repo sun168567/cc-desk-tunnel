@@ -37,8 +37,8 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
       <h2 className="page-heading">缓存过期前自动压缩</h2>
       <p className="muted">
         本项目服务端的设置，不写入 CLI 设置文件。提示缓存在最后一次请求后 1
-        小时过期，过期后压缩要按全价重读整段上下文；开启后，服务端在会话空闲到设定时间时用当前模型执行
-        /compact，与手动点“压缩”完全相同，读取的是缓存。这是一次真实请求，会计入额度；会话在运行、被终端占用、所在电脑不在线或额度接近上限时不压缩。关闭时，会话里会在过期前提醒。
+        小时过期，过期后压缩要按全价重读整段上下文。开启后，会话空闲到设定时间时，服务端用当前模型执行
+        /compact，与手动点“压缩”相同，读取的是缓存；不需要客户端或会话所在电脑在线。这是一次真实请求，会计入额度。关闭时，会话里会在过期前提醒。
       </p>
       {failure && (
         <p className="error-text" role="alert">

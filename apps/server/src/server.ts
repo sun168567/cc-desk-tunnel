@@ -55,7 +55,7 @@ import type { ClaudeOptions } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import type { NativeLogin } from './native-account.ts';
-import { IdleCompactions, nearLimit } from './idle-compaction.ts';
+import { IdleCompactions } from './idle-compaction.ts';
 import { NativeInput } from './native-input.ts';
 import { statusLineQuota } from './native-controls.ts';
 import { completeOnboarding } from './native-onboarding.ts';
@@ -478,28 +478,23 @@ export function createProxyServer(options: ServerOptions) {
       if (turn) compactions.arm(session.id, turn.endedAt, turn.metrics);
     }
   }
-  // Compacts an idle session before its prompt cache lapses, as the compact button does from a window of the computer
-  // the session is on; see idle-compaction.ts. Nothing is done while it runs or a terminal holds it, when the quota is
-  // near its limit, or when no window of that computer is there.
+  // Compacts an idle session before its prompt cache lapses, as the compact button does; see idle-compaction.ts. It
+  // runs here whether or not a window or the session's computer is there. A session that runs, or that a terminal
+  // holds, is left alone: either keeps its cache current.
   function compactIdle(sessionId: string) {
     if (closing || !options.claude) return;
     try {
       const { session } = store.get(sessionId);
-      if (session.activeRun || terminals.has(sessionId) || nearLimit(quotas.current())) return;
-      const from =
-        !session.device || session.device.id === serverDevice.id
-          ? [...peers].find((peer) => peer.authenticated)
-          : [...(seats.get(session.device.id)?.peers ?? [])].find((peer) => peer.authenticated);
-      if (!from) return;
-      submit(from, { type: 'session.compact', requestId: randomUUID(), sessionId }, session);
+      if (session.activeRun || terminals.has(sessionId) || !session.device) return;
+      submit(undefined, { type: 'session.compact', requestId: randomUUID(), sessionId }, session);
       const run = runs.get(sessionId);
       if (run)
         emit(run, {
           type: 'native.notice',
-          text: `上一轮结束已 ${compactions.settings.afterMinutes} 分钟，提示缓存将要过期：按设置自动压缩上下文，压缩读取的是缓存。`,
+          text: `上一轮结束已 ${compactions.settings.afterMinutes} 分钟，提示缓存即将过期：按设置自动压缩上下文，压缩读取的是缓存。`,
         });
     } catch {
-      // Busy, or the computer's execution channel is not ready: the session is left as it is.
+      // As many runs as the service holds are going, or the session's native record is gone: left as it is.
     }
   }
   // Records what has arrived of the output the run is in the middle of.
@@ -610,7 +605,15 @@ export function createProxyServer(options: ServerOptions) {
   async function native(run: Run) {
     try {
       const { session } = store.get(run.sessionId);
-      const ssh = run.device === serverDevice.id ? undefined : seats.get(run.device)!.door!.ssh!;
+      // The session's SSH configuration is named the same in the system prompt whether or not its computer is there
+      // (see `sessionSsh`): a compaction, which runs no command, reads the same prompt cache while it is away.
+      const door = seats.get(run.device)?.door?.ssh;
+      const ssh =
+        run.device === serverDevice.id
+          ? undefined
+          : door
+            ? sessionSsh(store.directory, run.sessionId, door)
+            : { configPath: sessionSshPath(store.directory, run.sessionId) };
       const said = store.promptValues(run.sessionId);
       const status = await runClaude(options.claude!, {
         sessionId: run.sessionId,
@@ -633,7 +636,7 @@ export function createProxyServer(options: ServerOptions) {
         dataDir: store.directory,
         resume: store.hasNativeContext(run.sessionId),
         signal: run.controller.signal,
-        ssh: ssh ? sessionSsh(store.directory, run.sessionId, ssh) : undefined,
+        ssh,
         emit: (event) => emit(run, event),
         approve: (toolId, waiting) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
@@ -1192,9 +1195,10 @@ export function createProxyServer(options: ServerOptions) {
     }
   }
   // A message starts a run on the computer the session is on, or joins the native run going there. Compacting
-  // is the native /compact command sent as a message.
+  // is the native /compact command sent as a message. The service compacts an idle session from no connection
+  // (`peer` absent; see `compactIdle`).
   function submit(
-    peer: Peer,
+    peer: Peer | undefined,
     command: CommandOf<'message.send' | 'session.compact' | 'run.continue'>,
     session: Session,
   ) {
@@ -1221,21 +1225,21 @@ export function createProxyServer(options: ServerOptions) {
       if (active.controller.signal.aborted)
         throw new DomainError('run_finishing', '原生运行正在停止，请稍后发送。');
       active.input.assertWritable();
-      peer.subscriptions.add(command.sessionId);
+      peer?.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
       active.input.submit(command.requestId, store.notice(command.sessionId) + text);
       return;
     }
     if (options.claude && mutations.size)
       throw new DomainError('native_busy', '原生状态正在读取，请稍后发送。');
-    const device = target(peer, session);
+    const device = peer ? target(peer, session) : session.device!.id;
     room();
-    peer.subscriptions.add(command.sessionId);
+    peer?.subscriptions.add(command.sessionId);
     const run: Run = {
       id: randomUUID(),
       sessionId: command.sessionId,
       device,
-      connectionId: peer.id,
+      connectionId: peer?.id ?? serverDevice.id,
       controller: new AbortController(),
       toolFinished: false,
       approvals: new Map(),
