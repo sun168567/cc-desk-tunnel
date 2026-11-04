@@ -189,6 +189,10 @@ export class Quotas {
     this.heard(login);
     this.observed.observe(login, event, now);
   }
+  // The quota as it stands for the login last seen.
+  current(now = Date.now()) {
+    return this.of(this.login ?? '', now);
+  }
   // The windows a terminal's status line showed (see `statusLineQuota`), and the quota as it now stands.
   observeTerminal(windows: Windows, now = Date.now()) {
     const login = this.login ?? '';

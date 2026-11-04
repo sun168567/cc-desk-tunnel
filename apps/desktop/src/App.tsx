@@ -75,6 +75,7 @@ import type { Section } from './SettingsPage.tsx';
 import Sidebar from './Sidebar.tsx';
 import TitleBar from './TitleBar.tsx';
 import type { BarMenu } from './TitleBar.tsx';
+import IdleReminder from './IdleReminder.tsx';
 import { IconButton, Menu } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 
@@ -522,6 +523,10 @@ export function App({
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
+  // The service's idle compaction setting decides which reminder a session shows.
+  useEffect(() => {
+    if (nativeMode && connected) void client.request({ type: 'compaction.get' }).catch(() => {});
+  }, [nativeMode, connected]);
   // Each connection tells the service anew whether this client wants the quota kept current.
   useEffect(() => {
     if (nativeMode && connected)
@@ -1672,6 +1677,24 @@ export function App({
                 <p>设备“{selected.device?.name ?? '未知设备'}”未连接，当前只能查看会话。</p>
               </div>
             )}
+            {nativeMode &&
+              selected &&
+              !selected.activeRun &&
+              (!away || remote) &&
+              !terminalSessionId && (
+                <IdleReminder
+                  events={events}
+                  settings={state.compaction}
+                  canCompact={canCompact && !controlsDisabled}
+                  compact={() => {
+                    void compact();
+                  }}
+                  startFresh={() => {
+                    if (onThis(selected)) void createInProject(selected.projectPath);
+                    else void newSession();
+                  }}
+                />
+              )}
             {selected && (!away || remote) && !terminalSessionId && (
               <Composer
                 openAccount={() => open('settings', 'account')}

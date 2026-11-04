@@ -55,6 +55,7 @@ import type { ClaudeOptions } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import type { NativeLogin } from './native-account.ts';
+import { IdleCompactions, nearLimit } from './idle-compaction.ts';
 import { NativeInput } from './native-input.ts';
 import { statusLineQuota } from './native-controls.ts';
 import { completeOnboarding } from './native-onboarding.ts';
@@ -223,6 +224,8 @@ export function createProxyServer(options: ServerOptions) {
   const mutations = new Set<string>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
+  const compactions = new IdleCompactions(store.directory, compactIdle);
+  armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
   let login: Login | undefined;
   // Each run or terminal is a CLI process that keeps some 250 MB; more of them than the memory holds would
@@ -462,7 +465,42 @@ export function createProxyServer(options: ServerOptions) {
       usage.observe(payload.rateLimits);
     const event = store.append(sessionId, runId, payload, createdAt);
     broadcast({ type: 'session.event', event }, sessionId);
+    if (payload.type === 'native.metrics' && payload.cacheTtl)
+      compactions.arm(sessionId, Date.parse(event.createdAt), payload);
+    else if (payload.type === 'message.user') compactions.cancel(sessionId);
     return event;
+  }
+  // Each session's last turn sets when it is compacted while idle, as after the service starts or the setting changes.
+  function armCompactions() {
+    if (!compactions.settings.enabled) return;
+    for (const session of store.list()) {
+      const turn = !session.activeRun && store.lastCachedTurn(session.id);
+      if (turn) compactions.arm(session.id, turn.endedAt, turn.metrics);
+    }
+  }
+  // Compacts an idle session before its prompt cache lapses, as the compact button does from a window of the computer
+  // the session is on; see idle-compaction.ts. Nothing is done while it runs or a terminal holds it, when the quota is
+  // near its limit, or when no window of that computer is there.
+  function compactIdle(sessionId: string) {
+    if (closing || !options.claude) return;
+    try {
+      const { session } = store.get(sessionId);
+      if (session.activeRun || terminals.has(sessionId) || nearLimit(quotas.current())) return;
+      const from =
+        !session.device || session.device.id === serverDevice.id
+          ? [...peers].find((peer) => peer.authenticated)
+          : [...(seats.get(session.device.id)?.peers ?? [])].find((peer) => peer.authenticated);
+      if (!from) return;
+      submit(from, { type: 'session.compact', requestId: randomUUID(), sessionId }, session);
+      const run = runs.get(sessionId);
+      if (run)
+        emit(run, {
+          type: 'native.notice',
+          text: `上一轮结束已 ${compactions.settings.afterMinutes} 分钟，提示缓存将要过期：按设置自动压缩上下文，压缩读取的是缓存。`,
+        });
+    } catch {
+      // Busy, or the computer's execution channel is not ready: the session is left as it is.
+    }
   }
   // Records what has arrived of the output the run is in the middle of.
   function settle(run: Run) {
@@ -754,6 +792,8 @@ export function createProxyServer(options: ServerOptions) {
     const running = terminals.get(command.sessionId);
     if (running?.continued && running.process && command.continueSession)
       return attachTerminal(peer, running, command);
+    // The terminal's own CLI takes care of the session while it is held.
+    compactions.cancel(command.sessionId);
     if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
       throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
     const device = target(peer, session);
@@ -1334,6 +1374,19 @@ export function createProxyServer(options: ServerOptions) {
             '原生设置文件无法读取或写入；请在原生终端用 /config 检查。',
           );
         }
+        return undefined;
+      }
+      case 'compaction.get':
+        send(peer, {
+          type: 'compaction.state',
+          requestId: command.requestId,
+          values: compactions.settings,
+        });
+        return undefined;
+      case 'compaction.update': {
+        const values = compactions.update(command.values);
+        armCompactions();
+        broadcast({ type: 'compaction.state', requestId: command.requestId, values });
         return undefined;
       }
       case 'instructions.get':
@@ -2022,6 +2075,7 @@ export function createProxyServer(options: ServerOptions) {
       );
       for (const run of runs.values()) cancel(run, '服务停止，运行未重放。');
       for (const seat of seats.values()) clearTimeout(seat.away);
+      compactions.clear();
       const cleanup = [
         ...[...peers].map((peer) => peer.tunnel?.close()),
         ...[...seats.values()].map((seat) => seat.door?.close()),

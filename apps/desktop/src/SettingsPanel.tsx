@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { NativeSettings } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import GlobalInstructions from './GlobalInstructions.tsx';
+import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 
 type Key = keyof NativeSettings;
 type Value = NativeSettings[Key];
@@ -331,6 +332,7 @@ export default function SettingsPanel({ client }: { client: ProxyClient }) {
               </div>
             </div>
           ))}
+        <IdleCompactionSettings client={client} />
         <GlobalInstructions client={client} />
       </div>
     </section>
