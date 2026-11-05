@@ -62,7 +62,7 @@ This repository publishes all of its own client, server, build and deployment so
 | --- | --- |
 | **Projects and sessions** | Grouped by Windows folder; create, rename, delete, search, fork; edit and resend any of your own messages |
 | **The conversation** | Streaming replies, thinking summaries, tool calls with their input and results; add messages during a run, stop at any time |
-| **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; an embedded native terminal when you need it |
+| **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; one click opens the session in the terminal client `ccdt` when you need it |
 | **Terminal client** | `ccdt` opens the official Claude Code in your own terminal, sharing sessions, context and usage statistics with the desktop client |
 | **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics |
 | **Scheduled tasks** | Send a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |

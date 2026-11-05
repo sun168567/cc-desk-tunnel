@@ -51,18 +51,18 @@ export type TerminalSpawner = (
   options: { cwd: string; cols: number; rows: number; env: Record<string, string>; name: string },
 ) => TerminalProcess;
 
-// A terminal that continues the session works in the same native session as its chat runs: it resumes it, or
-// creates it under the session's ID when there is none yet. `settingsPath` replaces the provider's settings then,
-// with the terminal's hooks added to them.
+// A terminal works in the same native session as its session's chat runs: it resumes it, or creates it under the
+// session's ID when there is none yet. `settingsPath` replaces the provider's settings, with the terminal's hooks
+// added to them.
 export function terminalArguments(
   options: ClaudeOptions,
   session: Session,
-  ssh?: SshConnection,
-  continued?: { resume: boolean; settingsPath: string },
+  ssh: SshConnection | undefined,
+  { resume, settingsPath }: { resume: boolean; settingsPath: string },
 ) {
-  const settingsPath = continued?.settingsPath ?? options.settingsPath;
   return [
-    ...(continued ? [continued.resume ? '--resume' : '--session-id', session.id] : []),
+    resume ? '--resume' : '--session-id',
+    session.id,
     '--permission-mode',
     session.permissionMode === 'default' ? 'manual' : session.permissionMode,
     ...(ssh
@@ -73,7 +73,8 @@ export function terminalArguments(
       : []),
     ...((session.model ?? options.model) ? ['--model', session.model ?? options.model!] : []),
     ...(session.effort ? ['--effort', session.effort] : []),
-    ...(settingsPath ? ['--settings', settingsPath] : []),
+    '--settings',
+    settingsPath,
   ];
 }
 
@@ -90,8 +91,6 @@ const GATHER_LIMIT = 16384;
 // modifyOtherKeys.
 const KEYBOARD = /\x1b\[>(\d+)u|\x1b\[<\d*u|\x1b\[>4;(\d+)m/g;
 
-// Native control sessions have their own CLI history; no terminal transcript is persisted by the proxy.
-//
 // A terminal that keeps running while no client shows it (`screen`) also writes its output to a screen model. A client
 // that attaches gets the current screen first, then the live output; one that stops acknowledging for 30 s is
 // detached and the CLI goes on. Without a screen the terminal ends then. The screen model, the snapshot and the modes

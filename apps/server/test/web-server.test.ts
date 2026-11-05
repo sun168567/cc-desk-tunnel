@@ -435,7 +435,7 @@ test('authenticated desktop TOTP commands omit proof; a browser needs it to set 
   assert.equal((await desktop.request({ type: 'web.totp.disable' })).ok, true);
 });
 
-test('background read types do not renew activity; the server terminal has no remote SSH instructions', () => {
+test('background read types do not renew activity; a browser opens no terminal; the server terminal has no remote SSH instructions', () => {
   for (const command of [
     'session.subscribe',
     'session.history',
@@ -447,7 +447,16 @@ test('background read types do not renew activity; the server terminal has no re
     assert.equal(browserActivity.has(command), false);
   }
   assert.equal(browserActivity.has('message.send'), true);
-  const args = terminalArguments({ executable: 'claude' }, { permissionMode: 'auto' } as never);
+  assert.equal(browserCommands.has('terminal.open'), false);
+  const args = terminalArguments(
+    { executable: 'claude' },
+    { permissionMode: 'auto' } as never,
+    undefined,
+    {
+      resume: false,
+      settingsPath: '/t.json',
+    },
+  );
   assert.equal(args.includes('--append-system-prompt'), false);
   assert.equal(
     args.some((arg) => /SSH|device-script/.test(arg)),

@@ -653,7 +653,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('terminal.open'),
       ...request,
       sessionId: id,
-      // The terminal continues the session's conversation, and what it adds is recorded in the session afterwards.
+      // Sent by ccdt before 0.3.10, when a terminal could also be one apart from the session's conversation. Every
+      // terminal continues it now, and what it adds is recorded in the session; the field is let through, unread.
       continueSession: z.boolean().optional(),
       cols: z.number().int().min(20).max(400),
       rows: z.number().int().min(5).max(160),

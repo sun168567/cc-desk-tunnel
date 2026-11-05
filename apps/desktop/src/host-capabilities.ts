@@ -6,5 +6,7 @@ export function hostCapabilities(browser: boolean) {
     accountManagement: !browser,
     serviceManagement: !browser,
     nativeSettings: !browser,
+    // Opening a session in ccdt, a program on this computer.
+    terminalClient: !browser,
   };
 }

@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -102,7 +102,6 @@ test('the terminal is shown as it is: output acknowledged once written, keys and
   assert.deepEqual(f.requests[0], {
     type: 'terminal.open',
     sessionId,
-    continueSession: true,
     cols: 120,
     rows: 30,
   });
@@ -172,11 +171,12 @@ test('a lost connection, a terminal taken elsewhere and output left behind end t
   assert.deepEqual(await three, { how: 'stalled' });
 });
 
-test('ccdt login offers the services the desktop client signs in to, without their tokens', (t) => {
+test('ccdt login offers the services the desktop client signs in to, by its names, without their tokens', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ccdt-logins-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = { cli: join(root, 'cli'), desktop: join(root, 'desktop') };
   mkdirSync(join(paths.desktop, 'connections', 'abcdefgh'), { recursive: true });
+  mkdirSync(join(paths.desktop, 'shared'), { recursive: true });
   const login = (url, fingerprint) =>
     JSON.stringify({ login: { url, fingerprint, token: 'encrypted' } });
   writeFileSync(join(paths.desktop, 'settings.json'), login('wss://main/ws', 'AA:BB'));
@@ -184,10 +184,90 @@ test('ccdt login offers the services the desktop client signs in to, without the
     join(paths.desktop, 'connections', 'abcdefgh', 'settings.json'),
     login('wss://other/ws', ''),
   );
+  writeFileSync(
+    join(paths.desktop, 'shared', 'connections.json'),
+    JSON.stringify([{ id: 'abcdefgh', name: '家里' }]),
+  );
   assert.deepEqual(new Config(paths).desktopLogins(), [
-    { url: 'wss://main/ws', fingerprint: 'AA:BB' },
-    { url: 'wss://other/ws', fingerprint: '' },
+    { url: 'wss://main/ws', fingerprint: 'AA:BB', name: '主连接' },
+    { url: 'wss://other/ws', fingerprint: '', name: '家里' },
   ]);
+});
+
+// Three services signed in to, the desktop client calling one of them 公司.
+function signedIn(t) {
+  const root = mkdtempSync(join(tmpdir(), 'ccdt-servers-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = { cli: join(root, 'cli'), desktop: join(root, 'desktop') };
+  mkdirSync(paths.cli, { recursive: true });
+  mkdirSync(join(paths.desktop, 'shared'), { recursive: true });
+  writeFileSync(
+    join(paths.desktop, 'settings.json'),
+    JSON.stringify({ login: { url: 'wss://tunnel.example.com/ws', fingerprint: '' } }),
+  );
+  writeFileSync(
+    join(paths.desktop, 'shared', 'connections.json'),
+    JSON.stringify([{ id: '', name: '公司' }]),
+  );
+  // Written by a ccdt before services said when they were last used.
+  writeFileSync(
+    join(paths.cli, 'config.json'),
+    JSON.stringify({
+      servers: [
+        { url: 'wss://tunnel.example.com/ws', fingerprint: '' },
+        { url: 'wss://tokyo.example.net/ws', fingerprint: '' },
+        { url: 'wss://tokyo-2.example.net/ws', fingerprint: '' },
+      ],
+      current: 'wss://tokyo.example.net/ws',
+    }),
+  );
+  return paths;
+}
+
+test('a service is named by its address, the desktop client’s name for it or its host, or a part that tells it apart', (t) => {
+  const config = new Config(signedIn(t));
+  const urls = (wanted) => config.find(wanted).map((server) => server.url);
+  assert.deepEqual(urls('公司'), ['wss://tunnel.example.com/ws']);
+  assert.deepEqual(urls('TUNNEL'), ['wss://tunnel.example.com/ws']);
+  assert.deepEqual(urls('tokyo.example.net'), ['wss://tokyo.example.net/ws']);
+  assert.deepEqual(urls('wss://tokyo-2.example.net/ws'), ['wss://tokyo-2.example.net/ws']);
+  assert.deepEqual(urls('tokyo'), ['wss://tokyo.example.net/ws', 'wss://tokyo-2.example.net/ws']);
+  assert.deepEqual(urls('osaka'), []);
+});
+
+test('the service connected to last is the one used when none is named, whatever another ccdt wrote meanwhile', (t) => {
+  const paths = signedIn(t);
+  const config = new Config(paths);
+  assert.equal(config.server().url, 'wss://tokyo.example.net/ws');
+  const other = new Config(paths);
+  other.remember({ url: 'wss://osaka.example.net/ws', fingerprint: '' });
+  config.use('wss://tunnel.example.com/ws');
+  const read = new Config(paths);
+  assert.equal(read.server().url, 'wss://tunnel.example.com/ws');
+  assert.ok(read.find('osaka').length, 'a service another ccdt signed in to meanwhile is kept');
+  assert.ok(read.find('tunnel')[0].usedAt);
+  read.use('wss://tokyo-2.example.net/ws', false);
+  const chosen = new Config(paths);
+  assert.equal(chosen.server().url, 'wss://tokyo-2.example.net/ws');
+  assert.equal(chosen.find('tokyo-2')[0].usedAt, undefined, 'chosen, not yet connected to');
+});
+
+test('naming a service none or several answer, or choosing one away from a terminal, stops before connecting', (t) => {
+  const paths = signedIn(t);
+  const ccdt = (...args) =>
+    spawnSync(process.execPath, ['apps/cli/bin/ccdt.mjs', ...args], {
+      encoding: 'utf8',
+      input: '',
+      env: { ...process.env, CCDT_CONFIG_DIR: paths.cli, APPDATA: join(paths.desktop, '..') },
+    });
+  const none = ccdt('sessions', '--server', 'osaka');
+  assert.equal(none.status, 1);
+  assert.match(none.stderr, /没有登录过 osaka/);
+  assert.match(ccdt('sessions', '--server', 'tokyo').stderr, /有几个服务端都符合 tokyo/);
+  assert.match(ccdt('-s').stderr, /选服务端需要在终端里运行/);
+  const listed = ccdt('server');
+  assert.equal(listed.status, 0);
+  assert.match(listed.stderr, /tokyo\.example\.net .*（当前）/);
 });
 
 test('reading keys leaves the input open for the terminal shown next', async () => {

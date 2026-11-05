@@ -34,8 +34,18 @@ function writeJson(path, value) {
   renameSync(temporary, path);
 }
 
-// `servers` are the services signed in to, by address; `current` is the one used when none is named. `waits` are the
-// seconds each step of connecting may take where they are not the defaults (see `ccdt config`).
+// A service as ccdt calls it where the desktop client has no name for it.
+export const hostOf = (url) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+};
+
+// `servers` are the services signed in to, by address, each with when it was last connected to (`usedAt`); `current`
+// is the one used when none is named: the one connected to last. `waits` are the seconds each step of connecting may
+// take where they are not the defaults (see `ccdt config`).
 export class Config {
   constructor(paths = directories()) {
     this.paths = paths;
@@ -60,28 +70,78 @@ export class Config {
       this.servers.find((server) => server.url === wanted) ?? (url ? undefined : this.servers[0])
     );
   }
+  // The services `wanted` names: by address, by the desktop client's name for the connection to it or by host, else
+  // those any of these hold it in, ignoring case.
+  find(wanted, names = this.names()) {
+    const text = wanted.toLowerCase();
+    const called = (server) =>
+      [server.url, names.get(server.url) ?? '', hostOf(server.url)].map((name) =>
+        name.toLowerCase(),
+      );
+    const exact = this.servers.filter((server) => called(server).includes(text));
+    return exact.length
+      ? exact
+      : this.servers.filter((server) => called(server).some((name) => name.includes(text)));
+  }
+  // The desktop client's names for the services it connects to, by address.
+  names() {
+    return new Map(this.desktopLogins().map(({ url, name }) => [url, name]));
+  }
   remember(server) {
-    this.servers = [...this.servers.filter((other) => other.url !== server.url), server];
+    const used = { ...server, usedAt: new Date().toISOString() };
+    this.servers = [...this.servers.filter((other) => other.url !== server.url), used];
     this.current = server.url;
     this.save();
+  }
+  // The service becomes the one used when none is named; `connected` also says it was used now. Another ccdt may
+  // have changed the file since this one read it, so it is read again first.
+  use(url, connected = true) {
+    const fresh = new Config(this.paths);
+    const server = fresh.servers.find((other) => other.url === url);
+    if (!server) return;
+    if (connected) server.usedAt = new Date().toISOString();
+    fresh.current = url;
+    fresh.save();
+    this.servers = fresh.servers;
+    this.current = fresh.current;
   }
   forget(url) {
     this.servers = this.servers.filter((server) => server.url !== url);
     if (this.current === url) this.current = this.servers.at(-1)?.url;
     this.save();
   }
-  // The services the desktop client signs in to, one a connection, for `ccdt login` to offer: the address and the
-  // certificate pin. Its saved tokens are encrypted for the desktop program alone and are not read.
+  // The services the desktop client signs in to, one a connection, for `ccdt login` to offer: the address, the
+  // certificate pin and the connection's name, the first one's "主连接" unless the user renamed it. Its saved tokens
+  // are encrypted for the desktop program alone and are not read.
   desktopLogins() {
     const connections = join(this.paths.desktop, 'connections');
-    let names = [];
+    let ids = [];
     try {
-      names = readdirSync(connections);
+      ids = readdirSync(connections);
     } catch {}
-    const logins = [this.paths.desktop, ...names.map((name) => join(connections, name))]
-      .map((directory) => readJson(join(directory, 'settings.json')).login)
-      .filter((login) => login && typeof login.url === 'string' && login.url.startsWith('wss://'))
-      .map((login) => ({ url: login.url, fingerprint: String(login.fingerprint ?? '') }));
+    let named = [];
+    try {
+      named = JSON.parse(
+        readFileSync(join(this.paths.desktop, 'shared', 'connections.json'), 'utf8'),
+      );
+    } catch {}
+    const nameOf = (id) =>
+      (Array.isArray(named) && named.find((entry) => entry?.id === id)?.name) ||
+      (id ? id : '主连接');
+    const logins = ['', ...ids]
+      .map((id) => ({
+        id,
+        login: readJson(join(id ? join(connections, id) : this.paths.desktop, 'settings.json'))
+          .login,
+      }))
+      .filter(
+        ({ login }) => login && typeof login.url === 'string' && login.url.startsWith('wss://'),
+      )
+      .map(({ id, login }) => ({
+        url: login.url,
+        fingerprint: String(login.fingerprint ?? ''),
+        name: String(nameOf(id)),
+      }));
     return logins.filter(
       (login, index) => logins.findIndex((other) => other.url === login.url) === index,
     );

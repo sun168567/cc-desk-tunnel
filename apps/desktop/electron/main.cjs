@@ -456,6 +456,10 @@ handle('service:upgrade', async (event, config) => {
     (error) => ({ error: error.message }),
   );
 });
+handle('ccdt:open', async (_event, request) => {
+  const { openSession } = await import(pathToFileURL(path.join(__dirname, 'ccdt.mjs')).href);
+  return openSession(request, { version: app.getVersion() });
+});
 // The service token is kept only when the user asks, encrypted for the current account of the system (DPAPI on
 // Windows, the login keychain on macOS).
 handle('login:load', () => {

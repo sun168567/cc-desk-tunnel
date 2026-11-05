@@ -22,7 +22,7 @@ export function readInstructions(path = instructionsPath()) {
   if (text.length > INSTRUCTIONS_LIMIT)
     throw new DomainError(
       'instructions_too_long',
-      `全局说明超过 ${INSTRUCTIONS_LIMIT} 字，请在原生终端里编辑。`,
+      `全局说明超过 ${INSTRUCTIONS_LIMIT} 字，请在 ccdt 里用 /memory 编辑。`,
     );
   return { text, version: createHash('sha256').update(text).digest('hex') };
 }

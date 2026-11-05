@@ -16,7 +16,6 @@ import type {
   ServiceUpdate,
   Session,
   SessionEvent,
-  TerminalControl,
 } from '@cc-desk-tunnel/protocol';
 
 type Response = Extract<ServerMessage, { type: 'response' }>;
@@ -56,10 +55,7 @@ type Replies = {
   'web.certificate.set': 'web.certificate.state';
   'web.certificate.reset': 'web.certificate.state';
 };
-type TerminalMessage = Extract<
-  ServerMessage,
-  { type: 'terminal.opened' | 'terminal.data' | 'terminal.closed' }
->;
+
 type NewCommand = Command extends infer C
   ? C extends Command
     ? Omit<C, 'requestId'>
@@ -182,7 +178,6 @@ export class ProxyClient {
   };
   results = new Map<string, DataMessage>();
   listeners = new Set<() => void>();
-  terminalListeners = new Set<(message: TerminalMessage) => void>();
   socket: WebSocket | null = null;
   credentials: {
     url: string;
@@ -509,12 +504,6 @@ export class ProxyClient {
         this.update({ devices: message.devices });
       } else if (message.type === 'session.updated') {
         this.upsert(message.session);
-      } else if (
-        message.type === 'terminal.opened' ||
-        message.type === 'terminal.data' ||
-        message.type === 'terminal.closed'
-      ) {
-        for (const listener of this.terminalListeners) listener(message);
       } else if (message.type === 'session.deleted') {
         const events = { ...this.state.events };
         const live = { ...this.state.live };
@@ -815,23 +804,14 @@ export class ProxyClient {
     this.update({ selectedId: sessionId, events, live, history });
     if (this.state.status === 'connected') this.load(sessionId);
   }
-  // Terminal output bypasses the state store; xterm consumes it directly.
-  onTerminal = (listener: (message: TerminalMessage) => void) => {
-    this.terminalListeners.add(listener);
-    return () => {
-      this.terminalListeners.delete(listener);
-    };
-  };
+
   // A browser's user is still there; its login's idle time starts over.
   markActive() {
     if (!this.state.browser || this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(JSON.stringify({ type: 'web.activity' }));
     return true;
   }
-  terminalControl(command: TerminalControl) {
-    if (this.state.status === 'connected' && this.socket?.readyState === WebSocket.OPEN)
-      this.socket.send(JSON.stringify(command));
-  }
+
   // Data replies arrive just before their response frame.
   async fetch<T extends keyof Replies>(command: Extract<NewCommand, { type: T }>) {
     const response = await this.request(command);
