@@ -28,9 +28,12 @@ concurrency:
 # The steps that download Electron and the packaging tools are tried a second time after a minute: those
 # downloads now and then time out.
 jobs:
-  # The server image of the release, for amd64 and arm64 (see images.yml).
+  # The server image of the release, for amd64 and arm64 (see images.yml). It is built once every client is: an
+  # image tag is never moved once pushed, so a release whose clients failed must not leave one behind, or trying
+  # again after a fix would stop at the tag of the commit before.
   images:
     if: inputs.release != ''
+    needs: [windows, macos, linux, cli-linux-arm64, server]
     uses: ./.github/workflows/images.yml
     permissions:
       contents: read
