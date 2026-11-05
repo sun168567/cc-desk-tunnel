@@ -21,7 +21,7 @@ Node.js、Claude Code、Agent SDK 均为固定版本（见 `scripts/install-linu
 | Windows sshd / UI bridge | Windows `127.0.0.1:<随机>` | SSH / 本机 nonce + Origin WS | 不开放 |
 | 运维 SSH | 遵循 VPS 原有端口，常见 22 | SSH / SFTP 管理 | 管理者可访问 |
 
-`--control-port` 可改，nginx 公网端口由既有服务决定。无需 UDP、Windows 入站规则或公开随机 SSH 端口；暂不支持 IPv6 配置。业务双向控制、原生终端均走 WSS，没有 REST 业务会话 / 配置 / 上传接口。无认证的 `GET /health` 只返回状态、协议版本和适配器类型；`GET /client/installer` 凭服务凭据下载客户端安装包。这两个入口和桌面 `/ws` 不受 Web 开关、域名或子路径设置影响。
+`--control-port` 可改，nginx 公网端口由既有服务决定。无需 UDP、Windows 入站规则或公开随机 SSH 端口；暂不支持 IPv6 配置。业务双向控制、`ccdt` 的终端均走 WSS，没有 REST 业务会话 / 配置 / 上传接口。无认证的 `GET /health` 只返回状态、协议版本和适配器类型；`GET /client/installer` 凭服务凭据下载客户端安装包。这两个入口和桌面 `/ws` 不受 Web 开关、域名或子路径设置影响。
 
 Web 首次默认关闭，由桌面设置启用，选择保存在服务端，重启后保持。启用后，在同一端口增加页面、静态资源、登录 / 退出 / 登录状态 HTTP 接口，以及单独的浏览器 WebSocket；未启用或不匹配的 Web 路径返回 404。不新增 Docker 端口映射，也不提供公网明文 HTTP 开关，详见[浏览器访问](server-web.md)。服务端自身只向外访问 GitHub 的发布接口（查询版本、下载程序包与安装包）和升级时的 npm 仓库，可用 `PROXY_RELEASE_REPO='none'` 关闭。
 

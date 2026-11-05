@@ -23,7 +23,7 @@ export default function ShortcutSettings() {
   return (
     <Page
       title="快捷键"
-      intro="快捷键只在本窗口处于前台时起作用，不向系统注册全局热键；在内嵌的原生终端里和对话框打开时，按键原样交给它们。"
+      intro="快捷键只在本窗口处于前台时起作用，不向系统注册全局热键；对话框打开时，按键原样交给它。"
     >
       <div className="card">
         <div className="setting-row">

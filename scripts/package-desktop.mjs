@@ -87,11 +87,12 @@ export async function stageDesktop(root, app, { description, files = [], depende
     },
   });
   // All CommonJS modules ship as written, including helpers required by main/preload.
-  // The ESM bridge and its dependencies are already in the bundle above; the release download needs only Node.
+  // The ESM bridge and its dependencies are already in the bundle above; the release download and opening a
+  // session in ccdt need only Node.
   const commonjs = readdirSync(join(root, 'apps/desktop/electron')).filter((file) =>
     file.endsWith('.cjs'),
   );
-  for (const file of [...commonjs, 'release-download.mjs', 'icon.png', ...files])
+  for (const file of [...commonjs, 'release-download.mjs', 'ccdt.mjs', 'icon.png', ...files])
     cpSync(join(root, 'apps/desktop/electron', file), join(app, 'electron', file));
   // A file the main process loads by path is only missed when its feature is used, so each is looked for here.
   for (const file of commonjs)

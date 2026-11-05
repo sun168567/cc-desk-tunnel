@@ -84,48 +84,6 @@
   color: var(--accent);
   color: var(--muted);
 }
-.native-terminal {
-  flex: 0 0 min(58dvh, 600px);
-  min-height: 230px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  background: #18191c;
-  color: #e2e5e9;
-  border-bottom: 1px solid #4a4c50;
-}
-.native-terminal > header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 12px;
-  min-height: 40px;
-  font-size: 12px;
-}
-.native-terminal > header > span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.native-terminal .icon-button:hover {
-  background: #383a40;
-}
-.native-terminal > p {
-  margin: 0;
-  padding: 5px 12px;
-  color: #f2979e;
-  font-size: 12px;
-}
-.terminal-host {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  padding: 5px 8px;
-}
-.terminal-host .xterm {
-  height: 100%;
-}
 .message.thinking {
   color: var(--muted);
   font-size: 12px;
@@ -4009,4 +3967,19 @@ dialog:has(.web-settings-form) {
 .web-proxy-trust > p,
 .web-proxy-trust > pre {
   margin-top: 10px;
+}
+/* The one line that installs ccdt, wrapped to the dialog rather than scrolled. */
+dialog:has(.ccdt-dialog) {
+  width: min(600px, calc(100vw - 32px));
+}
+.ccdt-dialog p {
+  margin: 0;
+}
+.ccdt-dialog pre {
+  margin: 0;
+  padding: 10px 96px 10px 12px;
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

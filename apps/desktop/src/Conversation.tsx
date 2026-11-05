@@ -1152,9 +1152,7 @@ export default function Conversation({
                 <span
                   className={`running-dot${session.activeRun.activity === 'working' && connected ? ' breathing' : ''}`}
                 />
-                {session.activeRun.activity
-                  ? `${terminalState(session.activeRun.activity)} · 每一轮结束后显示在这里，关闭终端后可以在这里接着聊`
-                  : '原生终端打开中'}
+                {`${terminalState(session.activeRun.activity)} · 每一轮结束后显示在这里，关闭终端后可以在这里接着聊`}
               </div>
             )}
             {session.activeRun &&

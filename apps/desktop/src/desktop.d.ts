@@ -107,6 +107,15 @@ declare global {
         deviceName: string;
         service: string;
       }) => Promise<{ version?: string; error?: string }>;
+      // Opens the session in ccdt, the terminal client, signed in to this window's service with its token; says
+      // instead when ccdt is not installed, or not of this client's release.
+      openInCcdt: (request: {
+        url: string;
+        fingerprint: string;
+        token: string;
+        sessionId: string;
+        projectPath?: string;
+      }) => Promise<{ status: 'opened' | 'missing' } | { status: 'outdated'; installed: string }>;
       onServiceUpgrade: (
         callback: (update: import('@cc-desk-tunnel/protocol').ServiceUpdate) => void,
       ) => () => void;

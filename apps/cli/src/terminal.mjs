@@ -69,7 +69,6 @@ export async function relay(
     await service.request({
       type: 'terminal.open',
       sessionId,
-      continueSession: true,
       ...size(output),
     });
     return await done;

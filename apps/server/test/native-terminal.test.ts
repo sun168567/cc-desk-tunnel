@@ -121,39 +121,41 @@ test('a terminal that keeps running shows its current screen to a client that at
   await f.terminal.close();
 });
 
-test('control terminal launches the official CLI directly with remote guidance and no shell, MCP or bypass', () => {
+test('a terminal launches the official CLI directly with remote guidance and no shell, MCP or bypass', () => {
+  const own = { resume: true, settingsPath: '/t.json' };
   const args = terminalArguments(
     { executable: '/native/claude', model: 'provider', settingsPath: '/private/provider.json' },
-    { projectPath: 'D:\\项目', permissionMode: 'auto', model: null, effort: 'high' } as Session,
+    {
+      id: '11111111-2222-4333-8444-555555555555',
+      projectPath: 'D:\\项目',
+      permissionMode: 'auto',
+      model: null,
+      effort: 'high',
+    } as Session,
     { configPath: '/private/ssh.conf' },
+    own,
   );
   assert.ok(args.includes('--append-system-prompt'));
   assert.ok(args.some((arg) => arg.includes('D:\\\\项目')));
   assert.ok(args.includes('provider'));
   assert.ok(args.includes('high'));
-  assert.ok(!args.includes('--resume') && !args.includes('--session-id'));
   assert.ok(
     !args.some((arg) => arg.includes('bypass') || arg.includes('mcp') || arg.includes('sdk-ts')),
   );
-  assert.equal(
-    terminalArguments(
+  const mode = (permissionMode: Session['permissionMode']) => {
+    const launched = terminalArguments(
       { executable: 'claude' },
-      { projectPath: 'D:\\test', permissionMode: 'default' } as Session,
+      { id: 's', projectPath: 'D:\\test', permissionMode } as Session,
       { configPath: '/ssh' },
-    )[1],
-    'manual',
-  );
-  assert.equal(
-    terminalArguments(
-      { executable: 'claude' },
-      { projectPath: 'D:\\test', permissionMode: 'bypassPermissions' } as Session,
-      { configPath: '/ssh' },
-    )[1],
-    'bypassPermissions',
-  );
+      own,
+    );
+    return launched[launched.indexOf('--permission-mode') + 1];
+  };
+  assert.equal(mode('default'), 'manual');
+  assert.equal(mode('bypassPermissions'), 'bypassPermissions');
 });
 
-test('a terminal that continues its session resumes or creates it under the session ID, with its own settings', () => {
+test('a terminal resumes its session or creates it under the session ID, with its own settings', () => {
   const session = {
     id: '11111111-2222-4333-8444-555555555555',
     projectPath: 'D:\\test',

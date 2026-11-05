@@ -102,7 +102,6 @@ test('the terminal is shown as it is: output acknowledged once written, keys and
   assert.deepEqual(f.requests[0], {
     type: 'terminal.open',
     sessionId,
-    continueSession: true,
     cols: 120,
     rows: 30,
   });

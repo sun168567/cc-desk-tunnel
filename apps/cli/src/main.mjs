@@ -73,13 +73,11 @@ const when = (time) => {
   const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
   return today ? `今天 ${clock}` : `${date.getMonth() + 1}月${date.getDate()}日 ${clock}`;
 };
-// Who is using the session now: a terminal of ccdt, which reports what its CLI is doing, the native terminal of a
-// desktop window, or a run started from the desktop client.
+// Who is using the session now: a terminal of ccdt, which reports what its CLI is doing, or a run started from the
+// desktop client.
 const TERMINAL = { working: '终端运行中', waiting: '终端等你确认', idle: '终端打开中' };
 const using = (run) =>
-  run.surface !== 'terminal'
-    ? '图形客户端运行中'
-    : (TERMINAL[run.activity] ?? '图形客户端的原生终端打开中');
+  run.surface !== 'terminal' ? '图形客户端运行中' : (TERMINAL[run.activity] ?? TERMINAL.idle);
 const status = (session) => (session.activeRun ? ` [${using(session.activeRun)}]` : '');
 
 async function readSecret(prompt) {
@@ -561,15 +559,11 @@ async function show(config, values, service, session, fresh) {
     `${dim('项目')} ${session.projectPath}  ${dim('会话')} ${session.title}${fresh ? dim('（新建）') : ''}`,
   );
   if (newer(service.update)) say(notice(newer(service.update)));
-  // A terminal of ccdt is taken over; anything else using the session has to finish first.
+  // A terminal of ccdt is taken over; a run from the desktop client has to finish first.
   const run = service.sessions.get(session.id)?.activeRun;
-  if (run && !(run.surface === 'terminal' && run.activity)) {
+  if (run && run.surface !== 'terminal') {
     await service.close();
-    say(
-      run.surface === 'terminal'
-        ? '这个会话的原生终端在图形客户端里开着，关掉它再打开。'
-        : '这个会话正在图形客户端里运行，这一轮结束后再打开。',
-    );
+    say('这个会话正在图形客户端里运行，这一轮结束后再打开。');
     return 1;
   }
   // While the terminal is shown the service looks for a new release at least hourly, as for a desktop window in use;

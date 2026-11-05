@@ -296,33 +296,6 @@ test('an event of a session not shown, as the quota of a terminal sent to all, l
     [1, 2, 3],
   );
 });
-test('terminal frames bypass conversation caches and are never stored as display history', (t) => {
-  const { client, socket, sessions } = fixture(t);
-  const terminalId = randomUUID();
-  const received = [];
-  const unsubscribe = client.onTerminal((message) => received.push(message));
-  socket.message({ type: 'terminal.opened', sessionId: sessions[0].id, terminalId });
-  socket.message({
-    type: 'terminal.data',
-    sessionId: sessions[0].id,
-    terminalId,
-    data: 'native output',
-    bytes: 13,
-  });
-  assert.equal(received.length, 2);
-  assert.deepEqual(client.state.events, {});
-  client.terminalControl({
-    type: 'terminal.ack',
-    sessionId: sessions[0].id,
-    terminalId,
-    bytes: 13,
-  });
-  assert.equal(socket.sent.at(-1).type, 'terminal.ack');
-  unsubscribe();
-  socket.message({ type: 'terminal.closed', sessionId: sessions[0].id, terminalId, exitCode: 0 });
-  assert.equal(received.length, 2);
-});
-
 test('native input receipts update the existing user row without duplicating messages', () => {
   const sessionId = randomUUID(),
     runId = randomUUID(),
