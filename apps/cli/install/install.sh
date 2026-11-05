@@ -28,8 +28,8 @@ case ":$PATH:" in
     esac
     if ! grep -qsF "$line" "$rc"; then
       printf '\n# ccdt\n%s\n' "$line" >>"$rc"
-      echo "已把 ~/.local/bin 加入 PATH（写在 $rc）。"
+      echo "已把 ~/.local/bin 加入 PATH（写在 ${rc}）。"
     fi
-    echo "打开一个新的终端窗口后运行 ccdt login 登录服务端；在这个窗口里先运行 $line。"
+    echo "打开一个新的终端窗口后运行 ccdt login 登录服务端；在这个窗口里先运行 ${line}。"
     ;;
 esac

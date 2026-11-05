@@ -68,7 +68,7 @@ main() {
       [[ "$CC_DESK_TUNNEL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "CC_DESK_TUNNEL_VERSION 应写成 X.Y.Z。"
       releases="https://github.com/$REPO/releases/download/v$CC_DESK_TUNNEL_VERSION"
     fi
-    echo "查询版本（github.com/$REPO）…"
+    echo "查询版本（github.com/${REPO}）…"
     curl -fsSL --connect-timeout 20 --max-time 60 -o "$temp/SHA256SUMS" "$releases/SHA256SUMS" \
       || fail "无法读取发布页。请检查这台机器能否访问 github.com，以及版本号是否存在。"
     name="$(awk '$2 ~ /^cc-desk-tunnel-server-[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz$/ { print $2 }' "$temp/SHA256SUMS" | head -n 1)"
@@ -77,7 +77,7 @@ main() {
 
     if [[ -f "$TARGET/deploy/manage.sh" && -f "${PROXY_DEPLOY_CONFIG:-$TARGET/.local/docker.env}" ]]; then
       installed="$(version_of "$TARGET")"
-      echo "检测到已有部署：$TARGET（程序包版本 ${installed:-未知}），最新版本 $latest。"
+      echo "检测到已有部署：${TARGET}（程序包版本 ${installed:-未知}），最新版本 ${latest}。"
       confirm "升级到 $latest 并替换容器？数据、账号和配置保留" || exit 0
       set -- upgrade
     elif [[ -e "$TARGET" && ! -f "$TARGET/deploy/manage.sh" && -n "$(ls -A "$TARGET" 2>/dev/null)" ]]; then
@@ -85,7 +85,7 @@ main() {
     else
       cat <<NOTICE
 
-即将安装 CC Desk Tunnel $latest 到 $TARGET。继续之前请确认：
+即将安装 CC Desk Tunnel $latest 到 ${TARGET}。继续之前请确认：
   · 这台服务器由你自己控制且可信：连接期间它能以你的 Windows 用户身份执行任意命令。
   · 安装结束时显示的“服务凭据”等同于这台服务器和你 Windows 的控制权，不要外传或截图分享。
   · 防火墙只需要放行安装结束时列出的那个 TCP 端口，其余端口不需要为本项目开放。
