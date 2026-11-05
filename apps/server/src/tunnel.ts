@@ -23,6 +23,8 @@ export type SshConnection = { configPath: string };
 // device's commands need; they bound what a stray local process connecting to the port can make the device do.
 const MAX_WAITING = 32;
 const MAX_CHANNELS = 128;
+// How long a channel whose SSH connection ended has to deliver the rest and close.
+const CLOSING_MS = 10_000;
 
 // The SSH configuration a session's system prompt names. Its path is the session's for good; each run points
 // it at the door of the device it runs on. A system prompt that named something of a connection would change
@@ -138,7 +140,12 @@ export function sshConfig(
 function splice(socket: Socket, channel: WebSocket) {
   const stream = createWebSocketStream(channel);
   stream.on('error', () => socket.destroy());
-  socket.once('close', () => stream.destroy());
+  // What ssh sent before it went goes on first; a channel that does not answer its end is cut after a while.
+  socket.once('close', () => {
+    stream.end();
+    const cut = setTimeout(() => stream.destroy(), CLOSING_MS);
+    stream.once('close', () => clearTimeout(cut));
+  });
   socket.pipe(stream);
   stream.pipe(socket);
 }

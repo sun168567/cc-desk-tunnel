@@ -22,6 +22,8 @@ export function openChannels(
   onFailure,
   retryMs = 10000,
   heartbeatMs = 15000,
+  // How long a channel whose SSH connection ended has to deliver the rest and close.
+  closingMs = 10000,
 ) {
   const open = new Set();
   let closed = false;
@@ -79,7 +81,13 @@ export function openChannels(
     });
     stream.on('error', () => local.destroy());
     local.on('error', () => stream.destroy());
-    local.once('close', () => stream.destroy());
+    // What the SSH service sent before it ended goes on first; a channel that does not answer its end is cut after
+    // a while.
+    local.once('close', () => {
+      stream.end();
+      const cut = setTimeout(() => stream.destroy(), closingMs);
+      stream.once('close', () => clearTimeout(cut));
+    });
     stream.pipe(local);
     local.pipe(stream);
   }
