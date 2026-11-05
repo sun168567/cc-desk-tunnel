@@ -40,6 +40,9 @@ execFileSync(
 );
 const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/package.json'), 'utf8'));
 const folder = (what) => `访问你选择的${what}项目，让 Claude 经执行通道读取和修改其中的文件。`;
+// electron-builder leaves a pull request's build unsigned, lest a fork reach a certificate. The signature here is
+// ad hoc and uses none, and a build left without it fails the check below: it is signed as any other.
+process.env.CSC_FOR_PULL_REQUEST = 'true';
 const results = await electronBuild({
   targets: Platform.MAC.createTarget(unpacked ? 'dir' : ['dmg', 'zip'], Arch[architecture]),
   publish: 'never',

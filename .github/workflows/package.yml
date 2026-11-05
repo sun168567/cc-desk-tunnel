@@ -2,7 +2,9 @@
 # macOS and Linux packages, the terminal client ccdt and the server bundle, each client started as a check. This is where a release
 # is built: the release script names its draft in `release`, and the files are attached to it with their
 # hashes. Nothing is signed with a certificate. Otherwise the files are kept with the run for 3 days; it
-# runs when asked for, and by itself when what does the packaging changes on a dev branch.
+# runs when asked for, and on a pull request that changes what does the packaging: at every push to it, as the
+# paths are those of the whole request, so that a package that fails stays failed on the request until fixed
+# instead of being hidden by a later commit.
 name: package
 on:
   workflow_dispatch:
@@ -10,8 +12,7 @@ on:
       release:
         description: Tag of a draft release to attach the files to. Left empty, they stay with the run.
         default: ''
-  push:
-    branches: ['dev/**']
+  pull_request:
     paths:
       - .github/workflows/package.yml
       - scripts/package-*.mjs
