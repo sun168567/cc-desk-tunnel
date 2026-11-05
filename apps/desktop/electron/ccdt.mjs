@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { existsSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
 // A session opened in ccdt, the terminal client, from the desktop client: ccdt is a program of its own, spoken to
@@ -66,17 +67,15 @@ export function terminalCommand({ platform, env }, ccdt, args, cwd, exists = exi
   if (platform === 'win32')
     return windowsCommand(env, `${[ccdt, ...args].map(quoted).join(' ')} || pause`);
   const script = `cd ${shellQuoted(cwd)} && ${[ccdt, ...args].map(shellQuoted).join(' ')} || read -r _`;
+  // A .command file is Terminal's to run, which asks for no permission as telling Terminal what to do would. It
+  // holds no token, and is gone once read.
   if (platform === 'darwin') {
-    const text = `"${script.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+    const path = join(tmpdir(), `ccdt-open-${randomUUID()}.command`);
     return {
-      file: 'osascript',
-      args: [
-        '-e',
-        `tell application "Terminal" to do script ${text}`,
-        '-e',
-        'tell application "Terminal" to activate',
-      ],
+      file: 'open',
+      args: ['-a', 'Terminal', path],
       options: {},
+      script: { path, text: `#!/bin/sh\nrm -f "$0"\n${script}\n` },
     };
   }
   // Linux has no one terminal: the one the system names its default, else the common ones.
@@ -98,7 +97,8 @@ export function terminalCommand({ platform, env }, ccdt, args, cwd, exists = exi
   throw new Error('没有找到可以打开的终端程序：请在终端里运行 ccdt open。');
 }
 
-function launch({ file, args, options }, system, cwd) {
+function launch({ file, args, options, script }, system, cwd) {
+  if (script) writeFileSync(script.path, script.text, { mode: 0o700 });
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
       ...options,
