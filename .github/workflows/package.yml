@@ -84,7 +84,9 @@ jobs:
       - run: |
           $folder = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\ccdt"
           tar -xf (Get-Item artifacts/cli/*.zip).FullName -C $folder
-          & "$folder\ccdt\install.ps1"
+          # Run as ccdt upgrade and the one-line installer run it, by Windows PowerShell.
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$folder\ccdt\install.ps1"
+          if ($LASTEXITCODE) { throw 'The install script failed.' }
           $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
           ccdt --version
           if ($LASTEXITCODE) { throw 'The installed ccdt did not start.' }

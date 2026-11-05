@@ -1,4 +1,4 @@
-# Installs ccdt from this folder for the current user: copies it to %LOCALAPPDATA%\Programs\ccdt and adds that
+﻿# Installs ccdt from this folder for the current user: copies it to %LOCALAPPDATA%\Programs\ccdt and adds that
 # folder to the user's PATH. Running it again updates ccdt in place. Nothing is installed for other users or
 # registered as a service. `ccdt upgrade` runs the script of the release it installs.
 $ErrorActionPreference = 'Stop'
