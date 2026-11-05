@@ -399,7 +399,12 @@ test(
     assert.notEqual(await command.exited, 0);
     const seconds = (Date.now() - started) / 1000;
     assert.ok(seconds > 15 && seconds < 60, `ssh gave up after ${seconds}s`);
-    assert.ok(channel.upstream.destroyed, 'the service closed its end once ssh was gone');
+    // What ssh sent may still be on its way: the service ends its side, and cuts it when no answer comes.
+    await until(
+      () => channel.upstream.destroyed,
+      15,
+      'the service to close its end once ssh was gone',
+    );
     // The device's end hears nothing of that: it gives up after 45 seconds without an answer to its own asking.
     await until(() => channel.client.destroyed, 90, 'the device to give up the silent channel');
     assert.equal(
