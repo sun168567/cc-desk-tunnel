@@ -147,7 +147,7 @@ fetch_release() {
   current="$(version_of)"
   if [[ "$version" = "$current" || ( -z "${CC_DESK_TUNNEL_VERSION:-}" && -n "$current" \
     && "$(printf '%s\n' "$version" "$current" | sort -V | tail -n 1)" = "$current" ) ]]; then
-    echo "已是最新版本 $current。"
+    echo "已是最新版本 ${current}。"
     return
   fi
   # The version found is fetched by its own address, even if the newest release changes meanwhile.
@@ -211,7 +211,7 @@ case "$command" in
   help|--help|-h) usage; exit ;;
   setup)
     if [[ -f "$CONFIG" ]]; then
-      echo "已有部署配置（$CONFIG），跳过问答，准备镜像并启动。"
+      echo "已有部署配置（${CONFIG}），跳过问答，准备镜像并启动。"
     else
       [[ -t 0 ]] || fail "setup needs an interactive terminal; use init with options in scripts."
       echo "CC Desk Tunnel 首次安装。直接回车使用方括号内的默认值。"
@@ -367,7 +367,7 @@ case "$command" in
     if [[ "$previous" != "$PROXY_IMAGE" && "$previous" =~ ^(ghcr\.io/sun168567/cc-desk-tunnel:.+|cc-desk-tunnel:local)$ ]] \
       && [[ "$(docker image inspect -f '{{.Id}}' "$previous" 2>/dev/null)" != "$(docker image inspect -f '{{.Id}}' "$PROXY_IMAGE")" ]] \
       && docker image rm "$previous" >/dev/null 2>&1; then
-      echo "已删除替换下来的镜像 $previous。"
+      echo "已删除替换下来的镜像 ${previous}。"
     fi
     summary ;;
   summary) summary ;;
