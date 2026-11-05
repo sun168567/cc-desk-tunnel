@@ -396,6 +396,8 @@ async function configure(config, values, [name, ...words]) {
   // This computer's own settings need no service; the others are read from it.
   if (!name?.startsWith('connection.'))
     try {
+      // Settings are no reason to log in: without a service only this computer's are shown.
+      if (!config.servers.length) throw new Error('还没有登录服务端');
       service = await signIn(config, values, true);
       remote = await readRemote(service);
     } catch (error) {
