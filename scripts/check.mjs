@@ -46,6 +46,13 @@ for (const file of files) {
       errors.push('JSON 无效：' + file);
     }
   }
+  // The /bin/sh of macOS, bash 3.2, takes a byte of a character after a name as part of the name: `$rc）` asks for a
+  // variable that is not there. A name followed by anything but ASCII is written in braces.
+  if (file.endsWith('.sh')) {
+    for (const [index, line] of content.split('\n').entries())
+      if (/\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]/.test(line))
+        errors.push('shell 变量名后紧跟非 ASCII 字符，应写成 ${名字}：' + file + ':' + (index + 1));
+  }
   if (file.endsWith('.md')) {
     for (const match of content.matchAll(/\]\(([^\s)]+)\)/g)) {
       const link = match[1];

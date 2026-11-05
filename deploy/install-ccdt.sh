@@ -37,7 +37,7 @@ curl -fsSL -o "$folder/$name" "$base/$name"
 curl -fsSL -o "$folder/SHA256SUMS" "$base/SHA256SUMS"
 expected=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1; exit }' "$folder/SHA256SUMS")
 if [ -z "$expected" ]; then
-  echo "$version 的校验清单里没有 $name。" >&2
+  echo "$version 的校验清单里没有 ${name}。" >&2
   exit 1
 fi
 if command -v sha256sum >/dev/null 2>&1; then
