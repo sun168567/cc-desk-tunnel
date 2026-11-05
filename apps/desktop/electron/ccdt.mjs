@@ -57,7 +57,9 @@ function run(ccdt, args, system, input) {
         reject(new Error(said ? `ccdt：${said}` : `ccdt 没有运行成功：${error.message}`));
       },
     );
-    child.stdin.end(input ?? '');
+    // ccdt may end before it reads, as `--version` does, which closes the pipe: how it ended tells the outcome.
+    child.stdin.on('error', () => {});
+    child.stdin.end(input);
   });
 }
 
