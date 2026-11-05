@@ -62,6 +62,8 @@ process.stdout.write('DONE ' + result.how + '\\r\\n');
     let screen = '';
     child.onData((data) => (screen += data));
     const exited = new Promise((resolve) => child.onExit(resolve));
+    // A test that fails part way leaves no terminal behind to keep the run going.
+    t.after(() => child.kill('SIGKILL'));
     const until = async (pattern) => {
       for (let i = 0; i < 100 && !pattern.test(screen); i++)
         await new Promise((r) => setTimeout(r, 100));
@@ -115,6 +117,8 @@ test(
     let screen = '';
     child.onData((data) => (screen += data));
     const exited = new Promise((resolve) => child.onExit(resolve));
+    // A test that fails part way leaves no terminal behind to keep the run going.
+    t.after(() => child.kill('SIGKILL'));
     const until = async (pattern) => {
       for (let i = 0; i < 100 && !pattern.test(screen); i++)
         await new Promise((r) => setTimeout(r, 100));
