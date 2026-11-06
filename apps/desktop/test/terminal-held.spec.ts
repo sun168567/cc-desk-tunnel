@@ -102,7 +102,7 @@ test('a session a terminal of ccdt holds says what the terminal does, and takes 
   const status = page.locator('.transcript > .run-indicator');
   const input = page.getByLabel('消息', { exact: true });
 
-  // The terminal's turns show here as they end; the message box waits for the terminal to close.
+  // The terminal's turns show here as its CLI writes them; the message box waits for the terminal to close.
   await expect(page.locator('.transcript')).toContainText('终端里答的');
   await expect(status).toContainText('终端运行中');
   await expect(status.locator('.running-dot')).toHaveClass(/breathing/);

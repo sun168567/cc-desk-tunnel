@@ -18,7 +18,7 @@ export type TranscriptItem =
       delivery?: string;
       // Stands for the "continue" button: there is no message of the user's to show, edit or copy.
       continued?: boolean;
-      // Asked in a terminal that continued the session; recorded as its turn ended.
+      // Asked in a terminal that continued the session; recorded as its CLI wrote it.
       terminal?: boolean;
       at: string;
       // A reply: when its last text arrived, which is when it was done (`at` is when it began).
@@ -244,7 +244,8 @@ export type Turn = {
   joined?: boolean;
   steps: Step[];
   answer?: Text;
-  notices: Extract<TranscriptItem, { kind: 'notice' }>[];
+  // Said after the answer: how the run ended, and what was done after it before the next question.
+  notices: Notice[];
   startedAt: string;
   endedAt?: string;
   // The "continue" button takes a stopped turn up again: the messages it sent, and how long the turn stood stopped.
@@ -262,16 +263,19 @@ export function conversation(events: SessionEvent[]): Turn[] {
   const ended = new Map<string, string>();
   const endedHow = new Map<string, string>();
   // Each time a run stopped working, finished or not: a question put in later ends the turn at the last of them.
+  // A terminal that continues the session stops each time its CLI waits for the next prompt.
   const stops = new Map<string, string[]>();
+  const stop = (runId: string, at: string) => stops.set(runId, [...(stops.get(runId) ?? []), at]);
   for (const { runId, createdAt, payload } of events)
     if (payload.type !== 'run.status') continue;
+    else if (payload.surface === 'terminal' && payload.activity === 'idle') stop(runId, createdAt);
     else if (
       ['completed', 'cancelled', 'failed'].includes(payload.status) ||
       payload.waiting === 'background'
     ) {
       ended.set(runId, createdAt);
       endedHow.set(runId, payload.status);
-      stops.set(runId, [...(stops.get(runId) ?? []), createdAt]);
+      stop(runId, createdAt);
     } else if (payload.status === 'running') {
       ended.delete(runId);
       endedHow.delete(runId);
@@ -302,7 +306,8 @@ export function conversation(events: SessionEvent[]): Turn[] {
       continue;
     }
     if (!turn || item.kind === 'user') {
-      const joined = !!turn && item.runId === runId;
+      // A terminal's turns are all of one run, each asked once the one before was over.
+      const joined = !!turn && item.runId === runId && !(item.kind === 'user' && item.terminal);
       // The next question closes the turn before it. One put in while the same run goes on closes it where the run
       // last stopped working, or else at the question; how the run ends later belongs to the turn it ends in.
       if (turn && !turn.endedAt && joined) {
@@ -332,7 +337,8 @@ export function conversation(events: SessionEvent[]): Turn[] {
     ]
       .filter((value): value is string => !!value)
       .reduce((a, b) => (a > b ? a : b));
-    if (!seen.has(turn) || seen.get(turn)! < at) seen.set(turn, at);
+    // What the CLI said after the answer, such as a command done in the terminal, is no part of the turn's time.
+    if (item.kind !== 'note' && (!seen.has(turn) || seen.get(turn)! < at)) seen.set(turn, at);
     if (item.kind === 'user') turn.question = item;
     else if (item.kind === 'notice') turn.notices.push(item);
     else if (item.kind === 'assistant' || item.kind === 'note' || item.kind === 'compact')
@@ -348,6 +354,9 @@ export function conversation(events: SessionEvent[]): Turn[] {
   if (last && !last.endedAt && ended.has(runId)) {
     close(last, ended.get(runId));
     last.outcome = outcome(runId);
+  } else if (last && !last.endedAt && last.question?.terminal) {
+    const idle = stops.get(runId)?.findLast((at) => at >= last.startedAt);
+    if (idle) close(last, idle);
   }
   // A page of history may start after the question a report belongs to. A turn taken up again is reported once
   // for each of its messages, and each report may come several times: the last one counts.
@@ -361,10 +370,14 @@ export function conversation(events: SessionEvent[]): Turn[] {
     });
     if (parts.length) turn.stats = parts.length === 1 ? parts[0] : combined(parts);
   }
+  // What the CLI said once the answer was given stays in view under it.
   for (const turn of turns) {
     if (!turn.endedAt) continue;
-    const final = turn.steps.at(-1);
-    if (final?.kind === 'assistant') turn.answer = turn.steps.pop() as Text;
+    let end = turn.steps.length;
+    while (turn.steps[end - 1]?.kind === 'note') end--;
+    if (turn.steps[end - 1]?.kind !== 'assistant') continue;
+    turn.notices.unshift(...(turn.steps.splice(end) as Notice[]));
+    turn.answer = turn.steps.pop() as Text;
   }
   return turns;
 }
