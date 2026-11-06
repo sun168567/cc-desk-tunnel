@@ -2,6 +2,7 @@ import {
   cliSettingGroups,
   connectionWaits,
   idleCompactionFields,
+  shellField,
   waitFields,
   waitRange,
 } from '../../desktop/src/setting-fields.ts';
@@ -30,11 +31,13 @@ export async function readRemote(service) {
     read('settings.get'),
     read('web.settings.get'),
   ]);
-  return { compaction, cli, web };
+  // This computer as the service lists it, with its shells.
+  const here = service.devices?.find((device) => device.id === service.deviceId);
+  return { compaction, cli, web, here };
 }
 
 // Every setting with its current value. `waits` are ccdt's own, in seconds, a missing one taking the default.
-export function entries({ waits = {}, compaction, cli, web } = {}) {
+export function entries({ waits = {}, compaction, cli, web, here } = {}) {
   const list = waitFields.map(({ step, title, detail }) => ({
     name: `connection.${step}`,
     group: '本机',
@@ -44,6 +47,23 @@ export function entries({ waits = {}, compaction, cli, web } = {}) {
     value: waits[step] ?? null,
     fallback: connectionWaits[step],
   }));
+  // On Windows: Git Bash is listed whether or not this computer has it, and saved once it does.
+  if (here && (here.platform ?? 'win32') === 'win32') {
+    const has = (shell) => !!here.shells?.includes(shell);
+    list.push({
+      name: 'device.shell',
+      group: '本机',
+      ...shellField,
+      kind: 'choice',
+      value: here.shell ?? null,
+      options: shellField.options.map(([shell, words]) => [
+        shell,
+        has(shell) ? words : `${words}（未检测到）`,
+      ]),
+      available: shellField.options.map(([shell]) => shell).filter(has),
+      read: String,
+    });
+  }
   const usable = (values) => values && !values.error;
   if (usable(compaction))
     list.push(
@@ -198,6 +218,11 @@ export async function save(entry, value, { config, service }) {
     return;
   }
   if (!service) throw new Error('改服务端的设置要先连上服务端。');
+  if (scope === 'device') {
+    if (value && !entry.available.includes(value)) throw new Error(shellField.missing);
+    await service.request({ type: 'device.shell', shell: value });
+    return;
+  }
   const type = {
     compaction: 'compaction.update',
     web: 'web.settings.update',

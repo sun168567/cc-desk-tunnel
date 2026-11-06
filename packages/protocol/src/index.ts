@@ -422,6 +422,10 @@ export type SessionEvent = z.infer<typeof eventSchema>;
 // The systems a device may run. What runs its scripts and how its paths are written follow from it.
 export const devicePlatformSchema = z.enum(['win32', 'darwin', 'linux']);
 export type DevicePlatform = z.infer<typeof devicePlatformSchema>;
+// The shells a device runs Claude's scripts in, each under a host name of its own (`device-pwsh` and so on): PowerShell
+// 7 on Windows, and Git Bash too where Git for Windows is installed; on macOS and Linux the user's own shell.
+export const deviceShellSchema = z.enum(['pwsh', 'bash', 'zsh']);
+export type DeviceShell = z.infer<typeof deviceShellSchema>;
 // One of the user's computers: the client there makes the ID once and keeps it. Its system is recorded
 // unless it is Windows, which is what every computer was before others were supported.
 export const deviceSchema = z.object({
@@ -456,11 +460,16 @@ export const sessionSchema = z.object({
       device: id.optional(),
       // The system the prompt describes; Windows where none is recorded.
       platform: devicePlatformSchema.optional(),
+      // The device's shells the prompt names, and the one it says the user prefers, if any.
+      shells: z.array(deviceShellSchema).optional(),
+      shell: deviceShellSchema.optional(),
       told: z
         .object({
           projectPath: z.string(),
           device: id.optional(),
           platform: devicePlatformSchema.optional(),
+          shells: z.array(deviceShellSchema).optional(),
+          shell: deviceShellSchema.optional(),
         })
         .optional(),
       compacted: z.boolean().optional(),
@@ -553,6 +562,10 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       values: idleCompactionSchema.partial().strict(),
     })
+    .strict(),
+  // The shell the user prefers Claude to run scripts in on the computer of this connection; null leaves it to Claude.
+  z
+    .object({ type: z.literal('device.shell'), ...request, shell: deviceShellSchema.nullable() })
     .strict(),
   z.object({ type: z.literal('instructions.get'), ...request }).strict(),
   z
@@ -896,7 +909,13 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('devices'),
     devices: z.array(
-      deviceSchema.extend({ ready: z.boolean(), server: z.literal(true).optional() }),
+      deviceSchema.extend({
+        ready: z.boolean(),
+        server: z.literal(true).optional(),
+        // The shells the computer runs scripts in, and the one its user prefers, if any; none for the service.
+        shells: z.array(deviceShellSchema).optional(),
+        shell: deviceShellSchema.optional(),
+      }),
     ),
   }),
   // The execution channel runs over connections the device opens to this same address. `secret` signs them
@@ -933,6 +952,8 @@ export const tunnelCredentialsSchema = z
       .regex(/^[a-zA-Z0-9_.\\@-]+$/),
     privateKey: z.string().min(1).max(16384),
     hostPublicKey: z.string().regex(/^ssh-ed25519 [A-Za-z0-9+/=]+$/),
+    // What the SSH service runs scripts in.
+    shells: z.array(deviceShellSchema).min(1).max(3),
   })
   .strict();
 export type TunnelCredentials = z.infer<typeof tunnelCredentialsSchema>;

@@ -433,7 +433,16 @@ export function createProxyServer(options: ServerOptions) {
           : []),
         ...[...seats.values()].flatMap((seat) => {
           const device = [...seat.peers].findLast((peer) => peer.device)?.device;
-          return device ? [{ ...device, ready: !options.tunnel || !!seat.door?.ready }] : [];
+          if (!device) return [];
+          const { shells, shell } = store.execution(device.id, platformOf(device));
+          return [
+            {
+              ...device,
+              ready: !options.tunnel || !!seat.door?.ready,
+              shells,
+              ...(shell ? { shell } : {}),
+            },
+          ];
         }),
       ],
     };
@@ -606,21 +615,24 @@ export function createProxyServer(options: ServerOptions) {
   async function native(run: Run) {
     try {
       const { session } = store.get(run.sessionId);
-      // The session's SSH configuration is named the same in the system prompt whether or not its computer is there
-      // (see `sessionSsh`): a compaction, which runs no command, reads the same prompt cache while it is away.
+      // The session's `ssh` is there whether or not its computer is (see `sessionSsh`): a compaction, which runs no
+      // command, reads the same prompt cache while it is away.
       const door = seats.get(run.device)?.door?.ssh;
       const ssh =
         run.device === serverDevice.id
           ? undefined
           : door
             ? sessionSsh(store.directory, run.sessionId, door)
-            : { configPath: sessionSshPath(store.directory, run.sessionId) };
+            : {
+                configPath: join(sessionSshPath(store.directory, run.sessionId), 'config'),
+                bin: join(sessionSshPath(store.directory, run.sessionId), 'bin'),
+              };
       const said = store.promptValues(run.sessionId);
       const status = await runClaude(options.claude!, {
         sessionId: run.sessionId,
         nativeRoot: session.nativeRoot ?? session.id,
         projectPath: said.projectPath,
-        platform: said.platform,
+        execution: said.execution,
         permissionMode: session.permissionMode,
         model: session.model,
         effort: session.effort,
@@ -849,19 +861,19 @@ export function createProxyServer(options: ServerOptions) {
       if (closing || peer.socket.readyState !== WebSocket.OPEN)
         throw new Error('Connection closed');
       completeOnboarding();
+      const reach = ssh ? sessionSsh(store.directory, session.id, ssh) : undefined;
       current.process = new NativeTerminal(
         options.claude.executable,
-        terminalArguments(
-          options.claude,
-          session,
-          ssh ? sessionSsh(store.directory, session.id, ssh) : undefined,
-          { resume, settingsPath: current.continued.settingsPath },
-        ),
+        terminalArguments(options.claude, session, reach, {
+          resume,
+          settingsPath: current.continued.settingsPath,
+          execution: store.execution(session.device?.id, platformOf(session.device)),
+        }),
         {
           cwd,
           cols: command.cols,
           rows: command.rows,
-          env: terminalEnvironment(options.claude),
+          env: terminalEnvironment(options.claude, process.env, reach),
           screen: {
             detached: () => {
               if (current.owner)
@@ -1110,7 +1122,10 @@ export function createProxyServer(options: ServerOptions) {
       }
       if (command.type === 'session.delete') {
         store.delete(command.sessionId);
-        rmSync(sessionSshPath(store.directory, command.sessionId), { force: true });
+        rmSync(sessionSshPath(store.directory, command.sessionId), {
+          recursive: true,
+          force: true,
+        });
         broadcast({ type: 'session.deleted', sessionId: command.sessionId });
         for (const other of peers) other.subscriptions.delete(command.sessionId);
       } else {
@@ -1388,6 +1403,11 @@ export function createProxyServer(options: ServerOptions) {
         broadcast({ type: 'compaction.state', requestId: command.requestId, values });
         return undefined;
       }
+      // Sessions on the computer are told with the user's next message to each (see `store.notice`).
+      case 'device.shell':
+        store.prefer(deviceOf(peer).id, command.shell);
+        announce();
+        return undefined;
       case 'instructions.get':
       case 'instructions.update': {
         if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有全局说明。');
@@ -1700,6 +1720,9 @@ export function createProxyServer(options: ServerOptions) {
     track(
       peer.tunnel
         .accept(credentials, peer.device?.platform)
+        .then(() => {
+          if (peer.device) store.equip(peer.device.id, peer.tunnel!.shells);
+        })
         .then(() => adopt(peer))
         .then(() => {
           send(peer, { type: 'tunnel.ready', connectionId: peer.id });

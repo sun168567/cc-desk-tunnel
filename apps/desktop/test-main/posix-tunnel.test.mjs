@@ -105,7 +105,8 @@ async function connected(t) {
     project,
     schedules,
     bridge,
-    script: (text) => run('ssh', ['-F', config, 'device-script'], text),
+    // The host of scripts in the user's own shell, zsh here (see below).
+    script: (text) => run('ssh', ['-F', config, 'device-zsh'], text),
     command: (line) => run('ssh', ['-F', config, 'device', line], ''),
     scp: (from, to) => run('scp', ['-q', '-F', config, from, to], ''),
   };
@@ -117,7 +118,8 @@ test(
   async (t) => {
     const device = await connected(t);
     const config = await readFile(device.config, 'utf8');
-    assert.match(config, /RemoteCommand exec "\$CC_DESK_TUNNEL_SHELL" -s\n/);
+    assert.match(config, /^Host device-zsh\n {2}RemoteCommand exec "\$CC_DESK_TUNNEL_SHELL" -s\n/m);
+    assert.match(config, /^Host device device-zsh$/m);
     assert.match(config, /ControlMaster auto/);
     // A script as the system prompt has it written: begun in the project, any length, its exit code kept.
     const result = await device.script(

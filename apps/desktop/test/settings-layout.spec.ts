@@ -22,16 +22,28 @@ const every = [
   '关于与更新',
 ];
 
-// A service at `url` that answers what each settings page reads.
-async function serve(page: Page, url: string) {
+// A service at `url` that answers what each settings page reads. With `shells`, it lists this computer with them, and
+// keeps the shell chosen for it in `chosen`.
+async function serve(page: Page, url: string, shells?: string[], chosen: unknown[] = []) {
   const now = new Date().toISOString();
   const hour = new Date(Date.now() + 3 * 3_600_000).toISOString();
   await page.routeWebSocket(url, (route) => {
     const send = (value: unknown) => route.send(JSON.stringify(value));
+    let here: { id: string; name: string; ready: boolean; shells: string[]; shell?: string };
     route.onMessage((raw) => {
       const message = JSON.parse(String(raw));
       const requestId = message.requestId;
-      if (message.type === 'device') return;
+      if (message.type === 'device') {
+        here = { id: message.id, name: '这台电脑', ready: true, shells: shells ?? ['pwsh'] };
+        if (shells) send({ type: 'devices', devices: [here] });
+        return;
+      }
+      if (message.type === 'device.shell') {
+        chosen.push(message.shell);
+        const { shell: _, ...rest } = here;
+        here = message.shell ? { ...rest, shell: message.shell } : rest;
+        send({ type: 'devices', devices: [here] });
+      }
       if (message.type === 'auth') {
         send({
           type: 'ready',
@@ -169,6 +181,71 @@ test('each settings page opens from its group in the side list', async ({ page }
     resolve(shots, 'browser'),
     every.filter((name) => name !== '连接'),
   );
+});
+
+// A Windows computer has a page for the shell Claude should prefer: Git Bash is listed, and chosen once it has it.
+test('the shell Claude prefers on this computer is chosen there, Git Bash once it is found', async ({
+  page,
+}) => {
+  const alone = 'ws://127.0.0.1:18899/ws';
+  await serve(page, alone, ['pwsh']);
+  await page.goto('/');
+  await page.getByLabel('服务地址', { exact: true }).fill(alone);
+  await page
+    .getByLabel('服务凭据', { exact: true })
+    .fill('test-only-settings-layout-token-with-length');
+  await page.getByRole('button', { name: '连接', exact: true }).click();
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: 'Shell', exact: true })
+    .click();
+  const missing = page.getByLabel('偏好的 Shell', { exact: true });
+  await expect(missing.locator('option')).toHaveText([
+    '不指定',
+    'PowerShell 7',
+    'Git Bash（未检测到）',
+  ]);
+  expect(
+    await missing
+      .locator('option[value="bash"]')
+      .evaluate((option: HTMLOptionElement) => option.disabled),
+  ).toBe(true);
+  await expect(page.getByText(/没有检测到 Git Bash：安装 Git for Windows/)).toBeVisible();
+  await page.screenshot({ path: resolve(shots, 'shell-without-git-bash.png') });
+  await page.close();
+  page = await page.context().newPage();
+  const url = 'ws://127.0.0.1:18898/ws';
+  const chosen: unknown[] = [];
+  await serve(page, url, ['pwsh', 'bash'], chosen);
+  await page.goto('/');
+  await page.getByLabel('服务地址', { exact: true }).fill(url);
+  await page
+    .getByLabel('服务凭据', { exact: true })
+    .fill('test-only-settings-layout-token-with-length');
+  await page.getByRole('button', { name: '连接', exact: true }).click();
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  const sections = page.getByRole('navigation', { name: '设置分类' });
+  await expect(sections.getByRole('button')).toHaveText(
+    every.flatMap((name) =>
+      name === '连接' ? [] : name === '上下文与缓存' ? [name, 'Shell'] : [name],
+    ),
+  );
+  await sections.getByRole('button', { name: 'Shell', exact: true }).click();
+  await expect(page.getByText('保存在服务端，只对这台电脑生效。')).toBeVisible();
+  const choice = page.getByLabel('偏好的 Shell', { exact: true });
+  await expect(choice).toHaveValue('');
+  await expect(choice.locator('option')).toHaveText(['不指定', 'PowerShell 7', 'Git Bash']);
+  await expect(page.getByText(/没有检测到 Git Bash/)).toHaveCount(0);
+  await choice.selectOption('bash');
+  await expect(choice).toHaveValue('bash');
+  await choice.selectOption('');
+  await expect(choice).toHaveValue('');
+  expect(chosen).toEqual(['bash', null]);
+  mkdirSync(resolve(shots, 'browser'), { recursive: true });
+  await page.screenshot({ path: resolve(shots, 'shell.png') });
 });
 
 // This computer's pages as the desktop client shows them. It connects through its own tunnel, so to the simulated

@@ -455,11 +455,12 @@ test('background read types do not renew activity; a browser opens no terminal; 
     {
       resume: false,
       settingsPath: '/t.json',
+      execution: { platform: 'win32', shells: ['pwsh'] },
     },
   );
   assert.equal(args.includes('--append-system-prompt'), false);
   assert.equal(
-    args.some((arg) => /SSH|device-script/.test(arg)),
+    args.some((arg) => /SSH|device-/.test(arg)),
     false,
   );
 });

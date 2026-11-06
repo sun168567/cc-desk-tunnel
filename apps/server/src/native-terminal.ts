@@ -1,9 +1,9 @@
 import { spawn as spawnPty } from 'node-pty';
 import type { IPty } from 'node-pty';
-import { platformOf } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import type { ClaudeOptions } from './claude.ts';
-import { remotePrompt } from './claude.ts';
+import { remotePrompt, sshPath } from './claude.ts';
+import type { Execution } from './device-terms.ts';
 import type { SshConnection } from './tunnel.ts';
 import { readFileSync } from 'node:fs';
 import headless from '@xterm/headless';
@@ -19,6 +19,7 @@ export function definedEnvironment(env: NodeJS.ProcessEnv): Record<string, strin
 export function terminalEnvironment(
   options: ClaudeOptions,
   inherited: NodeJS.ProcessEnv = process.env,
+  ssh?: SshConnection,
 ): Record<string, string> {
   const env = definedEnvironment(inherited);
   // Reuse the private provider configuration as a normal CLI process environment.
@@ -31,6 +32,7 @@ export function terminalEnvironment(
   const result: Record<string, string> = {
     ...env,
     ...options.environment,
+    ...sshPath(ssh, inherited.PATH),
     TERM: 'xterm-256color',
   };
   // The CLI reports what started it from these. A terminal runs the interactive CLI and must never pass for an SDK
@@ -58,7 +60,11 @@ export function terminalArguments(
   options: ClaudeOptions,
   session: Session,
   ssh: SshConnection | undefined,
-  { resume, settingsPath }: { resume: boolean; settingsPath: string },
+  {
+    resume,
+    settingsPath,
+    execution,
+  }: { resume: boolean; settingsPath: string; execution: Execution },
 ) {
   return [
     resume ? '--resume' : '--session-id',
@@ -66,10 +72,7 @@ export function terminalArguments(
     '--permission-mode',
     session.permissionMode === 'default' ? 'manual' : session.permissionMode,
     ...(ssh
-      ? [
-          '--append-system-prompt',
-          remotePrompt(session.projectPath, ssh, session.id, platformOf(session.device)),
-        ]
+      ? ['--append-system-prompt', remotePrompt(session.projectPath, session.id, execution)]
       : []),
     ...((session.model ?? options.model) ? ['--model', session.model ?? options.model!] : []),
     ...(session.effort ? ['--effort', session.effort] : []),

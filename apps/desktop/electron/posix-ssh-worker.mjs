@@ -223,6 +223,8 @@ async function start({
       username,
       privateKey: keys.loginPrivate,
       hostPublicKey: keys.hostPublic.trim().split(' ').slice(0, 2).join(' '),
+      // The user's own shell, zsh or bash (see `resolvePosixShell`).
+      shells: [basename(shell)],
     },
   });
 }

@@ -5,7 +5,7 @@ const topics: { title: string; lines: string[] }[] = [
   {
     title: '它是怎么工作的',
     lines: [
-      'Claude Code 运行在你的云端服务器上，项目和工具留在这台电脑上。客户端连接服务后会临时打开一条只通向本机的执行通道，Claude 通过它读写项目文件、执行命令（Windows 上是 PowerShell，macOS 上是你自己的 shell）。',
+      'Claude Code 运行在你的云端服务器上，项目和工具留在这台电脑上。客户端连接服务后会临时打开一条只通向本机的执行通道，Claude 通过它读写项目文件、执行命令（Windows 上是 PowerShell，装了 Git for Windows 时也可以用 Git Bash；macOS 和 Linux 上是你自己的 shell）。',
       '会话的上下文与记忆保存在云端的 Claude Code 里；这里显示的是它的镜像，关闭客户端不会丢失会话。',
     ],
   },

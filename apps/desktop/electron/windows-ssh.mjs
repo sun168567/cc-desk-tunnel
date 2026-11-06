@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { connect, createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { componentFailure, missingComponent } from './connect-errors.mjs';
+import { findGitBash } from './git-bash.mjs';
 
 function execute(file, args, timeout) {
   return new Promise((resolve, reject) => {
@@ -68,11 +69,14 @@ function probe(port) {
   });
 }
 // Starts the SSH service of this connection: the bundled OpenSSH on a loopback port, with a host key and a
-// login key made for this connection alone. `readyMs` is how long it may take to start listening.
+// login key made for this connection alone. `readyMs` is how long it may take to start listening. Scripts run in
+// the bundled PowerShell, and in Git Bash too where Git for Windows is installed: looked for each time, so one
+// installed since is there from the next connection. `binaries.gitBash` names it instead, or none with null.
 export async function startWindowsSsh(connectionId, binaries, signal, onFailure, readyMs = 10000) {
   if (process.platform !== 'win32') throw new Error('Windows OpenSSH requires Windows.');
   const directory = await mkdtemp(join(tmpdir(), 'cc-desk-tunnel-ssh-'));
   const powershell = binaries.powershell ?? 'pwsh.exe';
+  const bash = binaries.gitBash === undefined ? await findGitBash() : binaries.gitBash;
   const scriptPath = (name) =>
     binaries.scriptDirectory
       ? join(binaries.scriptDirectory, name)
@@ -96,11 +100,12 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
   function launch(file, args) {
     check();
     // The host and its components print why they stop; the end of that is kept to explain a failure.
-    // What the host is given here reaches every command of the SSH service it starts.
+    // What the host is given here reaches every command of the SSH service it starts: the service has Claude run
+    // Git Bash by this variable, as PowerShell by the one the host sets. One inherited from elsewhere is not kept.
     const child = spawn(file, args, {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...binaries.environment },
+      env: { ...process.env, ...binaries.environment, CC_DESK_TUNNEL_BASH: bash ?? undefined },
     });
     const started = Date.now();
     let output = '';
@@ -177,6 +182,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
         username: metadata.username,
         privateKey: metadata.privateKey,
         hostPublicKey: metadata.hostPublicKey,
+        shells: bash ? ['pwsh', 'bash'] : ['pwsh'],
       },
       async close() {
         await close();

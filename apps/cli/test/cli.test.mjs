@@ -477,3 +477,43 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
     ['connection.connect', 'connection.ssh', 'connection.ready'],
   );
 });
+
+test('ccdt offers the shell Claude should prefer on Windows, Git Bash once the computer has it', async () => {
+  const here = { id: 'x', name: 'pc', ready: true, shells: ['pwsh', 'bash'] };
+  const shell = (device) =>
+    entries({ here: device }).find((entry) => entry.name === 'device.shell');
+  assert.equal(shell({ ...here, platform: 'darwin', shells: ['zsh'] }), undefined);
+  assert.equal(shell(undefined), undefined);
+  // Without Git Bash it is listed as not found, and choosing it says how to get it.
+  const alone = shell({ ...here, shells: ['pwsh'] });
+  assert.deepEqual(
+    choices(alone).map(([, words]) => words),
+    ['不指定', 'PowerShell 7', 'Git Bash（未检测到）'],
+  );
+  const asked = [];
+  const quiet = { request: async (command) => (asked.push(command), { type: 'response' }) };
+  await assert.rejects(save(alone, 'bash', { service: quiet }), /安装 Git for Windows/);
+  await save(alone, 'pwsh', { service: quiet });
+  assert.deepEqual(asked, [{ type: 'device.shell', shell: 'pwsh' }]);
+  const entry = shell(here);
+  assert.equal(entry.group, '本机');
+  assert.equal(shown(entry), '不指定');
+  assert.equal(shown(shell({ ...here, shell: 'bash' })), 'Git Bash');
+  assert.deepEqual(
+    choices(entry).map(([value]) => value),
+    [null, 'pwsh', 'bash'],
+  );
+  assert.equal(parse(entry, 'bash'), 'bash');
+  assert.equal(parse(entry, 'PowerShell 7'), 'pwsh');
+  assert.equal(parse(entry, 'default'), null);
+  assert.throws(() => parse(entry, 'zsh'), /可选：pwsh、bash、default/);
+  // It goes to the service, which keeps it for this computer.
+  const requests = [];
+  const service = { request: async (command) => (requests.push(command), { type: 'response' }) };
+  await save(entry, 'bash', { service });
+  await save(entry, null, { service });
+  assert.deepEqual(requests, [
+    { type: 'device.shell', shell: 'bash' },
+    { type: 'device.shell', shell: null },
+  ]);
+});

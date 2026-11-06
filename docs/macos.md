@@ -18,7 +18,7 @@ macOS 上的客户端与 Windows 上的是同一套界面和同一条连接，�
 
 ## 与 Windows 的不同
 
-对 Claude 来说两者是一回事：一份 SSH 配置，`device-script` 收脚本，`device` 收命令和 scp。不同的只有本机这一侧。
+对 Claude 来说两者是一回事：用户的 shell 有一个收脚本的主机（`device-zsh` 或 `device-bash`），`device` 收命令和 scp。不同的只有本机这一侧。
 
 | 方面 | Windows | macOS |
 | --- | --- | --- |
@@ -60,7 +60,7 @@ npm run package:macos     # 打出本机架构的 dmg 与 zip，在 artifacts/ma
 - `process-supervisor.mjs`：每条命令一个进程组，通道关闭、连接断开或客户端退出时先 TERM、限期后 KILL。自己另起会话脱离进程组的程序不在此列。
 - `shell-environment.mjs`：取登录 shell 的环境。环境经一个私有的 Unix 套接字传回，启动脚本往标准输出打印的内容不会混进去。
 - `ssh-channel-output.mjs`：修正 ssh2 1.17.0 在标准输出与标准错误共用发送窗口时的一处问题，用到了它的内部字段，并在版本不符时拒绝加载。升级 ssh2 前要重新核对这一层。
-- 服务端一侧只有两处随系统变化：`device-script` 在设备上执行的命令（`tunnel.ts` 的 `scriptCommand`），和提示词里讲脚本与命令行的两句话（`device-terms.ts`）。
+- 服务端一侧只有两处随系统变化：shell 的主机在设备上执行的命令（`tunnel.ts` 的 `shellCommand`），和提示词里讲脚本与命令行的两句话（`device-terms.ts`）。
 
 同一套执行端也用于 [Linux 客户端](linux.md)。各系统的安装包只带自己的那一套：打包时连接桥按目标系统裁剪，Windows 的包里没有这里的任何一个模块和 ssh2，macOS 与 Linux 的包里没有 Windows 的 SSH 宿主脚本。
 

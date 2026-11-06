@@ -74,7 +74,8 @@ try {
       const known = join(directory, 'known_hosts');
       await writeFile(identity, service.credentials.privateKey, { mode: 0o600 });
       await writeFile(known, '[127.0.0.1]:' + service.port + ' ' + service.credentials.hostPublicKey + '\n');
-      // What the service's SSH configuration has for the host device-script: see scriptCommand in tunnel.ts.
+      // What the service's SSH configuration has for the host of the user's shell: see shellCommand in tunnel.ts.
+      assert.deepEqual(service.credentials.shells, [process.env.CC_PACKAGE_SHELL.split('/').pop()]);
       const output = await new Promise((done, fail) => {
         const child = execFile('/usr/bin/ssh', [
           '-p', String(service.port), '-i', identity, '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
