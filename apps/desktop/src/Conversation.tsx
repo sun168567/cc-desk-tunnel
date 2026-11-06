@@ -432,7 +432,7 @@ function Message({
       {user && (
         <div className="message-footer">
           {item.terminal && (
-            <span className="message-delivery" title="在终端里问的，终端结束时记入这个会话">
+            <span className="message-delivery" title="在终端里问的，随终端的进展记入这个会话">
               终端
             </span>
           )}
@@ -1152,7 +1152,7 @@ export default function Conversation({
                 <span
                   className={`running-dot${session.activeRun.activity === 'working' && connected ? ' breathing' : ''}`}
                 />
-                {`${terminalState(session.activeRun.activity)} · 每一轮结束后显示在这里，关闭终端后可以在这里接着聊`}
+                {`${terminalState(session.activeRun.activity)} · 进展随后显示在这里，关闭终端后可以在这里接着聊`}
               </div>
             )}
             {session.activeRun &&

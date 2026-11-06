@@ -1,5 +1,13 @@
 import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, mkdirSync, readFileSync, rmSync, unwatchFile, watchFile } from 'node:fs';
+import {
+  createReadStream,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  unwatchFile,
+  watchFile,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
@@ -64,10 +72,12 @@ import { readNativeSettings, updateNativeSettings } from './native-settings.ts';
 import { readInstructions, writeInstructions } from './native-instructions.ts';
 import type { NativeTerminal } from './native-terminal.ts';
 import {
+  statusLineContext,
   terminalActivity,
-  terminalEvents,
   terminalHooks,
+  terminalRecord,
   terminalSettings,
+  TerminalTranscript,
 } from './terminal-transcript.ts';
 import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
@@ -159,6 +169,11 @@ type Terminal = {
     toldElsewhere?: boolean;
     // The native session held no message when last looked at.
     empty?: boolean;
+    // The CLI's record of the session, which a hook names, and how far it was read as the CLI wrote it; what was read
+    // of it goes through `transcript`.
+    record?: string;
+    recordOffset: number;
+    transcript: TerminalTranscript;
   };
 };
 const INTERRUPTS = new Set(['\x1b', '\x03', '\x1b[27u', '\x1b[99;5u']);
@@ -833,6 +848,8 @@ export function createProxyServer(options: ServerOptions) {
         activity: 'idle',
         at: new Date().toISOString(),
         connectionId: peer.id,
+        recordOffset: 0,
+        transcript: new TerminalTranscript((payload, at) => terminalEvent(current, payload, at)),
       },
     };
     terminals.set(current.sessionId, current);
@@ -902,6 +919,7 @@ export function createProxyServer(options: ServerOptions) {
           const { hooksPath, settingsPath, statusPath } = current.continued;
           unwatchFile(hooksPath);
           unwatchFile(statusPath);
+          if (current.continued.record) unwatchFile(current.continued.record);
           await heardTerminal(current, true);
           // A terminal that said nothing leaves no native session: its record, with nothing in it, would keep the
           // session's ID from a chat run or the next terminal, which the CLI refuses it to as one in use.
@@ -984,7 +1002,7 @@ export function createProxyServer(options: ServerOptions) {
     }, graceMs);
   }
   // What the hooks of a terminal that continues its session wrote since they were last read: the session shows what
-  // its CLI is doing, and what a turn added, once it ended, is recorded (see `importTerminal`). Reads go one at a time,
+  // its CLI is doing, and what a turn added is read whole once it ended (see `importTerminal`). Reads go one at a time,
   // and the last, when the terminal `ended`, records what is left.
   function heardTerminal(terminal: Terminal, ended = false, interrupted = false) {
     const { continued } = terminal;
@@ -996,12 +1014,16 @@ export function createProxyServer(options: ServerOptions) {
         for (const hook of hooks) {
           if (typeof hook.session_id === 'string' && hook.session_id !== terminal.sessionId)
             continued.elsewhere = true;
+          else if (!continued.record && typeof hook.transcript_path === 'string' && !ended)
+            followRecord(terminal, hook.transcript_path);
           activity = terminalActivity(hook) ?? activity;
         }
         interrupted &&= !hooks.length && continued.activity === 'working';
         if (interrupted) activity = 'idle';
-        if (ended || interrupted || hooks.some((hook) => terminalActivity(hook) === 'idle'))
+        if (ended || interrupted || hooks.some((hook) => terminalActivity(hook) === 'idle')) {
           await importTerminal(terminal);
+          terminalTurnEnded(terminal);
+        }
         if (ended || !activity || activity === continued.activity) return;
         continued.activity = activity;
         record(terminal.sessionId, terminal.id, {
@@ -1017,13 +1039,77 @@ export function createProxyServer(options: ServerOptions) {
     continued.heard = task;
     return task;
   }
+  // The CLI's record of the session, read as the CLI writes it, from where it is when a hook names it: a turn shows
+  // here part by part as it goes, a moment after the terminal (see `terminalRecord`). Nothing the CLI writes before
+  // its first hook is a turn's. Reads go one at a time, with those of the hooks.
+  function followRecord(terminal: Terminal, path: string) {
+    const { continued } = terminal;
+    continued.record = path;
+    try {
+      continued.recordOffset = statSync(path).size;
+    } catch {
+      continued.recordOffset = 0;
+    }
+    watchFile(path, { interval: 1000 }, () => void readRecord(terminal));
+  }
+  function readRecord(terminal: Terminal) {
+    const { continued } = terminal;
+    const task = continued.heard
+      .then(() => {
+        if (!continued.record) return;
+        const { messages, offset } = terminalRecord(continued.record, continued.recordOffset);
+        continued.recordOffset = offset;
+        continued.transcript.accept(messages, continued.known);
+        for (const message of messages) continued.known.add(message.uuid);
+        // The CLI writes the end of a turn a moment after it says the turn is over.
+        if (continued.activity === 'idle') terminalTurnEnded(terminal);
+      })
+      .catch(() => {});
+    continued.heard = task;
+    return task;
+  }
+  // Records what a terminal's CLI wrote, each at the time the CLI recorded it, after what was recorded of its turns
+  // before and no later than now. What the terminal was doing is recorded as it happens, and does not move them: a
+  // turn keeps the times it took.
+  function terminalEvent(terminal: Terminal, payload: EventPayload, at?: string) {
+    const { continued } = terminal;
+    const now = new Date().toISOString();
+    const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
+    continued.at = time < continued.at ? continued.at : time > now ? now : time;
+    record(terminal.sessionId, terminal.id, payload, continued.at);
+  }
+  // How full the context is, as the terminal's CLI last showed it in its status line.
+  function terminalContext(terminal: Terminal) {
+    try {
+      return statusLineContext(JSON.parse(readFileSync(terminal.continued.statusPath, 'utf8')));
+    } catch {
+      return null;
+    }
+  }
+  // A terminal's turn is over, as a chat run's: the context it left and how long the cache it wrote lasts, from which
+  // the session tells how long it has been idle (see idle.ts). A turn that asked the model nothing says nothing.
+  function terminalTurnEnded(terminal: Terminal) {
+    const ttl = terminal.continued.transcript.cacheTtl();
+    if (!ttl) return;
+    const last = store.lastMetrics(terminal.sessionId);
+    record(terminal.sessionId, terminal.id, {
+      type: 'native.metrics',
+      context: terminalContext(terminal) ?? last?.context ?? null,
+      usage: last?.usage ?? null,
+      rateLimits: null,
+      cacheTtl: ttl,
+    });
+  }
   // The quota a terminal's CLI showed in its status line, its replies' as a chat run's stream would carry it: it goes
   // to the account's quota, and every connection is told, as the quota is the account's, not the session's.
   function terminalQuota(terminal: Terminal) {
     const { continued } = terminal;
     let windows;
+    let context;
     try {
-      windows = statusLineQuota(JSON.parse(readFileSync(continued.statusPath, 'utf8')));
+      const status: unknown = JSON.parse(readFileSync(continued.statusPath, 'utf8'));
+      windows = statusLineQuota(status);
+      context = statusLineContext(status);
     } catch {
       return;
     }
@@ -1037,7 +1123,7 @@ export function createProxyServer(options: ServerOptions) {
     usage.observe(rateLimits);
     const event = store.append(terminal.sessionId, terminal.id, {
       type: 'native.metrics',
-      context: last?.context ?? null,
+      context: context ?? last?.context ?? null,
       usage: last?.usage ?? null,
       rateLimits,
     });
@@ -1062,14 +1148,7 @@ export function createProxyServer(options: ServerOptions) {
     const { continued } = terminal;
     const { known } = continued;
     const { sessionId } = terminal;
-    const now = new Date().toISOString();
-    // Each at the time the CLI recorded it, after what was recorded of its turns before and no later than now. What the
-    // terminal was doing is recorded as it happens, and does not move them: a turn keeps the times it took.
-    const emit = (payload: EventPayload, at?: string) => {
-      const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
-      continued.at = time < continued.at ? continued.at : time > now ? now : time;
-      record(sessionId, terminal.id, payload, continued.at);
-    };
+    const emit = (payload: EventPayload) => terminalEvent(terminal, payload);
     const dir = nativeDirectory(store.directory, nativeRoot(sessionId));
     const messages = await getSessionMessages(sessionId, { dir, includeSystemMessages: true });
     continued.empty = !messages.length;
@@ -1083,17 +1162,22 @@ export function createProxyServer(options: ServerOptions) {
         version: '',
       });
     }
-    const compacted = messages.some(
-      (message) =>
-        !known.has(message.uuid) && (message as { isCompactSummary?: boolean }).isCompactSummary,
-    );
+    // A compaction, read here or as the CLI wrote it, leaves out what was there: that is no rewind.
+    const compacted =
+      continued.transcript.compactedSince() ||
+      messages.some(
+        (message) =>
+          !known.has(message.uuid) && (message as { isCompactSummary?: boolean }).isCompactSummary,
+      );
     if (
       continued.last &&
       !compacted &&
       !messages.some((message) => message.uuid === continued.last)
     )
       emit({ type: 'native.notice', text: '终端里回退了对话，上面有些内容已不在上下文中。' });
-    terminalEvents(messages, known, emit);
+    continued.transcript.accept(messages, known);
+    continued.transcript.settle();
+    continued.transcript.compactedSince();
     for (const message of messages) known.add(message.uuid);
     continued.last = messages.at(-1)?.uuid ?? continued.last;
     if (continued.elsewhere && !continued.toldElsewhere) {
