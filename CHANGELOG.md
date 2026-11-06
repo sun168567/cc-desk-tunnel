@@ -4,6 +4,37 @@
 
 自 0.2.1 起，每个版本的一节按同一结构书写，它会成为发布说明：先用一句话概括这一版，然后依次是“新增功能”“优化改进”“问题修复”“升级说明”，没有内容的小节省略。每条写使用者能看到的变化，一条一件事。出自他人的代码或想法的条目，在末尾按事实注明议题或合并请求的编号和那个人；采用了他人代码的提交另以 `Co-authored-by` 记名。
 
+## 0.3.12
+
+Windows 电脑上，Claude 可以按任务在 PowerShell 7 和 Git Bash 之间选择，连到设备改用普通的 `ssh` 写法；在 `ccdt` 里推进的会话，图形客户端会分段及时显示、按轮折叠，不再误报提示缓存过期。
+
+### 新增功能
+
+- Windows 上的 Git Bash：装了 Git for Windows 的电脑，Claude 除了 PowerShell 7 还能用 Git Bash 执行命令，按任务自己选择。脚本里调用的 cmd、ping 等 Windows 程序输出的中文不会乱码。
+- Shell 偏好：在“设置 → Shell”或用 `ccdt config device.shell` 指定偏好 PowerShell 7 还是 Git Bash，按电脑保存。这只是告诉 Claude 优先用哪个，另一个照样可用。Windows 电脑上这一页一直显示，没检测到 Git Bash 时标为“未检测到”，并说明安装后重新连接即可。
+
+### 优化改进
+
+- Claude 连到设备改用最常见的 `ssh` 写法：每种 shell 一个主机名，Windows 上是 `device-pwsh` 和 `device-bash`，macOS 与 Linux 上是你自己的 shell（如 `device-zsh`），会话里直接写 `ssh device-pwsh`，不再带配置文件路径。会话里连其他服务器时，照常读你自己的 ssh 配置。
+- 换 shell 或改偏好，和换项目、换电脑一样，在下一条消息前告诉 Claude，系统提示词不变，提示缓存不受影响。
+- 在 `ccdt` 里推进的会话，图形客户端按 Claude Code 写入记录的进度分段显示，提问、工具调用和回答约一两秒后出现，不用等这一轮结束。
+
+### 问题修复
+
+- 在 `ccdt` 里聊过的会话，图形客户端不再误报“提示缓存已过期”：终端里每一轮结束时也记下上下文用量和缓存时长，空闲提醒从这一轮算起。
+- 在 `ccdt` 里推进的会话，图形客户端里不再偶尔只有工具调用、缺最后的回答。
+- 在 `ccdt` 里推进的会话，每一轮也像图形客户端里的对话一样，折叠成提问、用时和回答，不用等关掉终端。
+- 在 `ccdt` 里执行 /compact，图形客户端只显示这次提问和一个压缩标记，不再重复出现命令和 “Compacted (ctrl+o…)”；/model 这类本地命令在回答下方显示为一行说明，/exit 不显示。
+
+### 升级说明
+
+- 协议版本升到 24，图形客户端、`ccdt` 与服务端需要一起升级到 0.3.12。从 0.3.8 及以后的版本升级，照常在图形客户端里先升级服务端，`ccdt` 运行 `ccdt upgrade`。
+- `device-script` 和更早的 `windows` 主机名已删除。如果你在全局指令或项目的 CLAUDE.md 里写过它们，请改成 `device-pwsh`（或 `device-bash`）。
+- 从 0.3.7 或更早的版本升级，需要先在服务器上运行一次安装命令，数据、账号和配置都保留：
+
+  ```
+  sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+  ```
 ## 0.3.11
 
 图形客户端的内嵌原生终端改由 `ccdt` 承担：会话菜单里的“在 ccdt 中打开”直接在系统终端里打开这个会话。新增缓存过期前自动压缩（可选）与空闲提醒；`ccdt` 可以同时登录几个服务端并随时切换，新增 `ccdt config` 设置与一键安装命令。
