@@ -219,8 +219,13 @@ export function terminalRecord(path: string, offset: number) {
 }
 
 // How full the context window is, as the CLI last showed it in its status line (CLI 2.1.293): the tokens the last
-// request read, of the model's window. The status line says nothing of what they are made of.
-export function statusLineContext(status: unknown): NativeMetrics['context'] {
+// request read, of the model's window. The status line says nothing of what they are made of. Its window is the
+// model's even where the CLI settings set a smaller one to compact by (`autoCompactWindow`), which the CLI's /context
+// and the SDK count by instead; so is it counted here, in whole percents as theirs.
+export function statusLineContext(
+  status: unknown,
+  compactWindow?: number | null,
+): NativeMetrics['context'] {
   const { model, context_window: window } = (status ?? {}) as {
     model?: { id?: unknown };
     context_window?: {
@@ -228,9 +233,10 @@ export function statusLineContext(status: unknown): NativeMetrics['context'] {
       current_usage?: Record<string, unknown> | null;
     };
   };
-  const size = window?.context_window_size;
+  const full = window?.context_window_size;
   const usage = window?.current_usage;
-  if (typeof size !== 'number' || size <= 0 || !usage) return null;
+  if (typeof full !== 'number' || full <= 0 || !usage) return null;
+  const size = compactWindow && compactWindow > 0 ? Math.min(full, compactWindow) : full;
   const used = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']
     .map((name) => usage[name])
     .reduce<number>((sum, value) => sum + (typeof value === 'number' ? value : 0), 0);
@@ -238,7 +244,7 @@ export function statusLineContext(status: unknown): NativeMetrics['context'] {
     model: typeof model?.id === 'string' ? model.id : '',
     usedTokens: used,
     windowTokens: size,
-    percentage: (used / size) * 100,
+    percentage: Math.round((used / size) * 100),
     measuredAt: new Date().toISOString(),
     categories: [],
   };
