@@ -45,6 +45,18 @@ test('without a record or a git on the PATH, the folders the installer uses by d
     }),
     'C:\\Users\\me\\AppData\\Local\\Programs\\Git\\bin\\bash.exe',
   );
+  // Scoop's, whose git on the PATH is a shim elsewhere.
+  assert.equal(
+    await findGitBash({
+      env: { PATH: 'C:\\Users\\me\\scoop\\shims', USERPROFILE: 'C:\\Users\\me' },
+      roots: async () => [],
+      exists: computer(
+        'C:\\Users\\me\\scoop\\shims\\git.exe',
+        'C:\\Users\\me\\scoop\\apps\\git\\current\\bin\\bash.exe',
+      ),
+    }),
+    'C:\\Users\\me\\scoop\\apps\\git\\current\\bin\\bash.exe',
+  );
   // The bash.exe of WindowsApps or System32 starts WSL, and is never taken for Git Bash.
   assert.equal(
     await findGitBash({

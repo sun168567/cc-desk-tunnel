@@ -183,9 +183,39 @@ test('each settings page opens from its group in the side list', async ({ page }
   );
 });
 
-// A computer with Git Bash as well as PowerShell has a page for the shell Claude should prefer; one with PowerShell
-// alone has none (above).
-test('the shell Claude prefers on this computer is chosen where it has two', async ({ page }) => {
+// A Windows computer has a page for the shell Claude should prefer: Git Bash is listed, and chosen once it has it.
+test('the shell Claude prefers on this computer is chosen there, Git Bash once it is found', async ({
+  page,
+}) => {
+  const alone = 'ws://127.0.0.1:18899/ws';
+  await serve(page, alone, ['pwsh']);
+  await page.goto('/');
+  await page.getByLabel('服务地址', { exact: true }).fill(alone);
+  await page
+    .getByLabel('服务凭据', { exact: true })
+    .fill('test-only-settings-layout-token-with-length');
+  await page.getByRole('button', { name: '连接', exact: true }).click();
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: 'Shell', exact: true })
+    .click();
+  const missing = page.getByLabel('偏好的 Shell', { exact: true });
+  await expect(missing.locator('option')).toHaveText([
+    '不指定',
+    'PowerShell 7',
+    'Git Bash（未检测到）',
+  ]);
+  expect(
+    await missing
+      .locator('option[value="bash"]')
+      .evaluate((option: HTMLOptionElement) => option.disabled),
+  ).toBe(true);
+  await expect(page.getByText(/没有检测到 Git Bash：安装 Git for Windows/)).toBeVisible();
+  await page.screenshot({ path: resolve(shots, 'shell-without-git-bash.png') });
+  await page.close();
+  page = await page.context().newPage();
   const url = 'ws://127.0.0.1:18898/ws';
   const chosen: unknown[] = [];
   await serve(page, url, ['pwsh', 'bash'], chosen);
@@ -208,6 +238,7 @@ test('the shell Claude prefers on this computer is chosen where it has two', asy
   const choice = page.getByLabel('偏好的 Shell', { exact: true });
   await expect(choice).toHaveValue('');
   await expect(choice.locator('option')).toHaveText(['不指定', 'PowerShell 7', 'Git Bash']);
+  await expect(page.getByText(/没有检测到 Git Bash/)).toHaveCount(0);
   await choice.selectOption('bash');
   await expect(choice).toHaveValue('bash');
   await choice.selectOption('');

@@ -478,12 +478,23 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
   );
 });
 
-test('ccdt offers the shell Claude should prefer only on a computer that has two', async () => {
+test('ccdt offers the shell Claude should prefer on Windows, Git Bash once the computer has it', async () => {
   const here = { id: 'x', name: 'pc', ready: true, shells: ['pwsh', 'bash'] };
   const shell = (device) =>
     entries({ here: device }).find((entry) => entry.name === 'device.shell');
-  assert.equal(shell({ ...here, shells: ['pwsh'] }), undefined);
+  assert.equal(shell({ ...here, platform: 'darwin', shells: ['zsh'] }), undefined);
   assert.equal(shell(undefined), undefined);
+  // Without Git Bash it is listed as not found, and choosing it says how to get it.
+  const alone = shell({ ...here, shells: ['pwsh'] });
+  assert.deepEqual(
+    choices(alone).map(([, words]) => words),
+    ['不指定', 'PowerShell 7', 'Git Bash（未检测到）'],
+  );
+  const asked = [];
+  const quiet = { request: async (command) => (asked.push(command), { type: 'response' }) };
+  await assert.rejects(save(alone, 'bash', { service: quiet }), /安装 Git for Windows/);
+  await save(alone, 'pwsh', { service: quiet });
+  assert.deepEqual(asked, [{ type: 'device.shell', shell: 'pwsh' }]);
   const entry = shell(here);
   assert.equal(entry.group, '本机');
   assert.equal(shown(entry), '不指定');

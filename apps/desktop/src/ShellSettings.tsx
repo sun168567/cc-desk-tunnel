@@ -3,9 +3,9 @@ import type { DeviceShell } from '@cc-desk-tunnel/protocol';
 import type { ConnectedDevice, ProxyClient } from './client.ts';
 import { shellField } from './setting-fields.ts';
 
-// The shell Claude is told the user prefers for scripts on this computer, where it has both PowerShell and Git Bash.
-// The service keeps the choice for this computer alone and lists it with the computer, so the value shown is the one
-// it has; each session hears of a change with its next message.
+// The shell Claude is told the user prefers for scripts on this Windows computer. Git Bash is listed whether or not the
+// computer has it, and can be chosen once it does. The service keeps the choice for this computer alone and lists it
+// with the computer, so the value shown is the one it has; each session hears of a change with its next message.
 export default function ShellSettings({
   client,
   here,
@@ -15,6 +15,7 @@ export default function ShellSettings({
 }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const has = (shell: DeviceShell) => !!here.shells?.includes(shell);
   async function save(shell: DeviceShell | null) {
     setFailure(null);
     setSaving(true);
@@ -30,8 +31,8 @@ export default function ShellSettings({
     <>
       <h2 className="page-heading">脚本用哪种 Shell</h2>
       <p className="muted page-section-note">
-        Claude 在这台电脑上执行命令时，两种 Shell 都可以用：PowerShell 7 随客户端自带，Git Bash
-        来自这台电脑安装的 Git for Windows。改动在每个会话的下一条消息时告诉 Claude。
+        PowerShell 7 随客户端自带；装了 Git for Windows 的电脑还可以用它的 Git Bash，两种都在时
+        Claude 按任务选用。改动在每个会话的下一条消息时告诉 Claude。
       </p>
       {failure && (
         <p className="error-text" role="alert">
@@ -51,16 +52,15 @@ export default function ShellSettings({
             onChange={({ target }) => void save((target.value || null) as DeviceShell | null)}
           >
             <option value="">{shellField.unset}</option>
-            {shellField.options
-              .filter(([shell]) => here.shells?.includes(shell))
-              .map(([shell, name]) => (
-                <option key={shell} value={shell}>
-                  {name}
-                </option>
-              ))}
+            {shellField.options.map(([shell, name]) => (
+              <option key={shell} value={shell} disabled={!has(shell)}>
+                {has(shell) ? name : `${name}（未检测到）`}
+              </option>
+            ))}
           </select>
         </label>
       </div>
+      {!has('bash') && <p className="muted page-section-note">{shellField.missing}</p>}
     </>
   );
 }

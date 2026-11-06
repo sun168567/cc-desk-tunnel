@@ -37,12 +37,14 @@ export const idleCompactionFields = {
   },
 };
 
-// The shell Claude is told the user prefers for scripts on this computer, offered where it has more than one. The
-// choice is kept by the service for this computer alone.
+// The shell Claude is told the user prefers for scripts on a Windows computer. The choice is kept by the service for
+// this computer alone; Git Bash is offered once the computer has it.
 export const shellField = {
   title: '偏好的 Shell',
   detail: '不指定时由 Claude 按任务选择；选了也只是优先，任务更适合另一种时 Claude 仍会换用',
   unset: '不指定',
+  missing:
+    '没有检测到 Git Bash：安装 Git for Windows（https://git-scm.com/download/win）后重新连接，就可以选择它。',
   options: [
     ['pwsh', 'PowerShell 7'],
     ['bash', 'Git Bash'],

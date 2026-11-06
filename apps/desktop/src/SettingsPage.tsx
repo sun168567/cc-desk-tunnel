@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { platformOf } from '@cc-desk-tunnel/protocol';
 import {
   ArrowLeft,
   Bell,
@@ -854,7 +855,8 @@ export default function SettingsPage({
   browser = false,
   here,
 }: {
-  // This computer as the service lists it, with the shells it runs Claude's scripts in.
+  // This computer as the service lists it, with the shells it runs Claude's scripts in. A Windows one has a page for
+  // the shell Claude should prefer.
   here?: ConnectedDevice;
   // Given before a connection exists: only this computer's own settings are shown, and this leaves them.
   back?: () => void;
@@ -885,7 +887,7 @@ export default function SettingsPage({
       (item.id !== 'connection' || window.desktop) &&
       (!browser || !['context', 'account', 'claude', 'instructions'].includes(item.id)) &&
       (item.id !== 'context' || native) &&
-      (item.id !== 'shell' || (native && !browser && (here?.shells?.length ?? 0) > 1)) &&
+      (item.id !== 'shell' || (native && !browser && !!here && platformOf(here) === 'win32')) &&
       (item.id !== 'web' || native || browser) &&
       `${item.name} ${item.words}`.toLowerCase().includes(term),
   );

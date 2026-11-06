@@ -20,8 +20,8 @@ function installed() {
 }
 
 // Git Bash, the bash of Git for Windows: where its installer put it, else beside a git on the PATH, as a copy unpacked
-// by hand has it, else where the installer puts it by default. It is the launcher in bin\, which gives the bash it
-// starts the PATH of Git's Unix tools; never the bash.exe of WindowsApps or System32, which starts WSL.
+// by hand has it, else where the installer or Scoop puts it by default. It is the launcher in bin\, which gives the
+// bash it starts the PATH of Git's Unix tools; never the bash.exe of WindowsApps or System32, which starts WSL.
 export async function findGitBash({
   env = process.env,
   roots = installed,
@@ -38,5 +38,8 @@ export async function findGitBash({
       );
   for (const base of [env.ProgramFiles, env.LOCALAPPDATA && join(env.LOCALAPPDATA, 'Programs')])
     if (base) candidates.push(join(base, 'Git', 'bin', 'bash.exe'));
+  // Scoop's git puts only a shim of git.exe on the PATH.
+  const scoop = env.SCOOP ?? (env.USERPROFILE && join(env.USERPROFILE, 'scoop'));
+  if (scoop) candidates.push(join(scoop, 'apps', 'git', 'current', 'bin', 'bash.exe'));
   return candidates.find((path) => exists(path));
 }
