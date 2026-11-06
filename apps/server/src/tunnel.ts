@@ -46,6 +46,8 @@ export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnectio
   const bin = join(directory, 'bin');
   const configPath = join(directory, 'config');
   mkdirSync(bin, { recursive: true, mode: 0o700 });
+  // Where a session's configuration was until 0.3.12.
+  rmSync(`${directory}.conf`, { force: true });
   const write = (path: string, text: string, mode: number) => {
     const next = `${path}.${randomBytes(6).toString('hex')}`;
     writeFileSync(next, text, { mode });

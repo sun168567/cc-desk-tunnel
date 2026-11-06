@@ -122,9 +122,19 @@ test('context names the hosts of the device as plain SSH aliases without inventi
   // The path given for scp is the project's own: an example on another drive was taken for the drive to use.
   assert.match(
     prompt,
-    /scp or sftp, where a Windows path takes forward slashes: the project directory is "device:D:\/中文 空格\/it's"/,
+    /scp or sftp, where a Windows path takes forward slashes and one before its drive: the project directory is "device:\/D:\/中文 空格\/it's"/,
+  );
+  // A network path keeps its own two.
+  assert.match(
+    remotePrompt('\\\\nas\\share\\x', 'session', windows),
+    /the project directory is "device:\/\/nas\/share\/x"/,
   );
   assert.match(prompt, /CC_DESK_TUNNEL_SCHEDULES/);
+  // ccdt's device has no file of scheduled prompts, and the same words hold for it.
+  assert.match(
+    prompt,
+    /Where that variable is empty the device is connected by ccdt, which sends none/,
+  );
   // Nothing of the device's own layout: where its programs and the client's files are is the device's to know.
   assert.doesNotMatch(prompt, /pwsh\.exe|APPDATA/);
   assert.match(prompt, /0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11/);
@@ -156,10 +166,10 @@ test('a Windows device with Git Bash has a host for it, which Claude picks by th
   assert.match(prompt, /Set-Location -LiteralPath 'D:\\中文 空格\\it''s'/);
   assert.match(prompt, /cd '\/d\/中文 空格\/it'\\''s'/);
   assert.match(prompt, /a switch such as \/c is written \/\/c/);
-  // What Claude writes out of habit on Linux: a missing /proc fails loudly, a ps that misses a process does not.
+  // What Claude writes out of habit on Linux: a missing apt fails loudly; a ps or /proc that misses a process does not.
   assert.match(
     prompt,
-    /its ps and kill see only its own processes, so other Windows processes are found and stopped in PowerShell\./,
+    /no apt, and its ps, kill and \/proc see only its own processes, so other Windows processes are found and stopped in PowerShell\./,
   );
   assert.match(prompt, /Use whichever suits the task\./);
   assert.match(
@@ -191,7 +201,11 @@ test('a session reaches its device by ssh, scp and sftp of its own, and every ot
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const session = '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11';
   const door = join(directory, 'devices', 'one', 'ssh_config');
+  // A session from before 0.3.12 had a configuration file of its own name, which is no longer read.
+  mkdirSync(join(directory, 'session-ssh'), { recursive: true });
+  writeFileSync(join(directory, 'session-ssh', `${session}.conf`), 'Include "old"\n');
   const ssh = sessionSsh(directory, session, { configPath: door });
+  assert.equal(existsSync(join(directory, 'session-ssh', `${session}.conf`)), false);
   assert.equal(ssh.configPath, join(directory, 'session-ssh', session, 'config'));
   assert.equal(
     readFileSync(ssh.configPath, 'utf8'),
