@@ -25,11 +25,13 @@ export function deviceTerms({ platform, shells, shell }: Execution, projectPath:
     'as plain text: any length, UTF-8, nothing to escape or encode. The exit code is kept; standard input is the script, so it cannot read more.';
   if (platform === 'win32') {
     const pwsh = `Set-Location -LiteralPath '${projectPath.replaceAll("'", "''")}'`;
-    const scp = `The host device runs a command line as it is, parsed by cmd.exe, and is the one for scp or sftp, where a Windows path takes forward slashes: the project directory is ${JSON.stringify(`device:${projectPath.replaceAll('\\', '/')}`)}.`;
+    // sftp reads C:/x as a path under the user's home; /C:/x is the drive's for it and for scp alike.
+    const remote = projectPath.replaceAll('\\', '/').replace(/^(?=[A-Za-z]:)/, '/');
+    const scp = `The host device runs a command line as it is, parsed by cmd.exe, and is the one for scp or sftp, where a Windows path takes forward slashes and one before its drive: the project directory is ${JSON.stringify(`device:${remote}`)}.`;
     const script = shells.includes('bash')
       ? [
           `Send a script on standard input, as a quoted Bash here-document, to the host of the shell it is written for: ssh device-pwsh <<'PS' ... PS runs it in PowerShell 7, ssh device-bash <<'SH' ... SH in Git Bash, the bash of Git for Windows with its usual Unix tools; either ${text}`,
-          `Begin a PowerShell script with ${pwsh}, whose errors come back as plain text; begin a Git Bash script with cd ${quoted(msysPath(projectPath))}, where Windows programs get arguments that look like Unix paths turned into Windows ones, so a switch such as /c is written //c. Git Bash is still Windows: there is no /proc or apt, and its ps and kill see only its own processes, so other Windows processes are found and stopped in PowerShell.`,
+          `Begin a PowerShell script with ${pwsh}, whose errors come back as plain text; begin a Git Bash script with cd ${quoted(msysPath(projectPath))}, where Windows programs get arguments that look like Unix paths turned into Windows ones, so a switch such as /c is written //c. Git Bash is still Windows: there is no apt, and its ps, kill and /proc see only its own processes, so other Windows processes are found and stopped in PowerShell.`,
           shell === 'bash'
             ? 'The user prefers Git Bash: use it unless a task is better done in PowerShell.'
             : shell === 'pwsh'

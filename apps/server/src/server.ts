@@ -1081,7 +1081,10 @@ export function createProxyServer(options: ServerOptions) {
   // How full the context is, as the terminal's CLI last showed it in its status line.
   function terminalContext(terminal: Terminal) {
     try {
-      return statusLineContext(JSON.parse(readFileSync(terminal.continued.statusPath, 'utf8')));
+      return statusLineContext(
+        JSON.parse(readFileSync(terminal.continued.statusPath, 'utf8')),
+        readNativeSettings().autoCompactWindow,
+      );
     } catch {
       return null;
     }
@@ -1109,7 +1112,7 @@ export function createProxyServer(options: ServerOptions) {
     try {
       const status: unknown = JSON.parse(readFileSync(continued.statusPath, 'utf8'));
       windows = statusLineQuota(status);
-      context = statusLineContext(status);
+      context = statusLineContext(status, readNativeSettings().autoCompactWindow);
     } catch {
       return;
     }

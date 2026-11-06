@@ -321,8 +321,30 @@ test('the context comes from what the CLI shows in its status line', () => {
   assert.equal(context?.model, 'claude-opus-5-5');
   assert.equal(context?.usedTokens, 141354);
   assert.equal(context?.windowTokens, 1_000_000);
-  assert.ok(Math.abs(context!.percentage - 14.1354) < 1e-9);
+  // In whole percents, as the SDK gives them.
+  assert.equal(context?.percentage, 14);
   assert.deepEqual(context?.categories, []);
+  // The status line names the model's window even where the CLI settings compact by a smaller one, which /context and
+  // the SDK count by; a larger one leaves the model's.
+  const status = {
+    model: { id: 'claude-opus-5-5' },
+    context_window: {
+      context_window_size: 1_000_000,
+      current_usage: {
+        input_tokens: 2,
+        cache_creation_input_tokens: 232,
+        cache_read_input_tokens: 167041,
+      },
+    },
+  };
+  assert.deepEqual(
+    (({ windowTokens, percentage }) => ({ windowTokens, percentage }))(
+      statusLineContext(status, 500_000)!,
+    ),
+    { windowTokens: 500_000, percentage: 33 },
+  );
+  assert.equal(statusLineContext(status, 2_000_000)?.windowTokens, 1_000_000);
+  assert.equal(statusLineContext(status, null)?.windowTokens, 1_000_000);
   assert.equal(statusLineContext({ context_window: { current_usage: null } }), null);
   assert.equal(statusLineContext(null), null);
 });
