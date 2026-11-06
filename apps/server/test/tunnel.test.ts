@@ -156,6 +156,11 @@ test('a Windows device with Git Bash has a host for it, which Claude picks by th
   assert.match(prompt, /Set-Location -LiteralPath 'D:\\中文 空格\\it''s'/);
   assert.match(prompt, /cd '\/d\/中文 空格\/it'\\''s'/);
   assert.match(prompt, /a switch such as \/c is written \/\/c/);
+  // What Claude writes out of habit on Linux: a missing /proc fails loudly, a ps that misses a process does not.
+  assert.match(
+    prompt,
+    /its ps and kill see only its own processes, so other Windows processes are found and stopped in PowerShell\./,
+  );
   assert.match(prompt, /Use whichever suits the task\./);
   assert.match(
     remotePrompt('D:\\work', 'session', { ...gitBash, shell: 'bash' }),
