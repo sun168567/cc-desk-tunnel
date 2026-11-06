@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Door, SCRIPT_COMMAND, sshConfig, sessionSsh, Tunnel } from '../src/tunnel.ts';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { Door, shellCommand, shellsOf, sshConfig, sessionSsh, Tunnel } from '../src/tunnel.ts';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connect } from 'node:net';
@@ -11,7 +12,11 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { TestContext } from 'node:test';
-import { remotePrompt } from '../src/claude.ts';
+import { remotePrompt, sshPath } from '../src/claude.ts';
+import type { Execution } from '../src/device-terms.ts';
+
+const windows: Execution = { platform: 'win32', shells: ['pwsh'] };
+const gitBash: Execution = { platform: 'win32', shells: ['pwsh', 'bash'] };
 
 // A tunnel whose device is this test: each request for a channel is recorded, and `device.open` answers one
 // with a real WebSocket pair, handing the service's end to the tunnel as the service would.
@@ -79,12 +84,13 @@ function collect(socket: Socket) {
 
 test('SSH config pins loopback target and host key, disallows interactive/agent forwarding', () => {
   const files = sshConfig('/tmp/private', 32123, 'user', 'ssh-ed25519 AAAATEST');
-  assert.match(files.config, /^Host device windows device-script$/m);
+  assert.match(files.config, /^Host device device-pwsh$/m);
   // The name that takes a script: the same computer with the command fixed, its variable kept from `ssh`.
   assert.match(
     files.config,
-    /^Host device-script\n  RemoteCommand "%%CC_DESK_TUNNEL_PWSH%%" .*\n  RequestTTY no$/m,
+    /^Host device-pwsh\n  RemoteCommand "%%CC_DESK_TUNNEL_PWSH%%" .*\n  RequestTTY no$/m,
   );
+  assert.doesNotMatch(files.config, /device-script|windows|device-bash/);
   assert.match(files.config, /HostName 127\.0\.0\.1/);
   assert.match(files.config, /StrictHostKeyChecking yes/);
   assert.match(files.config, /BatchMode yes/);
@@ -101,16 +107,17 @@ test('commands share one SSH connection where the platform and the length of the
   assert.doesNotMatch(config('/tmp/private', 'win32'), /Control/);
   assert.doesNotMatch(config(`/srv/${'long-name/'.repeat(9)}connections/id`, 'linux'), /Control/);
 });
-test('context references native SSH configuration without inventing execution tools', () => {
+test('context names the hosts of the device as plain SSH aliases without inventing execution tools', () => {
   const prompt = remotePrompt(
     "D:\\中文 空格\\it's",
-    { configPath: '/private/ssh_config' },
     '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11',
+    windows,
   );
   // Scripts travel on standard input to a host of the configuration: nothing of the device's command line,
-  // and no encoding, is for the model to write.
-  assert.match(prompt, /ssh -F "\/private\/ssh_config" device-script <<'PS'/);
-  assert.doesNotMatch(prompt, /EncodedCommand|CC_DESK_TUNNEL_PWSH|ReadToEnd/);
+  // and no encoding, is for the model to write; nor a file of this service to give `ssh`.
+  assert.match(prompt, /ssh device-pwsh <<'PS'/);
+  assert.doesNotMatch(prompt, /EncodedCommand|CC_DESK_TUNNEL_PWSH|ReadToEnd|ssh -F|ssh_config/);
+  assert.doesNotMatch(prompt, /device-bash|Git Bash|device-script/);
   assert.match(prompt, /The host device runs a command line as it is/);
   // The path given for scp is the project's own: an example on another drive was taken for the drive to use.
   assert.match(
@@ -122,32 +129,96 @@ test('context references native SSH configuration without inventing execution to
   assert.doesNotMatch(prompt, /pwsh\.exe|APPDATA/);
   assert.match(prompt, /0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11/);
   assert.match(prompt, /native Bash/);
-  assert.match(prompt, /ssh -F/);
   assert.match(prompt, /it''s/);
   assert.doesNotMatch(prompt, /mcp__/);
 });
+test('a Windows device with Git Bash has a host for it, which Claude picks by the shell a script is written for', () => {
+  const files = sshConfig(
+    '/tmp/private',
+    32123,
+    'user',
+    'ssh-ed25519 AAAATEST',
+    'linux',
+    15,
+    'win32',
+    ['pwsh', 'bash'],
+  );
+  assert.match(files.config, /^Host device device-pwsh device-bash$/m);
+  assert.match(
+    files.config,
+    /^Host device-bash\n  RemoteCommand chcp\.com 65001 >nul & "%%CC_DESK_TUNNEL_BASH%%" -s\n  RequestTTY no$/m,
+  );
+  const prompt = remotePrompt("D:\\中文 空格\\it's", 'session', gitBash);
+  assert.match(
+    prompt,
+    /ssh device-pwsh <<'PS' \.\.\. PS runs it in PowerShell 7, ssh device-bash <<'SH' \.\.\. SH in Git Bash/,
+  );
+  assert.match(prompt, /Set-Location -LiteralPath 'D:\\中文 空格\\it''s'/);
+  assert.match(prompt, /cd '\/d\/中文 空格\/it'\\''s'/);
+  assert.match(prompt, /a switch such as \/c is written \/\/c/);
+  assert.match(prompt, /Use whichever suits the task\./);
+  assert.match(
+    remotePrompt('D:\\work', 'session', { ...gitBash, shell: 'bash' }),
+    /The user prefers Git Bash: use it unless a task is better done in PowerShell\./,
+  );
+  assert.match(
+    remotePrompt('D:\\work', 'session', { ...gitBash, shell: 'pwsh' }),
+    /The user prefers PowerShell: use it unless a task is better done in Git Bash\./,
+  );
+  // A network path is written as Git Bash writes one.
+  assert.match(remotePrompt('\\\\nas\\share\\x', 'session', gitBash), /cd '\/\/nas\/share\/x'/);
+});
+test('a device says which shells it has; those its system cannot have are passed over', () => {
+  assert.deepEqual(shellsOf('win32', ['bash', 'zsh', 'bash']), ['pwsh', 'bash']);
+  assert.deepEqual(shellsOf('win32', ['pwsh']), ['pwsh']);
+  assert.deepEqual(shellsOf('darwin', ['pwsh']), ['zsh']);
+  assert.deepEqual(shellsOf('linux', ['zsh']), ['zsh']);
+});
 test('the fixed script command survives the double quotes of cmd.exe', () => {
   // What follows -Command is wrapped in double quotes and holds neither kind of quote itself.
-  const body = SCRIPT_COMMAND.slice(SCRIPT_COMMAND.indexOf('-Command "') + 10, -1);
+  const command = shellCommand('win32', 'pwsh');
+  const body = command.slice(command.indexOf('-Command "') + 10, -1);
   assert.doesNotMatch(body, /["']/);
   assert.match(body, /ReadToEnd\(\)/);
 });
-test('a session keeps one SSH path, and so one system prompt, across reconnects', (t) => {
+test('a session reaches its device by ssh, scp and sftp of its own, and every other host as plain ssh does', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'claude-session-ssh-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const session = '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11';
-  const prompts = ['first', 'second'].map((connection) => {
-    const configPath = join(directory, 'connections', connection, 'ssh_config');
-    const ssh = sessionSsh(directory, session, { configPath });
-    assert.equal(readFileSync(ssh.configPath, 'utf8'), `Include ${JSON.stringify(configPath)}\n`);
-    return remotePrompt('D:\\work', ssh, session);
-  });
-  assert.equal(prompts[0], prompts[1]);
-  assert.doesNotMatch(prompts[0]!, /connections/);
-  assert.notEqual(
-    sessionSsh(directory, randomUUID(), { configPath: '/x' }).configPath,
-    sessionSsh(directory, session, { configPath: '/x' }).configPath,
+  const door = join(directory, 'devices', 'one', 'ssh_config');
+  const ssh = sessionSsh(directory, session, { configPath: door });
+  assert.equal(ssh.configPath, join(directory, 'session-ssh', session, 'config'));
+  assert.equal(
+    readFileSync(ssh.configPath, 'utf8'),
+    `Include ${JSON.stringify(door)}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
   );
+  for (const name of ['ssh', 'scp', 'sftp'])
+    assert.match(
+      readFileSync(join(ssh.bin!, name), 'utf8'),
+      new RegExp(
+        `^#!/bin/sh\\nexec '[^']*${name}' -F '${ssh.configPath.replaceAll('\\', '\\\\')}' "\\$@"\\n$`,
+      ),
+    );
+  assert.notEqual(sessionSsh(directory, randomUUID(), { configPath: door }).bin, ssh.bin);
+  // The session's own come first on the PATH of its CLI.
+  assert.deepEqual(sshPath(ssh, '/usr/bin'), {
+    PATH: `${ssh.bin}${process.platform === 'win32' ? ';' : ':'}/usr/bin`,
+  });
+  assert.deepEqual(sshPath(undefined, '/usr/bin'), {});
+  if (process.platform === 'win32') return;
+  // What the session's `ssh` makes of a host: the device's own, by its door; anything else, as without it.
+  mkdirSync(join(directory, 'devices', 'one'), { recursive: true });
+  writeFileSync(
+    door,
+    sshConfig(join(directory, 'devices', 'one'), 32123, 'me', 'ssh-ed25519 AAAA').config,
+  );
+  const resolved = (host: string) =>
+    execFileSync(join(ssh.bin!, 'ssh'), ['-G', host], { encoding: 'utf8' });
+  assert.match(resolved('device-pwsh'), /^hostname 127\.0\.0\.1$/m);
+  assert.match(resolved('device-pwsh'), /^port 32123$/m);
+  assert.match(resolved('device'), /^port 32123$/m);
+  assert.match(resolved('example.com'), /^hostname example\.com$/m);
+  assert.doesNotMatch(resolved('example.com'), /^port 32123$/m);
 });
 test('the tunnel offers a secret of its own and compares it without leaking its length', async (t) => {
   const first = await harness(t);
@@ -340,6 +411,7 @@ test('a device keeps one door: commands begun while it is away wait for its next
     username: 'tester',
     hostPublicKey: `ssh-ed25519 ${name}`,
     privateKey: `private ${name}\n`,
+    shells: ['pwsh' as const],
   });
   first.tunnel.credentials = credentials('first');
   door.use(first.tunnel);
@@ -385,7 +457,7 @@ test('a device keeps one door: commands begun while it is away wait for its next
   assert.ok(Date.now() - began >= 300);
 });
 test('the prompt lets the model look at a picture of the device by copying that one file here', () => {
-  const prompt = remotePrompt('D:\\work', { configPath: '/private/ssh_config' }, 'session');
+  const prompt = remotePrompt('D:\\work', 'session', windows);
   assert.match(prompt, /copy that one file with scp to a temporary file on this host/);
   assert.match(prompt, /Do not use this host's Read\/Edit tools on project files/);
 });
@@ -399,24 +471,37 @@ test('a device with a POSIX shell gets a script command and a prompt of its own'
     'linux',
     15,
     'darwin',
+    ['zsh'],
   );
-  assert.match(files.config, /\n {2}RemoteCommand exec "\$CC_DESK_TUNNEL_SHELL" -s\n/);
+  assert.match(
+    files.config,
+    /^Host device-zsh\n {2}RemoteCommand exec "\$CC_DESK_TUNNEL_SHELL" -s\n/m,
+  );
+  assert.match(files.config, /^Host device device-zsh$/m);
   assert.doesNotMatch(files.config, /CC_DESK_TUNNEL_PWSH/);
-  const ssh = { configPath: '/private/ssh_config' };
-  const prompt = remotePrompt("/Users/me/my project/it's", ssh, 'session', 'darwin');
+  const mac: Execution = { platform: 'darwin', shells: ['zsh'] };
+  const prompt = remotePrompt("/Users/me/my project/it's", 'session', mac);
   assert.match(prompt, /Device: macOS\. Project directory: "\/Users\/me\/my project\/it's"\./);
-  assert.match(prompt, /ssh -F "\/private\/ssh_config" device-script <<'PS'/);
+  assert.match(prompt, /ssh device-zsh <<'SH' \.\.\. SH\. It runs in the user's own shell, zsh,/);
   assert.match(prompt, /Begin it with cd -- '\/Users\/me\/my project\/it'\\''s'\./);
   assert.match(prompt, /the project directory is "device:\/Users\/me\/my project\/it's"/);
   assert.doesNotMatch(prompt, /PowerShell|cmd\.exe|Windows|Set-Location/);
+  assert.match(
+    remotePrompt('/work', 'session', { platform: 'linux', shells: ['bash'] }),
+    /ssh device-bash <<'SH'/,
+  );
   // Everything that does not depend on the system reads the same on both, line for line.
-  const windows = remotePrompt('D:\\work', ssh, 'session').split('\n');
-  const mac = remotePrompt('/work', ssh, 'session', 'darwin').split('\n');
-  assert.equal(windows.length, mac.length);
+  const onWindows = remotePrompt('D:\\work', 'session', windows).split('\n');
+  const onMac = remotePrompt('/work', 'session', mac).split('\n');
+  assert.equal(onWindows.length, onMac.length);
   assert.deepEqual(
-    windows.flatMap((line, index) => (line === mac[index] ? [] : [index])),
+    onWindows.flatMap((line, index) => (line === onMac[index] ? [] : [index])),
     [1, 3, 4],
   );
-  // No system named is Windows, as it was before others were supported.
-  assert.equal(remotePrompt('D:\\work', ssh, 'session', 'win32'), windows.join('\n'));
+  // So do they with Git Bash: only the lines of scripts and command lines differ.
+  const withBash = remotePrompt('D:\\work', 'session', gitBash).split('\n');
+  assert.deepEqual(
+    onWindows.flatMap((line, index) => (line === withBash[index] ? [] : [index])),
+    [3],
+  );
 });

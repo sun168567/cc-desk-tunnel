@@ -75,12 +75,23 @@ async function fixture(t: TestContext, pairMs = 5000) {
         username: 'user',
         privateKey: 'unused',
         hostPublicKey: 'ssh-ed25519 AAAA',
+        shells: ['bash', 'pwsh'],
       }),
     );
     await signed.next('tunnel.ready');
     const config = readFileSync(
       join(directory, 'connections', signed.connectionId, 'ssh_config'),
       'utf8',
+    );
+    // The SSH service's shells are hosts of their own, PowerShell first, and every window is told of them.
+    assert.match(config, /^Host device device-pwsh device-bash$/m);
+    assert.deepEqual(
+      (
+        signed.messages.findLast((message) => message.type === 'devices')?.devices as {
+          shells?: string[];
+        }[]
+      ).at(-1)?.shells,
+      ['pwsh', 'bash'],
     );
     const port = Number(/Port (\d+)/.exec(config)![1]);
     function ssh() {

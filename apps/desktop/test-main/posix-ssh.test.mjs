@@ -618,16 +618,21 @@ test(
       'win32',
       15,
       process.platform,
+      f.executor.credentials.shells,
     );
+    // The SSH service names the user's own shell, which the host of its scripts is called after.
+    const [shell] = f.executor.credentials.shells;
+    assert.match(shell, /^(zsh|bash)$/);
+    assert.equal(f.executor.credentials.shells.length, 1);
     const configPath = join(f.directory, 'ssh_config');
     await writeFile(join(f.directory, 'known_hosts'), files.knownHosts, { mode: 0o600 });
     await writeFile(configPath, files.config, { mode: 0o600 });
-    await sshProbe(configPath);
+    await sshProbe(configPath, `device-${shell}`);
     const run = (script) =>
       new Promise((done) => {
         const child = execFile(
           '/usr/bin/ssh',
-          ['-F', configPath, 'device-script'],
+          ['-F', configPath, `device-${shell}`],
           { timeout: 15000 },
           (error, stdout, stderr) => done({ code: error?.code ?? 0, stdout, stderr }),
         );
@@ -659,7 +664,9 @@ test(
       process.platform,
       15,
       process.platform,
+      f.executor.credentials.shells,
     );
+    const script = `device-${f.executor.credentials.shells[0]}`;
     assert.match(files.config, /ControlMaster auto/);
     const configPath = join(directory, 'ssh_config');
     await writeFile(join(directory, 'identity'), f.executor.credentials.privateKey, {
@@ -679,12 +686,12 @@ test(
       });
     t.after(() => ssh('device', '', '-O', 'exit'));
     // The first opens the connection; the rest, scripts and command lines together, run over it.
-    assert.deepEqual(await ssh('device-script', 'echo first\n'), { code: 0, stdout: 'first\n' });
+    assert.deepEqual(await ssh(script, 'echo first\n'), { code: 0, stdout: 'first\n' });
     assert.equal((await ssh('device', '', '-O', 'check')).code, 0);
     const results = await Promise.all(
       Array.from({ length: 12 }, (_, index) =>
         index % 2
-          ? ssh('device-script', `sleep 0.2; printf '%s' ${index}; exit ${index}\n`)
+          ? ssh(script, `sleep 0.2; printf '%s' ${index}; exit ${index}\n`)
           : ssh('device', '', `printf '%s' ${index}`),
       ),
     );

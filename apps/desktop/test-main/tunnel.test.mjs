@@ -14,6 +14,7 @@ import { promisify } from 'node:util';
 import { WebSocket, WebSocketServer } from 'ws';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import { openProxyBridge } from '../electron/proxy-bridge.mjs';
+import { findGitBash } from '../electron/git-bash.mjs';
 
 // The whole execution channel on one machine: the real service over TLS, the real connection bridge, the bundled
 // OpenSSH as the device's SSH service and the system's `ssh` as the command the native CLI would run. Only the
@@ -121,13 +122,13 @@ async function service() {
     tunnel: {
       // The service is made for Linux, where the login key it writes is private by its file mode. Here it runs
       // on Windows, whose `ssh` refuses a key that inherited access for anyone else from the temporary folder.
-      async probe(configPath) {
+      async probe(configPath, host) {
         await execute(
           'icacls.exe',
           [join(dirname(configPath), 'identity'), '/inheritance:r', '/grant:r', `*${account}:F`],
           { windowsHide: true },
         );
-        return sshProbe(configPath);
+        return sshProbe(configPath, host);
       },
     },
   });
@@ -206,7 +207,7 @@ function ssh(svc, connectionId, command, input) {
   return new Promise((done, fail) => {
     const child = execFile(
       'ssh',
-      ['-F', configOf(svc, connectionId), 'windows', command],
+      ['-F', configOf(svc, connectionId), 'device', command],
       { timeout: 60000, maxBuffer: 64 * 1024 * 1024, encoding: 'buffer', windowsHide: true },
       (error, stdout, stderr) => (error ? fail(Object.assign(error, { stderr })) : done(stdout)),
     );
@@ -219,7 +220,7 @@ function ssh(svc, connectionId, command, input) {
 async function sleeper(t, svc, connectionId) {
   const child = spawn(
     'ssh',
-    ['-F', configOf(svc, connectionId), 'windows', ps('Write-Output $PID; Start-Sleep 120')],
+    ['-F', configOf(svc, connectionId), 'device', ps('Write-Output $PID; Start-Sleep 120')],
     { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   const exited = new Promise((done) => child.once('close', (code) => done(code)));
@@ -300,6 +301,53 @@ test('commands reach the device over the service address alone', windows(), asyn
   assert.ok(dev.forward.links.length >= 3);
   await until(() => dev.forward.channels().length === 0, 10, 'finished channels to close');
 });
+// A script as the system prompt has Claude send one: on standard input to the host of its shell.
+function script(svc, connectionId, host, text) {
+  return new Promise((done) => {
+    const child = execFile(
+      'ssh',
+      ['-F', configOf(svc, connectionId), host],
+      { timeout: 60000, encoding: 'buffer', windowsHide: true },
+      (error, stdout) => done({ code: error?.code ?? 0, stdout: stdout.toString('utf8') }),
+    );
+    child.stdin.end(text);
+  });
+}
+test(
+  'scripts run in PowerShell, and in Git Bash where it is installed, in UTF-8 with their exit code',
+  windows(),
+  async (t) => {
+    const { svc, dev, connectionId } = await connected();
+    const bash = await findGitBash();
+    const config = await readFile(configOf(svc, connectionId), 'utf8');
+    assert.match(config, new RegExp(`^Host device device-pwsh${bash ? ' device-bash' : ''}$`, 'm'));
+    // Windows programs a script runs write UTF-8 too, as the console of each command is switched to it.
+    assert.deepEqual(
+      await script(
+        svc,
+        connectionId,
+        'device-pwsh',
+        "Write-Output '通道 pwsh'\ncmd /c echo 中文 cmd\nexit 3\n",
+      ),
+      { code: 3, stdout: '通道 pwsh\r\n中文 cmd\r\n' },
+    );
+    // The service tells every window which shells the computer has.
+    const listed = dev.messages.findLast((message) => message.type === 'devices');
+    assert.deepEqual(listed?.devices.at(-1)?.shells, bash ? ['pwsh', 'bash'] : ['pwsh']);
+    if (!bash) {
+      t.diagnostic('Git for Windows is not installed: no Git Bash to try');
+      return;
+    }
+    const result = await script(
+      svc,
+      connectionId,
+      'device-bash',
+      'printf "%s|" "通道 bash" "$CC_DESK_TUNNEL_SCHEDULES"\ncmd //c echo 中文 cmd\nexit 4\n',
+    );
+    assert.equal(result.code, 4);
+    assert.equal(result.stdout, `通道 bash|${schedules}|中文 cmd\r\n`);
+  },
+);
 test('commands started together each get through', windows(120000), async () => {
   const { svc, dev, connectionId } = await connected();
   // Four times what one address may hold in connections that have not signed in yet.
@@ -346,7 +394,7 @@ test('files are copied both ways with scp', windows(180000), async (t) => {
   t.after(() => rm(directory, { recursive: true, force: true }));
   const content = randomBytes(12 * 1024 * 1024);
   await writeFile(join(directory, 'source.bin'), content);
-  const remote = (name) => `windows:${join(directory, name).replaceAll('\\', '/')}`;
+  const remote = (name) => `device:${join(directory, name).replaceAll('\\', '/')}`;
   const scp = (from, to) =>
     execute('scp', ['-q', '-F', configOf(svc, connectionId), from, to], {
       timeout: 120000,

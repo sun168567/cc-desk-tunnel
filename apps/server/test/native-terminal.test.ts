@@ -122,7 +122,11 @@ test('a terminal that keeps running shows its current screen to a client that at
 });
 
 test('a terminal launches the official CLI directly with remote guidance and no shell, MCP or bypass', () => {
-  const own = { resume: true, settingsPath: '/t.json' };
+  const own = {
+    resume: true,
+    settingsPath: '/t.json',
+    execution: { platform: 'win32' as const, shells: ['pwsh' as const] },
+  };
   const args = terminalArguments(
     { executable: '/native/claude', model: 'provider', settingsPath: '/private/provider.json' },
     {
@@ -137,6 +141,7 @@ test('a terminal launches the official CLI directly with remote guidance and no 
   );
   assert.ok(args.includes('--append-system-prompt'));
   assert.ok(args.some((arg) => arg.includes('D:\\\\项目')));
+  assert.ok(args.some((arg) => arg.includes('ssh device-pwsh')));
   assert.ok(args.includes('provider'));
   assert.ok(args.includes('high'));
   assert.ok(
@@ -162,11 +167,12 @@ test('a terminal resumes its session or creates it under the session ID, with it
     permissionMode: 'auto',
   } as Session;
   const options = { executable: 'claude', settingsPath: '/private/provider.json' };
+  const execution = { platform: 'win32' as const, shells: ['pwsh' as const] };
   const resumed = terminalArguments(
     options,
     session,
     { configPath: '/ssh' },
-    { resume: true, settingsPath: '/t.json' },
+    { resume: true, settingsPath: '/t.json', execution },
   );
   assert.deepEqual(resumed.slice(0, 2), ['--resume', session.id]);
   assert.deepEqual(resumed.slice(-2), ['--settings', '/t.json']);
@@ -174,6 +180,7 @@ test('a terminal resumes its session or creates it under the session ID, with it
   const created = terminalArguments(options, session, undefined, {
     resume: false,
     settingsPath: '/t.json',
+    execution,
   });
   assert.deepEqual(created.slice(0, 2), ['--session-id', session.id]);
 });
@@ -184,6 +191,19 @@ test('a terminal never passes for an SDK process, whatever the service inherited
     { CLAUDE_CODE_ENTRYPOINT: 'sdk-ts', CLAUDE_AGENT_SDK_CLIENT_APP: 'x', LANG: 'C.UTF-8' },
   );
   assert.deepEqual(Object.keys(env).sort(), ['LANG', 'TERM']);
+});
+
+test("a terminal's CLI finds the session's ssh before the service's", () => {
+  const ssh = { configPath: '/data/session-ssh/s/config', bin: '/data/session-ssh/s/bin' };
+  const env = terminalEnvironment({ executable: 'claude' }, { PATH: '/usr/bin' }, ssh);
+  assert.equal(
+    env.PATH,
+    `/data/session-ssh/s/bin${process.platform === 'win32' ? ';' : ':'}/usr/bin`,
+  );
+  assert.equal(
+    terminalEnvironment({ executable: 'claude' }, { PATH: '/usr/bin' }).PATH,
+    '/usr/bin',
+  );
 });
 
 test('terminal provider environment stays inside the child process and does not mutate the proxy', (t) => {

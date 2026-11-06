@@ -1,4 +1,4 @@
-import type { NativeSettings } from '@cc-desk-tunnel/protocol';
+import type { DeviceShell, NativeSettings } from '@cc-desk-tunnel/protocol';
 
 // Settings described once for every client that shows them: the desktop and browser pages, and ccdt in a terminal.
 // Nothing here draws; each client shows the same choices with the same words in its own way.
@@ -35,6 +35,18 @@ export const idleCompactionFields = {
     detail: '小于这个大小的会话不压缩，也不提醒',
     options: [50_000, 100_000, 150_000, 200_000, 300_000],
   },
+};
+
+// The shell Claude is told the user prefers for scripts on this computer, offered where it has more than one. The
+// choice is kept by the service for this computer alone.
+export const shellField = {
+  title: '偏好的 Shell',
+  detail: '不指定时由 Claude 按任务选择；选了也只是优先，任务更适合另一种时 Claude 仍会换用',
+  unset: '不指定',
+  options: [
+    ['pwsh', 'PowerShell 7'],
+    ['bash', 'Git Bash'],
+  ] as [DeviceShell, string][],
 };
 
 export type CliKey = keyof NativeSettings;

@@ -1,15 +1,10 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { query, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKSessionInfo, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type {
-  DevicePlatform,
-  Effort,
-  EventPayload,
-  NativeMetrics,
-  PermissionMode,
-} from '@cc-desk-tunnel/protocol';
+import type { Effort, EventPayload, NativeMetrics, PermissionMode } from '@cc-desk-tunnel/protocol';
 import { deviceTerms } from './device-terms.ts';
+import type { Execution } from './device-terms.ts';
 import { ClaudeStream } from './claude-stream.ts';
 import type { SshConnection } from './tunnel.ts';
 import { cacheTtl } from './idle-compaction.ts';
@@ -52,8 +47,8 @@ export type ClaudeRun = {
   // The session whose Linux directory holds this session's native history; itself unless it is a fork.
   nativeRoot: string;
   projectPath: string;
-  // The system of the device, as the session's prompt has it.
-  platform: DevicePlatform;
+  // How commands run on the device, as the session's prompt has it.
+  execution: Execution;
   permissionMode: PermissionMode;
   model?: string | null;
   effort?: Effort | null;
@@ -97,20 +92,23 @@ const quotaOf =
   (login: string, asked = false) =>
   (query: Query) =>
     quotas.through(login, query, { asked });
+// The PATH of a session's CLI, with its own `ssh`, `scp` and `sftp` first (see `sessionSsh`).
+export function sshPath(
+  ssh: SshConnection | undefined,
+  path = process.env.PATH ?? '',
+): Record<string, string> {
+  return ssh?.bin ? { PATH: path ? `${ssh.bin}${delimiter}${path}` : ssh.bin } : {};
+}
+
 // `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
-export function remotePrompt(
-  projectPath: string,
-  ssh: SshConnection,
-  sessionId: string,
-  platform: DevicePlatform = 'win32',
-) {
-  const terms = deviceTerms(platform, projectPath);
+export function remotePrompt(projectPath: string, sessionId: string, execution: Execution) {
+  const terms = deviceTerms(execution, projectPath);
   return [
     "The user's projects are on their own computer, the device, NOT on this Linux host, which only runs Claude Code and has no copy of them.",
     `Device: ${terms.name}. Project directory: ${JSON.stringify(projectPath)}.`,
-    `Do all project reads, edits, searches and commands on the device with your native Bash tool over SSH, with the configuration ${JSON.stringify(ssh.configPath)}. Do not use this host's Read/Edit tools on project files, and do not print, read into conversation or copy the key the configuration names.`,
-    `Send a script on standard input, as a quoted Bash here-document: ssh -F ${JSON.stringify(ssh.configPath)} device-script <<'PS' ... PS. ${terms.script}`,
-    `device-script is the host device with one fixed command, which the configuration shows as RemoteCommand, and takes none of its own. ${terms.command}`,
+    "Do all project reads, edits, searches and commands on the device with your native Bash tool over SSH: here ssh, scp and sftp know the device by the host names below, and reach any other host as they otherwise would. Do not use this host's Read/Edit tools on project files, and do not read or copy the keys these hosts sign in with.",
+    terms.script,
+    terms.command,
     'If the device is unreachable, say so; never fall back to this host. After an interruption report results as unknown; do not repeat side effects on your own.',
     'To look at a picture on the device, such as a pasted screenshot or an attached image, copy that one file with scp to a temporary file on this host, open it with the Read tool, and delete the copy afterwards. That is the only use of Read on this host for a file from the device.',
     'Commands may run concurrently. One that blocks holds the turn until its Bash timeout: size the timeout to the work, and run anything long-lived, such as a dev server or watcher, as a background Bash task. Do not count on a process outliving the ssh command that started it, nor on ending the command to stop it: keep the command running for as long as the process is needed, and stop the process itself on the device.',
@@ -186,7 +184,7 @@ export async function runClaude(
           type: 'preset',
           preset: 'claude_code',
           ...(run.ssh
-            ? { append: remotePrompt(run.projectPath, run.ssh, run.sessionId, run.platform) }
+            ? { append: remotePrompt(run.projectPath, run.sessionId, run.execution) }
             : {}),
           snapshot: false,
         },
@@ -212,7 +210,7 @@ export async function runClaude(
           ],
         },
         maxTurns: options.maxTurns,
-        env: { ...process.env, ...options.environment },
+        env: { ...process.env, ...options.environment, ...sshPath(run.ssh) },
         stderr: (text) => {
           stderr = (stderr + text).slice(-8192);
         },
