@@ -12,6 +12,7 @@
 - 分片到达的输出（`text.delta`、`thinking.delta`、`tool.input.delta`、`tool.output`）在到达时以 `session.fragment` 发给订阅者：不落盘、没有 `sequence`。一段输出结束（同一运行记下任何别的事件之前，或累计满 64K 字符）时，才作为一条同类型、含全部文字的 `session.event` 落盘并广播；客户端以它取代此前拼起来的片段。`session.subscribe` 的快照之后，服务端把运行当前未结束的那一段整段补发一次。
 - `session.subscribe` 只订阅当前会话，游标为 0 时取最近一页，非零游标补齐小差量，大差量回最近页。`session.history.beforeSequence` 加载更早完整轮次，不改变订阅。`session.snapshot` 有 `requestId`、replace/prepend/append 模式、原始 first/lastSequence 游标和 hasEarlier；历史里一段输出就是一条事件；0.2.12 之前写入的历史在升级时合并过，合并事件的 sequence 为该段末事件，所以 sequence 递增但不保证连续，分页游标由独立字段提供。`session.updated/deleted` 更新目录。
 - `auth` 之后客户端紧接着发一帧 `device`，给出这台电脑的标识（客户端生成一次并保存）；名字取 `auth.deviceName`。`auth` 这一帧的形状各版本都要能读，版本不一致的客户端靠它得知服务端版本，所以新字段不加在它上面。没有发过 `device` 的连接可以查看，不能创建会话或发消息。服务端在 `ready` 之后、以及有设备上线、下线或执行通道就绪时，向所有连接发 `devices`：当前在线的设备列表，每项带 `ready`（命令能否到达它）；不在列表里的设备视为离线。
+- 启用执行通道时，`auth.tunnel=false` 的连接只负责控制，不建立或切换通道，也不计入设备的在线连接。报告 `device` 后，它可以通过该设备已就绪的执行通道发起运行或打开原生终端；通道未就绪时返回 `execution_offline`。如果设备只剩控制连接，其他设备会将它视为离线，发起新运行时返回 `device_offline`。请求自己建立通道的连接仍须等自己的通道就绪。服务未启用执行通道时，连接和设备在线状态保持原有行为。
 - 比服务端新的客户端可以让它升级：登录被拒时 `version_mismatch` 给出服务端版本，客户端按 `PROTOCOL_HISTORY` 查出那一版的协议版本，另开一条连接以它登录，发 `service.update.check`，状态为 `available` 时发 `service.update.install`，跟着 `service.update` 的进度直到 `restarting`。0.2.4 起的服务端都这样应答，以后的版本要保持这几帧（`auth`、`ready`、`response`、`connection.error`、`service.update` 与这两条命令）的形状和含义；改 `PROTOCOL_VERSION` 时在 `PROTOCOL_HISTORY` 加上新版本，测试会核对。
 - 原生桌面 `auth.tunnel=true`，服务发送 `tunnel.offer`（本次连接的通道密钥）；主进程返回绑定 connection ID 的 `tunnel.credentials`（SSH identity / host key / 用户），服务实际探测后发送 `tunnel.ready`。服务端每收到一条 SSH 连接就发一条 `tunnel.open`，主进程为它另开一条到同一地址的连接，首帧发 `tunnel.attach`（连接 ID、通道 ID、通道密钥），此后这条连接只转发 SSH 的字节。这些消息不进入 GUI 历史，所有秘密经加密且验证身份的控制连接传递。
 - 不含 `execution.*` 请求、远程执行能力标志或执行 MCP。原生审批仍用 `approval.requested/reply/resolved`，只传递官方引擎发出的请求 / 用户决定。
@@ -35,7 +36,7 @@
 
 运行状态为 `running → awaiting_approval → running → completed`，也可终止为 `cancelled/failed`。拒绝产生 `tool.result(denied)`，模拟器在解释拒绝后正常完成本轮；错误事件与失败状态分开。
 
-运行属于会话所在的设备（会话的 `device`），命令走那台设备的执行通道；消息、追加消息、审批、停止、结束后台任务可以来自任何设备的任何连接，`activeRun.connectionId` 只记录发起它的连接。从别的设备发起新运行时，会话所在设备必须在线且执行通道就绪，否则返回 `device_offline` 或 `execution_offline`。两端同时操作时：同一 `requestId` 重发按同一条处理；审批与提问以先到的答复为准，后到的返回 `approval_answered`；对已结束的运行或后台任务再发停止视为无操作，返回成功；两端各自发出的不同消息都保留。断连不结束运行：设备的最后一条连接断开后，它的运行保留一段宽限期（默认 5 分钟），同一设备重新认证后接着订阅历史、答复审批；超过宽限期或客户端先发了 `leave` 帧则结束。`run.continue` 接着被停止或中断的一轮继续，记录为带 `continued` 的 `message.user`。服务恢复未完成记录时补充工具取消和运行取消事件，不重放操作。
+运行属于会话所在的设备（会话的 `device`），命令走那台设备的执行通道；消息、追加消息、审批、停止、结束后台任务可以来自任何设备的任何连接，`activeRun.connectionId` 只记录发起它的连接。从别的设备发起新运行时，会话所在设备必须在线且执行通道就绪，否则返回 `device_offline` 或 `execution_offline`。两端同时操作时：同一 `requestId` 重发按同一条处理；审批与提问以先到的答复为准，后到的返回 `approval_answered`；对已结束的运行或后台任务再发停止视为无操作，返回成功；两端各自发出的不同消息都保留。断连不结束运行：设备的最后一条在线连接断开后，它的运行保留一段宽限期（默认 5 分钟），同一设备重新认证后接着订阅历史、答复审批；启用执行通道时只计算请求执行通道的连接，控制连接不会阻止宽限期或取消。超过宽限期或客户端先发了 `leave` 帧则结束。`run.continue` 接着被停止或中断的一轮继续，记录为带 `continued` 的 `message.user`。服务恢复未完成记录时补充工具取消和运行取消事件，不重放操作。
 
 同一连接的相同 requestId 返回已缓存响应；不同内容返回冲突。`session.create` 和同一会话内 `message.send` 的 requestId 在记录存续期间持久去重，即使跨连接或服务重启也不重复创建/发送；删除记录后该去重信息也删除。其他请求不跨连接自动重试。超时/断连可能发生在服务已接纳请求之后，客户端以恢复历史确认结果，不自动重发。
 
