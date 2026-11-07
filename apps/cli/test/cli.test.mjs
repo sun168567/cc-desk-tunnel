@@ -270,6 +270,22 @@ test('naming a service none or several answer, or choosing one away from a termi
   assert.match(listed.stderr, /tokyo\.example\.net .*（当前）/);
 });
 
+test('upgrading with no service saved says to log in, rather than failing inside the upgrade', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ccdt-upgrade-cli-'));
+  try {
+    const result = spawnSync(process.execPath, ['apps/cli/bin/ccdt.mjs', 'upgrade'], {
+      encoding: 'utf8',
+      input: '',
+      env: { ...process.env, CCDT_CONFIG_DIR: join(root, 'cli'), APPDATA: join(root, 'appdata') },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr + result.stdout, /还没有登录服务端/);
+    assert.doesNotMatch(result.stderr + result.stdout, /before initialization/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('reading keys leaves the input open for the terminal shown next', async () => {
   const input = new PassThrough();
   input.setRawMode = (on) => (input.raw = on);

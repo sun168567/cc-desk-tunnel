@@ -308,13 +308,13 @@ async function upgrade(config, values) {
     if (error.code !== 'version_mismatch' || !error.service) throw error;
     current = error.service;
   }
-  let target = current;
+  let next = current;
   // A service newer than ccdt is not asked: this ccdt cannot tell which protocol it speaks.
   if (!older(version, current)) {
     say(dim(`服务端是 ${current}，正在检查新版本……`));
     let installing = false;
     try {
-      target = await upgradeService(
+      next = await upgradeService(
         {
           url: server.url,
           fingerprint: server.fingerprint,
@@ -341,30 +341,30 @@ async function upgrade(config, values) {
           },
         },
       );
-      say(`服务端已升级到 ${target}，正在重启，约一分钟后可以连接。`);
+      say(`服务端已升级到 ${next}，正在重启，约一分钟后可以连接。`);
     } catch (error) {
       if (error.code === 'current') say(`服务端已是最新的正式版本 ${current}。`);
       else if (error.code === 'declined' || error.code === 'manual') say(error.message);
       else throw error;
     }
   }
-  if (target === version) {
+  if (next === version) {
     say(`ccdt 是 ${version}，与服务端相同。`);
     return 0;
   }
-  if (older(target, FIRST_UPGRADABLE)) {
+  if (older(next, FIRST_UPGRADABLE)) {
     say(
-      `ccdt 不能自己换成 ${FIRST_UPGRADABLE} 以前的版本：到 ${releasePage(target)} 下载 ccdt ${target}，运行其中的安装脚本。`,
+      `ccdt 不能自己换成 ${FIRST_UPGRADABLE} 以前的版本：到 ${releasePage(next)} 下载 ccdt ${next}，运行其中的安装脚本。`,
     );
     return 1;
   }
   if (!bundled) {
-    say(`从源码运行的 ccdt 不自行更新：服务端是 ${target}，请换到这个版本的源码。`);
+    say(`从源码运行的 ccdt 不自行更新：服务端是 ${next}，请换到这个版本的源码。`);
     return 1;
   }
-  say(dim(`正在下载 ccdt ${target}……`));
-  install(await download(target));
-  say(`ccdt 已换成 ${target}。`);
+  say(dim(`正在下载 ccdt ${next}……`));
+  install(await download(next));
+  say(`ccdt 已换成 ${next}。`);
   say(dim('其他已打开的 ccdt 窗口仍是原来的版本，关掉重开即可。'));
   return 0;
 }
