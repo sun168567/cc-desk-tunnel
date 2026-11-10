@@ -9,7 +9,37 @@ import {
   eventSchema,
   serverMessageSchema,
   terminalControlSchema,
+  tunnelCredentialsSchema,
 } from '../src/index.ts';
+
+test('tunnel credentials accept spaces in usernames without allowing config delimiters', () => {
+  const credentials = {
+    type: 'tunnel.credentials',
+    connectionId: randomUUID(),
+    username: 'local user',
+    privateKey: 'test-key',
+    hostPublicKey: 'ssh-ed25519 AAAATEST',
+    shells: ['pwsh'],
+  };
+  for (const username of ['local user', 'domain\\local user', 'user@example.com', 'user-name']) {
+    assert.ok(tunnelCredentialsSchema.safeParse({ ...credentials, username }).success, username);
+  }
+  for (const username of [
+    '',
+    'user\nForwardAgent yes',
+    'user\rname',
+    'user\tname',
+    'user"name',
+    'user\0name',
+    'user*',
+  ]) {
+    assert.equal(
+      tunnelCredentialsSchema.safeParse({ ...credentials, username }).success,
+      false,
+      username,
+    );
+  }
+});
 
 test('protocol validates UTF-8 text, IDs and bounded input', () => {
   const command = {

@@ -197,7 +197,7 @@ async function device(svc, { route = () => svc.port, binaries = {}, config = {} 
   };
 }
 const ps = (script) =>
-  `pwsh.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(
+  `"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(
     `$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);${script}`,
     'utf16le',
   ).toString('base64')}`;

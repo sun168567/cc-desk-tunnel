@@ -160,7 +160,7 @@ export function sshConfig(
       `Host device ${shells.map((shell) => `device-${shell}`).join(' ')}`,
       '  HostName 127.0.0.1',
       `  Port ${port}`,
-      `  User ${username}`,
+      `  User ${JSON.stringify(username)}`,
       `  IdentityFile "${join(directory, 'identity')}"`,
       `  UserKnownHostsFile "${join(directory, 'known_hosts')}"`,
       '  IdentitiesOnly yes',

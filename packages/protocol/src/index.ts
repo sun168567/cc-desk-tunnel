@@ -963,7 +963,7 @@ export const tunnelCredentialsSchema = z
       .string()
       .min(1)
       .max(256)
-      .regex(/^[a-zA-Z0-9_.\\@-]+$/),
+      .regex(/^[a-zA-Z0-9_.\\@ -]+$/),
     privateKey: z.string().min(1).max(16384),
     hostPublicKey: z.string().regex(/^ssh-ed25519 [A-Za-z0-9+/=]+$/),
     // What the SSH service runs scripts in.

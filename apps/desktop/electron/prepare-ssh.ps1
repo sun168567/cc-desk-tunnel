@@ -26,7 +26,8 @@ Set-Content -LiteralPath (Join-Path $Runtime 'authorized_keys') -Value $publicKe
 # by the bare name still finds the domain account, so that is what the service is given.
 $account = [Security.Principal.WindowsIdentity]::GetCurrent().Name.ToLowerInvariant()
 $username = $account -replace '^.*\\', ''
-$allowed = if ($account.StartsWith($env:COMPUTERNAME.ToLowerInvariant() + '\')) { $username } else { "$account $username" }
+$names = if ($account.StartsWith($env:COMPUTERNAME.ToLowerInvariant() + '\')) { @($username) } else { @($account, $username) }
+$allowed = ($names | ForEach-Object { '"' + $_.Replace('\', '\\').Replace('"', '\"') + '"' }) -join ' '
 $path = $Runtime.Replace('\', '/')
 $bin = $OpenSshDirectory.Replace('\', '/')
 @"
