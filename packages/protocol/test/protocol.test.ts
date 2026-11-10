@@ -5,6 +5,7 @@ import {
   PROTOCOL_HISTORY,
   PROTOCOL_VERSION,
   authSchema,
+  runWorking,
   commandSchema,
   eventSchema,
   serverMessageSchema,
@@ -187,4 +188,20 @@ test('a turn report names the message it answered, or none for a turn a backgrou
   assert.equal(eventSchema.safeParse(event(stats)).success, true);
   assert.equal(eventSchema.safeParse(event({ ...stats, requests: -1 })).success, false);
   assert.equal(eventSchema.safeParse(event({ ...stats, partial: undefined })).success, false);
+});
+
+test('a run is at work while a turn goes or waits on the user, or the CLI of a terminal works or waits', () => {
+  const run = { id: randomUUID(), connectionId: randomUUID(), status: 'running' as const };
+  assert.equal(runWorking(null), false);
+  assert.equal(runWorking(run), true);
+  assert.equal(runWorking({ ...run, status: 'awaiting_approval', waiting: 'question' }), true);
+  assert.equal(runWorking({ ...run, waiting: 'background' }), false);
+  assert.equal(runWorking({ ...run, surface: 'terminal', activity: 'working' }), true);
+  assert.equal(runWorking({ ...run, surface: 'terminal', activity: 'waiting' }), true);
+  assert.equal(runWorking({ ...run, surface: 'terminal', activity: 'idle' }), false);
+  assert.equal(runWorking({ ...run, surface: 'terminal' }), false);
+  const install = { type: 'service.update.install', requestId: randomUUID(), version: '0.3.15' };
+  assert.equal(commandSchema.safeParse(install).success, true);
+  assert.equal(commandSchema.safeParse({ ...install, force: true }).success, true);
+  assert.equal(commandSchema.safeParse({ ...install, force: 'yes' }).success, false);
 });

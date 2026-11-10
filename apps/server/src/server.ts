@@ -33,6 +33,7 @@ import {
   pathKey,
   platformOf,
   PROTOCOL_VERSION,
+  runWorking,
   TUNNEL_CLOSE,
   tunnelAttachSchema,
   tunnelCredentialsSchema,
@@ -115,6 +116,24 @@ type Peer = {
 // A run belongs to the computer its session is on, not to the connection that started it: connections come
 // and go with the network, and the CLI goes on working here meanwhile. `connectionId` only names the one that
 // started it, in the record.
+// What holds a service upgrade back, as a refusal says it: sessions at work, a session being moved or changed, a
+// sign-in under way. Null when nothing does. Open terminals at rest and background tasks only end with the restart.
+export function upgradeHeld(sessions: Session[], mutating: boolean, signingIn: boolean) {
+  const working = sessions.filter((session) => runWorking(session.activeRun));
+  const named =
+    working
+      .slice(0, 3)
+      .map((session) => `「${session.title}」`)
+      .join('') + (working.length > 3 ? ` 等 ${working.length} 个会话` : '');
+  const parts = [
+    ...(working.length ? [`${named}正在运行`] : []),
+    ...(mutating ? ['有会话正在移动或修改'] : []),
+    ...(signingIn ? ['Claude 账号正在登录'] : []),
+  ];
+  return parts.length
+    ? `${parts.join('，')}。升级会重启服务端并中断它们：等结束后再升级，或选择强行升级。`
+    : null;
+}
 export type Run = {
   id: string;
   sessionId: string;
@@ -1573,17 +1592,19 @@ export function createProxyServer(options: ServerOptions) {
         if (!updates) throw new DomainError('updates_unavailable', '此服务未启用版本跟踪。');
         await updates.check();
         return undefined;
-      case 'service.update.install':
+      case 'service.update.install': {
         if (!updates) throw new DomainError('updates_unavailable', '此服务未启用版本跟踪。');
-        // The restart at the end would cut these off.
-        if (terminals.size || runs.size || mutations.size || login)
-          throw new DomainError('native_busy', '请先结束运行、终端或登录流程，再升级服务端。');
+        // The restart at the end cuts off whatever goes on. What is at work holds it back unless the user forces it;
+        // an open terminal at rest, and background tasks a finished turn left, only end.
+        const held = upgradeHeld(store.list(), mutations.size > 0, !!login);
+        if (held && !command.force) throw new DomainError('native_busy', held);
         try {
           updates.install(command.version);
         } catch (error) {
           throw new DomainError('update_unavailable', (error as Error).message);
         }
         return undefined;
+      }
       case 'usage.query': {
         const titles = new Map(store.list().map((session) => [session.id, session.title]));
         send(peer, {
