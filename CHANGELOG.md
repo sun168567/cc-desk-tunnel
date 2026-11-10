@@ -26,6 +26,7 @@
 ### 问题修复
 
 - Windows 上 `ccdt upgrade` 报 “Cannot access 'target' before initialization”、无法升级的问题（#178，#179）。
+- `ccdt` 里的 Claude Code 不再弹出自带的更新提示、随后报没有权限的更新失败：服务端启动的 Claude Code 都关掉了自动更新，版本随服务端的发布固定。
 
 ### 升级说明
 
