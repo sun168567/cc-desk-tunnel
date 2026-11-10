@@ -2,7 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
 import { usePopover } from './usePopover.ts';
 
-// The native summary names its categories in English; the common ones are translated, any other is shown as it came.
+// The native summary names its categories in English, and a newer CLI gives each a stable id as well; the common ones
+// are translated, any other is shown as it came.
+const categoryIds: Record<string, string> = {
+  system_prompt: '系统提示词',
+  system_tools: '系统工具',
+  mcp_instructions: 'MCP 说明',
+  mcp_tools: 'MCP 工具',
+  custom_agents: '自定义智能体',
+  memory_files: '记忆文件',
+  skills: '技能',
+  messages: '对话消息',
+};
 const categoryNames: Record<string, string> = {
   'System prompt': '系统提示词',
   'System tools': '系统工具',
@@ -21,14 +32,15 @@ function ContextBreakdown({ context }: { context: NonNullable<NativeMetrics['con
   const used = context.categories.filter((item) => item.kind === 'used' && item.tokens > 0);
   const total = used.reduce((sum, item) => sum + item.tokens, 0);
   if (!total) return null;
-  const label = (name: string) => categoryNames[name] ?? name;
+  const label = ({ id, name }: (typeof used)[number]) =>
+    (id && categoryIds[id]) ?? categoryNames[name] ?? name;
   const size = (tokens: number) => `${tokens.toLocaleString('zh-CN')} tok`;
   return (
     <div className="context-breakdown">
       <div className="context-breakdown-bar" aria-hidden="true">
         {used.map((item, index) => (
           <span
-            key={item.name}
+            key={item.id ?? item.name}
             className={`part-${index % 6}`}
             style={{ width: `${(item.tokens / total) * 100}%` }}
           />
@@ -36,9 +48,9 @@ function ContextBreakdown({ context }: { context: NonNullable<NativeMetrics['con
       </div>
       <ul>
         {used.map((item, index) => (
-          <li key={item.name}>
+          <li key={item.id ?? item.name}>
             <i className={`part-${index % 6}`} aria-hidden="true" />
-            <span>{label(item.name)}</span>
+            <span>{label(item)}</span>
             <b>{size(item.tokens)}</b>
           </li>
         ))}

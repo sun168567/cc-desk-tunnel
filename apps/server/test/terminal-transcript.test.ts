@@ -288,6 +288,55 @@ test('the record is read as the CLI writes it, and a turn shows part by part as 
   );
   assert.deepEqual(read(), ['message.user /compact', 'native.compact manual 447294']);
 
+  // CLI 2.1.321 records the /compact the user typed only after the summary; the question still comes first, with what
+  // was asked of the summary. The summary and the command may be read apart.
+  appendFileSync(
+    path,
+    line({
+      type: 'system',
+      subtype: 'compact_boundary',
+      uuid: 'b2',
+      parentUuid: null,
+      compactMetadata: { trigger: 'manual', preTokens: 120000 },
+    }) +
+      said('m2', 'This session is being continued…', {
+        parentUuid: 'b2',
+        isCompactSummary: true,
+        isVisibleInTranscriptOnly: true,
+      }) +
+      said('m3', '<local-command-caveat>Caveat…</local-command-caveat>', { isMeta: true }),
+  );
+  assert.deepEqual(read(), []);
+  appendFileSync(
+    path,
+    said(
+      'm4',
+      '<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args> 保留要点 </command-args>',
+    ) +
+      said(
+        'm5',
+        '<local-command-stdout>Compacted (ctrl+o to see full summary)</local-command-stdout>',
+      ),
+  );
+  assert.deepEqual(read(), ['message.user /compact 保留要点', 'native.compact manual 120000']);
+  // One the CLI makes by itself while idle has no question.
+  appendFileSync(
+    path,
+    line({
+      type: 'system',
+      subtype: 'compact_boundary',
+      uuid: 'b3',
+      parentUuid: null,
+      compactMetadata: { trigger: 'auto', preTokens: 250000 },
+    }) +
+      said('i2', 'This session is being continued…', {
+        parentUuid: 'b3',
+        isCompactSummary: true,
+        isVisibleInTranscriptOnly: true,
+      }),
+  );
+  assert.deepEqual(read(), ['native.compact auto 250000']);
+
   // A command of the CLI's that asks the model is a question as any other.
   appendFileSync(
     path,
@@ -372,6 +421,19 @@ test('the terminal settings add the hooks to the provider settings, readable onl
     assert.equal(written.hooks[name][0].hooks[0].command, command);
   if (process.platform !== 'win32') assert.equal(statSync(settings).mode & 0o777, 0o600);
   assert.equal(written.statusLine, undefined);
+  assert.equal(written.idleCompaction, undefined);
+  // The CLI compacts an idle conversation by the service's setting, beside the provider's environment.
+  terminalSettings(settings, hooks, provider, undefined, undefined, {
+    enabled: false,
+    afterMinutes: 50,
+    minTokens: 150_000,
+  });
+  const idle = JSON.parse(readFileSync(settings, 'utf8'));
+  assert.equal(idle.idleCompaction, false);
+  assert.deepEqual(idle.env, {
+    ANTHROPIC_BASE_URL: 'https://example.test',
+    CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS: '150000',
+  });
 });
 
 test("the terminal status line keeps what the CLI hands it, and still shows the user's own", (t) => {

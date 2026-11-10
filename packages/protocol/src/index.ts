@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 24;
+export const PROTOCOL_VERSION = 25;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -23,6 +23,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.8': 22,
   '0.3.10': 23,
   '0.3.12': 24,
+  '0.3.14': 25,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -78,6 +79,9 @@ export const accountStateSchema = z.object({
   email: z.string().optional(),
   organization: z.string().optional(),
   subscriptionType: z.string().optional(),
+  // When a stored claude.ai sign-in ends for good (ISO 8601), as `claude auth status` reads it: renewing the access
+  // token does not move it, and the real end can be up to three days earlier. Absent for any other credential.
+  loginExpiresAt: z.string().optional(),
   // Present while the official sign-in command waits for the code shown after browser authorization.
   login: z.object({ url: z.url() }).nullable(),
   notice: z.string().optional(),
@@ -112,6 +116,9 @@ export const nativeSettingsSchema = z.object({
   // Not a key of its own in the file: ENABLE_TOOL_SEARCH under `env`. Tools are then described to the model
   // only when it looks for them, instead of all of them with every request.
   toolSearch: toggle,
+  // Under `permissions` in the file: the first from CLI 2.1.319, the second from 2.1.314.
+  denyInsteadOfPrompting: toggle,
+  blockWritesOutsideWorkingDirectories: toggle,
 });
 export type NativeSettings = z.infer<typeof nativeSettingsSchema>;
 // The service's own setting, not the CLI's: before the prompt cache of an idle session lapses, it compacts the session
@@ -131,6 +138,8 @@ export const contextUsageSchema = z.object({
   measuredAt: timestamp,
   categories: z.array(
     z.object({
+      // The CLI's stable name for the row (CLI 2.1.304 and later), where `name` is English text that may change.
+      id: z.string().optional(),
       name: z.string(),
       tokens: z.number().nonnegative(),
       kind: z.enum(['used', 'free', 'buffer', 'deferred']),
@@ -143,6 +152,10 @@ export const nativeUsageSchema = z.object({
   outputTokens: z.number().nonnegative(),
   cacheReadTokens: z.number().nonnegative(),
   cacheWriteTokens: z.number().nonnegative(),
+  // The cache writes that last an hour and those that last five minutes, which the API prices differently (CLI 2.1.311
+  // and later). Writes a response did not say the lifetime of are in neither, so the two may add up to less.
+  cacheWrite1hTokens: z.number().nonnegative().optional(),
+  cacheWrite5mTokens: z.number().nonnegative().optional(),
   measuredAt: timestamp,
 });
 export const rateLimitsSchema = z.object({

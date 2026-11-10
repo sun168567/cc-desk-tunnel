@@ -101,6 +101,7 @@ jiangan-code 的分支（[jiangan-code/cc-desk-tunnel](https://github.com/jianga
   - 等你确认：`PermissionRequest`。CLI 2.1.293 弹出确认时只运行它，不发 `Notification`（`permission_prompt`），后者仍按“等你”处理，以防别的版本发。
   - 空闲：`Stop`、`SessionStart`，以及 `Notification` 的 `idle_prompt`。
   - 中断：使用者按 Esc 或 Ctrl+C 中断一轮时，CLI 不运行任何 hook，记录里也不留痕迹（实测：被中断的提示之后直接是下一条提示，没有 `turn_duration`，也没有“interrupted”字样；`idle_prompt` 等了 80 秒也没有来）。所以服务端在“运行中”时看终端输入：单独的 Esc 或 Ctrl+C（含 kitty 键盘协议的写法）之后 2 秒内没有新的 hook，就当作这一轮已中断，回到空闲并导入。
+  - CLI 自己报告：2.1.295 起 CLI 支持 OSC 7501（Program Status Protocol）。它启动时问终端支不支持，得到回答后每次状态变化输出一段 `state=working|blocked|done|idle|error`。服务端替终端回答这个问题（问题本身不转给客户端的终端），读主对话的报告：`working` 为运行中，`blocked`（等审批或提问）为等你确认，其余为空闲；中断一轮时 CLI 立即报告 `idle`，不用再等上面的推断。报告照常转给客户端的终端，支持它的终端也能显示。2026-11-10 用 CLI 2.1.321 在伪终端里对着本地模拟接口实测：启动 `idle`，提交后 `working`，按 Esc 后 `idle`，一轮结束 `done`。Windows 的 ConPTY 会抢先回答同一批里的设备属性查询，CLI 便认为终端不支持；服务端在 Linux 的真实 pty 里没有这个问题，Windows 上的实测改用 node-pty 自带的 conpty.dll。
 - 图形客户端：会话列表和对话底部显示“终端运行中”“终端等你确认”“终端打开中”，输入框变灰并提示关掉终端后可以接着聊，停止按钮不显示（终端的运行由终端自己中断）。
 - `ccdt`：`sessions` 与 `-r` 标出谁在用这个会话；会话正在图形客户端里运行，或开着图形客户端的内嵌终端时，不去打开，直接说明原因。另一个 `ccdt` 窗口开着的照旧接过来。
 

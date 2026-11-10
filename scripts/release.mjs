@@ -34,6 +34,11 @@ const section = new RegExp(
   .exec(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))?.[1]
   .trim();
 if (!section) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
+// The section's GitHub alerts (`> [!WARNING]` and the like) are what a reader must see before upgrading: they open
+// the notes, above how to download, in the colours GitHub gives them.
+const alert = /^> \[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n(?:>.*(?:\n|$))*/gm;
+const alerts = section.match(alert)?.map((block) => block.trim()) ?? [];
+const body = section.replace(alert, '').replace(/\n{3,}/g, '\n\n');
 const repository = 'https://github.com/sun168567/cc-desk-tunnel';
 const [
   installer,
@@ -56,6 +61,7 @@ const raw = 'https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/dep
 // system stands. A preview carries the same text, so that making it the release later changes nothing a reader has
 // seen.
 const notes = [
+  ...alerts.flatMap((block) => [block, '']),
   '## 下载与升级',
   '',
   '客户端有两种，可以只装一种，也可以都装，都要与服务端同一版本：**图形客户端**是桌面应用；**终端客户端 `ccdt`** 在自己的终端里使用原版 Claude Code，与图形客户端共用会话。',
@@ -86,7 +92,7 @@ const notes = [
   '> 用桌面客户端驱动云端的 Claude Code，经反向隧道在你自己的电脑上执行。',
   '',
   // The change log links to files beside it; on the release page those links need the whole address.
-  section
+  body
     .replace(/^### /gm, '## ')
     .replace(/\]\((?![a-z]+:|#)([^)]+)\)/g, `](${repository}/blob/main/$1)`),
   '',

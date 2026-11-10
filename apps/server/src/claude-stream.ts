@@ -14,6 +14,17 @@ export function printed(output: string) {
   );
   return `${fence}text\n${text}\n${fence}`;
 }
+// Behind a gateway, a CLI in auto mode tells of how its classifier is billed on every turn. In a terminal the user
+// acknowledges it and it rests a day; a CLI the service runs has no one to acknowledge it, so it is shown once a day.
+const DAILY = /^We're changing auto mode to no longer charge for classifier requests/;
+const DAY_MS = 86_400_000;
+let dailyShownAt = -Infinity;
+export function shownToday(text: string, now = Date.now()) {
+  if (!DAILY.test(text)) return false;
+  if (now - dailyShownAt < DAY_MS) return true;
+  dailyShownAt = now;
+  return false;
+}
 export type NativeTool = {
   id: string;
   name: string;
@@ -116,6 +127,20 @@ export class ClaudeStream {
           this.tools.has(toolId)
         )
           this.emit({ type: 'tool.task', toolId, taskId: message.task_id });
+      } else if (message.subtype === 'session_writes_lost') {
+        // The CLI could not save all it wrote as it exited: the server's disk was full, or its quota used up.
+        const lost = Array.isArray(message.lost) ? message.lost : [];
+        const disk =
+          message.error_code === 'EDQUOT' ? '服务器的磁盘配额已用完' : '服务器的磁盘已满';
+        this.emit({
+          type: 'native.notice',
+          text: `${disk}，Claude Code 有内容没能保存：${[
+            ...(lost.includes('transcript')
+              ? ['会话记录缺了一部分，之后继续这个会话时 Claude 可能看不到这段对话']
+              : []),
+            ...(lost.includes('global_config') ? ['它自己的配置（~/.claude.json）的改动'] : []),
+          ].join('；')}。请清理服务器磁盘。`,
+        });
       } else if (message.subtype === 'status' && message.status === null) {
         // The status the CLI was in is over; what it was over for (a compaction) says so itself.
       } else if (['status', 'informational'].includes(String(message.subtype))) {
@@ -125,7 +150,7 @@ export class ClaudeStream {
             : typeof message.message === 'string'
               ? message.message
               : String(message.status ?? message.subtype);
-        this.emit({ type: 'native.notice', text });
+        if (!shownToday(text)) this.emit({ type: 'native.notice', text });
       }
     }
     if (message.type === 'tool_progress') {

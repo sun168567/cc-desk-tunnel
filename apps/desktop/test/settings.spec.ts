@@ -28,6 +28,8 @@ test('Claude Code settings load from the service and save each change at once', 
     attribution: null,
     includeGitInstructions: null,
     toolSearch: null,
+    denyInsteadOfPrompting: null,
+    blockWritesOutsideWorkingDirectories: null,
   };
   const updates: unknown[] = [];
   await page.routeWebSocket('ws://127.0.0.1:18889/ws', (route) => {

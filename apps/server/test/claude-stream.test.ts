@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
-import { ClaudeStream } from '../src/claude-stream.ts';
+import { ClaudeStream, shownToday } from '../src/claude-stream.ts';
 
 test('native partial text/thinking are not duplicated by complete assistant events', () => {
   const events: EventPayload[] = [];
@@ -145,6 +145,17 @@ test('identical concurrent native calls keep their IDs and progress uses real SD
   assert.ok(
     events.some((event) => event.type === 'native.notice' && event.text === 'Native notice'),
   );
+  // As CLI 2.1.321 says on its way out that a full disk kept it from saving the session.
+  stream.accept({
+    type: 'system',
+    subtype: 'session_writes_lost',
+    error_code: 'ENOSPC',
+    lost: ['transcript'],
+    transcript_session_ids: ['x'],
+  });
+  const lost = events.at(-1);
+  assert.equal(lost?.type, 'native.notice');
+  assert.match(lost?.type === 'native.notice' ? lost.text : '', /磁盘已满.*会话记录缺了一部分/);
 });
 test("a call waiting on a foreground task names it; a background task or another agent's call does not", () => {
   const events: EventPayload[] = [];
@@ -283,4 +294,16 @@ test('a local command answered after a streamed reply is shown as a reply of its
     ['模型的回答', '## Context Usage'],
   );
   assert.notEqual(texts[0].messageId, texts[1].messageId);
+});
+
+test('the gateway notice of auto mode is shown once a day, other notices every time', () => {
+  const billing =
+    "We're changing auto mode to no longer charge for classifier requests in Claude Code. However, this session isn't eligible because your requests go through api.example.com.";
+  const day = 86_400_000;
+  assert.equal(shownToday(billing, 10 * day), false);
+  assert.equal(shownToday(billing, 10 * day + 1000), true);
+  assert.equal(shownToday(billing, 11 * day - 1), true);
+  assert.equal(shownToday(billing, 11 * day), false);
+  assert.equal(shownToday('Native notice', 11 * day), false);
+  assert.equal(shownToday('Native notice', 11 * day), false);
 });

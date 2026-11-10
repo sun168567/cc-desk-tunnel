@@ -18,7 +18,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 原生连接
 
-`scripts/install-linux.sh` 为普通用户准备 Node 24.22.2、官方 Claude Code 2.1.293。CLI 使用官方 npm 发布包，无二进制修改。
+`scripts/install-linux.sh` 为普通用户准备 Node 24.22.2、官方 Claude Code 2.1.321。CLI 使用官方 npm 发布包，无二进制修改。
 
 开发部署用 `scripts/deploy-linux.mjs`：通过可信 SSH 传输应用与私有配置，生成 IP 可用的固定自签证书，原生服务 WSS 监听 `PROXY_PORT`。生产只需放行这一个端口，通往 Windows 的 SSH 端口只监听 Linux `127.0.0.1`。
 
@@ -44,7 +44,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 实现与验证
 
-- 模块：`main.ts` / `config.ts` 读环境并启动；`server.ts` 是连接与命令的唯一入口；`store.ts` 持久化；`claude.ts`（SDK 运行）、`claude-stream.ts`（原生消息转协议事件）、`native-input.ts`（运行中追加输入）、`native-controls.ts`（账号 / 模型 / 额度）、`native-terminal.ts`、`native-account.ts`、`native-onboarding.ts` 组成原生适配；`tunnel.ts` 管执行通道与 SSH 配置；`usage.ts` 收集调用统计；`simulation.ts` 是离线模拟；`errors.ts` 是可回给客户端的错误。
+- 模块：`main.ts` / `config.ts` 读环境并启动；`server.ts` 是连接与命令的唯一入口；`store.ts` 持久化；`claude.ts`（SDK 运行）、`claude-stream.ts`（原生消息转协议事件）、`native-input.ts`（运行中追加输入）、`native-controls.ts`（账号 / 模型 / 额度）、`native-terminal.ts`、`native-account.ts`、`login-expiry.ts`（登录到期提醒）、`native-onboarding.ts` 组成原生适配；`tunnel.ts` 管执行通道与 SSH 配置；`usage.ts` 收集调用统计；`simulation.ts` 是离线模拟；`errors.ts` 是可回给客户端的错误。
 - `src/server.ts`：认证、请求、连接归属和广播；每类命令一个处理函数，`execute` 只做分发。模拟器在 `src/simulation.ts`。三种场景为聊天、一次 PowerShell 审批、上游错误。PowerShell 仅显示固定 `Get-Location` 和模拟结果，从不创建命令进程。
 - `src/store.ts`：Node 24 内置 SQLite / WAL，摘要与原始事件分表、每事件事务落盘，不逐 token 重写整份历史。旧 UTF-8 JSON 一次性事务导入、原文件保留作迁移备份；日后备份以 SQLite 和原生 CLI 存储为准。启动恢复未结束轮次，不重放。
 - 状态读取不改变会话的最近使用时间。升级时修正旧的活动时间和用量周期边界，原始事件与调用记录保留。提前重置的时间靠额度读数推断，历史读数缺失时不能精确恢复。

@@ -110,6 +110,8 @@ async function serve(page: Page, url: string, shells?: string[], chosen: unknown
             attribution: null,
             includeGitInstructions: null,
             toolSearch: null,
+            denyInsteadOfPrompting: null,
+            blockWritesOutsideWorkingDirectories: null,
           },
         });
       if (message.type === 'compaction.get')

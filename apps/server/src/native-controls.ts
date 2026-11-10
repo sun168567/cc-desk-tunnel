@@ -310,7 +310,19 @@ export function resultUsage(result: SDKResultMessage): Metrics['usage'] {
     outputTokens: values.reduce((sum, value) => sum + value.outputTokens, 0),
     cacheReadTokens: values.reduce((sum, value) => sum + value.cacheReadInputTokens, 0),
     cacheWriteTokens: values.reduce((sum, value) => sum + value.cacheCreationInputTokens, 0),
+    ...lifetimes(values),
     measuredAt: new Date().toISOString(),
+  };
+}
+// The cache writes by lifetime, from a CLI that counts them so.
+function lifetimes(values: NonNullable<SDKResultMessage['modelUsage']>[string][]) {
+  if (!values.some((value) => value.cacheCreationEphemeral1hInputTokens !== undefined)) return {};
+  const sum = (
+    key: 'cacheCreationEphemeral1hInputTokens' | 'cacheCreationEphemeral5mInputTokens',
+  ) => values.reduce((total, value) => total + (value[key] ?? 0), 0);
+  return {
+    cacheWrite1hTokens: sum('cacheCreationEphemeral1hInputTokens'),
+    cacheWrite5mTokens: sum('cacheCreationEphemeral5mInputTokens'),
   };
 }
 
@@ -344,7 +356,12 @@ function contextSummary(context: ContextUsage | null): Metrics['context'] {
         windowTokens: context.rawMaxTokens,
         percentage: context.percentage,
         measuredAt: new Date().toISOString(),
-        categories: context.categories.map(({ name, tokens, kind }) => ({ name, tokens, kind })),
+        categories: context.categories.map(({ id, name, tokens, kind }) => ({
+          ...(id && { id }),
+          name,
+          tokens,
+          kind,
+        })),
       }
     : null;
 }

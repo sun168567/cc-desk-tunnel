@@ -21,6 +21,16 @@ import { IconButton, Page, Row, Switch } from './ui.tsx';
 import { setPrefs, usePrefs } from './prefs.ts';
 import { copyText } from './copy.tsx';
 
+// What the date a stored claude.ai sign-in ends means for the user. Renewing the access token does not move it; the
+// CLI starts warning ten days before it.
+function loginExpiry(expiresAt: string, now = Date.now()) {
+  const days = Math.ceil((Date.parse(expiresAt) - now) / 86_400_000);
+  if (days <= 0)
+    return <span className="error-text">可能已经到期；请求开始失败时，退出登录后重新登录</span>;
+  if (days <= 10) return <span className="error-text">约 {days} 天后到期，到期后需要重新登录</span>;
+  return `约 ${days} 天后到期，实际可能早几天`;
+}
+
 export default function AccountPanel({
   client,
   account: state,
@@ -246,6 +256,13 @@ export default function AccountPanel({
             {account?.tokenSource ?? account?.apiKeySource ?? '未提供'}
           </span>
         </Row>
+        {state?.loggedIn && state.loginExpiresAt && (
+          <Row title="登录有效期" detail={loginExpiry(state.loginExpiresAt)}>
+            <span className="setting-value">
+              {new Date(state.loginExpiresAt).toLocaleDateString('zh-CN')}
+            </span>
+          </Row>
+        )}
       </div>
       <div className="page-heading account-section-title">
         <h2>订阅用量</h2>
@@ -333,7 +350,13 @@ export default function AccountPanel({
               : '等待读取'}
           </span>
         </Row>
-        <Row title="缓存读取 / 写入">
+        <Row
+          title="缓存读取 / 写入"
+          detail={
+            metrics?.usage?.cacheWrite1hTokens !== undefined &&
+            `写入中 1 小时缓存 ${metrics.usage.cacheWrite1hTokens.toLocaleString()}、5 分钟缓存 ${(metrics.usage.cacheWrite5mTokens ?? 0).toLocaleString()} tokens；1 小时缓存的写入单价是 5 分钟的 1.6 倍`
+          }
+        >
           <span className="setting-value">
             {metrics?.usage
               ? `${metrics.usage.cacheReadTokens.toLocaleString()} / ${metrics.usage.cacheWriteTokens.toLocaleString()} tokens`

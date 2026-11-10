@@ -9,6 +9,7 @@ import {
   IDLE_COMPACTION,
   IdleCompactions,
   cacheTtl,
+  cacheWrites,
   compactionDue,
   readIdleCompaction,
   writeIdleCompaction,
@@ -127,4 +128,28 @@ test('the store finds the last turn that wrote a cache, and when it ended', (t) 
   const found = store.lastCachedTurn(session.id);
   assert.equal(found?.metrics.context?.usedTokens, 150_000);
   assert.equal(found?.endedAt, Date.parse(turn.createdAt));
+  // A compaction after it, as a terminal's CLI makes of an idle session by itself, leaves nothing to compact.
+  store.append(session.id, 'terminal', {
+    type: 'native.compact',
+    trigger: 'auto',
+    previousTokens: 150_000,
+  });
+  assert.equal(store.lastCachedTurn(session.id), null);
+  store.append(session.id, 'run', metrics(20_000, '1h'));
+  assert.equal(store.lastCachedTurn(session.id)?.metrics.context?.usedTokens, 20_000);
+});
+
+test("a result that does not break its cache writes down is read by the session's totals", () => {
+  const written = cacheWrites();
+  const usage = (hour: number, minutes: number) => ({
+    'claude-opus-5-5': {
+      cacheCreationEphemeral1hInputTokens: hour,
+      cacheCreationEphemeral5mInputTokens: minutes,
+    },
+  });
+  assert.equal(written(usage(1000, 0)), '1h');
+  assert.equal(written(usage(1000, 0)), undefined, 'nothing written this turn');
+  assert.equal(written(usage(1000, 300)), '5m');
+  assert.equal(written(usage(4000, 600)), '1h');
+  assert.equal(written(undefined), undefined, 'a CLI that does not count them');
 });
