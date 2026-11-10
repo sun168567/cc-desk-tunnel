@@ -7,8 +7,12 @@ import { certificateMatches, connectService } from './proxy-bridge.mjs';
 // do: sign in with the protocol version of its release, ask it to check for the newest release and install
 // it, and follow its progress until it restarts. Resolves to the version installed. `confirm`, given the version found,
 // can decline the install. An error says why in its `code` where there is nothing to do: `current` (no newer
-// release), `manual` (the release needs the server's image updated), `declined`.
-export function upgradeService({ url, fingerprint, token, deviceName, service }, options = {}) {
+// release), `manual` (the release needs the server's image updated), `declined`, `busy` (sessions at work, which
+// `force` upgrades past on a service of FORCED_UPGRADE_SINCE or later).
+export function upgradeService(
+  { url, fingerprint, token, deviceName, service, force },
+  options = {},
+) {
   const protocolVersion = Object.entries(PROTOCOL_HISTORY).findLast(
     ([release]) => release.localeCompare(service, undefined, { numeric: true }) <= 0,
   )?.[1];
@@ -48,7 +52,11 @@ export function upgradeService({ url, fingerprint, token, deviceName, service },
     remote.on('message', (raw) => {
       const message = JSON.parse(raw.toString('utf8'));
       if (message.type === 'connection.error' || (message.type === 'response' && !message.ok))
-        end(message.message ?? '服务端拒绝了升级。');
+        end(
+          message.message ?? '服务端拒绝了升级。',
+          undefined,
+          message.code === 'native_busy' ? 'busy' : undefined,
+        );
       // An upgrade already under way is only followed.
       else if (message.type === 'ready' && message.update?.state !== 'installing')
         send({ type: 'service.update.check' });
@@ -58,7 +66,11 @@ export function upgradeService({ url, fingerprint, token, deviceName, service },
           Promise.resolve(options.confirm?.(message.latest) ?? true).then(
             (yes) =>
               yes
-                ? send({ type: 'service.update.install', version: message.latest })
+                ? send({
+                    type: 'service.update.install',
+                    version: message.latest,
+                    ...(force ? { force: true } : {}),
+                  })
                 : end('没有升级服务端。', undefined, 'declined'),
             (error) => end(error.message, undefined, 'declined'),
           );

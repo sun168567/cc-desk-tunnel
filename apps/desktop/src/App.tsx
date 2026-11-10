@@ -39,6 +39,7 @@ import type {
   Session,
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
+import { FORCED_UPGRADE_SINCE, runWorking } from '@cc-desk-tunnel/protocol';
 import { browserSession, browserSocket, watchActivity } from './browser-api.ts';
 import { CertificateWarning } from './WebGate.tsx';
 import { hostCapabilities } from './host-capabilities.ts';
@@ -409,22 +410,49 @@ export function App({
       document.removeEventListener('visibilitychange', look);
     };
   }, [client, nativeMode, connected]);
+  // Upgrading the service restarts it. Sessions at work are cut off, so the upgrade asks to be forced past them; an
+  // open terminal at rest and background tasks a finished turn left only end. A service before FORCED_UPGRADE_SINCE
+  // refuses while anything runs, terminals at rest included, and cannot be forced.
+  const working = state.sessions.filter((item) => runWorking(item.activeRun));
+  const resting = state.sessions.filter((item) => item.activeRun && !runWorking(item.activeRun));
+  const titles = (sessions: Session[]) =>
+    sessions
+      .slice(0, 3)
+      .map((item) => `「${item.title}」`)
+      .join('') + (sessions.length > 3 ? ` 等 ${sessions.length} 个会话` : '');
+  const forcible =
+    !!state.service &&
+    state.service.localeCompare(FORCED_UPGRADE_SINCE, undefined, { numeric: true }) >= 0;
   const serviceUpdate = !nativeMode
     ? null
     : update?.state === 'available'
       ? {
-          label: `升级服务端到 ${update.latest}`,
+          label: `升级服务端到 ${update.latest}${
+            working.length
+              ? `（${working.length} 个会话正在运行）`
+              : !forcible && resting.length
+                ? '（先关闭终端、等后台任务结束）'
+                : ''
+          }`,
           icon: <Download />,
-          disabled: busy || state.sessions.some((item) => !!item.activeRun),
+          disabled: busy || (!forcible && (working.length > 0 || resting.length > 0)),
           run: () => {
-            if (
-              window.confirm(
-                `服务端将升级到 ${update.latest} 并重启，需要几分钟，期间不能发送消息；重启后需重新连接。继续？`,
-              )
-            )
+            const force = working.length > 0;
+            const question = force
+              ? `${titles(working)}正在运行。\n\n升级会重启服务端：正在进行的回答、命令和等你确认的审批会被中断，可能需要重新开始。\n\n仍然强行升级到 ${update.latest}？`
+              : `服务端将升级到 ${update.latest} 并重启，需要几分钟，期间不能发送消息；重启后需重新连接。${
+                  resting.length
+                    ? `\n\n${titles(resting)}开着终端或在等后台任务，它们会被结束；会话本身保留，升级后可以继续。`
+                    : ''
+                }\n\n继续？`;
+            if (window.confirm(question))
               void act(async () => {
                 asked.current = true;
-                await client.request({ type: 'service.update.install', version: update.latest! });
+                await client.request({
+                  type: 'service.update.install',
+                  version: update.latest!,
+                  ...(force ? { force } : {}),
+                });
               });
           },
         }
@@ -1109,9 +1137,9 @@ export function App({
     : (state.account?.email ?? capabilities?.account.email ?? (nativeMode ? '账号' : '离线模拟'));
   const upgradeItem: MenuItem | null = upgrade
     ? {
-        label: `升级客户端到 ${upgrade}`,
+        label: `升级客户端到 ${upgrade}${working.length ? `（${working.length} 个会话正在运行）` : ''}`,
         icon: <Download />,
-        disabled: busy || state.sessions.some((item) => !!item.activeRun),
+        disabled: busy || working.length > 0,
         run: () => {
           void act(() => window.desktop!.installUpdate());
         },

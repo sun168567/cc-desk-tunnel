@@ -70,3 +70,56 @@ test('the install waits for a yes, and a no leaves the service as it is', async 
   assert.equal(no.result.code, 'declined');
   assert.ok(!no.received.some((message) => message.type === 'service.update.install'));
 });
+
+test('a service with sessions at work says so as busy, and a forced upgrade asks it to go past them', async () => {
+  const server = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  await new Promise((resolve) => server.once('listening', resolve));
+  const installs = [];
+  server.on('connection', (socket) => {
+    const send = (message) => socket.send(JSON.stringify(message));
+    socket.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.type === 'auth') send({ type: 'ready', update: { state: 'idle' } });
+      else if (message.type === 'service.update.check')
+        send({ type: 'service.update', state: 'available', latest: '0.3.16' });
+      else if (message.type === 'service.update.install') {
+        installs.push(message);
+        if (message.force) send({ type: 'service.update', state: 'restarting', latest: '0.3.16' });
+        else
+          send({
+            type: 'response',
+            requestId: message.requestId,
+            ok: false,
+            code: 'native_busy',
+            message: '「在回答」正在运行。',
+          });
+      }
+    });
+  });
+  const url = `ws://127.0.0.1:${server.address().port}/ws`;
+  const config = {
+    url,
+    fingerprint: '',
+    token: 'a'.repeat(32),
+    deviceName: '这台电脑',
+    service: '0.3.15',
+  };
+  try {
+    const busy = await upgradeService(config, { open: () => new WebSocket(url) }).catch(
+      (error) => error,
+    );
+    assert.equal(busy.code, 'busy');
+    assert.match(busy.message, /在回答/);
+    const forced = await upgradeService(
+      { ...config, force: true },
+      { open: () => new WebSocket(url) },
+    );
+    assert.equal(forced, '0.3.16');
+    assert.deepEqual(
+      installs.map((message) => message.force),
+      [undefined, true],
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
