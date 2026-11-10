@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { absoluteLinks, releaseSection } from '../src/notes.ts';
+import { absoluteLinks, alertLabels, releaseSection } from '../src/notes.ts';
 import { quotaFigures } from '../src/quota.ts';
 
 test('a version’s notes are its section of the changelog, without the heading', () => {
@@ -62,4 +62,11 @@ test('the quota beside the message box is the five hours and the fullest week', 
   assert.deepEqual(quotaFigures({ available: true, windows: [window('seven_day', 0)] }), [
     { label: '每周', used: 0, resetsAt: null },
   ]);
+});
+
+test("GitHub's alerts in the notes open with their label in the program", () => {
+  assert.equal(
+    alertLabels('概括\n\n> [!WARNING]\n> **版本变化**：从 A 到 B。\n\n> [!NOTE]\n> 可以暂缓。\n'),
+    '概括\n\n> **注意** · **版本变化**：从 A 到 B。\n\n> **提示** · 可以暂缓。\n',
+  );
 });

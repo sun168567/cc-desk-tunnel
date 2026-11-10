@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import changelog from '../../../CHANGELOG.md?raw';
-import { absoluteLinks, releaseSection } from './notes.ts';
+import { absoluteLinks, alertLabels, releaseSection } from './notes.ts';
 import { project } from './project.tsx';
 import RichText from './RichText.tsx';
 import { Modal } from './ui.tsx';
@@ -45,7 +45,7 @@ export default function ReleaseNotes({
         }}
       >
         {text ? (
-          <RichText text={text} />
+          <RichText text={alertLabels(text)} />
         ) : (
           <p className="muted">
             {failed ? '没能从 GitHub 读到这一版的说明，可以到发布页查看。' : '正在读取…'}
