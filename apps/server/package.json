@@ -8,7 +8,7 @@
     "start": "node src/main.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.286",
+    "@anthropic-ai/claude-agent-sdk": "0.3.321",
     "@cc-desk-tunnel/protocol": "0.0.0",
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",

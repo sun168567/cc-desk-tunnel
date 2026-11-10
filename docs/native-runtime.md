@@ -4,9 +4,9 @@
 
 ## 本体与外层
 
-本项目按固定版本从官方 npm 安装 `@anthropic-ai/claude-code`（当前 2.1.293）。不改写 CLI、替换内部工具或注入代码；自动与手动审批均交给原生处理。
+本项目按固定版本从官方 npm 安装 `@anthropic-ai/claude-code`（当前 2.1.321）。不改写 CLI、替换内部工具或注入代码；自动与手动审批均交给原生处理。
 
-外层采用官方 Agent SDK 0.3.286，指定 `pathToClaudeCodeExecutable`，经官方双向 stream-json / stdio 控制接口传递用户输入、公开事件、审批与取消。SDK 自身使用真实 `CLAUDE_CODE_ENTRYPOINT=sdk-ts`、版本标记与 `--permission-prompt-tool stdio`；这是原生 stdio 请求 / 回复入口，不是 MCP 工具。没有伪装成交互式终端，也没有覆盖官方标记。
+外层采用官方 Agent SDK 0.3.321，指定 `pathToClaudeCodeExecutable`，经官方双向 stream-json / stdio 控制接口传递用户输入、公开事件、审批与取消。SDK 自身使用真实 `CLAUDE_CODE_ENTRYPOINT=sdk-ts`、版本标记与 `--permission-prompt-tool stdio`；这是原生 stdio 请求 / 回复入口，不是 MCP 工具。没有伪装成交互式终端，也没有覆盖官方标记。
 
 模型列表来自 CLI 初始化，桌面端不维护型号名单。CLI 按账号和提供方使用官方动态目录或内置目录；SDK 的 `supportedModels()` 返回初始化快照。空闲时“刷新模型列表”启动新的 CLI 读取状态。动态目录可带来新型号，内置目录和能力支持仍随 CLI 版本更新。
 
