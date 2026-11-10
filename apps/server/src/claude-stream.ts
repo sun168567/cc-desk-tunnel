@@ -14,6 +14,17 @@ export function printed(output: string) {
   );
   return `${fence}text\n${text}\n${fence}`;
 }
+// Behind a gateway, a CLI in auto mode tells of how its classifier is billed on every turn. In a terminal the user
+// acknowledges it and it rests a day; a CLI the service runs has no one to acknowledge it, so it is shown once a day.
+const DAILY = /^We're changing auto mode to no longer charge for classifier requests/;
+const DAY_MS = 86_400_000;
+let dailyShownAt = -Infinity;
+export function shownToday(text: string, now = Date.now()) {
+  if (!DAILY.test(text)) return false;
+  if (now - dailyShownAt < DAY_MS) return true;
+  dailyShownAt = now;
+  return false;
+}
 export type NativeTool = {
   id: string;
   name: string;
@@ -139,7 +150,7 @@ export class ClaudeStream {
             : typeof message.message === 'string'
               ? message.message
               : String(message.status ?? message.subtype);
-        this.emit({ type: 'native.notice', text });
+        if (!shownToday(text)) this.emit({ type: 'native.notice', text });
       }
     }
     if (message.type === 'tool_progress') {

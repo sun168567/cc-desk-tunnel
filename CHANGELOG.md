@@ -33,6 +33,7 @@
 
 - Windows 上 `ccdt upgrade` 报 “Cannot access 'target' before initialization”、无法升级的问题（#178，#179）。
 - `ccdt` 里的 Claude Code 不再弹出自带的更新提示、随后报没有权限的更新失败：服务端启动的 Claude Code 都关掉了自动更新，版本随服务端的发布固定。
+- 通过第三方网关（API 中转）使用自动模式时，Claude Code 每一轮都会在对话里提示一段英文的分类器计费说明；现在一天只显示一次，与终端里确认后一天不再提示的做法一致。自动模式本身不受影响。
 
 ### 升级说明
 
