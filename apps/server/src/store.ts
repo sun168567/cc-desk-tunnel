@@ -379,11 +379,12 @@ export class SessionStore {
     const payload = row ? (JSON.parse(String(row.data)) as SessionEvent).payload : undefined;
     return payload?.type === 'native.metrics' ? payload : null;
   }
-  // The figures of the last turn that wrote a prompt cache, and when it ended.
+  // The figures of the last turn that wrote a prompt cache, and when it ended; none once the session was compacted
+  // after it, as a terminal's CLI does by itself while it is idle.
   lastCachedTurn(sessionId: string) {
     const row = this.database
       .prepare(
-        "SELECT data FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') = 'native.metrics' AND json_extract(data, '$.payload.cacheTtl') IS NOT NULL ORDER BY sequence DESC LIMIT 1",
+        "SELECT data FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') IN ('native.metrics', 'native.compact') AND (json_extract(data, '$.payload.type') = 'native.compact' OR json_extract(data, '$.payload.cacheTtl') IS NOT NULL) ORDER BY sequence DESC LIMIT 1",
       )
       .get(sessionId);
     const event = row ? (JSON.parse(String(row.data)) as SessionEvent) : undefined;

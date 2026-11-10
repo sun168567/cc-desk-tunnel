@@ -244,6 +244,25 @@ export const cliSettingGroups = (
     ],
   },
   {
+    name: '权限',
+    fields: [
+      {
+        key: 'denyInsteadOfPrompting',
+        kind: 'toggle',
+        title: '不等审批，直接拒绝',
+        detail:
+          '要你批准的工具调用不再等你，立即拒绝并告诉 Claude，这一轮接着做；适合无人值守的定时任务。开启后所有会话（包括 ccdt）都不会再弹出审批，允许规则和自动模式照常先判断',
+      },
+      {
+        key: 'blockWritesOutsideWorkingDirectories',
+        kind: 'toggle',
+        title: '禁止在工作目录外写文件',
+        detail:
+          '写文件、编辑工具不能改工作目录以外的文件，也不能改 Claude Code 的设置文件；不限制命令，Claude 自己的记忆和计划文件不受影响。这些工具只作用于服务器上的文件',
+      },
+    ],
+  },
+  {
     name: 'Git',
     fields: [
       {

@@ -116,6 +116,20 @@ export class ClaudeStream {
           this.tools.has(toolId)
         )
           this.emit({ type: 'tool.task', toolId, taskId: message.task_id });
+      } else if (message.subtype === 'session_writes_lost') {
+        // The CLI could not save all it wrote as it exited: the server's disk was full, or its quota used up.
+        const lost = Array.isArray(message.lost) ? message.lost : [];
+        const disk =
+          message.error_code === 'EDQUOT' ? '服务器的磁盘配额已用完' : '服务器的磁盘已满';
+        this.emit({
+          type: 'native.notice',
+          text: `${disk}，Claude Code 有内容没能保存：${[
+            ...(lost.includes('transcript')
+              ? ['会话记录缺了一部分，之后继续这个会话时 Claude 可能看不到这段对话']
+              : []),
+            ...(lost.includes('global_config') ? ['它自己的配置（~/.claude.json）的改动'] : []),
+          ].join('；')}。请清理服务器磁盘。`,
+        });
       } else if (message.subtype === 'status' && message.status === null) {
         // The status the CLI was in is over; what it was over for (a compaction) says so itself.
       } else if (['status', 'informational'].includes(String(message.subtype))) {

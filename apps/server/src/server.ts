@@ -60,7 +60,7 @@ import {
   quotas,
   readNativeStatus,
 } from './claude.ts';
-import type { ClaudeOptions } from './claude.ts';
+import type { ClaudeOptions, Unanswered } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import type { NativeLogin } from './native-account.ts';
@@ -126,7 +126,12 @@ export type Run = {
   toolFinished: boolean;
   approvalId?: string;
   decide?: (allowed: boolean, answers?: Record<string, string>) => void;
-  approvals: Map<string, (allowed: boolean, answers?: Record<string, string>) => void>;
+  approvals: Map<
+    string,
+    (allowed: boolean, answers?: Record<string, string>, unanswered?: Unanswered) => void
+  >;
+  // The approvals that are Claude's questions, answered or left unanswered rather than allowed or denied.
+  questions: Set<string>;
   // Approvals and questions answered already: a second answer, from another window or computer, came late.
   answered: Set<string>;
   cancelReason?: string;
@@ -492,20 +497,23 @@ export function createProxyServer(options: ServerOptions) {
     broadcast({ type: 'session.event', event }, sessionId);
     if (payload.type === 'native.metrics' && payload.cacheTtl)
       compactions.arm(sessionId, Date.parse(event.createdAt), payload);
-    else if (payload.type === 'message.user') compactions.cancel(sessionId);
+    else if (payload.type === 'message.user' || payload.type === 'native.compact')
+      compactions.cancel(sessionId);
     return event;
   }
   // Each session's last turn sets when it is compacted while idle, as after the service starts or the setting changes.
   function armCompactions() {
     if (!compactions.settings.enabled) return;
-    for (const session of store.list()) {
-      const turn = !session.activeRun && store.lastCachedTurn(session.id);
-      if (turn) compactions.arm(session.id, turn.endedAt, turn.metrics);
-    }
+    for (const session of store.list()) if (!session.activeRun) armCompaction(session.id);
+  }
+  function armCompaction(sessionId: string) {
+    const turn = store.lastCachedTurn(sessionId);
+    if (turn) compactions.arm(sessionId, turn.endedAt, turn.metrics);
   }
   // Compacts an idle session before its prompt cache lapses, as the compact button does; see idle-compaction.ts. It
-  // runs here whether or not a window or the session's computer is there. A session that runs, or that a terminal
-  // holds, is left alone: either keeps its cache current.
+  // runs here whether or not a window or the session's computer is there. A session that runs is left alone, and so
+  // is one a terminal holds: the terminal's CLI compacts it by the same setting (see `terminalSettings`), and when the
+  // terminal ends first, its last turn is looked at again.
   function compactIdle(sessionId: string) {
     if (closing || !options.claude) return;
     try {
@@ -669,10 +677,12 @@ export function createProxyServer(options: ServerOptions) {
         approve: (toolId, waiting) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
           const approvalId = randomUUID();
+          if (waiting === 'question') run.questions.add(approvalId);
           return new Promise((resolve) => {
-            run.approvals.set(approvalId, (allowed, answers) => {
+            run.approvals.set(approvalId, (allowed, answers, unanswered) => {
+              run.questions.delete(approvalId);
               emit(run, { type: 'approval.resolved', approvalId, allowed });
-              resolve({ allowed, answers });
+              resolve({ allowed, answers, unanswered });
             });
             emit(run, { type: 'approval.requested', approvalId, toolId });
             emit(run, {
@@ -874,6 +884,8 @@ export function createProxyServer(options: ServerOptions) {
         current.continued.hooksPath,
         options.claude.settingsPath,
         current.continued.statusPath,
+        undefined,
+        compactions.settings,
       );
       if (closing || peer.socket.readyState !== WebSocket.OPEN)
         throw new Error('Connection closed');
@@ -891,6 +903,7 @@ export function createProxyServer(options: ServerOptions) {
           cols: command.cols,
           rows: command.rows,
           env: terminalEnvironment(options.claude, process.env, reach),
+          status: (activity) => void heardTerminal(current, false, activity),
           screen: {
             detached: () => {
               if (current.owner)
@@ -952,6 +965,8 @@ export function createProxyServer(options: ServerOptions) {
               exitCode,
             });
           terminals.delete(current.sessionId);
+          // What the terminal's CLI did not compact before it ended is the service's again.
+          if (compactions.settings.enabled) armCompaction(current.sessionId);
         },
       );
       store.append(command.sessionId, current.id, {
@@ -1003,8 +1018,10 @@ export function createProxyServer(options: ServerOptions) {
   }
   // What the hooks of a terminal that continues its session wrote since they were last read: the session shows what
   // its CLI is doing, and what a turn added is read whole once it ended (see `importTerminal`). Reads go one at a time,
-  // and the last, when the terminal `ended`, records what is left.
-  function heardTerminal(terminal: Terminal, ended = false, interrupted = false) {
+  // and the last, when the terminal `ended`, records what is left. `told` is what the CLI is doing as it says so itself
+  // (see `programStatus`), or as a key that interrupts it implies; it holds when no hook came since. A turn the user
+  // stops runs no hook, so its end is known only this way.
+  function heardTerminal(terminal: Terminal, ended = false, told?: TerminalActivity) {
     const { continued } = terminal;
     const task = continued.heard
       .then(async () => {
@@ -1018,9 +1035,9 @@ export function createProxyServer(options: ServerOptions) {
             followRecord(terminal, hook.transcript_path);
           activity = terminalActivity(hook) ?? activity;
         }
-        interrupted &&= !hooks.length && continued.activity === 'working';
-        if (interrupted) activity = 'idle';
-        if (ended || interrupted || hooks.some((hook) => terminalActivity(hook) === 'idle')) {
+        if (told && !hooks.length) activity = told;
+        const stopped = told === 'idle' && !hooks.length && continued.activity !== 'idle';
+        if (ended || stopped || hooks.some((hook) => terminalActivity(hook) === 'idle')) {
           await importTerminal(terminal);
           terminalTurnEnded(terminal);
         }
@@ -1141,7 +1158,7 @@ export function createProxyServer(options: ServerOptions) {
     const { offset } = continued;
     setTimeout(() => {
       if (continued.activity === 'working' && continued.offset === offset)
-        void heardTerminal(terminal, false, true);
+        void heardTerminal(terminal, false, 'idle');
     }, 2000).unref();
   }
   // What a terminal that continued its session added to the native session since it was last looked at, recorded in
@@ -1325,6 +1342,9 @@ export function createProxyServer(options: ServerOptions) {
       peer?.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
       active.input.submit(command.requestId, store.notice(command.sessionId) + text);
+      // A message sent while Claude waits on its question is the user's answer in the chat instead.
+      for (const approvalId of [...active.questions])
+        answerApproval(active, approvalId, false, undefined, 'replied_in_chat', peer?.id);
       return;
     }
     if (options.claude && mutations.size)
@@ -1340,6 +1360,7 @@ export function createProxyServer(options: ServerOptions) {
       controller: new AbortController(),
       toolFinished: false,
       approvals: new Map(),
+      questions: new Set(),
       answered: new Set(),
       controls: {},
       stats: inOrder(),
@@ -1413,13 +1434,19 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     if (options.claude) {
-      const decide = run.approvals.get(command.approvalId);
-      if (!decide) throw new DomainError('approval_inactive', '审批已失效。');
-      run.approvals.delete(command.approvalId);
-      run.answered.add(command.approvalId);
-      decide(command.allowed, command.answers);
-      if (!run.approvals.size)
-        emit(run, { type: 'run.status', status: 'running', connectionId: peer.id });
+      // A question the user declines is one they skipped.
+      const skipped = !command.allowed && run.questions.has(command.approvalId);
+      if (
+        !answerApproval(
+          run,
+          command.approvalId,
+          command.allowed,
+          command.answers,
+          skipped ? 'skipped' : undefined,
+          peer.id,
+        )
+      )
+        throw new DomainError('approval_inactive', '审批已失效。');
       return;
     }
     if (!run.decide || run.approvalId !== command.approvalId)
@@ -1428,6 +1455,23 @@ export function createProxyServer(options: ServerOptions) {
     run.decide = undefined;
     run.answered.add(command.approvalId);
     decide(command.allowed, command.answers);
+  }
+
+  function answerApproval(
+    run: Run,
+    approvalId: string,
+    allowed: boolean,
+    answers: Record<string, string> | undefined,
+    unanswered: Unanswered | undefined,
+    connectionId = run.connectionId,
+  ) {
+    const decide = run.approvals.get(approvalId);
+    if (!decide) return false;
+    run.approvals.delete(approvalId);
+    run.answered.add(approvalId);
+    decide(allowed, answers, unanswered);
+    if (!run.approvals.size) emit(run, { type: 'run.status', status: 'running', connectionId });
+    return true;
   }
 
   // Resolves to the session ID carried in the response frame; account and usage commands have none.

@@ -54,6 +54,39 @@ export function cacheTtl(usage: unknown): '5m' | '1h' | undefined {
   return undefined;
 }
 
+// The same for a result whose usage does not break its cache writes down, from the session's running totals by
+// lifetime (CLI 2.1.311 and later): what they grew by since the turn before. The first turn a run hears of compares
+// with nothing, so a resumed session's earlier writes count for it.
+export function cacheWrites() {
+  let before = { hour: 0, minutes: 0 };
+  return (
+    modelUsage:
+      | Record<
+          string,
+          {
+            cacheCreationEphemeral1hInputTokens?: number;
+            cacheCreationEphemeral5mInputTokens?: number;
+          }
+        >
+      | undefined,
+  ): '5m' | '1h' | undefined => {
+    const values = Object.values(modelUsage ?? {});
+    const now = {
+      hour: values.reduce(
+        (sum, value) => sum + (value.cacheCreationEphemeral1hInputTokens ?? 0),
+        0,
+      ),
+      minutes: values.reduce(
+        (sum, value) => sum + (value.cacheCreationEphemeral5mInputTokens ?? 0),
+        0,
+      ),
+    };
+    const grew = { hour: now.hour > before.hour, minutes: now.minutes > before.minutes };
+    before = now;
+    return grew.hour ? '1h' : grew.minutes ? '5m' : undefined;
+  };
+}
+
 // When a session whose turn ended at `endedAt` is to be compacted: `afterMinutes` later, if that turn wrote a one-hour
 // cache and the context holds `minTokens` or more; otherwise never (null).
 export function compactionDue(settings: IdleCompaction, endedAt: number, metrics: Metrics) {

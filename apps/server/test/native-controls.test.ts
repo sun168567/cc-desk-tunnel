@@ -73,7 +73,7 @@ test('context comes from the native summary and is distinct from cumulative usag
         totalTokens: 2500,
         rawMaxTokens: 10000,
         percentage: 25,
-        categories: [{ name: 'Messages', tokens: 2500, kind: 'used' }],
+        categories: [{ id: 'messages', name: 'Messages', tokens: 2500, kind: 'used' }],
       };
     },
     async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(options: unknown) {
@@ -89,12 +89,19 @@ test('context comes from the native summary and is distinct from cumulative usag
         outputTokens: 500,
         cacheReadInputTokens: 1000,
         cacheCreationInputTokens: 500,
+        cacheCreationEphemeral1hInputTokens: 400,
+        cacheCreationEphemeral5mInputTokens: 50,
       },
     },
   } as unknown as SDKResultMessage;
   const metrics = await nativeMetrics(query, result);
   assert.ok(metrics.type === 'native.metrics');
   assert.equal(metrics.context?.usedTokens, 2500);
+  assert.deepEqual(metrics.context?.categories, [
+    { id: 'messages', name: 'Messages', tokens: 2500, kind: 'used' },
+  ]);
+  assert.equal(metrics.usage?.cacheWrite1hTokens, 400);
+  assert.equal(metrics.usage?.cacheWrite5mTokens, 50);
   assert.equal(metrics.context?.percentage, 25);
   assert.equal(metrics.usage?.inputTokens, 100000);
   assert.equal(metrics.usage?.costUsd, 0.5);

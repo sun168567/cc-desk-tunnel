@@ -1,6 +1,6 @@
 import { spawn as spawnPty } from 'node-pty';
 import type { IPty } from 'node-pty';
-import type { Session } from '@cc-desk-tunnel/protocol';
+import type { Session, TerminalActivity } from '@cc-desk-tunnel/protocol';
 import type { ClaudeOptions } from './claude.ts';
 import { remotePrompt, sshPath } from './claude.ts';
 import type { Execution } from './device-terms.ts';
@@ -94,6 +94,39 @@ const GATHER_LIMIT = 16384;
 // modifyOtherKeys.
 const KEYBOARD = /\x1b\[>(\d+)u|\x1b\[<\d*u|\x1b\[>4;(\d+)m/g;
 
+// OSC 7501, the Program Status Protocol (CLI 2.1.295 and later): the CLI asks the terminal whether it shows a
+// program's status, and once answered reports each change of what it is doing. The service answers for the terminal
+// and reads the reports; the question does not reach the client's terminal, the reports do, for one that shows them.
+const PROGRAM_STATUS = /\x1b\]7501;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+const STATUS_ASKED = /\x1b\]7501;\?(?:\x07|\x1b\\)/g;
+const STATUS_SHOWN = '\x1b]7501;?\x1b\\';
+// What a report says the CLI is doing: working on a turn, waiting for the user to allow a tool or answer a question,
+// or neither (done, stopped, failed, or out of its sign-in). A dialog of its own says nothing of the turn. Only the
+// conversation's own report counts; one with an id is a subagent's or a task's.
+export function programStatus(report: string): TerminalActivity | undefined {
+  const fields = new Map(
+    report.split(':').map((field) => {
+      const at = field.indexOf('=');
+      return at < 0 ? [field, ''] : [field.slice(0, at), field.slice(at + 1)];
+    }),
+  );
+  if (fields.get('app') !== 'claude-code' || fields.has('id')) return undefined;
+  switch (fields.get('state')) {
+    case 'working':
+      return 'working';
+    case 'blocked':
+      return ['permission', 'question'].includes(fields.get('kind') ?? '')
+        ? 'waiting'
+        : fields.get('kind') === 'auth'
+          ? 'idle'
+          : undefined;
+    case 'done':
+    case 'idle':
+    case 'error':
+      return 'idle';
+  }
+}
+
 // A terminal that keeps running while no client shows it (`screen`) also writes its output to a screen model. A client
 // that attaches gets the current screen first, then the live output; one that stops acknowledging for 30 s is
 // detached and the CLI goes on. Without a screen the terminal ends then. The screen model, the snapshot and the modes
@@ -121,6 +154,9 @@ export class NativeTerminal {
   private pending?: string[];
   private kitty = 0;
   private otherKeys = 0;
+  private status?: (activity: TerminalActivity) => void;
+  private statusTail = '';
+  private reported?: TerminalActivity;
   constructor(
     file: string,
     args: string[],
@@ -131,12 +167,15 @@ export class NativeTerminal {
       env: Record<string, string>;
       // Keep a screen model, and on a client's 30 s of silence call `detached` instead of ending.
       screen?: { detached: () => void };
+      // Told what the CLI reports it is doing, as it changes (see `programStatus`).
+      status?: (activity: TerminalActivity) => void;
     },
     data: (text: string, bytes: number) => void,
     exit: (code: number | null) => void | Promise<void>,
     spawn: TerminalSpawner = spawnPty,
   ) {
-    const { screen, ...spawnOptions } = options;
+    const { screen, status, ...spawnOptions } = options;
+    this.status = status;
     this.cols = options.cols;
     this.rows = options.rows;
     this.data = data;
@@ -155,8 +194,9 @@ export class NativeTerminal {
       this.screen.loadAddon(this.serializer);
     }
     this.process = spawn(file, args, { ...spawnOptions, name: 'xterm-256color' });
-    this.process.onData((text) => {
+    this.process.onData((data) => {
       if (this.exited || this.closing) return;
+      const text = this.status ? this.programStatus(data) : data;
       if (this.screen) {
         this.screen.write(text);
         for (const [, kitty, otherKeys] of text.matchAll(KEYBOARD)) {
@@ -184,6 +224,26 @@ export class NativeTerminal {
         .catch(() => {})
         .finally(() => this.resolveClosed());
     });
+  }
+  // Answers the CLI's question of OSC 7501 and reads its reports, a report cut at a chunk's end with the next chunk.
+  private programStatus(text: string) {
+    const scanned = this.statusTail + text;
+    let end = 0;
+    for (const match of scanned.matchAll(PROGRAM_STATUS)) {
+      end = match.index + match[0].length;
+      if (match[1] === '?') {
+        this.process.write(STATUS_SHOWN);
+        continue;
+      }
+      const activity = programStatus(match[1]);
+      if (activity && activity !== this.reported) {
+        this.reported = activity;
+        this.status!(activity);
+      }
+    }
+    const open = scanned.lastIndexOf('\x1b]7501;');
+    this.statusTail = open >= end ? scanned.slice(open, open + 4096) : '';
+    return text.replace(STATUS_ASKED, '');
   }
   private gather(text: string) {
     this.gathered += text;

@@ -14,10 +14,16 @@ export function settingsPath(configDirectory = process.env.CLAUDE_CONFIG_DIR) {
 const variables: Partial<Record<keyof NativeSettings, string>> = {
   toolSearch: 'ENABLE_TOOL_SEARCH',
 };
-const environment = (file: Record<string, unknown>) =>
-  file.env && typeof file.env === 'object' && !Array.isArray(file.env)
-    ? (file.env as Record<string, unknown>)
+// Settings the file holds under `permissions`.
+const permissionKeys = new Set<keyof NativeSettings>([
+  'denyInsteadOfPrompting',
+  'blockWritesOutsideWorkingDirectories',
+]);
+const section = (file: Record<string, unknown>, name: string) =>
+  file[name] && typeof file[name] === 'object' && !Array.isArray(file[name])
+    ? (file[name] as Record<string, unknown>)
     : {};
+const environment = (file: Record<string, unknown>) => section(file, 'env');
 
 function readFile(path: string): Record<string, unknown> {
   let text: string;
@@ -43,7 +49,10 @@ export function readNativeSettings(path = settingsPath()): NativeSettings {
         const text = environment(file)[variable];
         return [key, text === 'true' ? true : text === 'false' ? false : null];
       }
-      const parsed = schema.safeParse(file[key] ?? null);
+      const value = permissionKeys.has(key as keyof NativeSettings)
+        ? section(file, 'permissions')[key]
+        : file[key];
+      const parsed = schema.safeParse(value ?? null);
       return [key, parsed.success ? parsed.data : null];
     }),
   ) as NativeSettings;
@@ -60,6 +69,15 @@ export function updateNativeSettings(values: Partial<NativeSettings>, path = set
       else env[variable] = String(value);
       if (Object.keys(env).length) file.env = env;
       else delete file.env;
+      continue;
+    }
+    if (permissionKeys.has(key as keyof NativeSettings)) {
+      if (value === undefined) continue;
+      const permissions = { ...section(file, 'permissions') };
+      if (value === null) delete permissions[key];
+      else permissions[key] = value;
+      if (Object.keys(permissions).length) file.permissions = permissions;
+      else delete file.permissions;
       continue;
     }
     if (value === null) delete file[key];

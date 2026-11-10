@@ -145,6 +145,17 @@ test('identical concurrent native calls keep their IDs and progress uses real SD
   assert.ok(
     events.some((event) => event.type === 'native.notice' && event.text === 'Native notice'),
   );
+  // As CLI 2.1.321 says on its way out that a full disk kept it from saving the session.
+  stream.accept({
+    type: 'system',
+    subtype: 'session_writes_lost',
+    error_code: 'ENOSPC',
+    lost: ['transcript'],
+    transcript_session_ids: ['x'],
+  });
+  const lost = events.at(-1);
+  assert.equal(lost?.type, 'native.notice');
+  assert.match(lost?.type === 'native.notice' ? lost.text : '', /磁盘已满.*会话记录缺了一部分/);
 });
 test("a call waiting on a foreground task names it; a background task or another agent's call does not", () => {
   const events: EventPayload[] = [];

@@ -67,6 +67,23 @@ test('native settings edit only the listed keys of the CLI user settings file', 
   );
   updateNativeSettings({ toolSearch: null }, path);
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {});
+  // Permission settings live under `permissions`, beside the rules there.
+  writeFileSync(path, JSON.stringify({ permissions: { allow: ['Read'] } }));
+  assert.equal(readNativeSettings(path).denyInsteadOfPrompting, null);
+  updateNativeSettings({ denyInsteadOfPrompting: true }, path);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {
+    permissions: { allow: ['Read'], denyInsteadOfPrompting: true },
+  });
+  assert.equal(readNativeSettings(path).denyInsteadOfPrompting, true);
+  updateNativeSettings({ denyInsteadOfPrompting: null }, path);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), { permissions: { allow: ['Read'] } });
+  writeFileSync(
+    path,
+    JSON.stringify({ permissions: { blockWritesOutsideWorkingDirectories: true } }),
+  );
+  assert.equal(readNativeSettings(path).blockWritesOutsideWorkingDirectories, true);
+  updateNativeSettings({ blockWritesOutsideWorkingDirectories: null }, path);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {});
   writeFileSync(path, '{ broken');
   assert.throws(() => updateNativeSettings({ fastMode: true }, path));
   assert.equal(readFileSync(path, 'utf8'), '{ broken', 'An unreadable file is never overwritten');

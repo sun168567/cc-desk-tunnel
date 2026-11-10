@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { closeSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 import type { SessionMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { EventPayload, NativeMetrics, TerminalActivity } from '@cc-desk-tunnel/protocol';
+import type {
+  EventPayload,
+  IdleCompaction,
+  NativeMetrics,
+  TerminalActivity,
+} from '@cc-desk-tunnel/protocol';
 import { ClaudeStream, printed } from './claude-stream.ts';
 import { cacheTtl } from './idle-compaction.ts';
 import { settingsPath as userSettingsPath } from './native-settings.ts';
@@ -45,6 +50,10 @@ export class TerminalTranscript {
   // out, the question and the mark already said so.
   private compacted = false;
   private skipPrinted = false;
+  // The question just shown was a /compact. CLI 2.1.321 records the /compact the user typed only after the summary,
+  // where 2.1.293 also did before it: then the mark waits there (`held`), to show after the question as it did.
+  private askedCompact = false;
+  private held: Extract<EventPayload, { type: 'native.compact' }> | undefined;
   // How long the prompt cache the turn's requests wrote lasts (see `cacheTtl`), until it is taken as the turn ends.
   private written: '5m' | '1h' | undefined;
   // Compactions read, and how many of them were asked about (see `compactedSince`).
@@ -65,12 +74,15 @@ export class TerminalTranscript {
       if (entry.isCompactSummary) {
         this.compacted = true;
         this.compactions++;
-        this.emit({
-          type: 'native.compact',
+        const mark = {
+          type: 'native.compact' as const,
           trigger: typeof entry.compact?.trigger === 'string' ? entry.compact.trigger : 'unknown',
           previousTokens:
             typeof entry.compact?.preTokens === 'number' ? entry.compact.preTokens : null,
-        });
+        };
+        if (mark.trigger === 'manual' && !this.askedCompact) this.held = mark;
+        else this.emit(mark);
+        this.askedCompact = false;
         continue;
       }
       // The CLI's own notes to the model, and messages it wrote on the user's behalf, such as a task's report.
@@ -118,8 +130,12 @@ export class TerminalTranscript {
           continue;
         }
         const text = [command, tag(content, 'command-args')?.trim()].filter(Boolean).join(' ');
-        if (wasCompacted && command === '/compact') this.skipPrinted = true;
-        else this.command = text;
+        if (wasCompacted && command === '/compact') {
+          this.skipPrinted = true;
+          if (this.held) this.question(text);
+          this.release();
+          this.askedCompact = false;
+        } else this.command = text;
         continue;
       }
       if (!Array.isArray(content)) continue;
@@ -136,6 +152,12 @@ export class TerminalTranscript {
   // A command that printed nothing was a question to the model after all; so is one the record holds nothing after.
   settle() {
     if (this.command !== undefined) this.question(this.command);
+    this.release();
+  }
+  private release() {
+    const held = this.held;
+    this.held = undefined;
+    if (held) this.emit(held);
   }
   // Whether a compaction was read since this was last asked.
   compactedSince() {
@@ -151,6 +173,7 @@ export class TerminalTranscript {
   }
   private question(text: string) {
     this.command = undefined;
+    this.askedCompact = text.split(' ')[0] === '/compact';
     this.emit({ type: 'message.user', messageId: randomUUID(), text, scenario: 'chat' });
   }
 }
@@ -265,12 +288,17 @@ const HOOKED = [
 // Its status line command also keeps the last of what the CLI hands it at `statusPath`, which carries the quota its
 // replies were answered with (see `statusLineQuota`). A status line of the user's own, from these settings or the user
 // settings these take the place of, is still run on the same input and shows as before.
+// The CLI compacts a conversation left idle by itself while its terminal is open (CLI 2.1.299 and later): at nine
+// tenths of the hour its prompt cache lasts, when the context holds CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS or more, never
+// under 100,000. `idle`, the service's own setting, decides whether it does and from what size; the service compacts a
+// session only when no terminal holds it (see `compactIdle`), so the two never compact the same idle time.
 export function terminalSettings(
   path: string,
   hooksPath: string,
   settingsPath?: string,
   statusPath?: string,
   ownSettingsPath = userSettingsPath(),
+  idle?: IdleCompaction,
 ) {
   const settings = settingsPath ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
   const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
@@ -290,7 +318,16 @@ export function terminalSettings(
       ? { ...own, command: `${keep}; printf '%s' "$s" | {\n${own.command}\n}` }
       : { type: 'command', command: keep };
   }
-  writeFileSync(path, JSON.stringify({ ...settings, hooks, statusLine }), { mode: 0o600 });
+  const idleSettings = idle && {
+    idleCompaction: idle.enabled,
+    env: {
+      ...(settings.env && typeof settings.env === 'object' ? settings.env : {}),
+      CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS: String(idle.minTokens),
+    },
+  };
+  writeFileSync(path, JSON.stringify({ ...settings, hooks, statusLine, ...idleSettings }), {
+    mode: 0o600,
+  });
 }
 function userStatusLine(path: string) {
   try {

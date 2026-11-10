@@ -19,6 +19,10 @@ export function parseAccountStatus(output: string): Account {
     ...(typeof status.subscriptionType === 'string' && {
       subscriptionType: status.subscriptionType,
     }),
+    ...(typeof status.loginExpiresAt === 'string' &&
+      Number.isFinite(Date.parse(status.loginExpiresAt)) && {
+        loginExpiresAt: status.loginExpiresAt,
+      }),
   };
 }
 function run(executable: string, args: string[]) {
