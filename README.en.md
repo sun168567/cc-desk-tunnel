@@ -138,7 +138,7 @@ The script downloads the newest release, checks it against `SHA256SUMS`, install
 
 ### 3. Sign in to Claude
 
-Sign in to your Claude account on the account page at the bottom left of the client (the official `claude auth` flow; the login is stored only on the server), add a project folder and start a conversation.
+Open Settings → Account and quota, sign in to your Claude account, then add a project folder and start a conversation. Choose normal sign-in (`claude auth login`) or setup token sign-in. The latter can run `claude setup-token` on the server: complete browser authorization and paste back its code to save the generated token automatically and show it once for you to copy. You can also paste a token you already have. Credentials are stored on the server and shared by graphical sessions and `ccdt`. To replace a token, sign out first. Setup tokens may not expose account details, full subscription quotas or an expiry date; a successful model request determines whether the token works. See [authentication details](docs/native-runtime.md#登录方式).
 
 ## Security
 

@@ -122,6 +122,22 @@ for (const type of [
   });
 }
 
+test('a generated setup token is transient and never restored by account status', (t) => {
+  const { client, socket } = fixture(t);
+  const created = { type: 'account.token.created', token: 'generated-fixture', saved: true };
+  const account = { type: 'account.state', loggedIn: true, authMethod: 'oauth_token', login: null };
+  socket.message(created);
+  assert.equal(client.state.setupToken.token, created.token);
+  socket.message(account);
+  assert.equal(Object.hasOwn(client.state.account, 'token'), false);
+  client.update({ setupToken: null });
+  socket.message(account);
+  assert.equal(client.state.setupToken, null);
+  socket.message(created);
+  socket.close();
+  assert.equal(client.state.setupToken, null);
+});
+
 test('the connected computers are what the service last said, and unknown while the connection is down', (t) => {
   const { client, socket } = fixture(t);
   const desk = { id: randomUUID(), name: '台式机', ready: true };
