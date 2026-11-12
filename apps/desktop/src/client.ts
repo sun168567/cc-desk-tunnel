@@ -5,6 +5,7 @@ import {
   serverMessageSchema,
 } from '@cc-desk-tunnel/protocol';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
+import { transcript } from './transcript.ts';
 import type {
   AccountState,
   Command,
@@ -61,6 +62,7 @@ type NewCommand = Command extends infer C
     ? Omit<C, 'requestId'>
     : never
   : never;
+const HISTORY_IDLE_TIMEOUT = 60_000;
 // Losing a reply says nothing about whether the operation reached the service. Keep that uncertainty
 // separate from the current connection state, which can recover while the warning is still displayed.
 export class RequestInterruptedError extends Error {
@@ -104,6 +106,16 @@ export type HistoryState = {
   hasEarlier: boolean;
   loading: boolean;
   loadingEarlier: boolean;
+  waitingForStatus?: boolean;
+  read?: {
+    requestId: string;
+    startedAt: number;
+    received: number;
+    phase: 'waiting' | 'processing' | 'complete' | 'failed';
+    finishedAt?: number;
+    content?: boolean;
+    error?: string;
+  };
 };
 export type ClientState = {
   status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
@@ -218,8 +230,13 @@ export class ProxyClient {
       reject: (error: Error) => void;
       timer: ReturnType<typeof setTimeout>;
       type: Command['type'];
+      sessionId?: string;
+      historyReceived?: number;
+      renewHistory?: () => void;
     }
   >();
+  // The service holds a session lock while reading its native state, and refuses history until it finishes.
+  private statusReads = new Map<string, Promise<Response>>();
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -400,7 +417,45 @@ export class ProxyClient {
       if (this.socket !== socket) return;
       let message: ServerMessage;
       try {
-        message = serverMessageSchema.parse(JSON.parse(data));
+        const value = JSON.parse(data);
+        // The desktop bridge observes bytes before a whole WebSocket message is available. These local
+        // notices never travel to the service and are not part of its protocol.
+        if (credentials.bridge && value.type === 'client.history.progress') {
+          const history = this.state.history[value.sessionId];
+          const read = history?.read;
+          const request = this.pending.get(value.requestId);
+          if (
+            read &&
+            request &&
+            read.requestId === value.requestId &&
+            (history.loading || history.loadingEarlier) &&
+            Number.isFinite(value.received) &&
+            value.received >= read.received
+          ) {
+            if (
+              Number.isFinite(value.historyReceived) &&
+              value.historyReceived > (request.historyReceived ?? 0)
+            ) {
+              request.historyReceived = value.historyReceived;
+              request.renewHistory?.();
+            }
+            this.update({
+              history: {
+                ...this.state.history,
+                [value.sessionId]: {
+                  ...history,
+                  read: {
+                    ...read,
+                    received: value.received,
+                    phase: value.processing ? 'processing' : 'waiting',
+                  },
+                },
+              },
+            });
+          }
+          return;
+        }
+        message = serverMessageSchema.parse(value);
       } catch {
         this.update({ error: '服务消息格式不兼容，已断开连接。' });
         this.credentials = null;
@@ -434,6 +489,7 @@ export class ProxyClient {
         const request = this.pending.get(message.requestId);
         if (!request) return;
         clearTimeout(request.timer);
+        if (!message.ok) this.failHistoryRead(message.requestId, message.message ?? '请求失败。');
         this.pending.delete(message.requestId);
         if (message.ok) request.resolve(message);
         else {
@@ -521,20 +577,31 @@ export class ProxyClient {
         this.update({ sessions, events, live, history, selectedId });
       } else if (message.type === 'session.snapshot') {
         this.flushStream();
+        const id = message.session.id;
+        const previous = this.state.history[id];
         if (
           !this.pending.has(message.requestId) ||
-          !this.cacheOrder.includes(message.session.id) ||
-          !this.state.sessions.some((session) => session.id === message.session.id)
+          (previous?.read && previous.read.requestId !== message.requestId) ||
+          !this.cacheOrder.includes(id) ||
+          !this.state.sessions.some((session) => session.id === id)
         )
           return;
         this.upsert(message.session);
-        const id = message.session.id;
         // History up to now ends where unfinished output begins; the service sends that again, whole.
         if (message.mode !== 'prepend' && this.state.live[id]) {
           const { [id]: _stale, ...live } = this.state.live;
           this.update({ live });
         }
-        const previous = this.state.history[id];
+        const content = transcript(message.events).length > 0;
+        // A page of native status readings has no transcript to show. Keep one upward read going until
+        // it reaches visible content or the beginning, instead of making the reader scroll again.
+        const continuing =
+          message.mode === 'prepend' &&
+          previous?.loadingEarlier &&
+          !content &&
+          message.hasEarlier &&
+          message.firstSequence > 0 &&
+          message.firstSequence < previous.firstSequence;
         const history = {
           firstSequence:
             message.mode === 'append'
@@ -547,7 +614,16 @@ export class ProxyClient {
           hasEarlier:
             message.mode === 'append' ? (previous?.hasEarlier ?? false) : message.hasEarlier,
           loading: false,
-          loadingEarlier: false,
+          loadingEarlier: !!continuing,
+          read:
+            previous?.read?.requestId === message.requestId
+              ? {
+                  ...previous.read,
+                  phase: continuing ? ('waiting' as const) : ('complete' as const),
+                  finishedAt: continuing ? undefined : Date.now(),
+                  content,
+                }
+              : previous?.read,
         };
         this.merge(id, message.events, history, message.mode === 'replace');
       } else if (message.type === 'session.event') {
@@ -636,9 +712,28 @@ export class ProxyClient {
     for (const [requestId, request] of this.pending) {
       clearTimeout(request.timer);
       this.results.delete(requestId);
-      request.reject(new RequestInterruptedError(request.type));
+      const error = new RequestInterruptedError(request.type);
+      this.failHistoryRead(requestId, error.message);
+      request.reject(error);
     }
     this.pending.clear();
+  }
+  private failHistoryRead(requestId: string, error: string) {
+    const sessionId = this.pending.get(requestId)?.sessionId;
+    if (!sessionId) return;
+    const history = this.state.history[sessionId];
+    if (history?.read?.requestId !== requestId || history.read.phase === 'complete') return;
+    this.update({
+      history: {
+        ...this.state.history,
+        [sessionId]: {
+          ...history,
+          loading: false,
+          loadingEarlier: false,
+          read: { ...history.read, phase: 'failed', finishedAt: Date.now(), error },
+        },
+      },
+    });
   }
   private upsert(session: Session) {
     this.update({
@@ -757,36 +852,66 @@ export class ProxyClient {
         },
       },
     });
-    void this.request({ type: 'session.subscribe', sessionId, afterSequence }).catch(
-      (error: Error) => {
-        const history = this.state.history[sessionId];
-        if (history)
-          this.update({
-            error: error.message,
-            history: { ...this.state.history, [sessionId]: { ...history, loading: false } },
-          });
-      },
-    );
+    const loading = this.request({ type: 'session.subscribe', sessionId, afterSequence });
+    const requestId = this.state.history[sessionId]?.read?.requestId;
+    void loading.catch((error: Error) => {
+      const history = this.state.history[sessionId];
+      if (history && history.read?.requestId === requestId)
+        this.update({
+          error: error.message,
+          history: { ...this.state.history, [sessionId]: { ...history, loading: false } },
+        });
+    });
   }
   async loadEarlier(sessionId: string) {
     const history = this.state.history[sessionId];
     if (!history?.hasEarlier || history.loadingEarlier || history.loading) return;
+    const statusRead = this.statusReads.get(sessionId);
     this.update({
-      history: { ...this.state.history, [sessionId]: { ...history, loadingEarlier: true } },
+      history: {
+        ...this.state.history,
+        [sessionId]: {
+          ...history,
+          loadingEarlier: true,
+          waitingForStatus: !!statusRead,
+          read: undefined,
+        },
+      },
     });
     try {
-      await this.request({
-        type: 'session.history',
-        sessionId,
-        beforeSequence: history.firstSequence,
-      });
-    } catch (error) {
-      const current = this.state.history[sessionId];
-      if (current)
+      if (statusRead) {
+        // A failed status read must not prevent a separate read of recorded history.
+        await statusRead.catch(() => {});
+        const current = this.state.history[sessionId];
+        if (!current?.loadingEarlier) return;
         this.update({
-          history: { ...this.state.history, [sessionId]: { ...current, loadingEarlier: false } },
+          history: {
+            ...this.state.history,
+            [sessionId]: { ...current, waitingForStatus: false },
+          },
         });
-      throw error;
+      }
+      let beforeSequence = history.firstSequence;
+      for (;;) {
+        const response = await this.request({ type: 'session.history', sessionId, beforeSequence });
+        const current = this.state.history[sessionId];
+        if (
+          this.state.selectedId !== sessionId ||
+          !current?.loadingEarlier ||
+          current.read?.requestId !== response.requestId
+        )
+          break;
+        beforeSequence = current.firstSequence;
+      }
+    } finally {
+      const current = this.state.history[sessionId];
+      if (current && (current.loadingEarlier || current.waitingForStatus))
+        this.update({
+          history: {
+            ...this.state.history,
+            [sessionId]: { ...current, loadingEarlier: false, waitingForStatus: false },
+          },
+        });
     }
   }
   select(sessionId: string) {
@@ -824,21 +949,64 @@ export class ProxyClient {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
       throw new Error('服务未连接。');
     const requestId = crypto.randomUUID();
-    return new Promise<Response>((resolve, reject) => {
+    const response = new Promise<Response>((resolve, reject) => {
+      const historyRead =
+        command.type === 'session.subscribe' || command.type === 'session.history';
+      const sessionId = historyRead ? command.sessionId : undefined;
+      const history = sessionId ? this.state.history[sessionId] : undefined;
+      if (sessionId && history)
+        this.update({
+          history: {
+            ...this.state.history,
+            [sessionId]: {
+              ...history,
+              read: { requestId, startedAt: Date.now(), received: 0, phase: 'waiting' },
+            },
+          },
+        });
+      const expire = () => {
+        const error = historyRead
+          ? '历史读取超时（连续 60 秒无进展）；请重试。'
+          : '请求超时；请查看历史确认结果，未自动重发。';
+        this.failHistoryRead(requestId, error);
+        this.pending.delete(requestId);
+        this.results.delete(requestId);
+        reject(new Error(error));
+      };
       const timer = setTimeout(
-        () => {
-          this.pending.delete(requestId);
-          this.results.delete(requestId);
-          reject(new Error('请求超时；请查看历史确认结果，未自动重发。'));
-        },
-        command.type === 'session.status' ||
-          command.type.startsWith('account.') ||
-          command.type.startsWith('service.')
-          ? 30000
-          : 10000,
+        expire,
+        historyRead
+          ? HISTORY_IDLE_TIMEOUT
+          : command.type === 'session.status' ||
+              command.type.startsWith('account.') ||
+              command.type.startsWith('service.')
+            ? 30000
+            : 10000,
       );
-      this.pending.set(requestId, { resolve, reject, timer, type: command.type });
+      this.pending.set(requestId, {
+        resolve,
+        reject,
+        timer,
+        type: command.type,
+        sessionId,
+        renewHistory: historyRead
+          ? () => {
+              const request = this.pending.get(requestId);
+              if (!request) return;
+              clearTimeout(request.timer);
+              request.timer = setTimeout(expire, HISTORY_IDLE_TIMEOUT);
+            }
+          : undefined,
+      });
       this.socket!.send(JSON.stringify({ ...command, requestId }));
     });
+    if (command.type === 'session.status') {
+      this.statusReads.set(command.sessionId, response);
+      return response.finally(() => {
+        if (this.statusReads.get(command.sessionId) === response)
+          this.statusReads.delete(command.sessionId);
+      });
+    }
+    return response;
   }
 }

@@ -1434,6 +1434,10 @@ kbd {
   font-size: 12px;
   padding: 12px 0;
 }
+.history-read-status {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 .message {
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;

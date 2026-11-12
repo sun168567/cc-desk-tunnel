@@ -90,6 +90,149 @@ function event(sessionId, sequence, text = 'text') {
   };
 }
 
+test('local history progress follows the pending page, resets for an earlier page and ignores stale notices', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  // This fake socket stands in for the authenticated loopback bridge, whose byte notices are client-only.
+  client.credentials.bridge = async () => 'ws://127.0.0.1:1/ws';
+  const session = sessions[0];
+  client.select(session.id);
+  const first = socket.sent.at(-1);
+  const progress = (received, extra = {}) =>
+    socket.message({
+      type: 'client.history.progress',
+      sessionId: session.id,
+      requestId: socket.sent.at(-1).requestId,
+      received,
+      processing: false,
+      ...extra,
+    });
+  assert.equal(client.state.history[session.id].read.received, 0);
+  progress(65536, { sessionId: sessions[1].id });
+  assert.equal(client.state.history[session.id].read.received, 0);
+  progress(65536);
+  assert.equal(client.state.history[session.id].read.received, 65536);
+  assert.equal(client.state.history[session.id].read.phase, 'waiting');
+  assert.equal(client.state.events[session.id], undefined);
+  progress(65536, { processing: true });
+  assert.equal(client.state.history[session.id].read.phase, 'processing');
+  snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+  assert.equal(client.state.history[session.id].read.phase, 'complete');
+  assert.equal(client.state.history[session.id].read.content, true);
+
+  const loading = client.loadEarlier(session.id);
+  assert.equal(client.state.history[session.id].read.received, 0);
+  progress(999999, { requestId: first.requestId });
+  assert.equal(client.state.history[session.id].read.received, 0);
+  progress(1024 * 1024);
+  progress(8); // An older notice cannot make a counter go backwards.
+  assert.equal(client.state.history[session.id].read.received, 1024 * 1024);
+  snapshot(session, [event(session.id, 50)], { mode: 'prepend' });
+  await loading;
+  assert.equal(client.state.history[session.id].read.content, true);
+  assert.equal(client.state.events[session.id].length, 2);
+  progress(9999999);
+  assert.equal(client.state.history[session.id].read.received, 1024 * 1024);
+  assert.deepEqual(
+    socket.sent.map((item) => item.type),
+    ['session.subscribe', 'session.history'],
+  );
+});
+
+test('a superseded read cannot finish or fail the progress of a newer read of the same session', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  client.credentials.bridge = async () => 'ws://127.0.0.1:1/ws';
+  const session = sessions[0];
+  client.select(session.id);
+  const old = socket.sent.at(-1);
+  client.select(session.id);
+  const current = socket.sent.at(-1);
+  socket.message({
+    type: 'session.snapshot',
+    requestId: old.requestId,
+    session,
+    events: [event(session.id, 1)],
+    mode: 'replace',
+    firstSequence: 1,
+    lastSequence: 1,
+    hasEarlier: false,
+  });
+  assert.equal(client.state.events[session.id], undefined);
+  assert.equal(client.state.history[session.id].loading, true);
+  socket.message({
+    type: 'response',
+    requestId: old.requestId,
+    ok: false,
+    message: 'old read failed',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(client.state.history[session.id].loading, true);
+  assert.equal(client.state.error, null);
+  socket.message({
+    type: 'client.history.progress',
+    requestId: current.requestId,
+    sessionId: session.id,
+    received: 4096,
+  });
+  assert.equal(client.state.history[session.id].read.received, 4096);
+  snapshot(session, [event(session.id, 100)]);
+  assert.equal(client.state.history[session.id].read.phase, 'complete');
+  assert.equal(client.state.events[session.id][0].sequence, 100);
+});
+
+for (const end of ['timeout', 'disconnect', 'rejection']) {
+  test(`history progress keeps the last byte count after ${end}, without claiming completion`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { client, socket, sessions } = fixture(t);
+    client.credentials.bridge = async () => 'ws://127.0.0.1:1/ws';
+    const session = sessions[0];
+    client.select(session.id);
+    const request = socket.sent.at(-1);
+    const notice = {
+      type: 'client.history.progress',
+      sessionId: session.id,
+      requestId: request.requestId,
+      received: 16384,
+    };
+    socket.message(notice);
+    if (end === 'timeout') t.mock.timers.tick(60_000);
+    else if (end === 'disconnect') socket.close();
+    else
+      socket.message({
+        type: 'response',
+        requestId: request.requestId,
+        ok: false,
+        message: 'test read rejected',
+      });
+    await new Promise((resolve) => setImmediate(resolve));
+    const read = client.state.history[session.id].read;
+    assert.equal(read.phase, 'failed');
+    assert.equal(read.received, 16384);
+    assert.ok(read.finishedAt >= read.startedAt);
+    assert.equal(client.state.history[session.id].loading, false);
+    assert.equal(client.state.events[session.id], undefined);
+    assert.equal(socket.sent.length, 1);
+    if (end !== 'disconnect') {
+      client.select(session.id);
+      socket.message({ ...notice, received: 99999 });
+      assert.equal(client.state.history[session.id].read.received, 0);
+      assert.equal(client.state.history[session.id].read.phase, 'waiting');
+    }
+  });
+}
+
+test('a server connection cannot supply desktop-only history progress notices', (t) => {
+  const { client, socket, sessions } = fixture(t);
+  client.select(sessions[0].id);
+  socket.message({
+    type: 'client.history.progress',
+    requestId: socket.sent.at(-1).requestId,
+    sessionId: sessions[0].id,
+    received: 4096,
+  });
+  assert.equal(client.state.status, 'disconnected');
+  assert.match(client.state.error, /服务消息格式不兼容/);
+});
+
 for (const type of [
   'session.status',
   'session.history',
@@ -240,6 +383,326 @@ test('earlier pages prepend in one batch while preserving the newest reconnect c
     client.state.events[session.id].map((event) => event.sequence),
     [50, 100],
   );
+});
+
+test('one upward read continues through status-only pages until a visible transcript arrives', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+  const loading = client.loadEarlier(session.id);
+  for (const sequence of [80, 60]) {
+    snapshot(session, statusEvents(session.id, sequence), { mode: 'prepend', hasEarlier: true });
+    assert.equal(client.state.history[session.id].loadingEarlier, true);
+    assert.equal(client.state.history[session.id].read.phase, 'waiting');
+    await client.loadEarlier(session.id);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(socket.sent.at(-1).beforeSequence, sequence);
+  }
+  snapshot(session, [event(session.id, 40, 'earlier answer')], {
+    mode: 'prepend',
+    hasEarlier: true,
+  });
+  await loading;
+  assert.equal(client.state.history[session.id].loadingEarlier, false);
+  assert.equal(client.state.history[session.id].read.content, true);
+  assert.equal(client.state.history[session.id].read.phase, 'complete');
+  assert.equal(client.state.history[session.id].lastSequence, 100);
+  assert.deepEqual(
+    socket.sent
+      .filter((command) => command.type === 'session.history')
+      .map((command) => command.beforeSequence),
+    [100, 80, 60],
+  );
+  assert.deepEqual(
+    transcript(client.state.events[session.id]).map((item) => item.text),
+    ['earlier answer', 'text'],
+  );
+});
+
+test('a failed read after a status-only page keeps its cursor and allows manual retry', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+  const loading = client.loadEarlier(session.id);
+  const rejected = assert.rejects(loading, /读取失败/);
+  snapshot(session, statusEvents(session.id, 80), { mode: 'prepend', hasEarlier: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  socket.message({
+    type: 'response',
+    requestId: socket.sent.at(-1).requestId,
+    ok: false,
+    code: 'internal_error',
+    message: '读取失败',
+  });
+  await rejected;
+  assert.equal(client.state.history[session.id].loadingEarlier, false);
+  assert.equal(client.state.history[session.id].read.phase, 'failed');
+  assert.equal(client.state.history[session.id].firstSequence, 80);
+  const retry = client.loadEarlier(session.id);
+  assert.equal(socket.sent.at(-1).beforeSequence, 80);
+  snapshot(session, [event(session.id, 40)], { mode: 'prepend' });
+  await retry;
+  assert.equal(client.state.history[session.id].read.phase, 'complete');
+});
+
+for (const end of ['beginning', 'unchanged cursor', 'another selected session']) {
+  test(`status-only history stops at ${end}`, async (t) => {
+    const { client, socket, sessions, snapshot } = fixture(t);
+    const session = sessions[0];
+    client.select(session.id);
+    snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+    const loading = client.loadEarlier(session.id);
+    snapshot(session, statusEvents(session.id, end === 'unchanged cursor' ? 100 : 80), {
+      mode: 'prepend',
+      hasEarlier: end !== 'beginning',
+    });
+    if (end === 'another selected session') client.select(sessions[1].id);
+    await loading;
+    assert.equal(client.state.history[session.id].loadingEarlier, false);
+    assert.equal(client.state.history[session.id].read.content, false);
+    assert.equal(socket.sent.filter((command) => command.type === 'session.history').length, 1);
+  });
+}
+
+function statusEvents(sessionId, sequence) {
+  const runId = randomUUID();
+  return [
+    { type: 'native.capabilities', models: [], account: {}, commands: [] },
+    { type: 'native.metrics', context: null, usage: null, rateLimits: null },
+  ].map((payload, index) => ({ ...event(sessionId, sequence + index), runId, payload }));
+}
+
+for (const ok of [true, false]) {
+  test(`earlier history waits for the same session's status read to ${ok ? 'finish' : 'fail'}, then sends once`, async (t) => {
+    const { client, socket, sessions, snapshot } = fixture(t);
+    const session = sessions[0];
+    client.select(session.id);
+    snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+    const status = client
+      .request({ type: 'session.status', sessionId: session.id })
+      .catch((error) => error);
+    const requestId = socket.sent.at(-1).requestId;
+    const loading = client.loadEarlier(session.id);
+    await client.loadEarlier(session.id);
+    assert.equal(client.state.history[session.id].loadingEarlier, true);
+    assert.equal(client.state.history[session.id].waitingForStatus, true);
+    assert.equal(client.state.history[session.id].read, undefined);
+    assert.equal(socket.sent.filter((command) => command.type === 'session.history').length, 0);
+
+    socket.message({
+      type: 'response',
+      requestId,
+      ok,
+      message: ok ? undefined : 'native status failed',
+    });
+    await status;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(client.state.history[session.id].waitingForStatus, false);
+    assert.equal(client.state.history[session.id].read.phase, 'waiting');
+    assert.equal(socket.sent.filter((command) => command.type === 'session.history').length, 1);
+    assert.equal(socket.sent.at(-1).beforeSequence, 100);
+    snapshot(session, [event(session.id, 50)], { mode: 'prepend' });
+    await loading;
+    assert.deepEqual(
+      client.state.events[session.id].map((item) => item.sequence),
+      [50, 100],
+    );
+  });
+}
+
+test('a disconnected status read cancels the waiting history without sending it after disconnect', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+  const status = client
+    .request({ type: 'session.status', sessionId: session.id })
+    .catch((error) => error);
+  const loading = client.loadEarlier(session.id).catch((error) => error);
+  socket.close();
+  await status;
+  assert.match((await loading).message, /服务未连接/);
+  assert.equal(socket.sent.filter((command) => command.type === 'session.history').length, 0);
+  assert.equal(client.state.history[session.id].loadingEarlier, false);
+  assert.equal(client.state.history[session.id].waitingForStatus, false);
+});
+
+for (const type of ['session.subscribe', 'session.history']) {
+  test(`${type} accepts a history page after twelve seconds without resending`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { client, socket, sessions, snapshot } = fixture(t);
+    const session = sessions[0];
+    client.select(session.id);
+    let loading;
+    if (type === 'session.history') {
+      snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+      loading = client.loadEarlier(session.id);
+    }
+    assert.equal(socket.sent.at(-1).type, type);
+    const sent = socket.sent.length;
+
+    t.mock.timers.tick(12_000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(client.state.status, 'connected');
+    assert.equal(client.state.error, null);
+    assert.equal(client.pending.size, 1);
+    snapshot(session, [event(session.id, 50)], {
+      mode: type === 'session.history' ? 'prepend' : 'replace',
+    });
+    await loading;
+
+    assert.deepEqual(
+      client.state.events[session.id].map((item) => item.sequence),
+      type === 'session.history' ? [50, 100] : [50],
+    );
+    assert.equal(client.state.history[session.id].loading, false);
+    assert.equal(client.state.history[session.id].loadingEarlier, false);
+    assert.equal(client.pending.size, 0);
+    assert.equal(socket.sent.length, sent);
+  });
+
+  test(`${type} times out after a minute, keeps shown history and rejects the expired page`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { client, socket, sessions, snapshot } = fixture(t);
+    const session = sessions[0];
+    client.select(session.id);
+    const shown = event(session.id, 100);
+    snapshot(session, [shown], { hasEarlier: true });
+    let failure;
+    if (type === 'session.history')
+      failure = client.loadEarlier(session.id).catch((error) => error);
+    else client.select(session.id);
+    const expired = socket.sent.at(-1);
+    const sent = socket.sent.length;
+
+    t.mock.timers.tick(59_999);
+    assert.equal(client.pending.has(expired.requestId), true);
+    t.mock.timers.tick(1);
+    await new Promise((resolve) => setImmediate(resolve));
+    const message = type === 'session.history' ? (await failure).message : client.state.error;
+    assert.equal(message, '历史读取超时（连续 60 秒无进展）；请重试。');
+    assert.equal(client.state.status, 'connected');
+    assert.equal(client.state.history[session.id].loading, false);
+    assert.equal(client.state.history[session.id].loadingEarlier, false);
+    assert.deepEqual(client.state.events[session.id], [shown]);
+    assert.equal(client.pending.size, 0);
+    assert.equal(socket.sent.length, sent);
+
+    // Even while a new read is pending, the expired page cannot replace what is shown.
+    let retry;
+    if (type === 'session.history') retry = client.loadEarlier(session.id);
+    else client.select(session.id);
+    socket.message({
+      type: 'session.snapshot',
+      requestId: expired.requestId,
+      session,
+      events: [event(session.id, 50)],
+      mode: 'replace',
+      firstSequence: 50,
+      lastSequence: 50,
+      hasEarlier: false,
+    });
+    socket.message({ type: 'response', requestId: expired.requestId, ok: true });
+    assert.deepEqual(client.state.events[session.id], [shown]);
+    assert.equal(client.pending.size, 1);
+    snapshot(session, [event(session.id, type === 'session.history' ? 50 : 101)], {
+      mode: type === 'session.history' ? 'prepend' : 'append',
+    });
+    await retry;
+    assert.equal(client.pending.size, 0);
+    assert.equal(client.state.events[session.id].length, 2);
+  });
+}
+
+for (const type of ['session.subscribe', 'session.history']) {
+  test(`${type} continues beyond a minute while its own history payload advances`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { client, socket, sessions, snapshot } = fixture(t);
+    client.credentials.bridge = async () => 'ws://127.0.0.1:1/ws';
+    const session = sessions[0];
+    client.select(session.id);
+    let loading;
+    if (type === 'session.history') {
+      snapshot(session, [event(session.id, 100)], { hasEarlier: true });
+      loading = client.loadEarlier(session.id);
+    }
+    const request = socket.sent.at(-1);
+    for (let part = 1; part <= 3; part++) {
+      t.mock.timers.tick(55_000);
+      socket.message({
+        type: 'client.history.progress',
+        requestId: request.requestId,
+        sessionId: session.id,
+        received: part * 16384,
+        historyReceived: part * 16000,
+      });
+      assert.equal(client.pending.has(request.requestId), true);
+      assert.equal(client.state.error, null);
+    }
+    snapshot(session, [event(session.id, 50)], {
+      mode: type === 'session.history' ? 'prepend' : 'replace',
+    });
+    await loading;
+    assert.equal(client.state.history[session.id].read.phase, 'complete');
+    assert.equal(socket.sent.filter((command) => command.type === type).length, 1);
+  });
+}
+
+test('history times out 60 seconds after its last payload advance despite other connection traffic', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { client, socket, sessions } = fixture(t);
+  client.credentials.bridge = async () => 'ws://127.0.0.1:1/ws';
+  const session = sessions[0];
+  client.select(session.id);
+  const requestId = socket.sent.at(-1).requestId;
+  t.mock.timers.tick(55_000);
+  socket.message({
+    type: 'client.history.progress',
+    requestId,
+    sessionId: session.id,
+    received: 16384,
+    historyReceived: 16000,
+  });
+  for (let part = 1; part <= 5; part++) {
+    t.mock.timers.tick(10_000);
+    socket.message({ type: 'session.updated', session: { ...session, title: `status ${part}` } });
+    socket.message({
+      type: 'client.history.progress',
+      requestId,
+      sessionId: session.id,
+      received: 16384 + part * 1024,
+      historyReceived: 16000,
+    });
+    assert.equal(client.pending.has(requestId), true);
+  }
+  t.mock.timers.tick(9999);
+  assert.equal(client.pending.has(requestId), true);
+  t.mock.timers.tick(1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(client.state.history[session.id].read.phase, 'failed');
+  assert.match(client.state.error, /连续 60 秒无进展/);
+  assert.equal(client.state.status, 'connected');
+  assert.equal(socket.sent.length, 1);
+});
+
+test('other commands keep their existing deadlines and timeout warning', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { client, sessions } = fixture(t);
+  for (const [type, milliseconds] of [
+    ['message.send', 10_000],
+    ['session.status', 30_000],
+    ['account.status', 30_000],
+    ['service.update.check', 30_000],
+  ]) {
+    const result = client.request({ type, sessionId: sessions[0].id }).catch((error) => error);
+    t.mock.timers.tick(milliseconds - 1);
+    assert.equal(client.pending.size, 1);
+    t.mock.timers.tick(1);
+    assert.equal((await result).message, '请求超时；请查看历史确认结果，未自动重发。');
+    assert.equal(client.pending.size, 0);
+  }
 });
 
 test('late responses cannot restore an evicted session or seed a cursor from unseen history', (t) => {
