@@ -3452,6 +3452,15 @@ dialog::backdrop {
   gap: 10px;
   margin-top: 10px;
 }
+.setup-token-value {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: monospace;
+  resize: none;
+}
 .delete-question {
   overflow-wrap: anywhere;
   margin-bottom: 10px;

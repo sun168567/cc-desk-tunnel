@@ -169,6 +169,11 @@ export default function AccountPanel({
             {failure ?? state?.notice}
           </p>
         )}
+        {signedOut && !state.login && !tokenOpen && (
+          <p className="muted">
+            Setup token 可能不提供账号资料、完整订阅额度和到期信息；失效后需要重新生成或更换。
+          </p>
+        )}
         {state?.loggedIn && confirmLogout && (
           <div className="account-confirm" role="group" aria-label="确认退出登录">
             <p>
@@ -272,7 +277,7 @@ export default function AccountPanel({
             }}
           >
             {state.login.method === 'setup-token' && (
-              <p>正在通过服务端生成 setup token；完成授权后自动保存，令牌不会回传到客户端。</p>
+              <p>正在通过服务端生成 setup token；完成授权后自动保存，并显示一次供你复制。</p>
             )}
             <p>
               <strong>1</strong>在浏览器打开官方授权页并登录。

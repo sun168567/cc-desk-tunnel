@@ -69,10 +69,15 @@ test('setup-token uses the official command, extracts its successful output and 
     };
   };
   let result: { succeeded: boolean; token?: string } | undefined;
+  let complete!: () => void;
+  const completed = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
   const login = new NativeLogin(
     'claude',
     (succeeded, token) => {
       result = { succeeded, token };
+      complete();
     },
     (text) => notices.push(text),
     { method: 'setup-token', spawn },
@@ -82,11 +87,14 @@ test('setup-token uses the official command, extracts its successful output and 
   assert.equal(await login.url, 'https://claude.ai/oauth/authorize?fixture=true');
   login.submit('code#state');
   assert.deepEqual(written, ['code#state\r']);
-  data('Your OAuth token (valid for 1 year):\r\n\x1b[33msk-ant-oat01-te');
+  data('Your OAuth token (valid for 1 year):\r\n\x1b[33msk-ant-oat01-XX');
+  data('\x1b[2Dte'); // Ink overwrites earlier cells instead of printing a fresh line.
   data('st\x1b[0m\r\nStore this token securely.\r\n');
   await delay(450);
   assert.equal(notices.length, 0);
+  data('\x1b[2J\x1b[H'); // The CLI may clear its screen during teardown.
   end({ exitCode: 0 });
+  await completed;
   assert.deepEqual(result, { succeeded: true, token: 'sk-ant-oat01-test' });
 
   const failure = new NativeLogin(
@@ -100,9 +108,36 @@ test('setup-token uses the official command, extracts its successful output and 
   data('https://claude.ai/oauth/authorize?fixture=true\r\n');
   await failure.url;
   failure.submit('bad');
-  data(
-    'OAuth error: Invalid code. Please make sure the full code was copied\r\nPress Enter to retry.\r\n',
-  );
+  data('OAuth error: Invalid code. ');
+  data('Please make sure the full code was copied\r\nPress Enter to retry.\r\n');
+  await delay(450);
   assert.deepEqual(result, { succeeded: false });
+  assert.equal(
+    failure.error,
+    'OAuth error: Invalid code. Please make sure the full code was copied',
+  );
   assert.equal(notices.length, 0);
+
+  const startup = new NativeLogin(
+    'claude',
+    () => {},
+    () => {},
+    { method: 'setup-token', spawn },
+  );
+  const rejected = assert.rejects(startup.url, /allowedProviders policy does not permit/);
+  data(
+    "setup-token creates a subscription token, which this machine's allowedProviders policy does not permit.\r\n",
+  );
+  end({ exitCode: 1 });
+  await rejected;
+
+  const missing = new NativeLogin(
+    'claude',
+    () => {},
+    () => {},
+    { method: 'setup-token', spawn },
+  );
+  const missingOutput = assert.rejects(missing.url, /未能从输出读取令牌/);
+  end({ exitCode: 0 });
+  await missingOutput;
 });

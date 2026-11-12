@@ -756,10 +756,10 @@ export function createProxyServer(options: ServerOptions) {
       if (login) throw new DomainError('login_active', '请先取消正在进行的浏览器登录。');
       try {
         configureSetupToken(command.token);
-      } catch {
+      } catch (error) {
         throw new DomainError(
           'token_save_failed',
-          '无法保存 setup token，请检查服务端 Claude Code 用户设置文件及其写入权限。',
+          `无法保存 setup token：${error instanceof Error ? error.message : String(error)}`,
         );
       }
       quotas.clear();
@@ -770,10 +770,10 @@ export function createProxyServer(options: ServerOptions) {
       login?.process.cancel();
       try {
         await accountLogout(options.claude.executable);
-      } catch {
+      } catch (error) {
         throw new DomainError(
           'logout_failed',
-          '退出登录失败，请检查服务端 Claude Code 凭据和用户设置文件的写入权限。',
+          `退出登录失败：${error instanceof Error ? error.message : String(error)}`,
         );
       }
       quotas.clear();
@@ -788,19 +788,21 @@ export function createProxyServer(options: ServerOptions) {
           (succeeded, token) => {
             if (login === current) login = undefined;
             if (closing) return;
-            let notice =
-              succeeded || current.process.cancelled
-                ? undefined
-                : '登录未完成；请重新获取链接后再试。';
+            let notice = succeeded || current.process.cancelled ? undefined : current.process.error;
             if (succeeded && token && !current.process.cancelled) {
               try {
                 configureSetupToken(token);
                 quotas.clear();
-              } catch {
+              } catch (error) {
                 succeeded = false;
-                notice =
-                  '令牌已生成但无法保存，请检查服务端 Claude Code 用户设置文件的写入权限，然后重新生成。';
+                notice = `令牌已生成但无法保存：${error instanceof Error ? error.message : String(error)}`;
               }
+              send(current.owner, {
+                type: 'account.token.created',
+                token,
+                saved: succeeded,
+                error: notice,
+              });
             }
             if (succeeded) completeOnboarding();
             track(publishAccount(undefined, notice).catch(() => {}));
@@ -815,8 +817,11 @@ export function createProxyServer(options: ServerOptions) {
       login = current;
       try {
         current.url = await current.process.url;
-      } catch {
-        throw new DomainError('login_failed', '官方登录命令没有给出授权链接，请检查 CLI 与网络。');
+      } catch (error) {
+        throw new DomainError(
+          'login_failed',
+          error instanceof Error ? error.message : String(error),
+        );
       }
     }
     await publishAccount();

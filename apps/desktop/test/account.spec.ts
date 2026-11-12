@@ -47,7 +47,9 @@ test('setup token can be configured before any session, stays masked, and ordina
           ...account,
           login: { url: 'https://claude.ai/oauth/authorize?test=fixture', method: message.method },
         };
-      if (message.type === 'account.code')
+      if (message.type === 'account.code') {
+        if (account.login?.method === 'setup-token')
+          reply({ type: 'account.token.created', token: 'generated-token-fixture', saved: true });
         account =
           account.login?.method === 'setup-token'
             ? { loggedIn: true, authMethod: 'oauth_token', login: null }
@@ -57,6 +59,7 @@ test('setup token can be configured before any session, stays masked, and ordina
                 email: 'fixture@example.invalid',
                 login: null,
               };
+      }
       if (message.type.startsWith('account.')) reply({ type: 'account.state', ...account });
       reply({ type: 'response', requestId: message.requestId, ok: true });
     });
@@ -111,6 +114,31 @@ test('setup token can be configured before any session, stays masked, and ordina
   await expect(generated).toContainText('正在通过服务端生成 setup token');
   await generated.getByLabel('授权码', { exact: true }).fill('generated#fixture-state');
   await generated.getByRole('button', { name: '完成登录', exact: true }).click();
+  const tokenDialog = page.getByRole('dialog');
+  await expect(
+    tokenDialog.getByRole('heading', { name: 'Setup token 已生成', exact: true }),
+  ).toBeVisible();
+  await expect(tokenDialog.getByLabel('生成的 setup token')).toHaveValue('generated-token-fixture');
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await tokenDialog.getByRole('button', { name: '复制 token', exact: true }).click();
+  await expect(tokenDialog.getByRole('button', { name: '已复制', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('generated-token-fixture');
+  expect(await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]))).not.toContain(
+    'generated-token-fixture',
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: resolve(screenshots, 'setup-token-created.png') });
+  await tokenDialog.getByRole('button', { name: '关闭', exact: true }).last().click();
+  await expect(tokenDialog).toHaveCount(0);
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: 'CLI 设置', exact: true })
+    .click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '账号与额度', exact: true })
+    .click();
+  await expect(page.getByLabel('生成的 setup token')).toHaveCount(0);
   await expect(
     page.getByRole('heading', { name: 'Setup token 已配置', exact: true }),
   ).toBeVisible();

@@ -89,6 +89,12 @@ export const accountStateSchema = z.object({
   notice: z.string().optional(),
 });
 export type AccountState = z.infer<typeof accountStateSchema>;
+const setupTokenResultSchema = z.object({
+  token: z.string(),
+  saved: z.boolean(),
+  error: z.string().optional(),
+});
+export type SetupTokenResult = z.infer<typeof setupTokenResultSchema>;
 // The part of the official CLI's user settings the GUI edits. null means unset: the CLI's own default applies.
 const toggle = z.boolean().nullable();
 export const nativeSettingsSchema = z.object({
@@ -881,6 +887,8 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     payload: eventPayloadSchema,
   }),
   z.object({ type: z.literal('account.state'), ...accountStateSchema.shape }),
+  // One-time result for the connection that generated it; never part of broadcast account state or history.
+  z.object({ type: z.literal('account.token.created'), ...setupTokenResultSchema.shape }),
   z.object({ type: z.literal('settings.state'), requestId: id, values: nativeSettingsSchema }),
   // Sent to every connection when it changes; the one that asked finds its request ID.
   z.object({

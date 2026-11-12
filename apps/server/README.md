@@ -18,7 +18,7 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 ## 原生连接
 
-账号由 `native-account.ts` 驱动官方授权与状态命令；`account.token` 复用 `native-settings.ts` 的原子写入，把 setup token 存到官方用户设置的 `env.CLAUDE_CODE_OAUTH_TOKEN`，供 SDK 与交互终端共用。退出同时移除这项设置，账号变更清空额度缓存。它不出现在账号状态或常用设置响应里；浏览器工作台无账号变更权限。配置与验证差异见[登录方式](../../docs/native-runtime.md#登录方式)。
+账号由 `native-account.ts` 驱动官方授权与状态命令；`account.token` 复用 `native-settings.ts` 的原子写入，把 setup token 存到官方用户设置的 `env.CLAUDE_CODE_OAUTH_TOKEN`，供 SDK 与交互终端共用。退出同时移除这项设置，账号变更清空额度缓存。它不出现在账号状态或常用设置响应里；生成后的 `account.token.created` 只发给发起连接一次，供用户复制，不广播或重放。`setup-token` 的屏幕重绘由已有的 xterm 组件解析，错误保留具体原因；浏览器工作台无账号变更权限。配置与验证差异见[登录方式](../../docs/native-runtime.md#登录方式)。
 
 `scripts/install-linux.sh` 为普通用户准备 Node 24.22.2、官方 Claude Code 2.1.321。CLI 使用官方 npm 发布包，无二进制修改。
 
