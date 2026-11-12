@@ -30,13 +30,17 @@ export default function TitleBar({
 }) {
   return (
     <header className="titlebar">
-      <IconButton title="后退" disabled={!back} onClick={back}>
+      <IconButton className="history-back" title="后退" disabled={!back} onClick={back}>
         <ArrowLeft />
       </IconButton>
-      <IconButton title="前进" disabled={!forward} onClick={forward}>
+      <IconButton className="history-button" title="前进" disabled={!forward} onClick={forward}>
         <ArrowRight />
       </IconButton>
-      <IconButton title={sideOpen ? '收起侧栏' : '展开会话列表'} onClick={toggleSide}>
+      <IconButton
+        className="sidebar-toggle"
+        title={sideOpen ? '收起侧栏' : '展开会话列表'}
+        onClick={toggleSide}
+      >
         <PanelLeft />
       </IconButton>
       <nav className="titlebar-menus" aria-label="菜单">

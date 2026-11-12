@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import { flushSync } from 'react-dom';
 import {
   CircleHelp,
   Download,
@@ -50,6 +51,9 @@ import SessionBar from './SessionBar.tsx';
 import { isHere, thisDevice } from './device.ts';
 import { isMac, selfUpdating } from './platform.ts';
 import { useDrafts } from './drafts.ts';
+import { useDrawerSwipe } from './useDrawerSwipe.ts';
+import { useWebNavigation } from './useWebNavigation.ts';
+import type { Place } from './useWebNavigation.ts';
 import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
@@ -72,7 +76,7 @@ import {
   RenameProjectDialog,
   RenameSessionDialog,
 } from './SessionDialogs.tsx';
-import SettingsPage from './SettingsPage.tsx';
+import SettingsPage, { sections } from './SettingsPage.tsx';
 import type { Section } from './SettingsPage.tsx';
 import Sidebar from './Sidebar.tsx';
 import TitleBar from './TitleBar.tsx';
@@ -92,8 +96,6 @@ function latest<T extends EventPayload['type']>(events: SessionEvent[], type: T)
     { type: T }
   > | null;
 }
-// Where the window is: a page, the settings section when that page is open, and the session being read.
-type Place = { page: Page; section: Section; sessionId: string | null };
 // Which menu is open. Its items are built while rendering, so they follow the state as it changes.
 type OpenMenu = MenuPosition &
   (
@@ -178,21 +180,73 @@ export function App({
   const [slashOpen, setSlashOpen] = useState(false);
   // The side column is shown beside the page on a wide window and laid over it on a narrow one.
   const [sideOpen, setSideOpen] = useState(() => !narrow());
-  const closeSide = useCallback(() => {
-    if (narrow()) setSideOpen(false);
-  }, []);
-  // Crossing between the two layouts starts from each one's usual state.
-  useEffect(() => {
-    const query = matchMedia('(max-width: 700px)');
-    const follow = () => setSideOpen(!query.matches);
-    query.addEventListener('change', follow);
-    return () => query.removeEventListener('change', follow);
-  }, []);
   const [place, setPlace] = useState<Place>({
     page: 'chat',
     section: browser ? 'general' : 'account',
     sessionId: null,
   });
+  const pendingPlace = useRef(place);
+  const webNavigation = useWebNavigation(inBrowser, place, (next, drawer, direction) => {
+    if (
+      direction &&
+      client.state.status === 'connected' &&
+      next.sessionId &&
+      !client.state.sessions.some((session) => session.id === next.sessionId)
+    ) {
+      webNavigation.step(webNavigation.canStep(direction) ? direction : -direction);
+      return;
+    }
+    changePlace(next);
+    if (narrow()) setSideOpen(drawer);
+  });
+  function changePlace(next: Place) {
+    pendingPlace.current = next;
+    const apply = () => {
+      if (pendingPlace.current === next) setPlace(next);
+    };
+    if (
+      narrow() &&
+      document.startViewTransition &&
+      (place.page === 'settings' || next.page === 'settings') &&
+      (place.page !== next.page ||
+        place.section !== next.section ||
+        place.settingsIndex !== next.settingsIndex)
+    ) {
+      document.documentElement.style.setProperty(
+        '--settings-shift',
+        next.page !== 'settings' ||
+          (place.page === 'settings' && next.settingsIndex && !place.settingsIndex)
+          ? '-24px'
+          : '24px',
+      );
+      document.startViewTransition(() => flushSync(apply));
+    } else apply();
+  }
+  const changeSide = (open: boolean) => {
+    if (inBrowser && narrow()) webNavigation.drawer(open);
+    else setSideOpen(open);
+  };
+  const closeSide = () => {
+    if (narrow()) changeSide(false);
+  };
+  // Crossing between the layouts also removes a narrow drawer's temporary history entry.
+  useEffect(() => {
+    const query = matchMedia('(max-width: 700px)');
+    const follow = () => {
+      if (inBrowser) webNavigation.drawer(false);
+      setSideOpen(!query.matches);
+    };
+    query.addEventListener('change', follow);
+    return () => query.removeEventListener('change', follow);
+  }, [inBrowser]);
+  useEffect(() => {
+    if (!inBrowser || state.status !== 'connected') return;
+    const id = place.sessionId;
+    if (id && client.state.sessions.some((session) => session.id === id)) {
+      if (client.state.selectedId !== id) client.select(id);
+    } else if (client.state.selectedId) client.update({ selectedId: null });
+  }, [client, inBrowser, place.sessionId, state.status]);
+  const drawerSwipe = useDrawerSwipe(narrow() && place.page !== 'settings', sideOpen, changeSide);
   // Places visited, for the title bar's way back and forward.
   const trail = useRef<{ places: Place[]; at: number }>({ places: [place], at: 0 });
   const [, setTrailAt] = useState(0);
@@ -662,8 +716,12 @@ export function App({
   }
   // Moves the window to a place and remembers it; going back or forward revisits without adding to the trail.
   function visit(next: Place, record = true) {
+    if (inBrowser) {
+      webNavigation.visit(next);
+      return;
+    }
     if (next.sessionId && next.sessionId !== client.state.selectedId) client.select(next.sessionId);
-    setPlace(next);
+    changePlace(next);
     closeSide();
     if (!record) return;
     const { places, at } = trail.current;
@@ -671,6 +729,7 @@ export function App({
     if (
       last.page === next.page &&
       last.section === next.section &&
+      last.settingsIndex === next.settingsIndex &&
       last.sessionId === next.sessionId
     )
       return;
@@ -679,6 +738,10 @@ export function App({
     setTrailAt(trail.current.at);
   }
   function step(by: number) {
+    if (inBrowser) {
+      webNavigation.step(by);
+      return;
+    }
     const { places } = trail.current;
     // Sessions deleted since are passed over.
     for (let at = trail.current.at + by; at >= 0 && at < places.length; at += by) {
@@ -692,6 +755,7 @@ export function App({
     }
   }
   const stepAvailable = (by: number) => {
+    if (inBrowser) return webNavigation.canStep(by);
     const { places } = trail.current;
     for (let at = trail.current.at + by; at >= 0 && at < places.length; at += by)
       if (!places[at].sessionId || state.sessions.some((item) => item.id === places[at].sessionId))
@@ -1202,7 +1266,7 @@ export function App({
       run: disconnect,
     },
   ];
-  const toggleSide = () => setSideOpen((value) => !value);
+  const toggleSide = () => changeSide(!sideOpen);
   const canCreate = connected && !busy && !refreshing;
   const barMenus: BarMenu[] = [
     {
@@ -1298,9 +1362,13 @@ export function App({
   // dialog, is left alone.
   const keys = useRef<(event: KeyboardEvent) => void>(() => {});
   keys.current = (event) => {
-    if (event.defaultPrevented || !prefs.shortcuts.enabled) return;
+    if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
+    if (event.key === 'Escape' && narrow() && sideOpen) {
+      changeSide(false);
+      return;
+    }
+    if (!prefs.shortcuts.enabled) return;
     if (!connected && state.status !== 'reconnecting') return;
-    if (document.querySelector('dialog[open]')) return;
     const combo = comboOf(event);
     const action = combo && actions.find((item) => keyFor(prefs, item.id) === combo)?.id;
     if (!action) return;
@@ -1450,24 +1518,11 @@ export function App({
                     label: menu.label,
                     items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
                   };
-  const sectionNames: Record<Section, string> = {
-    general: '常规',
-    appearance: '外观',
-    connection: '连接',
-    notifications: '通知',
-    shortcuts: '快捷键',
-    context: '上下文与缓存',
-    shell: 'Shell',
-    web: '浏览器访问',
-    account: '账号与额度',
-    claude: 'CLI 设置',
-    instructions: '全局说明',
-    help: '帮助',
-    about: '关于与更新',
-  };
   return (
     <div
-      className={`shell ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''}`}
+      className={`shell page-${place.page} ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''}`}
+      data-settings-index={place.settingsIndex || undefined}
+      {...drawerSwipe}
     >
       {selfSigned && <CertificateWarning />}
       <TitleBar
@@ -1476,9 +1531,17 @@ export function App({
             ? (selected?.title ?? 'CC Desk Tunnel')
             : place.page === 'schedules'
               ? '定时任务'
-              : sectionNames[place.section]
+              : place.settingsIndex && narrow()
+                ? '设置'
+                : (sections.find((item) => item.id === place.section)?.name ?? '设置')
         }
-        back={stepAvailable(-1) ? () => step(-1) : undefined}
+        back={
+          !inBrowser && narrow() && place.page === 'settings'
+            ? () => (place.settingsIndex ? open('chat') : visit({ ...place, settingsIndex: true }))
+            : stepAvailable(-1)
+              ? () => step(-1)
+              : undefined
+        }
         forward={stepAvailable(1) ? () => step(1) : undefined}
         sideOpen={sideOpen}
         toggleSide={toggleSide}
@@ -1489,24 +1552,28 @@ export function App({
       />
       <Rail
         page={place.page}
-        go={(page) => open(page)}
+        go={(page) => {
+          if (narrow() && page === 'chat' && place.page === 'chat') return;
+          open(page);
+          if (narrow() && page === 'chat') changeSide(true);
+        }}
         schedules={host.schedules}
         update={host.serviceManagement ? pendingUpdate : null}
         openUpdate={(position) => setMenu({ kind: 'update', ...position })}
-        openSettings={(position) => setMenu({ kind: 'settings', ...position })}
+        openSettings={(position) =>
+          narrow()
+            ? visit({ ...place, page: 'settings', settingsIndex: true })
+            : setMenu({ kind: 'settings', ...position })
+        }
       />
-      {sideOpen && (
-        <button
-          className="sidebar-shade"
-          aria-label="收起侧栏"
-          onClick={() => setSideOpen(false)}
-        />
-      )}
+      <button className="sidebar-shade" aria-label="收起侧栏" onClick={() => changeSide(false)} />
       {place.page === 'settings' ? (
         <SettingsPage
           client={client}
           browser={!!browser}
+          disconnect={disconnect}
           section={place.section}
+          indexOnly={narrow() && !!place.settingsIndex}
           go={(section) => open('settings', section)}
           native={nativeMode}
           here={state.devices.find((device) => device.id === state.device?.id)}

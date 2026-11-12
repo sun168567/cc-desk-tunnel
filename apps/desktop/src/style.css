@@ -2430,18 +2430,18 @@ details[open] > summary > .fold-chevron {
   outline: none;
 }
 .composer-toolbar {
-  container-type: inline-size;
   display: flex;
   align-items: center;
   gap: 4px;
   min-height: 48px;
   padding: 4px 9px 8px 10px;
 }
-@container (max-width: 400px) {
-  .permission-control .chip > span,
-  .permission-control .chip > svg:last-child {
-    display: none;
-  }
+.composer-toolbar.measuring > * {
+  flex-shrink: 0;
+}
+.compact-permission .permission-control .chip > span,
+.compact-permission .permission-control .chip > svg:last-child {
+  display: none;
 }
 .toolbar-space {
   flex: 1;
@@ -3449,37 +3449,182 @@ dialog::backdrop {
   overflow-wrap: anywhere;
   margin-bottom: 10px;
 }
-.sidebar-shade {
+.sidebar-shade,
+.mobile-only {
   display: none;
 }
 @media (max-width: 700px) {
+  html {
+    overscroll-behavior-y: contain;
+  }
   .shell,
   .shell.side-closed {
-    grid-template-columns: 44px 0 minmax(0, 1fr);
+    --drawer-width: min(340px, calc(100vw - 48px));
+    --drawer-duration: 240ms;
+    grid-template-columns: minmax(0, 1fr);
   }
-  .rail button {
-    width: 34px;
-    height: 34px;
+  .shell.side-closed {
+    --drawer-x: -100%;
+    --drawer-progress: 0;
+    --drawer-delay: var(--drawer-duration);
   }
-  .sidebar {
+  .titlebar .history-button,
+  .shell:not(.page-settings) .history-back,
+  .page-settings .rail,
+  .page-settings .sidebar-shade {
+    display: none;
+  }
+  .mobile-only {
+    display: inline-flex;
+  }
+  .rail {
     position: fixed;
-    left: 44px;
-    top: var(--bar);
-    bottom: 0;
-    width: min(284px, calc(100vw - 60px));
+    inset: 0 auto 0 0;
     z-index: 12;
+    width: var(--drawer-width);
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 8px 12px;
+    background: var(--side);
     box-shadow: var(--shadow);
   }
-  .sidebar-shade {
-    display: block;
+  .rail-space {
+    display: none;
+  }
+  .rail button {
+    width: 44px;
+    height: 44px;
+  }
+  .rail button:last-child {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+  }
+  .shell:not(.page-settings) > .sidebar {
     position: fixed;
-    inset: var(--bar) 0 0 44px;
+    left: 0;
+    top: 60px;
+    bottom: env(safe-area-inset-bottom);
+    width: var(--drawer-width);
+    z-index: 13;
+    border: 0;
+    border-radius: 0;
+  }
+  .sidebar-shade {
+    position: fixed;
+    inset: 0;
     z-index: 11;
     border: 0;
     background: var(--backdrop);
+    opacity: var(--drawer-progress, 1);
   }
-  .workspace {
-    border-radius: 14px 0 0 0;
+  .shell:not(.page-settings) > :is(.rail, .sidebar, .sidebar-shade) {
+    display: flex;
+    transition:
+      transform var(--drawer-duration) cubic-bezier(0.16, 1, 0.3, 1),
+      opacity var(--drawer-duration) ease-out,
+      visibility 0s var(--drawer-delay, 0s);
+  }
+  .shell:not(.page-settings) > :is(.rail, .sidebar) {
+    transform: translateX(var(--drawer-x, 0px));
+  }
+  .shell.side-closed:not(.page-settings) > :is(.rail, .sidebar, .sidebar-shade) {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .conversation,
+  .workspace,
+  .titlebar,
+  .rail,
+  .sidebar,
+  .sidebar .session-list,
+  .sidebar .notice-list,
+  .sidebar-shade {
+    touch-action: pan-y pinch-zoom;
+  }
+  .shell[data-drawer-drag]:not(.page-settings) > :is(.rail, .sidebar, .sidebar-shade) {
+    visibility: visible;
+    transition: none;
+    user-select: none;
+  }
+  .sidebar .notice-bell {
+    position: static;
+  }
+  .sidebar .notice-list {
+    inset: 56px 12px auto;
+    width: auto;
+    max-height: min(420px, calc(100% - 68px));
+  }
+  .notice strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .workspace,
+  .side-closed .workspace {
+    grid-column: 1;
+    border-radius: 0;
+  }
+  .page-settings > .sidebar {
+    grid-column: 1;
+    display: flex;
+    background: var(--surface);
+    border: 0;
+    border-radius: 0;
+  }
+  .shell.page-settings {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .shell.page-settings.web-self-signed {
+    grid-template-rows: calc(56px + env(safe-area-inset-top)) auto minmax(0, 1fr);
+  }
+  .page-settings.web-self-signed > :is(.sidebar, .workspace) {
+    padding-top: 0;
+  }
+  .page-settings > :is(.sidebar, .workspace) {
+    grid-row: 1;
+    padding-top: calc(56px + env(safe-area-inset-top));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .page-settings .titlebar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 4px;
+    background: var(--surface);
+  }
+  .page-settings .titlebar > :not(.history-back, h1),
+  .page-settings .sidebar-brand,
+  .page-settings .page-title {
+    display: none;
+  }
+  .page-settings .titlebar h1 {
+    margin: 0;
+    line-height: 44px;
+    text-align: center;
+    font-size: 18px;
+  }
+  .page-settings .titlebar .history-back {
+    width: 44px;
+    height: 44px;
+  }
+  .page-settings:not([data-settings-index]) > .sidebar,
+  .page-settings[data-settings-index] > .workspace {
+    display: none;
+  }
+  .settings-logout {
+    flex-shrink: 0;
+    margin: 12px 10px max(16px, env(safe-area-inset-bottom));
+  }
+  .page-settings .side-action {
+    min-height: 44px;
+  }
+  ::view-transition-old(root) {
+    animation: settings-out 180ms ease-out both;
+  }
+  ::view-transition-new(root) {
+    animation: settings-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .titlebar-menus,
   .connection-status small {
@@ -3506,6 +3651,21 @@ dialog::backdrop {
   }
   .composer-area {
     padding: 6px 12px 14px;
+  }
+  .idle-reminder {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    margin: 0 12px 8px;
+  }
+  .idle-reminder p {
+    grid-column: 2 / -1;
+  }
+  .idle-reminder > .button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .idle-reminder > .icon-button {
+    justify-self: end;
   }
   .model-trigger {
     max-width: 150px;
@@ -3540,6 +3700,29 @@ dialog::backdrop {
   }
   .empty-state {
     min-height: 220px;
+  }
+}
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--settings-shift));
+  }
+}
+@keyframes settings-out {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--settings-shift)));
+  }
+}
+@media (max-width: 700px) and (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 120ms;
+    transform: none !important;
+  }
+  .shell,
+  .shell.side-closed {
+    --drawer-duration: 120ms;
   }
 }
 /* The frameless desktop window is moved by its top edge, also before signing in. */
@@ -3894,9 +4077,6 @@ dialog:has(.web-settings-form) {
   .web-access-settings .setting-row {
     flex-wrap: wrap;
     gap: 12px;
-  }
-  .web-self-signed > .sidebar {
-    top: calc(var(--bar) + var(--web-warning-height, 56px));
   }
   .web-trust-warning {
     min-height: 56px;
