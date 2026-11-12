@@ -497,6 +497,10 @@ test('what the replies carry stands in where the quota is not read or does not a
   const token = new Quotas();
   token.observe('a', event(0.02), now);
   assert.equal((await token.through('a', query(false), { now })).rateLimits?.available, true);
+  // A new setup token may have the same public identity. Its old readings must not survive an account change.
+  token.clear();
+  assert.equal(token.of('a', now), null);
+  assert.equal((await token.through('a', query(false), { now })).rateLimits?.available, false);
   // A reading whose windows have all reset leaves the native answer as it is.
   const stale = new Quotas();
   stale.observe('a', event(0.9, later - 7200), now);

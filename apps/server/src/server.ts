@@ -728,7 +728,7 @@ export function createProxyServer(options: ServerOptions) {
     const { accountStatus } = await import('./native-account.ts');
     const state: AccountState = {
       ...(await accountStatus(options.claude!.executable)),
-      login: login?.url ? { url: login.url } : null,
+      login: login?.url ? { url: login.url, method: login.process.method } : null,
       notice,
     };
     if (target) send(target, { type: 'account.state', ...state });
@@ -751,14 +751,32 @@ export function createProxyServer(options: ServerOptions) {
     }
     if (terminals.size || runs.size || mutations.size)
       throw new DomainError('native_busy', '请先结束原生运行或终端，再管理账号。');
-    const { NativeLogin, accountLogout } = await import('./native-account.ts');
+    const { NativeLogin, accountLogout, configureSetupToken } = await import('./native-account.ts');
+    if (command.type === 'account.token') {
+      if (login) throw new DomainError('login_active', '请先取消正在进行的浏览器登录。');
+      try {
+        configureSetupToken(command.token);
+      } catch {
+        throw new DomainError(
+          'token_save_failed',
+          '无法保存 setup token，请检查服务端 Claude Code 用户设置文件及其写入权限。',
+        );
+      }
+      quotas.clear();
+      await publishAccount();
+      return;
+    }
     if (command.type === 'account.logout') {
       login?.process.cancel();
       try {
         await accountLogout(options.claude.executable);
       } catch {
-        throw new DomainError('logout_failed', '退出登录失败，请在 ccdt 里执行 /logout 确认。');
+        throw new DomainError(
+          'logout_failed',
+          '退出登录失败，请检查服务端 Claude Code 凭据和用户设置文件的写入权限。',
+        );
       }
+      quotas.clear();
       await publishAccount();
       return;
     }
@@ -767,23 +785,31 @@ export function createProxyServer(options: ServerOptions) {
         owner: peer,
         process: new NativeLogin(
           options.claude.executable,
-          (succeeded) => {
+          (succeeded, token) => {
             if (login === current) login = undefined;
             if (closing) return;
+            let notice =
+              succeeded || current.process.cancelled
+                ? undefined
+                : '登录未完成；请重新获取链接后再试。';
+            if (succeeded && token && !current.process.cancelled) {
+              try {
+                configureSetupToken(token);
+                quotas.clear();
+              } catch {
+                succeeded = false;
+                notice =
+                  '令牌已生成但无法保存，请检查服务端 Claude Code 用户设置文件的写入权限，然后重新生成。';
+              }
+            }
             if (succeeded) completeOnboarding();
-            track(
-              publishAccount(
-                undefined,
-                succeeded || current.process.cancelled
-                  ? undefined
-                  : '登录未完成；请重新获取链接后再试。',
-              ).catch(() => {}),
-            );
+            track(publishAccount(undefined, notice).catch(() => {}));
           },
           (text) => {
             if (closing || login !== current) return;
             track(publishAccount(undefined, text).catch(() => {}));
           },
+          { method: command.type === 'account.login' ? command.method : undefined },
         ),
       };
       login = current;
@@ -1518,6 +1544,7 @@ export function createProxyServer(options: ServerOptions) {
       }
       case 'account.status':
       case 'account.login':
+      case 'account.token':
       case 'account.code':
       case 'account.cancel':
       case 'account.logout':

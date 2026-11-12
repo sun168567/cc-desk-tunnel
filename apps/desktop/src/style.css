@@ -2817,6 +2817,7 @@ details[open] > summary > .fold-chevron {
 }
 .account-identity {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   padding: 16px 0;
@@ -2853,6 +2854,12 @@ details[open] > summary > .fold-chevron {
 .account-identity > .button {
   margin-left: auto;
   flex-shrink: 0;
+}
+.account-identity > .account-login-actions {
+  margin-left: auto;
+}
+.account-login.setup-token-login p {
+  display: block;
 }
 .account-confirm {
   display: flex;

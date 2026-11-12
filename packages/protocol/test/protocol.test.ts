@@ -42,6 +42,27 @@ test('tunnel credentials accept spaces in usernames without allowing config deli
   }
 });
 
+test('setup tokens are bounded single-line credentials and never part of account state', () => {
+  const message = {
+    type: 'account.token',
+    requestId: randomUUID(),
+    token: ' setup-token-fixture ',
+  };
+  const command = commandSchema.parse(message);
+  assert.equal(command.type, 'account.token');
+  if (command.type === 'account.token') assert.equal(command.token, 'setup-token-fixture');
+  for (const token of ['', 'one\ntwo', 'one two', 'x'.repeat(8193)])
+    assert.equal(commandSchema.safeParse({ ...message, token }).success, false);
+  const state = serverMessageSchema.parse({
+    type: 'account.state',
+    loggedIn: true,
+    authMethod: 'oauth_token',
+    login: null,
+    token: message.token,
+  });
+  assert.equal('token' in state, false);
+});
+
 test('protocol validates UTF-8 text, IDs and bounded input', () => {
   const command = {
     type: 'message.send',

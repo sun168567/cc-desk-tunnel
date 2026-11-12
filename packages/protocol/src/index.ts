@@ -83,7 +83,9 @@ export const accountStateSchema = z.object({
   // token does not move it, and the real end can be up to three days earlier. Absent for any other credential.
   loginExpiresAt: z.string().optional(),
   // Present while the official sign-in command waits for the code shown after browser authorization.
-  login: z.object({ url: z.url() }).nullable(),
+  login: z
+    .object({ url: z.url(), method: z.enum(['browser', 'setup-token']).optional() })
+    .nullable(),
   notice: z.string().optional(),
 });
 export type AccountState = z.infer<typeof accountStateSchema>;
@@ -558,7 +560,25 @@ export const commandSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({ type: z.literal('account.status'), ...request }).strict(),
-  z.object({ type: z.literal('account.login'), ...request }).strict(),
+  z
+    .object({
+      type: z.literal('account.login'),
+      ...request,
+      method: z.enum(['browser', 'setup-token']).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('account.token'),
+      ...request,
+      token: z
+        .string()
+        .trim()
+        .min(1)
+        .max(8192)
+        .regex(/^[\x21-\x7e]+$/),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('account.code'),
