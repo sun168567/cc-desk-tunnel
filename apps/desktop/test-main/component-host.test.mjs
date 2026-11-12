@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFile, spawn } from 'node:child_process';
-import { access, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { connect, createServer } from 'node:net';
@@ -126,7 +126,8 @@ test(
     const alias = join(fixture, '\u5b89\u88c5 \u8def\u5f84');
     let directory;
     try {
-      await symlink(join(vendor, 'pwsh'), alias, 'junction');
+      // Windows may reject an SSH child executable reached through a junction.
+      await cp(join(vendor, 'pwsh'), alias, { recursive: true });
       const powershell = join(alias, 'pwsh.exe');
       const prepared = await prepare(powershell, true);
       directory = prepared.directory;

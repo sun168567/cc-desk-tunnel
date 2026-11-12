@@ -415,6 +415,23 @@ test('closing the tunnel ends waiting and joined SSH connections, their channels
   assert.equal(device.tunnel.close(), device.tunnel.close());
 });
 
+test('OpenSSH parses a username with spaces or a domain as one User value', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'claude-ssh-user-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const configPath = join(directory, 'ssh_config');
+  for (const username of ['local user', 'domain\\local user', 'user@example.com', 'user-name']) {
+    writeFileSync(configPath, sshConfig(directory, 32123, username, 'ssh-ed25519 AAAATEST').config);
+    const config = execFileSync('ssh', ['-G', '-F', configPath, 'device'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    assert.equal(
+      config.split(/\r?\n/).find((line) => line.startsWith('user ')),
+      `user ${username}`,
+    );
+  }
+});
+
 test('a device keeps one door: commands begun while it is away wait for its next tunnel, whose keys replace the old', async (t) => {
   const first = await harness(t);
   const directory = mkdtempSync(join(tmpdir(), 'claude-door-'));
