@@ -2199,7 +2199,7 @@ details[open] > summary > .fold-chevron {
 .turn-process > summary .failed {
   color: var(--fail);
 }
-.thinking-block .tool-verb {
+.tool-verb {
   flex: none;
   white-space: nowrap;
 }
