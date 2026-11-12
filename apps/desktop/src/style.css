@@ -2430,18 +2430,18 @@ details[open] > summary > .fold-chevron {
   outline: none;
 }
 .composer-toolbar {
-  container-type: inline-size;
   display: flex;
   align-items: center;
   gap: 4px;
   min-height: 48px;
   padding: 4px 9px 8px 10px;
 }
-@container (max-width: 400px) {
-  .permission-control .chip > span,
-  .permission-control .chip > svg:last-child {
-    display: none;
-  }
+.composer-toolbar.measuring > * {
+  flex-shrink: 0;
+}
+.compact-permission .permission-control .chip > span,
+.compact-permission .permission-control .chip > svg:last-child {
+  display: none;
 }
 .toolbar-space {
   flex: 1;
