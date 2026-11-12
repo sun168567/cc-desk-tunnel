@@ -3454,6 +3454,9 @@ dialog::backdrop {
   display: none;
 }
 @media (max-width: 700px) {
+  html {
+    overscroll-behavior-y: contain;
+  }
   .shell,
   .shell.side-closed {
     --drawer-width: min(340px, calc(100vw - 48px));

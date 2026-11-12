@@ -521,8 +521,9 @@ export class ProxyClient {
         this.update({ sessions, events, live, history, selectedId });
       } else if (message.type === 'session.snapshot') {
         this.flushStream();
+        const request = this.pending.get(message.requestId);
         if (
-          !this.pending.has(message.requestId) ||
+          !request ||
           !this.cacheOrder.includes(message.session.id) ||
           !this.state.sessions.some((session) => session.id === message.session.id)
         )
@@ -550,6 +551,16 @@ export class ProxyClient {
           loadingEarlier: false,
         };
         this.merge(id, message.events, history, message.mode === 'replace');
+        if (request.type === 'session.history') {
+          clearTimeout(request.timer);
+          this.pending.delete(message.requestId);
+          request.resolve({
+            type: 'response',
+            requestId: message.requestId,
+            ok: true,
+            sessionId: id,
+          });
+        }
       } else if (message.type === 'session.event') {
         const payload = message.event.payload;
         const at = Date.parse(message.event.createdAt);
