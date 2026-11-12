@@ -3652,6 +3652,21 @@ dialog::backdrop {
   .composer-area {
     padding: 6px 12px 14px;
   }
+  .idle-reminder {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    margin: 0 12px 8px;
+  }
+  .idle-reminder p {
+    grid-column: 2 / -1;
+  }
+  .idle-reminder > .button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .idle-reminder > .icon-button {
+    justify-self: end;
+  }
   .model-trigger {
     max-width: 150px;
   }
