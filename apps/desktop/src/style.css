@@ -2430,12 +2430,18 @@ details[open] > summary > .fold-chevron {
   outline: none;
 }
 .composer-toolbar {
+  container-type: inline-size;
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
   min-height: 48px;
   padding: 4px 9px 8px 10px;
+}
+@container (max-width: 400px) {
+  .permission-control .chip > span,
+  .permission-control .chip > svg:last-child {
+    display: none;
+  }
 }
 .toolbar-space {
   flex: 1;
@@ -2455,6 +2461,10 @@ details[open] > summary > .fold-chevron {
 .permission-control {
   position: relative;
   min-width: 0;
+}
+.context-control,
+.permission-control {
+  flex-shrink: 0;
 }
 .context-button {
   width: 30px;
@@ -2524,6 +2534,7 @@ details[open] > summary > .fold-chevron {
   gap: 6px;
   height: 30px;
   max-width: 230px;
+  width: 100%;
   padding: 0 10px;
   background: transparent;
   border: 0;

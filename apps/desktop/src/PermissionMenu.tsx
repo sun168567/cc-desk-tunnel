@@ -73,6 +73,7 @@ export default function PermissionMenu({
         type="button"
         className={mode === bypass.value ? 'chip danger' : 'chip'}
         aria-label="审批模式"
+        title={current.name}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
