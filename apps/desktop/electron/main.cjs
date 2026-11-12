@@ -453,7 +453,7 @@ handle('service:upgrade', async (event, config) => {
     },
   }).then(
     (version) => ({ version }),
-    (error) => ({ error: error.message }),
+    (error) => ({ error: error.message, code: error.code }),
   );
 });
 handle('ccdt:open', async (_event, request) => {

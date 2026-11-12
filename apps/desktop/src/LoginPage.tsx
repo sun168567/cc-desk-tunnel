@@ -1,5 +1,6 @@
 import { Download, Settings, SquareTerminal, Unplug } from 'lucide-react';
 import { useState } from 'react';
+import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import { thisDevice } from './device.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import { useConnectionName } from './shared.ts';
@@ -55,9 +56,18 @@ export default function LoginPage({
   const [serviceUpgrade, setServiceUpgrade] = useState<{
     phase: 'running' | 'done' | 'failed';
     text: string;
+    // Refused for sessions at work, by a service that can be forced past them.
+    forcible?: boolean;
   } | null>(null);
-  function upgradeService(service: string) {
-    if (!window.confirm(`服务端 ${service} 将升级到最新的正式版并重启，需要几分钟。继续？`)) return;
+  function upgradeService(service: string, force = false) {
+    if (
+      !window.confirm(
+        force
+          ? `服务端 ${service} 上有会话正在运行。强行升级会重启服务端：正在进行的回答、命令和等你确认的审批会被中断，可能需要重新开始。继续？`
+          : `服务端 ${service} 将升级到最新的正式版并重启，需要几分钟。继续？`,
+      )
+    )
+      return;
     setServiceUpgrade({ phase: 'running', text: '正在升级服务端' });
     const stop = window.desktop!.onServiceUpgrade(
       (update) =>
@@ -72,13 +82,20 @@ export default function LoginPage({
           token: form.token.trim(),
           deviceName: device.name,
           service,
+          ...(force ? { force } : {}),
         }),
       )
-      .then(({ version, error }) =>
+      .then(({ version, error, code }) =>
         setServiceUpgrade(
           version
             ? { phase: 'done', text: `服务端已升级到 ${version}，正在重启；稍候再连接。` }
-            : { phase: 'failed', text: error ?? '服务端升级失败。' },
+            : {
+                phase: 'failed',
+                text: error ?? '服务端升级失败。',
+                forcible:
+                  code === 'busy' &&
+                  service.localeCompare(FORCED_UPGRADE_SINCE, undefined, { numeric: true }) >= 0,
+              },
         ),
       )
       .finally(stop);
@@ -212,6 +229,17 @@ export default function LoginPage({
             >
               <Download />
               {serviceUpgrade?.phase === 'running' ? serviceUpgrade.text : '升级服务端'}
+            </button>
+          )}
+          {older && serviceUpgrade?.forcible && (
+            <button
+              className="button login-submit"
+              type="button"
+              disabled={connecting}
+              onClick={() => upgradeService(older, true)}
+            >
+              <Download />
+              强行升级服务端
             </button>
           )}
           {newer && (

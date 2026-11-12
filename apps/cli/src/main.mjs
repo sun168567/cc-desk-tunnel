@@ -2,6 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
 import { Config, hostOf } from './config.mjs';
 import { Service, proxyFor } from './connection.mjs';
@@ -29,7 +30,8 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
                          --token-stdin 从标准输入读凭据，--no-save 不保存
   ccdt logout            退出一个服务端（登录了几个时先选），其他的不受影响
   ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用
-  ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本
+  ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本；
+                         有会话正在运行时会说明，可以选择强行升级（--force 不问）
   ccdt upgrade --check   只检查有没有新版本
   ccdt --version         版本，须与服务端相同
 
@@ -313,24 +315,27 @@ async function upgrade(config, values) {
   if (!older(version, current)) {
     say(dim(`服务端是 ${current}，正在检查新版本……`));
     let installing = false;
-    try {
-      next = await upgradeService(
+    // Sessions at work hold the upgrade back; a service that can be forced past them is, when asked to.
+    const forcible = !older(current, FORCED_UPGRADE_SINCE);
+    const attempt = (force) =>
+      upgradeService(
         {
           url: server.url,
           fingerprint: server.fingerprint,
           token,
           deviceName: hostname(),
           service: current,
+          force,
         },
         {
           resolveProxy: async (address) => proxyFor(address),
           confirm: async (latest) => {
-            if (values.yes) return true;
+            if (values.yes || force) return true;
             if (!process.stdin.isTTY)
               throw new Error('升级服务端要先确认：在终端里运行 ccdt upgrade，或加 --yes。');
             return (
               (await pick(
-                `服务端有新版本 ${latest}（现在是 ${current}）。升级时服务端会重启，进行中的运行和终端要先结束。`,
+                `服务端有新版本 ${latest}（现在是 ${current}）。升级时服务端会重启，正在运行的会话要先结束。`,
                 ['升级服务端', '不升级'],
               )) === 0
             );
@@ -341,6 +346,16 @@ async function upgrade(config, values) {
           },
         },
       );
+    try {
+      try {
+        next = await attempt(forcible && values.force);
+      } catch (error) {
+        if (error.code !== 'busy' || !forcible) throw error;
+        if (!process.stdin.isTTY) throw new Error(`${error.message}强行升级：加 --force。`);
+        if ((await pick(error.message, ['强行升级（正在运行的会被中断）', '不升级'])) !== 0)
+          throw Object.assign(new Error('没有升级服务端。'), { code: 'declined' });
+        next = await attempt(true);
+      }
       say(`服务端已升级到 ${next}，正在重启，约一分钟后可以连接。`);
     } catch (error) {
       if (error.code === 'current') say(`服务端已是最新的正式版本 ${current}。`);
@@ -637,6 +652,7 @@ export async function main(argv) {
         all: { type: 'boolean' },
         check: { type: 'boolean' },
         yes: { type: 'boolean', short: 'y' },
+        force: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
         version: { type: 'boolean', short: 'v' },
       },

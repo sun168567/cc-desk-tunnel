@@ -7,9 +7,9 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION, serverMessageSchema } from '@cc-desk-tunnel/protocol';
-import type { ServerMessage, SessionEvent } from '@cc-desk-tunnel/protocol';
+import type { ServerMessage, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { readIdleCompaction } from '../src/idle-compaction.ts';
-import { createProxyServer } from '../src/server.ts';
+import { createProxyServer, upgradeHeld } from '../src/server.ts';
 import { SessionStore } from '../src/store.ts';
 import { serviceVersion } from '../src/updates.ts';
 
@@ -1070,4 +1070,44 @@ test('the idle compaction setting is read, changed for every window and kept wit
   );
   // Kept with the sessions, for the service as it starts again.
   assert.equal(readIdleCompaction(f.directory).minTokens, 150_000);
+});
+
+test('an upgrade is held back only by what is at work, and says what that is', () => {
+  const now = new Date().toISOString();
+  const session = (title: string, activeRun: Session['activeRun']): Session => ({
+    id: randomUUID(),
+    title,
+    autoTitle: false,
+    projectPath: 'D:\\项目',
+    permissionMode: 'default',
+    model: null,
+    effort: null,
+    createdAt: now,
+    updatedAt: now,
+    activeRun,
+  });
+  const run = { id: randomUUID(), connectionId: randomUUID(), status: 'running' as const };
+  const resting = [
+    session('空闲', null),
+    session('终端开着', { ...run, surface: 'terminal', activity: 'idle' }),
+    session('等后台任务', { ...run, waiting: 'background' }),
+  ];
+  assert.equal(upgradeHeld(resting, false, false), null);
+  const held = upgradeHeld(
+    [
+      ...resting,
+      session('在回答', run),
+      session('终端在跑', { ...run, surface: 'terminal', activity: 'working' }),
+    ],
+    false,
+    false,
+  );
+  assert.match(held ?? '', /「在回答」「终端在跑」正在运行.*强行升级/);
+  assert.doesNotMatch(held ?? '', /终端开着|等后台任务/);
+  const many = Array.from({ length: 5 }, (_, index) => session(`会话${index}`, run));
+  assert.match(
+    upgradeHeld(many, false, false) ?? '',
+    /「会话0」「会话1」「会话2」 等 5 个会话正在运行/,
+  );
+  assert.match(upgradeHeld([], true, true) ?? '', /有会话正在移动或修改，Claude 账号正在登录/);
 });

@@ -106,7 +106,9 @@ declare global {
         token: string;
         deviceName: string;
         service: string;
-      }) => Promise<{ version?: string; error?: string }>;
+        // Upgrades even while sessions are at work (see FORCED_UPGRADE_SINCE).
+        force?: boolean;
+      }) => Promise<{ version?: string; error?: string; code?: string }>;
       // Opens the session in ccdt, the terminal client, signed in to this window's service with its token; says
       // instead when ccdt is not installed, or not of this client's release.
       openInCcdt: (request: {
