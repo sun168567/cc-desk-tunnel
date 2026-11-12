@@ -12,6 +12,7 @@ import { startPosixSsh } from './posix-ssh.mjs';
 import { openChannels } from './tunnel-channels.mjs';
 import { httpProxy, openSocket } from './system-proxy.mjs';
 import { channelFailure, controlFailure, passing } from './connect-errors.mjs';
+import { observeHistoryPayload } from './history-payload.mjs';
 // Loaded by the main process from here, so that the package's bundle of this module holds it.
 export { upgradeService } from './service-upgrade.mjs';
 
@@ -114,6 +115,7 @@ export async function openProxyBridge(
   const waits = connectionWaits(config.waits);
   const log = binaries.log ?? (() => {});
   const heartbeatMs = binaries.heartbeatMs ?? 15000;
+  const historyIdleMs = binaries.historyIdleMs ?? 60_000;
   const nonce = randomBytes(32).toString('hex');
   const server = createServer();
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
@@ -142,6 +144,8 @@ export async function openProxyBridge(
     // CA verification completes at TLS handshake; explicit pins are checked before sending credentials.
     const route = { proxy: null };
     const remote = new WebSocket(address, {
+      // Inspect snapshot headers before the whole message has arrived; the service sends plain JSON frames.
+      perMessageDeflate: false,
       // Node's HTTP client also takes the connection through this callback once it is ready.
       createConnection: (_options, created) => {
         connectService(address, config, binaries.resolveProxy, route).then(
@@ -172,6 +176,29 @@ export async function openProxyBridge(
     let heard = Date.now();
     let heartbeat;
     const alive = () => (heard = Date.now());
+    let received = 0;
+    let historyRead;
+    let progressTimer;
+    // Only the loopback connection receives this notice. It counts connection traffic during the read,
+    // including any concurrent events; the service does not provide a page size or transfer progress.
+    function historyProgress(processing = false) {
+      clearTimeout(progressTimer);
+      progressTimer = undefined;
+      if (historyRead && local.readyState === WebSocket.OPEN) {
+        historyRead.reportedAt = Date.now();
+        local.send(
+          JSON.stringify({
+            type: 'client.history.progress',
+            requestId: historyRead.requestId,
+            sessionId: historyRead.sessionId,
+            received: received - historyRead.began,
+            historyReceived: historyRead.historyReceived,
+            processing,
+          }),
+        );
+      }
+    }
+    current.controller.signal.addEventListener('abort', () => clearTimeout(progressTimer));
     remote.on('ping', alive);
     remote.on('pong', alive);
     const timer = setTimeout(
@@ -228,6 +255,7 @@ export async function openProxyBridge(
     // that trying again does not change.
     function fail(message, code = 'client_failed') {
       if (!closed) log(`Connection given up: ${message}`);
+      historyProgress();
       if (local.readyState === WebSocket.OPEN)
         local.send(JSON.stringify({ type: 'connection.error', code, message }));
       clearTimeout(timer);
@@ -245,6 +273,20 @@ export async function openProxyBridge(
       }
       verified = true;
       log(`Reached ${target}${route.proxy ? ' through the system proxy' : ''}.`);
+      // A large WebSocket message may take longer than the heartbeat interval to assemble. Count bytes arriving
+      // on the transport as activity too, so a slow but live history read is not mistaken for a dead connection.
+      remote._socket.prependListener('data', (chunk) => {
+        alive();
+        received += chunk.length;
+        if (historyRead && !progressTimer) progressTimer = setTimeout(() => historyProgress(), 500);
+      });
+      observeHistoryPayload(remote._receiver, (requestId, bytes) => {
+        if (requestId !== historyRead?.requestId) return;
+        historyRead.historyReceived += bytes;
+        historyRead.expiresAt = Date.now() + historyIdleMs;
+        // After a quiet gap, report the first returning payload immediately rather than waiting for the UI batch.
+        if (Date.now() - historyRead.reportedAt >= 500) historyProgress();
+      });
       for (const message of queue) remote.send(message);
       queue.length = 0;
       alive();
@@ -257,7 +299,14 @@ export async function openProxyBridge(
             `已有 ${Math.round(silent / 1000)} 秒没有收到服务端的任何数据，连接已经断开。\n途中的网络、代理或反向代理中断了这条连接而没有通知本机。`,
             'connection_lost',
           );
-        else if (remote.readyState === WebSocket.OPEN) remote.ping();
+        else if (remote.readyState === WebSocket.OPEN) {
+          remote.ping();
+          // The service's ping can be queued behind a large history frame. While bytes still arrive,
+          // send an unsolicited pong so its existing heartbeat does not end this read. Only this
+          // snapshot's payload renews the idle deadline; pings and unrelated messages do not.
+          if (historyRead && Date.now() < historyRead.expiresAt && historyRead.historyReceived > 0)
+            remote.pong();
+        }
       }, heartbeatMs);
       current.controller.signal.addEventListener('abort', () => clearInterval(heartbeat));
     });
@@ -278,6 +327,15 @@ export async function openProxyBridge(
           delete message.platform;
           if (process.platform !== 'win32') message.platform = process.platform;
         }
+        if (message.type === 'session.subscribe' || message.type === 'session.history')
+          historyRead = {
+            requestId: message.requestId,
+            sessionId: message.sessionId,
+            began: received,
+            historyReceived: 0,
+            reportedAt: 0,
+            expiresAt: Date.now() + historyIdleMs,
+          };
         if (verified && remote.readyState === WebSocket.OPEN) remote.send(JSON.stringify(message));
         else queue.push(JSON.stringify(message));
       } catch {
@@ -292,6 +350,14 @@ export async function openProxyBridge(
       } catch {
         fail('服务端的消息无法识别。\n客户端与服务端的版本可能不一致，请把两者升级到同一版本。');
         return;
+      }
+      if (message.requestId === historyRead?.requestId) {
+        if (message.type === 'session.snapshot') historyProgress(true);
+        if (message.type === 'session.snapshot' || message.type === 'response') {
+          clearTimeout(progressTimer);
+          progressTimer = undefined;
+          historyRead = undefined;
+        }
       }
       if (message.type === 'web.settings.state')
         webUrl = message.values.enabled ? (message.values.url ?? null) : null;
@@ -343,6 +409,7 @@ export async function openProxyBridge(
     });
     for (const socket of [local, remote]) {
       socket.on('close', (code) => {
+        historyProgress();
         clearTimeout(timer);
         // Who ended it first is what tells a fault on the way from a decision of this program or the service.
         if (!closed)

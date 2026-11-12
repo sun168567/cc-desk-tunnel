@@ -34,6 +34,7 @@ import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
 import type { HistoryState, TaskProgress } from './client.ts';
+import HistoryReadStatus from './HistoryReadStatus.tsx';
 import { RunStatus, TaskLine, terminalState } from './RunStatus.tsx';
 import type { Clock } from './RunStatus.tsx';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
@@ -687,7 +688,11 @@ export default function Conversation({
   }, [events, session?.activeRun?.id]);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [loadError, setLoadError] = useState('');
+  const [earlierFailure, setEarlierFailure] = useState<{
+    sessionId: string;
+    message: string;
+  } | null>(null);
+  const loadError = earlierFailure?.sessionId === session?.id ? earlierFailure?.message : '';
   const [copyStatus, setCopyStatus] = useState('');
   const [contextMenu, setContextMenu] = useState<
     (MenuPosition & { heading?: string; items: MenuItem[] }) | null
@@ -727,7 +732,7 @@ export default function Conversation({
   useEffect(() => {
     setFindOpen(false);
     setQuery('');
-    setLoadError('');
+    setEarlierFailure(null);
     setContextMenu(null);
     setCopyStatus('');
     setLinkCard(null);
@@ -848,14 +853,19 @@ export default function Conversation({
   const loadMore = () => {
     if (!session || !connected || !history?.hasEarlier || history.loadingEarlier || history.loading)
       return;
-    setLoadError('');
+    setEarlierFailure(null);
     if (scroll.current)
       prependAnchor.current = {
         sessionId: session.id,
         height: scroll.current.scrollHeight,
         top: scroll.current.scrollTop,
       };
-    void loadEarlier().catch(() => setLoadError('更早记录加载失败，请重试'));
+    void loadEarlier().catch((error) =>
+      setEarlierFailure({
+        sessionId: session.id,
+        message: error instanceof Error ? error.message : '更早记录加载失败，请重试',
+      }),
+    );
   };
   useLayoutEffect(() => {
     prependAnchor.current = null;
@@ -1058,7 +1068,7 @@ export default function Conversation({
           </div>
         ) : (
           <div className="transcript" ref={transcriptRoot}>
-            {loadError && (
+            {loadError && !history?.read && (
               <div className="history-status" role="alert">
                 {loadError}
               </div>
@@ -1074,7 +1084,15 @@ export default function Conversation({
                 {history.loadingEarlier ? '加载中' : '加载更早记录'}
               </button>
             )}
-            {history?.loading && (
+            {history?.waitingForStatus && (
+              <div className="history-status" role="status">
+                正在读取会话状态，完成后加载更早记录
+              </div>
+            )}
+            {history?.read && (
+              <HistoryReadStatus read={history.read} hasEarlier={history.hasEarlier} />
+            )}
+            {history?.loading && !history.read && (
               <div className="history-status" role="status">
                 同步会话
               </div>
