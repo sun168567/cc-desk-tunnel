@@ -16,7 +16,7 @@ export type TranscriptItem =
       id: string;
       runId: string;
       text: string;
-      delivery?: string;
+      delivery?: Extract<SessionEvent['payload'], { type: 'message.delivery' }>['status'];
       // Stands for the "continue" button: there is no message of the user's to show, edit or copy.
       continued?: boolean;
       // Asked in a terminal that continued the session; recorded as its CLI wrote it.
@@ -91,14 +91,7 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
       });
     if (payload.type === 'message.delivery') {
       const item = byId.get(payload.messageId);
-      if (item?.kind === 'user')
-        item.delivery = {
-          submitted: '已提交',
-          queued: '等待原生处理',
-          received: '原生已接收',
-          not_sent: '未送达原生',
-          unconfirmed: '接收未确认',
-        }[payload.status];
+      if (item?.kind === 'user') item.delivery = payload.status;
     }
     if (payload.type === 'text.delta') {
       const existing = byId.get(payload.messageId);
