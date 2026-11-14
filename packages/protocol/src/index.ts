@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 25;
+export const PROTOCOL_VERSION = 26;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -24,6 +24,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.10': 23,
   '0.3.12': 24,
   '0.3.14': 25,
+  '0.3.15': 26,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -55,6 +56,8 @@ export const permissionModeSchema = z.enum([
   'bypassPermissions',
 ]);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
+export const planExecutionModeSchema = z.enum(['auto', 'default', 'acceptEdits']);
+export type PlanExecutionMode = z.infer<typeof planExecutionModeSchema>;
 export const effortSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export type Effort = z.infer<typeof effortSchema>;
 export const modelInfoSchema = z.object({
@@ -294,6 +297,10 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     effort: effortSchema.nullable().optional(),
   }),
   z.object({
+    type: z.literal('native.permission'),
+    permissionMode: permissionModeSchema,
+  }),
+  z.object({
     type: z.literal('native.context'),
     nativeSessionId: id,
     persisted: z.boolean(),
@@ -382,7 +389,12 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     summary: z.string().max(300).optional(),
   }),
   z.object({ type: z.literal('approval.requested'), approvalId: id, toolId: z.string().min(1) }),
-  z.object({ type: z.literal('approval.resolved'), approvalId: id, allowed: z.boolean() }),
+  z.object({
+    type: z.literal('approval.resolved'),
+    approvalId: id,
+    allowed: z.boolean(),
+    executionMode: planExecutionModeSchema.optional(),
+  }),
   z.object({
     type: z.literal('tool.result'),
     toolId: z.string().min(1),
@@ -762,6 +774,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       runId: id,
       approvalId: id,
       allowed: z.boolean(),
+      executionMode: planExecutionModeSchema.optional(),
       // The answers to a question Claude asked, keyed by the question's text.
       answers: z.record(z.string().max(2000), z.string().max(4000)).optional(),
     })

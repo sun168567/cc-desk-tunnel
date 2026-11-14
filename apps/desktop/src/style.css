@@ -2285,6 +2285,189 @@ details[open] > summary > .fold-chevron {
   min-height: 31px;
   font-size: 12px;
 }
+/* A proposed plan is a document, with its decision separate from the reading surface. */
+.plan-card {
+  margin: 10px 0 18px;
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  overflow: visible;
+}
+.plan-heading,
+.plan-heading > span,
+.plan-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.plan-heading svg {
+  width: 16px;
+  height: 16px;
+  color: var(--tool-icon);
+}
+.plan-heading > span {
+  flex-wrap: wrap;
+}
+.plan-heading-state {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.plan-content {
+  padding: 18px 22px 24px;
+  color: var(--text);
+  font-size: 14px;
+}
+.plan-content h1 {
+  font-size: 19px;
+  font-weight: 600;
+}
+.plan-content h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.plan-content h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.plan-preview {
+  max-height: 480px;
+  overflow: hidden;
+}
+.plan-preview.expanded {
+  max-height: none;
+}
+.plan-expand {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.plan-details {
+  border-top: 1px solid var(--line-soft);
+}
+.plan-details > summary {
+  padding: 8px 18px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 var(--radius-s) var(--radius-s);
+  background: var(--surface);
+}
+.plan-status {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.plan-actions .permission-control {
+  margin-right: auto;
+}
+.plan-actions > .button {
+  min-height: 32px;
+  font-size: 12px;
+}
+.plan-actions > .button.secondary {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.plan-actions > .button.secondary:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+dialog:has(.plan-reader) {
+  width: min(840px, calc(100vw - 32px));
+  max-height: min(860px, 90dvh);
+  padding: 0;
+  overflow: hidden;
+}
+dialog:has(.plan-reader)[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog:has(.plan-reader) > .dialog-heading {
+  flex: none;
+  margin: 0;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+dialog:has(.plan-reader) > .dialog-heading h2 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.plan-dialog-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+.plan-reader-copy .copy-button {
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+}
+.plan-reader-copy .copy-button span {
+  display: none;
+}
+.plan-reader-copy .copy-button svg {
+  width: 15px;
+  height: 15px;
+}
+.plan-reader {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.plan-reader-body {
+  width: 100%;
+  padding: 24px 40px 32px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.plan-reader .plan-actions {
+  flex: none;
+}
+@media (max-width: 600px) {
+  .plan-content {
+    padding-inline: 14px;
+  }
+  .plan-heading,
+  .plan-actions {
+    padding-inline: 12px;
+  }
+  .plan-reader-body {
+    padding: 20px;
+  }
+  .plan-dialog-status {
+    display: none;
+  }
+  .plan-actions {
+    gap: 4px;
+  }
+  .plan-actions .chip {
+    padding-inline: 6px;
+  }
+}
 .run-notice {
   color: var(--faint);
   border-left: 2px solid var(--line-strong);
@@ -2616,6 +2799,7 @@ details[open] > summary > .fold-chevron {
 }
 /* The effort slider: a pill filled up to a large round handle. */
 .model-menu input[type='range'] {
+  --fill-position: calc(15px + (100% - 30px) * var(--fill, 0));
   -webkit-appearance: none;
   appearance: none;
   display: block;
@@ -2627,8 +2811,8 @@ details[open] > summary > .fold-chevron {
   border-radius: 15px;
   background: linear-gradient(
     to right,
-    var(--accent) 0 max(15px, var(--fill, 50%)),
-    var(--hover) max(15px, var(--fill, 50%)) 100%
+    var(--accent) 0 var(--fill-position),
+    var(--hover) var(--fill-position) 100%
   );
   cursor: pointer;
 }
@@ -3430,6 +3614,11 @@ dialog::backdrop {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 23px;
+}
+.dialog-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .dialog-heading h2 {
   margin: 0;

@@ -1,4 +1,9 @@
-import type { SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
+import type {
+  PermissionMode,
+  PlanExecutionMode,
+  SessionEvent,
+  TurnStats,
+} from '@cc-desk-tunnel/protocol';
 
 export type ToolState =
   | 'requested'
@@ -45,6 +50,9 @@ export type TranscriptItem =
       input: string;
       target: string;
       approvalId?: string;
+      approved?: boolean;
+      executionMode?: PlanExecutionMode;
+      confirmedMode?: PermissionMode;
       resolved: boolean;
       status: string;
       state: ToolState;
@@ -141,9 +149,21 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
       const tool = byApproval.get(payload.approvalId);
       if (tool?.kind === 'tool') {
         tool.resolved = true;
+        tool.approved = payload.allowed;
+        tool.executionMode = payload.executionMode;
         tool.status = payload.allowed ? '运行中' : '已拒绝';
         tool.state = payload.allowed ? 'running' : 'denied';
       }
+    }
+    if (payload.type === 'native.permission') {
+      for (const tool of byApproval.values())
+        if (
+          tool.runId === runId &&
+          tool.name === 'ExitPlanMode' &&
+          tool.approved &&
+          !tool.confirmedMode
+        )
+          tool.confirmedMode = payload.permissionMode;
     }
     if (payload.type === 'tool.result') {
       const tool = byId.get(payload.toolId);

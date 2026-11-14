@@ -620,6 +620,7 @@ export class SessionStore {
       payload,
     };
     if (!stateReadings.has(payload.type)) session.updatedAt = event.createdAt;
+    if (payload.type === 'native.permission') session.permissionMode = payload.permissionMode;
     if (payload.type === 'run.status')
       session.activeRun = terminalStatuses.has(payload.status)
         ? null

@@ -1639,7 +1639,7 @@ export function App({
                 });
               }}
               stop={stopRun}
-              replyApproval={async (runId, approvalId, allowed, answers) => {
+              replyApproval={async (runId, approvalId, allowed, answers, executionMode) => {
                 let sent = false;
                 await act(async () => {
                   await client.request({
@@ -1648,6 +1648,7 @@ export function App({
                     runId,
                     approvalId,
                     allowed,
+                    ...(executionMode ? { executionMode } : {}),
                     ...(answers ? { answers } : {}),
                   });
                   sent = true;

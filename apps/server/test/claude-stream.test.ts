@@ -3,6 +3,53 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream, shownToday } from '../src/claude-stream.ts';
+import { toolPermission } from '../src/claude.ts';
+
+test('native status mode changes survive null status and preserve compaction notices', () => {
+  const events: EventPayload[] = [];
+  const stream = new ClaudeStream((event) => events.push(event), 'plan');
+  stream.accept({ type: 'system', subtype: 'status', status: null, permissionMode: 'default' });
+  stream.accept({
+    type: 'system',
+    subtype: 'status',
+    status: 'compacting',
+    permissionMode: 'auto',
+  });
+  stream.accept({ type: 'system', subtype: 'status', status: null });
+  assert.deepEqual(events, [
+    { type: 'native.permission', permissionMode: 'default' },
+    { type: 'native.permission', permissionMode: 'auto' },
+    { type: 'native.notice', text: 'compacting' },
+  ]);
+  stream.accept({ type: 'system', subtype: 'status', status: null, permissionMode: 'future-mode' });
+  assert.equal(events.at(-1)?.type, 'native.notice');
+  assert.equal(stream.requestedPermissionMode, 'plan');
+});
+
+test('plan approvals return SDK session-only mode updates; declines and other tools never do', () => {
+  const input = { plan: '# 执行计划\n\n保持原文。', planFilePath: '/tmp/plan.md' };
+  for (const mode of ['auto', 'default', 'acceptEdits'] as const) {
+    assert.deepEqual(toolPermission('ExitPlanMode', input, true, undefined, mode), {
+      behavior: 'allow',
+      updatedInput: input,
+      updatedPermissions: [{ type: 'setMode', mode, destination: 'session' }],
+    });
+    const denied = toolPermission('ExitPlanMode', input, false, undefined, mode);
+    assert.equal(denied.behavior, 'deny');
+    assert.ok(!('updatedPermissions' in denied));
+  }
+  assert.deepEqual(toolPermission('Bash', input, true, undefined, 'auto'), {
+    behavior: 'allow',
+    updatedInput: input,
+  });
+  assert.deepEqual(
+    toolPermission('AskUserQuestion', { questions: [] }, true, { question: '答案' }),
+    {
+      behavior: 'allow',
+      updatedInput: { questions: [], answers: { question: '答案' } },
+    },
+  );
+});
 
 test('native partial text/thinking are not duplicated by complete assistant events', () => {
   const events: EventPayload[] = [];

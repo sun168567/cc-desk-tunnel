@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { permissionModeSchema } from '@cc-desk-tunnel/protocol';
 import type { Effort, EventPayload, PermissionMode } from '@cc-desk-tunnel/protocol';
 
 const jsonObject = z.record(z.string(), z.unknown());
@@ -76,6 +77,16 @@ export class ClaudeStream {
   accept(value: unknown) {
     const message = jsonObject.parse(value);
     if (message.type === 'system') {
+      // Mode changes can arrive with status:null; they are independent of compaction notices.
+      if (message.subtype === 'status' && message.permissionMode !== undefined) {
+        const mode = permissionModeSchema.safeParse(message.permissionMode);
+        if (mode.success) this.emit({ type: 'native.permission', permissionMode: mode.data });
+        else
+          this.emit({
+            type: 'native.notice',
+            text: `原生进程报告了尚不支持的审批模式：${String(message.permissionMode)}。`,
+          });
+      }
       if (message.subtype === 'init') {
         this.emit({
           type: 'native.session',

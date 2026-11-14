@@ -161,8 +161,8 @@ export default function ComposerControls({
                   style={
                     {
                       '--fill': shownEffort
-                        ? `${(Math.max(0, levels.indexOf(shownEffort)) / Math.max(1, levels.length - 1)) * 100}%`
-                        : '0%',
+                        ? Math.max(0, levels.indexOf(shownEffort)) / Math.max(1, levels.length - 1)
+                        : 0,
                     } as CSSProperties
                   }
                   aria-label="推理强度"

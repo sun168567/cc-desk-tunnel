@@ -1,8 +1,19 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { query, getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
-import type { Query, SDKSessionInfo, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { Effort, EventPayload, NativeMetrics, PermissionMode } from '@cc-desk-tunnel/protocol';
+import type {
+  PermissionResult,
+  Query,
+  SDKSessionInfo,
+  SDKUserMessage,
+} from '@anthropic-ai/claude-agent-sdk';
+import type {
+  Effort,
+  EventPayload,
+  NativeMetrics,
+  PermissionMode,
+  PlanExecutionMode,
+} from '@cc-desk-tunnel/protocol';
 import { deviceTerms } from './device-terms.ts';
 import type { Execution } from './device-terms.ts';
 import { ClaudeStream } from './claude-stream.ts';
@@ -63,7 +74,13 @@ export type ClaudeRun = {
   approve: (
     toolId: string,
     waiting: 'approval' | 'question',
-  ) => Promise<{ allowed: boolean; answers?: Record<string, string>; unanswered?: Unanswered }>;
+    toolName: string,
+  ) => Promise<{
+    allowed: boolean;
+    answers?: Record<string, string>;
+    unanswered?: Unanswered;
+    executionMode?: PlanExecutionMode;
+  }>;
   // Absent only for a session owned by the service itself.
   ssh?: SshConnection;
   // Told when Claude has finished its turn and the run goes on only for background tasks, and when it resumes.
@@ -89,6 +106,36 @@ export type ClaudeRun = {
   };
 };
 export type Unanswered = 'skipped' | 'replied_in_chat';
+// User decisions are returned through the SDK's permission callback, including a plan's execution mode.
+export function toolPermission(
+  name: string,
+  input: Record<string, unknown>,
+  allowed: boolean,
+  answers?: Record<string, string>,
+  executionMode?: PlanExecutionMode,
+): PermissionResult {
+  if (!allowed)
+    return {
+      behavior: 'deny',
+      message:
+        name === 'AskUserQuestion'
+          ? 'The user declined to answer.'
+          : name === 'ExitPlanMode'
+            ? 'The user wants to keep planning and has not approved execution.'
+            : 'The user denied or cancelled this request.',
+    };
+  return {
+    behavior: 'allow',
+    updatedInput: name === 'AskUserQuestion' && answers ? { ...input, answers } : input,
+    ...(name === 'ExitPlanMode' && executionMode
+      ? {
+          updatedPermissions: [
+            { type: 'setMode' as const, mode: executionMode, destination: 'session' as const },
+          ],
+        }
+      : {}),
+  };
+}
 // What Claude reads of a question left unanswered.
 const UNANSWERED: Record<Unanswered, string> = {
   skipped: 'The user skipped this question without answering it.',
@@ -235,10 +282,10 @@ export async function runClaude(
         canUseTool: async (name, input, context) => {
           const tool = mapper.tool(name, input, context.toolUseID);
           const question = name === 'AskUserQuestion';
-          const { allowed, answers, unanswered } =
+          const { allowed, answers, unanswered, executionMode } =
             context.signal.aborted || run.signal.aborted
               ? { allowed: false }
-              : await run.approve(tool.id, question ? 'question' : 'approval');
+              : await run.approve(tool.id, question ? 'question' : 'approval', name);
           if (question && unanswered) {
             // A CLI that knows of it is told how the question went: the tool's result says so, and Claude reads
             // the answer given for each question. An older one refuses an answer that says it.
@@ -260,18 +307,9 @@ export async function runClaude(
             };
           }
           tool.denied = !allowed;
-          if (!allowed)
-            return {
-              behavior: 'deny',
-              message: question
-                ? 'The user declined to answer.'
-                : 'The user denied or cancelled this request.',
-            };
-          // The official tool takes the user's choices as `answers`, keyed by question text.
-          return {
-            behavior: 'allow',
-            updatedInput: question && answers ? { ...input, answers } : input,
-          };
+          if (allowed && name === 'ExitPlanMode' && executionMode)
+            mapper.requestedPermissionMode = executionMode;
+          return toolPermission(name, input, allowed, answers, executionMode);
         },
       },
     });

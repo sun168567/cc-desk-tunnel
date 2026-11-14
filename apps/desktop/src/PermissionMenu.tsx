@@ -41,16 +41,24 @@ export default function PermissionMenu({
   mode,
   disabled,
   change,
+  executionOnly = false,
 }: {
   mode: PermissionMode;
   disabled: boolean;
   change: (mode: PermissionMode) => void;
+  // Approving a plan offers only modes that can execute, without enabling bypass at startup.
+  executionOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const allowed = usePrefs().bypassPermissions;
   // A session already in that mode shows it, whatever the setting says now.
-  const offered = allowed || mode === bypass.value ? [...modes, bypass] : modes;
+  const offered = executionOnly
+    ? modes.filter((item) => item.value !== 'plan')
+    : allowed || mode === bypass.value
+      ? [...modes, bypass]
+      : modes;
+  const label = executionOnly ? '计划执行模式' : '审批模式';
   const container = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -68,11 +76,21 @@ export default function PermissionMenu({
   }, [open]);
   const current = offered.find((item) => item.value === mode)!;
   return (
-    <div className="permission-control" ref={container}>
+    <div
+      className="permission-control"
+      ref={container}
+      onKeyDown={(event) => {
+        if (open && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
       <button
         type="button"
         className={mode === bypass.value ? 'chip danger' : 'chip'}
-        aria-label="审批模式"
+        aria-label={label}
         title={current.name}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -108,8 +126,10 @@ export default function PermissionMenu({
         </div>
       )}
       {open && !confirming && (
-        <div className="permission-menu" role="menu" aria-label="审批模式">
-          <p className="menu-heading">Claude Code 操作前如何征求同意？</p>
+        <div className="permission-menu" role="menu" aria-label={label}>
+          <p className="menu-heading">
+            {executionOnly ? '批准计划后如何执行？' : 'Claude Code 操作前如何征求同意？'}
+          </p>
           {offered.map(({ value, name, detail, icon: Icon }) => (
             <button
               type="button"

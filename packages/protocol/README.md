@@ -2,6 +2,8 @@
 
 当前版本见 `src/index.ts` 的 `PROTOCOL_VERSION`，导出 TypeScript 类型和 Zod 运行时校验。两端需一起升级。服务适配原生公开事件，不复制 CLI 私有控制协议；该部分由官方 SDK 管理。
 
+协议 26 增加 `approval.reply.executionMode`（仅允许批准 `ExitPlanMode` 时选择 `auto/default/acceptEdits`），`approval.resolved` 记录这一选择。`native.permission.permissionMode` 记录 SDK 报告的运行中模式变更，并同步会话元数据与 `session.updated`；用户提交审批不会提前更改保存的模式。
+
 ## 连接与消息
 
 - WebSocket `/ws` 建立后，首帧必须是 `auth`：协议版本、代理服务 token、设备名称。5 秒内不认证则关闭；token 不进入会话事件。服务回传 `ready`、连接 ID 和会话目录。
