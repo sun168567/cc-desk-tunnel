@@ -30,13 +30,14 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
+import type { PlanExecutionMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
 import type { HistoryState, TaskProgress } from './client.ts';
 import { RunStatus, TaskLine, terminalState } from './RunStatus.tsx';
 import type { Clock } from './RunStatus.tsx';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
+import PermissionMenu from './PermissionMenu.tsx';
 import { conversation } from './transcript.ts';
 import { usePrefs } from './prefs.ts';
 import { firstLine } from './transcriptView.ts';
@@ -45,7 +46,7 @@ import { CopyButton, copyText } from './copy.tsx';
 import { messageTime } from './messageTime.ts';
 import TurnStats from './TurnStats.tsx';
 import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
-import { IconButton, Menu } from './ui.tsx';
+import { IconButton, Menu, Modal } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 import { LinkPlace, linkTarget } from './links.ts';
 import type { Link } from './links.ts';
@@ -70,7 +71,12 @@ type Live = {
   // This window has answered the approval and waits for the service to take it: a second press would be
   // a second answer.
   answered: (tool: Tool) => boolean;
-  reply: (tool: Tool, allowed: boolean, answers?: Record<string, string>) => void;
+  reply: (
+    tool: Tool,
+    allowed: boolean,
+    answers?: Record<string, string>,
+    executionMode?: PlanExecutionMode,
+  ) => void;
   // The foreground task a running call waits on, while this window may act on it: 'sent' once it has, until
   // the call returns.
   taskControl: (tool: Tool) => 'ready' | 'sent' | undefined;
@@ -93,16 +99,21 @@ const icons: Record<Category, typeof Wrench> = {
 function Fold({
   className,
   forced = false,
+  reveal = false,
   summary,
   children,
 }: {
   className: string;
   forced?: boolean;
+  reveal?: boolean;
   // Given whether the fold is open, for a heading that shows what the open fold would show twice.
   summary: React.ReactNode | ((shown: boolean) => React.ReactNode);
   children: () => React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(reveal);
+  useEffect(() => {
+    if (reveal) setOpen(true);
+  }, [reveal]);
   const searching = useContext(SearchExpanded);
   const shown = open || forced || searching;
   return (
@@ -196,6 +207,174 @@ function TaskActions({
   );
 }
 
+const executionModes: Record<PlanExecutionMode, string> = {
+  auto: '自动审批',
+  default: '手动审批',
+  acceptEdits: '接受编辑',
+};
+
+function PlanCard({ tool, plan, live }: { tool: Tool; plan: string; live: Live }) {
+  const [expanded, setExpanded] = useState(false);
+  const [large, setLarge] = useState(false);
+  const [long, setLong] = useState(false);
+  const [mode, setMode] = useState<PlanExecutionMode>('auto');
+  const content = useRef<HTMLDivElement>(null);
+  const enlarge = useRef<HTMLButtonElement>(null);
+  const searching = useContext(SearchExpanded);
+  const approval = live.canApprove(tool);
+  const submitted = live.answered(tool);
+  const shown = expanded || searching;
+  useLayoutEffect(() => {
+    const element = content.current;
+    if (!element) return;
+    const measure = () => setLong(element.scrollHeight > 480);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [plan]);
+  const close = () => {
+    setLarge(false);
+    // The dialog must leave the top layer before its trigger can receive focus again.
+    requestAnimationFrame(() => enlarge.current?.focus());
+  };
+  const failed = ['failed', 'cancelled', 'unknown', 'denied'].includes(tool.state);
+  const confirmed =
+    tool.confirmedMode &&
+    (executionModes[tool.confirmedMode as PlanExecutionMode] ??
+      (tool.confirmedMode === 'plan' ? '计划模式' : '绕过权限'));
+  const status = failed
+    ? tool.status
+    : confirmed
+      ? `已批准 · 原生模式：${confirmed}`
+      : tool.approved || submitted
+        ? '已提交，等待原生确认'
+        : tool.status;
+  const actions = (
+    <div className="plan-actions" data-search-ignore>
+      {!approval && (
+        <span className="plan-status" role="status">
+          {status}
+        </span>
+      )}
+      {approval && (
+        <>
+          <PermissionMenu
+            mode={mode}
+            executionOnly
+            disabled={live.busy || submitted}
+            change={(value) => setMode(value as PlanExecutionMode)}
+          />
+          <button
+            type="button"
+            className="button secondary"
+            disabled={live.busy || submitted}
+            onClick={() => live.reply(tool, false)}
+          >
+            继续规划
+          </button>
+          <button
+            type="button"
+            className="button primary"
+            disabled={live.busy || submitted}
+            title={`批准计划并以${executionModes[mode]}模式继续`}
+            onClick={() => live.reply(tool, true, undefined, mode)}
+          >
+            <Check />
+            批准并执行
+          </button>
+        </>
+      )}
+    </div>
+  );
+  return (
+    <section className="plan-card" aria-label="执行计划">
+      <header className="plan-heading">
+        <span>
+          <FileText />
+          <strong>执行计划</strong>
+          <small className="plan-heading-state">{status}</small>
+        </span>
+        <div data-reading-control>
+          <CopyButton text={plan} label="复制计划" />
+          <button
+            ref={enlarge}
+            type="button"
+            className="copy-button"
+            onClick={() => setLarge(true)}
+          >
+            放大阅读
+          </button>
+        </div>
+      </header>
+      <div
+        className={`plan-preview${shown ? ' expanded' : ''}`}
+        onFocusCapture={() => setExpanded(true)}
+      >
+        <div
+          ref={content}
+          className="message-content plan-content"
+          data-search-content
+          data-copy-text={plan}
+        >
+          <Rich text={plan} />
+        </div>
+      </div>
+      {long && !searching && (
+        <button
+          type="button"
+          className="plan-expand"
+          data-reading-control
+          aria-expanded={shown}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {shown ? '收起' : '展开全文'}
+        </button>
+      )}
+      <details className="plan-details" data-search-ignore>
+        <summary>原始工具详情</summary>
+        <CopyButton text={tool.input} label="复制工具输入" />
+        <pre className="tool-input">{tool.input}</pre>
+        {tool.output && (
+          <>
+            <CopyButton text={tool.output} label="复制工具输出" />
+            <pre className="tool-output">{tool.output}</pre>
+          </>
+        )}
+      </details>
+      {actions}
+      {large && (
+        <Modal
+          title="执行计划"
+          onClose={close}
+          actions={
+            <>
+              <span className="plan-dialog-status" role="status">
+                {status}
+              </span>
+              <span className="plan-reader-copy">
+                <CopyButton text={plan} label="复制计划" />
+              </span>
+            </>
+          }
+        >
+          <div
+            className="plan-reader"
+            data-search-ignore
+            onWheel={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <div className="message-content plan-content plan-reader-body">
+              <Rich text={plan} />
+            </div>
+            {actions}
+          </div>
+        </Modal>
+      )}
+    </section>
+  );
+}
+
 function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Live }) {
   const { category, verb, subject, added, removed, running, failed } = describe(tool, active);
   const Icon = icons[category];
@@ -204,6 +383,16 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
   const control = live.taskControl(tool);
   // A question Claude asks is answered, not allowed or denied.
   const questions = tool.name === 'AskUserQuestion' ? questionsOf(tool.input) : null;
+  const plan = useMemo(() => {
+    if (tool.name !== 'ExitPlanMode') return null;
+    try {
+      const input = JSON.parse(tool.input);
+      return typeof input?.plan === 'string' && input.plan.trim() ? input.plan : null;
+    } catch {
+      return null;
+    }
+  }, [tool.name, tool.input]);
+  if (plan) return <PlanCard tool={tool} plan={plan} live={live} />;
   if (approval && questions)
     return (
       <QuestionCard
@@ -372,6 +561,7 @@ function WorkGroup({
     <Fold
       className="work"
       forced={waiting}
+      reveal={work.items.some((item) => item.kind === 'tool' && item.name === 'ExitPlanMode')}
       summary={(shown) => (
         <span className="work-heading">
           {running && <LoaderCircle className="spinning" />}
@@ -437,10 +627,16 @@ function Message({
             </span>
           )}
           {item.delivery && (
-            <span
-              className={`message-delivery${item.delivery === '原生已接收' ? '' : ' unsettled'}`}
-            >
-              {item.delivery}
+            <span className={`message-delivery${item.delivery === 'received' ? '' : ' unsettled'}`}>
+              {
+                {
+                  submitted: '已提交',
+                  queued: '等待原生处理',
+                  received: '原生已接收',
+                  not_sent: '未送达原生',
+                  unconfirmed: '接收未确认',
+                }[item.delivery]
+              }
             </span>
           )}
           {stamp}
@@ -449,7 +645,11 @@ function Message({
               type="button"
               className="message-action"
               aria-label="编辑重发"
-              title="编辑重发：从这条消息之前分叉出新会话，原会话保留"
+              title={
+                item.delivery === 'not_sent'
+                  ? '编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉'
+                  : '编辑重发：从这条消息之前分叉出新会话，原会话保留'
+              }
               onClick={() => edit(item)}
             >
               <Pencil />
@@ -653,9 +853,10 @@ export default function Conversation({
     approvalId: string,
     allowed: boolean,
     answers?: Record<string, string>,
+    executionMode?: PlanExecutionMode,
     // Whether the answer reached the service.
   ) => Promise<boolean>;
-  edit?: (messageId: string, text: string) => void;
+  edit?: (messageId: string, text: string, deliveryStatus?: Text['delivery']) => void;
   clock: Clock;
   // What the session's background tasks last said of themselves, by task.
   progress: Record<string, TaskProgress> | undefined;
@@ -785,12 +986,12 @@ export default function Conversation({
       session?.activeRun?.id === tool.runId &&
       !tool.resolved &&
       !!tool.approvalId,
-    reply: (tool, allowed, answers) => {
+    reply: (tool, allowed, answers, executionMode) => {
       const id = tool.approvalId!;
       if (answering.current.has(id)) return;
       answering.current.add(id);
       setAnswered((value) => new Set(value).add(id));
-      void replyApproval(tool.runId, id, allowed, answers).then((sent) => {
+      void replyApproval(tool.runId, id, allowed, answers, executionMode).then((sent) => {
         if (sent) return;
         answering.current.delete(id);
         setAnswered((value) => {
@@ -800,7 +1001,7 @@ export default function Conversation({
         });
       });
     },
-    edit: edit && !running ? (item) => edit(item.id, item.text) : undefined,
+    edit: edit && !running ? (item) => edit(item.id, item.text, item.delivery) : undefined,
     taskControl: (tool) =>
       connected &&
       ownsRun &&
@@ -1010,9 +1211,14 @@ export default function Conversation({
         }}
         onPointerDown={(event) => {
           // Steps opened or closed are being read where they are.
-          if ((event.target as HTMLElement).closest('summary')) leave();
+          if ((event.target as HTMLElement).closest('summary, [data-reading-control]')) leave();
         }}
         onKeyDown={(event) => {
+          if (
+            ['Enter', ' '].includes(event.key) &&
+            (event.target as HTMLElement).closest('[data-reading-control]')
+          )
+            leave();
           if ((event.target as HTMLElement).closest('input, textarea, [contenteditable="true"]'))
             return;
           if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) leave();

@@ -111,10 +111,12 @@ export function Modal({
   title,
   onClose,
   children,
+  actions,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  actions?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -124,6 +126,7 @@ export function Modal({
   return (
     <dialog
       ref={ref}
+      aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -131,9 +134,12 @@ export function Modal({
     >
       <div className="dialog-heading">
         <h2>{title}</h2>
-        <IconButton title="关闭" onClick={onClose}>
-          <X />
-        </IconButton>
+        <div className="dialog-heading-actions">
+          {actions}
+          <IconButton title="关闭" onClick={onClose}>
+            <X />
+          </IconButton>
+        </div>
       </div>
       {children}
     </dialog>

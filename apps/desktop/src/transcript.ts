@@ -1,4 +1,4 @@
-import type { SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
+import type { PermissionMode, SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
 
 export type ToolState =
   | 'requested'
@@ -15,7 +15,7 @@ export type TranscriptItem =
       id: string;
       runId: string;
       text: string;
-      delivery?: string;
+      delivery?: Extract<SessionEvent['payload'], { type: 'message.delivery' }>['status'];
       // Stands for the "continue" button: there is no message of the user's to show, edit or copy.
       continued?: boolean;
       // Asked in a terminal that continued the session; recorded as its CLI wrote it.
@@ -45,6 +45,8 @@ export type TranscriptItem =
       input: string;
       target: string;
       approvalId?: string;
+      approved?: boolean;
+      confirmedMode?: PermissionMode;
       resolved: boolean;
       status: string;
       state: ToolState;
@@ -84,14 +86,7 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
       });
     if (payload.type === 'message.delivery') {
       const item = byId.get(payload.messageId);
-      if (item?.kind === 'user')
-        item.delivery = {
-          submitted: '已提交',
-          queued: '等待原生处理',
-          received: '原生已接收',
-          not_sent: '未送达原生',
-          unconfirmed: '接收未确认',
-        }[payload.status];
+      if (item?.kind === 'user') item.delivery = payload.status;
     }
     if (payload.type === 'text.delta') {
       const existing = byId.get(payload.messageId);
@@ -141,9 +136,20 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
       const tool = byApproval.get(payload.approvalId);
       if (tool?.kind === 'tool') {
         tool.resolved = true;
+        tool.approved = payload.allowed;
         tool.status = payload.allowed ? '运行中' : '已拒绝';
         tool.state = payload.allowed ? 'running' : 'denied';
       }
+    }
+    if (payload.type === 'native.permission') {
+      for (const tool of byApproval.values())
+        if (
+          tool.runId === runId &&
+          tool.name === 'ExitPlanMode' &&
+          tool.approved &&
+          !tool.confirmedMode
+        )
+          tool.confirmedMode = payload.permissionMode;
     }
     if (payload.type === 'tool.result') {
       const tool = byId.get(payload.toolId);

@@ -270,6 +270,35 @@ for (const allowed of [true, false]) {
   });
 }
 
+test('ordinary and foreign approvals cannot switch execution mode or consume the pending approval', async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const sessionId = await f.create(client);
+  await client.request({ type: 'message.send', sessionId, text: '测试审批模式', scenario: 'tool' });
+  const approval = await client.event('approval.requested');
+  assert.ok(
+    approval.type === 'session.event' && approval.event.payload.type === 'approval.requested',
+  );
+  const reply = {
+    type: 'approval.reply',
+    sessionId,
+    runId: approval.event.runId,
+    approvalId: approval.event.payload.approvalId,
+    allowed: true,
+  };
+  const invalid = await client.request({ ...reply, executionMode: 'auto' });
+  assert.ok(invalid.type === 'response' && !invalid.ok && invalid.code === 'invalid_approval_mode');
+  const foreign = await client.request({
+    ...reply,
+    sessionId: await f.create(client),
+    executionMode: 'default',
+  });
+  assert.ok(foreign.type === 'response' && !foreign.ok && foreign.code === 'run_inactive');
+  assert.equal(f.server.store.get(sessionId).session.activeRun?.status, 'awaiting_approval');
+  const accepted = await client.request(reply);
+  assert.ok(accepted.type === 'response' && accepted.ok);
+});
+
 test('cancel during streaming stops events and never restarts the run', async (t) => {
   const f = await fixture(t, 20);
   const client = await f.connect();

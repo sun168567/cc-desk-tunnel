@@ -122,12 +122,16 @@ test('effort drag previews continuously, saves on release and keeps the menu ope
   const box = (await slider.boundingBox())!;
   await page.mouse.move(box.x + 8, box.y + box.height / 2);
   await page.mouse.down();
-  for (const fraction of [0.3, 0.6, 0.9, 1]) {
+  for (const fraction of [0.3, 0.6, 0.75, 0.9, 1]) {
     await page.mouse.move(box.x + 8 + (box.width - 16) * fraction, box.y + box.height / 2, {
       steps: 4,
     });
     await expect(menu).toBeVisible();
     expect(saves).toBe(0);
+    if (fraction === 0.75) {
+      await expect(slider).toHaveValue('3');
+      await menu.screenshot({ path: resolve('.local/screenshots/effort-xhigh.png') });
+    }
   }
   await expect(slider).toHaveValue('4');
   await expect(menu.locator('.effort-heading')).toContainText('最高');

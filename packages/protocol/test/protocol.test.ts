@@ -61,6 +61,22 @@ test('protocol validates UTF-8 text, IDs and bounded input', () => {
 test('the protocol history ends with the current version', () => {
   assert.equal(Object.values(PROTOCOL_HISTORY).at(-1), PROTOCOL_VERSION);
 });
+
+test('plan execution modes are bounded independently of the session mode', () => {
+  const reply = {
+    type: 'approval.reply',
+    requestId: randomUUID(),
+    sessionId: randomUUID(),
+    runId: randomUUID(),
+    approvalId: randomUUID(),
+    allowed: true,
+  };
+  for (const executionMode of ['auto', 'default', 'acceptEdits'])
+    assert.equal(commandSchema.safeParse({ ...reply, executionMode }).success, true);
+  for (const executionMode of ['plan', 'bypassPermissions', 'dontAsk', 'unknown'])
+    assert.equal(commandSchema.safeParse({ ...reply, executionMode }).success, false);
+  assert.equal(commandSchema.safeParse(reply).success, true);
+});
 test('authentication version and event ordering are explicit', () => {
   const auth = {
     type: 'auth',

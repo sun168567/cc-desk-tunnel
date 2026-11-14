@@ -70,3 +70,5 @@ Claude Code 原生存储是模型会话上下文的唯一权威，包含原生�
 新会话默认请求原生 `auto`，CLI 自己判断风险；没有本项目第二套 AI 审批器，也不把 auto 换成 bypassPermissions。GUI 可改为原生 `default` / `plan` / `acceptEdits`，偏好保存在 Linux；`bypassPermissions`（绕过权限，什么都不再询问）只在使用者于“设置 → 常规 → 审批”里允许后才出现在选项里，选中前再确认一次，从不作为默认。实际模式读取 `system.init.permissionMode`；版本 / 模型 / 提供方不支持时显示实际值及原生提示。
 
 `canUseTool` 仍接出原生升级到用户的请求，仅作为必要时人工允许 / 拒绝入口；Claude 的提问（`AskUserQuestion`）走同一入口，界面展示问题与选项，用户的选择按官方结构放进 `updatedInput.answers` 返回，不回答则按拒绝返回；不能因默认 auto 就移除或自动允许所有请求。`auto` 下多数操作不需要人工，但这不是所有命令、模型或提供方都不需要人工的保证。
+
+`ExitPlanMode` 的 `plan` 正文在界面中以 Markdown 计划卡片显示，可展开、复制和放大阅读，原始工具详情仍可查看。批准时可选择 `auto/default/acceptEdits`；选择通过 SDK `canUseTool` 的 `updatedPermissions: [{ type: 'setMode', mode, destination: 'session' }]` 返回，由原生退出计划模式并继续同一会话。继续规划则返回拒绝，不更改模式。运行中 `system/status.permissionMode`（包括 `status: null`）作为 `native.permission` 保存并广播，底部显示和后续启动使用原生确认的模式；审批回执本身不代表模式已切换。初始化时的请求 / 实际模式差异继续单独保留。

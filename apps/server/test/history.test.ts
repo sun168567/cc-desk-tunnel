@@ -193,6 +193,31 @@ test('legacy UTF-8 JSON is imported exactly once, kept intact and not resurrecte
   second.close();
 });
 
+test('a confirmed runtime mode is persisted for reconnects and the next run without weakening configure', (t) => {
+  const f = fixture(t);
+  const id = f.session.id;
+  const runId = randomUUID();
+  f.store.configure(id, 'plan');
+  f.store.append(id, runId, { type: 'run.status', status: 'running', connectionId: randomUUID() });
+  assert.throws(() => f.store.configure(id, 'auto'), /请先结束当前运行/);
+  f.store.append(id, runId, {
+    type: 'native.session',
+    nativeSessionId: id,
+    model: 'test',
+    version: '2.1.321',
+    requestedPermissionMode: 'plan',
+    permissionMode: 'default',
+  });
+  // Startup mismatch remains a report, not a change to the user's requested mode.
+  assert.equal(f.store.get(id).session.permissionMode, 'plan');
+  f.store.append(id, runId, { type: 'native.permission', permissionMode: 'acceptEdits' });
+  assert.equal(f.store.snapshot(id).session.permissionMode, 'acceptEdits');
+  f.store.close();
+  f.made.store = new SessionStore(f.directory);
+  assert.equal(f.made.store.get(id).session.permissionMode, 'acceptEdits');
+  assert.equal(f.made.store.get(id).session.activeRun, null);
+});
+
 test('reading the native state of a session leaves its time of last use alone', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T12:00:00Z') });
   const { store, directory, session } = fixture(t);

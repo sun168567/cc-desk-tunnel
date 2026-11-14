@@ -46,6 +46,7 @@ import type {
   Command,
   Device,
   EventPayload,
+  PlanExecutionMode,
   TerminalActivity,
   Fragment,
   ServerMessage,
@@ -147,7 +148,15 @@ export type Run = {
   decide?: (allowed: boolean, answers?: Record<string, string>) => void;
   approvals: Map<
     string,
-    (allowed: boolean, answers?: Record<string, string>, unanswered?: Unanswered) => void
+    {
+      toolName: string;
+      decide: (
+        allowed: boolean,
+        answers?: Record<string, string>,
+        unanswered?: Unanswered,
+        executionMode?: PlanExecutionMode,
+      ) => void;
+    }
   >;
   // The approvals that are Claude's questions, answered or left unanswered rather than allowed or denied.
   questions: Set<string>;
@@ -584,7 +593,8 @@ export function createProxyServer(options: ServerOptions) {
         session: store.renameNative(run.sessionId, payload.title),
       });
     if (payload.type === 'native.compact') store.compacted(run.sessionId);
-    if (payload.type === 'run.status') updated(run.sessionId);
+    if (payload.type === 'run.status' || payload.type === 'native.permission')
+      updated(run.sessionId);
   }
   // The CLI reports its model requests a moment after the turn ends. Wait for as many as the turn made, then
   // record what they add up to; whatever has not come by then is left out and the figures are marked partial.
@@ -636,7 +646,7 @@ export function createProxyServer(options: ServerOptions) {
     runs.delete(run.sessionId);
     run.controller.abort();
     run.decide?.(false);
-    for (const decide of run.approvals.values()) decide(false);
+    for (const { decide } of run.approvals.values()) decide(false);
     run.approvals.clear();
   }
   // A native run ends through its own adapter, which reports what is known about in-flight tools first.
@@ -648,7 +658,7 @@ export function createProxyServer(options: ServerOptions) {
     run.cancelReason = reason;
     run.input?.close();
     run.controller.abort();
-    for (const decide of run.approvals.values()) decide(false);
+    for (const { decide } of run.approvals.values()) decide(false);
     run.approvals.clear();
   }
   function nativeRoot(sessionId: string) {
@@ -693,15 +703,18 @@ export function createProxyServer(options: ServerOptions) {
         signal: run.controller.signal,
         ssh,
         emit: (event) => emit(run, event),
-        approve: (toolId, waiting) => {
+        approve: (toolId, waiting, toolName) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
           const approvalId = randomUUID();
           if (waiting === 'question') run.questions.add(approvalId);
           return new Promise((resolve) => {
-            run.approvals.set(approvalId, (allowed, answers, unanswered) => {
-              run.questions.delete(approvalId);
-              emit(run, { type: 'approval.resolved', approvalId, allowed });
-              resolve({ allowed, answers, unanswered });
+            run.approvals.set(approvalId, {
+              toolName,
+              decide: (allowed, answers, unanswered, executionMode) => {
+                run.questions.delete(approvalId);
+                emit(run, { type: 'approval.resolved', approvalId, allowed, executionMode });
+                resolve({ allowed, answers, unanswered, executionMode });
+              },
             });
             emit(run, { type: 'approval.requested', approvalId, toolId });
             emit(run, {
@@ -1425,6 +1438,12 @@ export function createProxyServer(options: ServerOptions) {
     }
     if (command.type === 'approval.reply' && run.answered.has(command.approvalId))
       throw new DomainError('approval_answered', '这一项已经处理过了，可能是在另一台设备上。');
+    if (
+      command.type === 'approval.reply' &&
+      command.executionMode !== undefined &&
+      (!command.allowed || run.approvals.get(command.approvalId)?.toolName !== 'ExitPlanMode')
+    )
+      throw new DomainError('invalid_approval_mode', '只有批准执行计划时可以选择执行模式。');
     if (command.type === 'run.task.stop') {
       if (!run.controls.stopTask) return;
       // The CLI reports the task gone through its task list; a task already over is not an error.
@@ -1463,6 +1482,7 @@ export function createProxyServer(options: ServerOptions) {
           command.answers,
           skipped ? 'skipped' : undefined,
           peer.id,
+          command.executionMode,
         )
       )
         throw new DomainError('approval_inactive', '审批已失效。');
@@ -1483,12 +1503,13 @@ export function createProxyServer(options: ServerOptions) {
     answers: Record<string, string> | undefined,
     unanswered: Unanswered | undefined,
     connectionId = run.connectionId,
+    executionMode?: PlanExecutionMode,
   ) {
-    const decide = run.approvals.get(approvalId);
-    if (!decide) return false;
+    const approval = run.approvals.get(approvalId);
+    if (!approval) return false;
     run.approvals.delete(approvalId);
     run.answered.add(approvalId);
-    decide(allowed, answers, unanswered);
+    approval.decide(allowed, answers, unanswered, executionMode);
     if (!run.approvals.size) emit(run, { type: 'run.status', status: 'running', connectionId });
     return true;
   }
