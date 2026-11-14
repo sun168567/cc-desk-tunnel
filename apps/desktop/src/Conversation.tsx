@@ -627,10 +627,16 @@ function Message({
             </span>
           )}
           {item.delivery && (
-            <span
-              className={`message-delivery${item.delivery === '原生已接收' ? '' : ' unsettled'}`}
-            >
-              {item.delivery}
+            <span className={`message-delivery${item.delivery === 'received' ? '' : ' unsettled'}`}>
+              {
+                {
+                  submitted: '已提交',
+                  queued: '等待原生处理',
+                  received: '原生已接收',
+                  not_sent: '未送达原生',
+                  unconfirmed: '接收未确认',
+                }[item.delivery]
+              }
             </span>
           )}
           {stamp}
@@ -639,7 +645,11 @@ function Message({
               type="button"
               className="message-action"
               aria-label="编辑重发"
-              title="编辑重发：从这条消息之前分叉出新会话，原会话保留"
+              title={
+                item.delivery === 'not_sent'
+                  ? '编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉'
+                  : '编辑重发：从这条消息之前分叉出新会话，原会话保留'
+              }
               onClick={() => edit(item)}
             >
               <Pencil />
@@ -846,7 +856,7 @@ export default function Conversation({
     executionMode?: PlanExecutionMode,
     // Whether the answer reached the service.
   ) => Promise<boolean>;
-  edit?: (messageId: string, text: string) => void;
+  edit?: (messageId: string, text: string, deliveryStatus?: Text['delivery']) => void;
   clock: Clock;
   // What the session's background tasks last said of themselves, by task.
   progress: Record<string, TaskProgress> | undefined;
@@ -991,7 +1001,7 @@ export default function Conversation({
         });
       });
     },
-    edit: edit && !running ? (item) => edit(item.id, item.text) : undefined,
+    edit: edit && !running ? (item) => edit(item.id, item.text, item.delivery) : undefined,
     taskControl: (tool) =>
       connected &&
       ownsRun &&

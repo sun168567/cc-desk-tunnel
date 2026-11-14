@@ -313,8 +313,8 @@ test('native input receipts update the existing user row without duplicating mes
     createdAt: new Date().toISOString(),
   }));
   assert.equal(transcript(events).length, 1);
-  assert.equal(transcript(events)[0].delivery, '原生已接收');
-  assert.equal(transcript(events.slice(0, 3))[0].delivery, '等待原生处理');
+  assert.equal(transcript(events)[0].delivery, 'received');
+  assert.equal(transcript(events.slice(0, 3))[0].delivery, 'queued');
 });
 
 test('account telemetry can refresh without selecting or loading a conversation', (t) => {

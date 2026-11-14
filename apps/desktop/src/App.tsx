@@ -1614,7 +1614,17 @@ export function App({
               edit={
                 controlsDisabled || away
                   ? undefined
-                  : (id, text) => {
+                  : (id, text, deliveryStatus) => {
+                      // Only a confirmed non-delivery can be resent in place. A missing receipt is not proof.
+                      if (deliveryStatus === 'not_sent') {
+                        if (draft && draft !== text) {
+                          setError('输入框里还有草稿，请先发送或清空，再编辑这条未送达的消息。');
+                          return;
+                        }
+                        setError(null);
+                        setDraft(selected!.id, text);
+                        return;
+                      }
                       void fork(selected!, { id, text });
                     }
               }
