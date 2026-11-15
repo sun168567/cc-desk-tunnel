@@ -368,7 +368,11 @@ export function createProxyServer(options: ServerOptions) {
         handler,
       )
     : createServer(handler);
-  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_FRAME_BYTES,
+    perMessageDeflate: { serverNoContextTakeover: true, clientNoContextTakeover: true },
+  });
   server.on('upgrade', (request, socket, head) => {
     if (!closing && web.matchesUpgrade(request)) {
       const address = web.address(request);
@@ -411,7 +415,9 @@ export function createProxyServer(options: ServerOptions) {
   });
 
   function send(peer: Peer, message: ServerMessage) {
-    if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(JSON.stringify(message));
+    // History benefits from compression; small live events and control replies do not need it.
+    if (peer.socket.readyState === WebSocket.OPEN)
+      peer.socket.send(JSON.stringify(message), { compress: message.type === 'session.snapshot' });
   }
   function broadcast(message: ServerMessage, sessionId?: string) {
     for (const peer of peers) {
