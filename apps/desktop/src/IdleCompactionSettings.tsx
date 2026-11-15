@@ -37,7 +37,7 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
       <p className="muted page-section-note">
         提示缓存在最后一次请求后 1
         小时过期，过期后压缩要按全价重读整段上下文。开启后，会话空闲到设定时间时，服务端用当前模型执行
-        /compact，与手动点“压缩”相同，读取的是缓存；不需要客户端或会话所在电脑在线。这是一次真实请求，会计入额度。关闭时，会话里会在过期前提醒。
+        /compact，与手动点“压缩”相同，读取的是缓存；不需要客户端或会话所在电脑在线。这是一次真实请求，会计入额度。已知达到额度上限时，服务端等到重置时间再检查；缓存届时已过期或不足一分钟就跳过，不补做全价压缩。关闭时，会话里会在过期前提醒。
       </p>
       {failure && (
         <p className="error-text" role="alert">

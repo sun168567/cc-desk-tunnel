@@ -370,6 +370,90 @@ const unified = rateLimitEvent({
   },
 });
 
+test('automatic work waits for exhausted account windows and ignores expired readings', () => {
+  const quotas = new Quotas();
+  const window = (name: string, utilization: number | null, resetsAt: string | null) => ({
+    name,
+    utilization,
+    resetsAt,
+  });
+  const reading = {
+    available: true,
+    windows: [
+      window('five_hour', 100, new Date(10_000).toISOString()),
+      window('seven_day', 101, new Date(20_000).toISOString()),
+      window('seven_day:Fable', 100, new Date(30_000).toISOString()),
+    ],
+  };
+  assert.equal(quotas.blockedUntil('account', reading, 0), 20_000);
+  assert.equal(quotas.blockedUntil('account', reading, 10_000), 20_000);
+  assert.equal(quotas.blockedUntil('account', reading, 20_000), null);
+  assert.equal(quotas.blockedUntil('account', null, 0), null);
+  assert.equal(
+    quotas.blockedUntil('account', { available: false, windows: reading.windows }, 0),
+    null,
+  );
+  assert.equal(
+    quotas.blockedUntil(
+      'account',
+      { available: true, windows: [window('five_hour', 100, null)] },
+      0,
+    ),
+    Infinity,
+  );
+  assert.equal(
+    quotas.blockedUntil(
+      'account',
+      { available: true, windows: [window('five_hour', null, null)] },
+      0,
+    ),
+    null,
+  );
+});
+
+test('native rejection without utilization holds its login until reset; allowed overage can continue', () => {
+  const quotas = new Quotas();
+  quotas.observe(
+    'a',
+    rateLimitEvent({ status: 'rejected', rateLimitType: 'five_hour', resetsAt: 10 }),
+    0,
+  );
+  assert.equal(quotas.blockedUntil('a', null, 0), 10_000);
+  assert.equal(quotas.blockedUntil('b', null, 0), null);
+  assert.equal(quotas.blockedUntil('a', null, 10_000), null);
+  quotas.observe('a', rateLimitEvent({ status: 'rejected' }), 0);
+  assert.equal(quotas.blockedUntil('a', null, 0), Infinity);
+  quotas.observe(
+    'a',
+    rateLimitEvent({
+      status: 'allowed_warning',
+      utilization: 0.9,
+      rateLimitType: 'five_hour',
+      resetsAt: 20,
+    }),
+    0,
+  );
+  assert.equal(quotas.blockedUntil('a', null, 0), null);
+  quotas.observe(
+    'a',
+    rateLimitEvent({
+      status: 'allowed',
+      utilization: 1,
+      rateLimitType: 'five_hour',
+      resetsAt: 20,
+      isUsingOverage: true,
+    }),
+    1,
+  );
+  assert.equal(quotas.blockedUntil('a', null, 1), null);
+  quotas.observe(
+    'a',
+    rateLimitEvent({ status: 'rejected', rateLimitType: 'overage', overageResetsAt: 30 }),
+    2,
+  );
+  assert.equal(quotas.blockedUntil('a', null, 2), 30_000);
+});
+
 test('the quota the CLI passes on in its stream becomes the windows of its own reading', () => {
   assert.deepEqual(observedQuota(unified, null, 0), {
     windows: [
