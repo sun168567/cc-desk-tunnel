@@ -790,9 +790,26 @@ test('history is identical with negotiated compression and without compression',
     f.clients.push(client);
     await client.open();
     assert.equal(client.socket.extensions, compression ? 'permessage-deflate' : '');
-    const response = await client.request({ type: 'session.subscribe', sessionId });
+    const requestId = randomUUID();
+    client.send({ type: 'session.subscribe', sessionId, requestId });
+    const parts: string[] = [];
+    for (;;) {
+      const part = await client.wait((message) => message.type === 'session.history.part');
+      assert.ok(part.type === 'session.history.part');
+      parts.push(part.data);
+      // An unrelated reply must get through before the receiver asks for another part.
+      if (parts.length === 1) {
+        const usage = await client.request({ type: 'usage.summary' });
+        assert.ok(usage.type === 'response' && usage.ok);
+      }
+      client.send({ type: 'session.history.next', requestId });
+      if (part.last) break;
+    }
+    const response = await client.wait(
+      (message) => message.type === 'response' && message.requestId === requestId,
+    );
     assert.ok(response.type === 'response' && response.ok);
-    const snapshot = await client.wait((message) => message.type === 'session.snapshot');
+    const snapshot = serverMessageSchema.parse(JSON.parse(parts.join(''))[0]);
     assert.ok(snapshot.type === 'session.snapshot');
     assert.deepEqual(snapshot.events, expected);
   }

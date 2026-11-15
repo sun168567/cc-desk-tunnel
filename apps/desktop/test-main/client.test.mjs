@@ -90,6 +90,143 @@ function event(sessionId, sequence, text = 'text') {
   };
 }
 
+test('history parts preserve the snapshot boundary while live output continues and renew only their own wait', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { client, socket, sessions } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  const request = socket.sent.at(-1);
+  const recorded = event(session.id, 1, '历史🙂');
+  const fragment = {
+    type: 'session.fragment',
+    sessionId: session.id,
+    runId: recorded.runId,
+    payload: { type: 'text.delta', messageId: randomUUID(), text: '开始' },
+  };
+  const page = [
+    {
+      type: 'session.snapshot',
+      requestId: request.requestId,
+      session,
+      events: [recorded],
+      mode: 'replace',
+      firstSequence: 1,
+      lastSequence: 1,
+      hasEarlier: false,
+    },
+    fragment,
+  ];
+  const text = JSON.stringify(page);
+  socket.message({
+    type: 'session.history.part',
+    requestId: request.requestId,
+    sessionId: session.id,
+    data: text.slice(0, 80),
+    last: false,
+  });
+  socket.message({ ...fragment, payload: { ...fragment.payload, text: '继续' } });
+  t.mock.timers.tick(20000);
+  assert.equal(client.state.history[session.id].loading, true);
+  assert.equal(client.state.live[session.id], undefined);
+  socket.message({
+    type: 'session.history.part',
+    requestId: request.requestId,
+    sessionId: session.id,
+    data: text.slice(80, 160),
+    last: false,
+  });
+  t.mock.timers.tick(20000);
+  assert.equal(client.pending.has(request.requestId), true);
+  socket.message({
+    type: 'session.history.part',
+    requestId: request.requestId,
+    sessionId: session.id,
+    data: text.slice(160),
+    last: true,
+  });
+  socket.message({ type: 'response', requestId: request.requestId, ok: true });
+  t.mock.timers.tick(32);
+  assert.deepEqual(client.state.events[session.id], [recorded]);
+  assert.equal(client.state.live[session.id].payload.text, '开始继续');
+  assert.equal(client.state.history[session.id].loading, false);
+  assert.equal(socket.sent.filter((message) => message.type === 'session.history.next').length, 3);
+});
+
+test('history consumers await failure instead of mistaking a stopped loading flag for success', async (t) => {
+  const { client, socket, sessions } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  const request = socket.sent.at(-1);
+  const rejected = assert.rejects(client.waitForHistory(session.id), /历史读取失败/);
+  socket.message({
+    type: 'response',
+    requestId: request.requestId,
+    ok: false,
+    message: '历史读取失败',
+  });
+  await rejected;
+});
+
+test('a failed partial snapshot cannot let later live events skip missing history on the next subscribe', async (t) => {
+  const { client, socket, sessions } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  const request = socket.sent.at(-1);
+  socket.message({
+    type: 'session.history.part',
+    requestId: request.requestId,
+    sessionId: session.id,
+    data: '[',
+    last: false,
+  });
+  socket.message({ type: 'session.event', event: event(session.id, 5) });
+  socket.message({
+    type: 'response',
+    requestId: request.requestId,
+    ok: false,
+    message: '历史停滞',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  socket.message({ type: 'session.event', event: event(session.id, 6) });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(client.state.history[session.id].lastSequence, 6);
+  client.select(session.id);
+  assert.equal(socket.sent.at(-1).afterSequence, 0);
+});
+
+test('switching cancels old history, ignores its late error and avoids duplicate subscriptions while loading', async (t) => {
+  const { client, socket, sessions } = fixture(t);
+  const [a, b] = sessions;
+  client.select(a.id);
+  const request = socket.sent.at(-1);
+  client.select(a.id);
+  assert.equal(socket.sent.filter((message) => message.type === 'session.subscribe').length, 1);
+  client.select(b.id);
+  assert.ok(
+    socket.sent.some(
+      (message) =>
+        message.type === 'session.history.cancel' && message.requestId === request.requestId,
+    ),
+  );
+  socket.message({
+    type: 'response',
+    requestId: request.requestId,
+    ok: false,
+    message: '旧会话失败',
+  });
+  socket.message({
+    type: 'session.history.part',
+    requestId: request.requestId,
+    sessionId: a.id,
+    data: 'late',
+    last: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(client.state.error, null);
+  assert.equal(client.state.history[b.id].loading, true);
+  assert.equal(client.pending.has(request.requestId), false);
+});
+
 for (const type of [
   'session.status',
   'session.history',

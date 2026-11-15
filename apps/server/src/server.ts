@@ -28,6 +28,7 @@ import {
   continues,
   deviceIdentitySchema,
   isFragment,
+  historyControlSchema,
   leaveSchema,
   MAX_FRAME_BYTES,
   pathKey,
@@ -64,6 +65,7 @@ import {
 import type { ClaudeOptions, Unanswered } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
+import { HistoryDelivery } from './history-delivery.ts';
 import type { NativeLogin } from './native-account.ts';
 import { IdleCompactions } from './idle-compaction.ts';
 import { NativeInput } from './native-input.ts';
@@ -111,6 +113,7 @@ type Peer = {
   // The client keeps the plan quota current on its screen, so the service reads it while runs go on.
   quotaWanted?: boolean;
   subscriptions: Set<string>;
+  history?: HistoryDelivery;
   responses: Map<string, { command: string; response: Promise<ServerMessage> }>;
 };
 // A run belongs to the computer its session is on, not to the connection that started it: connections come
@@ -417,7 +420,9 @@ export function createProxyServer(options: ServerOptions) {
   function send(peer: Peer, message: ServerMessage) {
     // History benefits from compression; small live events and control replies do not need it.
     if (peer.socket.readyState === WebSocket.OPEN)
-      peer.socket.send(JSON.stringify(message), { compress: message.type === 'session.snapshot' });
+      peer.socket.send(JSON.stringify(message), {
+        compress: message.type === 'session.snapshot' || message.type === 'session.history.part',
+      });
   }
   function broadcast(message: ServerMessage, sessionId?: string) {
     for (const peer of peers) {
@@ -1696,30 +1701,38 @@ export function createProxyServer(options: ServerOptions) {
       case 'terminal.open':
         await openTerminal(peer, command, session);
         return command.sessionId;
-      case 'session.subscribe':
+      case 'session.subscribe': {
         peer.subscriptions.clear();
         peer.subscriptions.add(command.sessionId);
-        send(peer, {
-          type: 'session.snapshot',
-          ...store.history(command.sessionId, command.requestId, command.afterSequence),
-        });
+        const messages: ServerMessage[] = [
+          {
+            type: 'session.snapshot',
+            ...store.history(command.sessionId, command.requestId, command.afterSequence),
+          },
+        ];
         // The history ends where the run's unfinished output begins.
         {
           const run = runs.get(command.sessionId);
           if (run?.open)
-            send(peer, {
+            messages.push({
               type: 'session.fragment',
               sessionId: run.sessionId,
               runId: run.id,
               payload: run.open,
             });
         }
+        peer.history ??= new HistoryDelivery((message) => send(peer, message));
+        await peer.history.deliver(command.requestId, command.sessionId, messages);
         return command.sessionId;
+      }
       case 'session.history':
-        send(peer, {
-          type: 'session.snapshot',
-          ...store.history(command.sessionId, command.requestId, 0, command.beforeSequence),
-        });
+        peer.history ??= new HistoryDelivery((message) => send(peer, message));
+        await peer.history.deliver(command.requestId, command.sessionId, [
+          {
+            type: 'session.snapshot',
+            ...store.history(command.sessionId, command.requestId, 0, command.beforeSequence),
+          },
+        ]);
         return command.sessionId;
       case 'run.cancel':
       case 'run.task.stop':
@@ -2047,6 +2060,7 @@ export function createProxyServer(options: ServerOptions) {
   // to come back, unless the client said it was leaving; nothing is replayed for a later connection either way.
   function release(peer: Peer) {
     peers.delete(peer);
+    peer.history?.cancel();
     if (login?.owner === peer) login.process.cancel();
     for (const terminal of terminals.values())
       if (terminal.owner !== peer) continue;
@@ -2219,6 +2233,13 @@ export function createProxyServer(options: ServerOptions) {
         if (control.success) {
           if (peer.browser && control.data.type === 'terminal.input') web.touch(peer.browser);
           controlTerminal(peer, control.data);
+          return;
+        }
+        const historyControl = historyControlSchema.safeParse(value);
+        if (historyControl.success) {
+          if (historyControl.data.type === 'session.history.next')
+            peer.history?.next(historyControl.data.requestId);
+          else peer.history?.cancel(historyControl.data.requestId);
           return;
         }
         const command = commandSchema.safeParse(value);

@@ -56,21 +56,10 @@ export function markdown(session: Session, events: SessionEvent[]) {
 // Only part of a long session is in memory; the rest is fetched page by page before writing.
 export async function exportSession(client: ProxyClient, session: Session) {
   if (client.state.selectedId !== session.id) client.select(session.id);
-  const settled = () =>
-    new Promise<void>((resolve, reject) => {
-      const started = Date.now();
-      const check = () => {
-        const history = client.state.history[session.id];
-        if (history && !history.loading && !history.loadingEarlier) resolve();
-        else if (Date.now() - started > 30000) reject(new Error('读取会话历史超时。'));
-        else setTimeout(check, 50);
-      };
-      check();
-    });
-  await settled();
+  await client.waitForHistory(session.id);
   while (client.state.history[session.id]?.hasEarlier) {
     await client.loadEarlier(session.id);
-    await settled();
+    await client.waitForHistory(session.id);
   }
   const text = markdown(session, client.shown(session.id));
   const name = `${session.title.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || '会话'}.md`;

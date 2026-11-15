@@ -23,7 +23,7 @@ function reply(n: number) {
 }
 
 // Opens the session; what is returned starts a reply streaming into it, fast, and stops it when called.
-async function open(page: Page) {
+async function open(page: Page, historyFailure = '') {
   const now = new Date().toISOString();
   const connectionId = randomUUID();
   let stream = (): (() => void) => () => {};
@@ -121,9 +121,18 @@ async function open(page: Page) {
           mode: 'replace',
           firstSequence: 1,
           lastSequence: sequence,
-          hasEarlier: false,
+          hasEarlier: !!historyFailure,
           events,
         });
+      if (message.type === 'session.history' && historyFailure) {
+        send({
+          type: 'response',
+          requestId: message.requestId,
+          ok: false,
+          message: historyFailure,
+        });
+        return;
+      }
       send({ type: 'response', requestId: message.requestId, ok: true });
     });
   });
@@ -160,6 +169,18 @@ async function fromEnd(page: Page) {
 test('a long conversation opens at its end', async ({ page }) => {
   await open(page);
   expect(await fromEnd(page)).toBeLessThan(2);
+});
+
+test('approaching the top preloads history and preserves the actual failure reason', async ({
+  page,
+}) => {
+  const reason = '历史传输连续 30 秒没有收到接收确认，请重试。';
+  await open(page, reason);
+  await page.locator('.conversation').evaluate((box) => {
+    box.scrollTop = 200;
+  });
+  await expect(page.getByText(reason, { exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '加载更早记录', exact: true })).toBeEnabled();
 });
 
 test('coming back from the settings, the conversation is at its end again', async ({ page }) => {

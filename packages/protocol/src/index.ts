@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 25;
+export const PROTOCOL_VERSION = 26;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -24,6 +24,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.10': 23,
   '0.3.12': 24,
   '0.3.14': 25,
+  '0.3.15': 26,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -842,7 +843,24 @@ export const deviceIdentitySchema = z
 // The client is closing the connection on purpose. Without it a connection that ends is taken for a fault on
 // the way, and what the device was running is kept for it to come back to.
 export const leaveSchema = z.object({ type: z.literal('leave') }).strict();
+// These controls only advance or discard a history owned by this authenticated connection.
+export const historyControlSchema = z
+  .object({
+    type: z.enum(['session.history.next', 'session.history.cancel']),
+    requestId: id,
+  })
+  .strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('session.history.part'),
+    requestId: id,
+    sessionId: id,
+    data: z
+      .string()
+      .min(1)
+      .max(32 * 1024),
+    last: z.boolean(),
+  }),
   z.object({
     type: z.literal('web.settings.state'),
     requestId: id,
