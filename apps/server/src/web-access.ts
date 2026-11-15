@@ -82,6 +82,7 @@ const fail = (code: string, message: string): never => {
 const statuses: Record<string, number> = { web_unauthorized: 401, web_rate_limited: 429 };
 const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
@@ -650,7 +651,7 @@ export class WebAccess {
         !(
           file === 'index.html' ||
           file.startsWith('assets/') ||
-          ['favicon.ico', 'icon.png'].includes(file)
+          ['favicon.ico', 'icon.png', 'manifest.webmanifest'].includes(file)
         )
       )
         return this.empty(response, 404);

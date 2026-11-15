@@ -35,6 +35,7 @@ async function fixture(t: TestContext, tls = false) {
   const directory = mkdtempSync(join(tmpdir(), 'cc-web-'));
   mkdirSync(join(directory, 'assets'));
   writeFileSync(join(directory, 'index.html'), '<!doctype html><h1>Shared workbench</h1>');
+  writeFileSync(join(directory, 'manifest.webmanifest'), '{"display":"standalone"}');
   writeFileSync(join(directory, 'assets', 'app.js'), 'console.log("shared");');
   writeFileSync(join(directory, 'assets', 'app.js.map'), '{}');
   const database = new DatabaseSync(':memory:');
@@ -180,6 +181,9 @@ test('Web starts disabled, persists its switch and stable server device, and onl
   assert.equal(f.web.serverDeviceId, device);
   assert.equal((await f.http('/')).status, 200);
   assert.equal((await f.http('/assets/app.js')).status, 200);
+  const manifest = await f.http('/manifest.webmanifest');
+  assert.equal(manifest.headers['content-type'], 'application/manifest+json');
+  assert.equal(JSON.parse(manifest.text).display, 'standalone');
   for (const path of [
     '/assets/app.js.map',
     '/assets/%2e%2e/index.html',

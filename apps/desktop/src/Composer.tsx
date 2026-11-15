@@ -119,6 +119,26 @@ export default function Composer({
   stop: () => void;
 }) {
   const input = useRef<HTMLTextAreaElement>(null);
+  const toolbar = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const bar = toolbar.current!;
+    const fit = () => {
+      bar.classList.remove('compact-permission');
+      bar.classList.add('measuring');
+      bar.classList.toggle(
+        'compact-permission',
+        bar.lastElementChild!.getBoundingClientRect().right +
+          parseFloat(getComputedStyle(bar).paddingRight) >
+          bar.getBoundingClientRect().right,
+      );
+      bar.classList.remove('measuring');
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(bar);
+    for (const child of bar.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [session, native, capabilities, nativeSession, !!resume, !!draft.trim()]);
   const branch = useBranch(session.projectPath, !!session.activeRun);
   const [dropping, setDropping] = useState(false);
   // The command menu: this window's own actions, then Claude Code's commands that fit what follows the slash. Enter
@@ -357,7 +377,7 @@ export default function Composer({
             }
           }}
         />
-        <div className="composer-toolbar">
+        <div className="composer-toolbar" ref={toolbar}>
           {window.desktop && (
             <IconButton
               title="添加文件：把文件的路径放进消息"
