@@ -549,7 +549,7 @@ export class SessionStore {
     if (afterSequence > 0) {
       const size = this.database
         .prepare(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(length(data)), 0) AS bytes FROM events WHERE session_id = ? AND sequence > ?',
+          'SELECT COUNT(*) AS count, COALESCE(SUM(octet_length(data)), 0) AS bytes FROM events WHERE session_id = ? AND sequence > ?',
         )
         .get(sessionId, afterSequence)!;
       if (Number(size.count) <= pageEvents && Number(size.bytes) <= pageBytes) {
@@ -569,23 +569,29 @@ export class SessionStore {
     const groups = this.database
       .prepare(
         `
-      SELECT run_id, MIN(sequence) AS first, COUNT(*) AS count, SUM(length(data)) AS bytes
+      SELECT run_id, MIN(sequence) AS first
       FROM events WHERE session_id = ? AND sequence < ? GROUP BY run_id ORDER BY first DESC LIMIT 1000
     `,
       )
       .all(sessionId, beforeSequence ?? last + 1);
+    // Find recent runs through the covering index; only read sizes until this page is full.
+    const sizeOf = this.database.prepare(
+      `SELECT COUNT(*) AS count, SUM(octet_length(data)) AS bytes
+       FROM events WHERE session_id = ? AND run_id = ? AND sequence < ?`,
+    );
     let first = 0,
       count = 0,
       bytes = 0;
     for (const group of groups) {
+      const size = sizeOf.get(sessionId, group.run_id, beforeSequence ?? last + 1)!;
       if (
         first &&
-        (count + Number(group.count) > pageEvents || bytes + Number(group.bytes) > pageBytes)
+        (count + Number(size.count) > pageEvents || bytes + Number(size.bytes) > pageBytes)
       )
         break;
       first = Number(group.first);
-      count += Number(group.count);
-      bytes += Number(group.bytes);
+      count += Number(size.count);
+      bytes += Number(size.bytes);
     }
     const events = first ? this.events(sessionId, first - 1, beforeSequence) : [];
     return {

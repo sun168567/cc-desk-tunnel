@@ -261,7 +261,7 @@ export function createProxyServer(options: ServerOptions) {
   // or changes the state the CLI keeps for all of them — a status read or session change (`mutations`), an
   // account change — waits until none is going.
   const runs = new Map<string, Run>();
-  const mutations = new Set<string>();
+  const mutations = new Map<string, 'status' | 'session'>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
   const compactions = new IdleCompactions(store.directory, compactIdle);
@@ -842,7 +842,7 @@ export function createProxyServer(options: ServerOptions) {
       throw new DomainError('native_busy', '运行结束后再刷新原生状态。');
     const resume = !terminals.has(command.sessionId);
     const last = resume ? null : store.lastMetrics(command.sessionId);
-    mutations.add(command.sessionId);
+    mutations.set(command.sessionId, 'status');
     const controller = new AbortController();
     const closed = () => controller.abort();
     peer.socket.once('close', closed);
@@ -1264,7 +1264,7 @@ export function createProxyServer(options: ServerOptions) {
     session: Session,
   ) {
     if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再管理会话。');
-    mutations.add(command.sessionId);
+    mutations.set(command.sessionId, 'session');
     try {
       if (options.claude && store.hasNativeContext(command.sessionId)) {
         const nativeOptions = {
@@ -1312,7 +1312,7 @@ export function createProxyServer(options: ServerOptions) {
     const title = `${session.title.slice(0, 116)}（分叉）`;
     let id: string = randomUUID();
     let resumable = false;
-    mutations.add(command.sessionId);
+    mutations.set(command.sessionId, 'session');
     try {
       if (options.claude && store.hasNativeContext(command.sessionId)) {
         const dir = nativeDirectory(store.directory, nativeRoot(command.sessionId));
@@ -1672,7 +1672,13 @@ export function createProxyServer(options: ServerOptions) {
       }
     }
     const { session } = store.get(command.sessionId);
-    if (mutations.has(command.sessionId))
+    // Native status reads leave the stored history available, including to other windows.
+    const readingHistory =
+      command.type === 'session.subscribe' || command.type === 'session.history';
+    if (
+      mutations.has(command.sessionId) &&
+      !(readingHistory && mutations.get(command.sessionId) === 'status')
+    )
       throw new DomainError('session_busy', '会话正在更新，请稍后重试。');
     switch (command.type) {
       case 'session.status':

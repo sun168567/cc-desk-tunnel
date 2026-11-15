@@ -113,6 +113,76 @@ test('small reconnect gaps only return unseen events and invalid page cursors ar
   assert.throws(() => store.history(session.id, randomUUID(), 0, 6), /游标/);
 });
 
+test('UTF-8 page and reconnect budgets retain every event and complete run', (t) => {
+  const { store, session } = fixture(t);
+  store.append(session.id, randomUUID(), { type: 'native.notice', text: 'before disconnect' });
+  for (let turn = 0; turn < 4; turn++) {
+    const runId = randomUUID();
+    store.append(session.id, runId, {
+      type: 'message.user',
+      messageId: randomUUID(),
+      text: `turn ${turn}`,
+      scenario: 'chat',
+    });
+    store.append(session.id, runId, {
+      type: 'text.delta',
+      messageId: randomUUID(),
+      text: '汉🙂'.repeat(30000),
+    });
+  }
+  const all = store.snapshot(session.id).events;
+  const page = store.history(session.id, randomUUID(), 1);
+  assert.equal(page.mode, 'replace', 'The reconnect gap exceeds the byte budget');
+  assert.equal(page.events.length, 4);
+  assert.ok(Buffer.byteLength(JSON.stringify(page.events)) < 512 * 1024);
+  assert.equal(page.events[0].payload.type, 'message.user');
+  const earlier = store.history(session.id, randomUUID(), 0, page.firstSequence);
+  assert.equal(earlier.mode, 'prepend');
+  assert.equal(earlier.hasEarlier, false);
+  assert.deepEqual([...earlier.events, ...page.events], all);
+  const append = store.history(session.id, randomUUID(), earlier.lastSequence);
+  assert.equal(append.mode, 'append');
+  assert.deepEqual(append.events, page.events);
+});
+
+test('a single oversized run stays intact and earlier runs remain accessible', (t) => {
+  const { store, session } = fixture(t);
+  const earlier = store.append(session.id, randomUUID(), { type: 'native.notice', text: 'old' });
+  const runId = randomUUID();
+  const start = store.append(session.id, runId, {
+    type: 'message.user',
+    messageId: randomUUID(),
+    text: 'large output',
+    scenario: 'chat',
+  });
+  store.append(session.id, runId, {
+    type: 'text.delta',
+    messageId: randomUUID(),
+    text: 'x'.repeat(600000),
+  });
+  const page = store.history(session.id, randomUUID());
+  assert.equal(page.firstSequence, start.sequence);
+  assert.equal(page.events.length, 2);
+  assert.equal(page.hasEarlier, true);
+  assert.deepEqual(store.history(session.id, randomUUID(), 0, page.firstSequence).events, [
+    earlier,
+  ]);
+  assert.deepEqual(store.history(session.id, randomUUID(), 0, earlier.sequence).events, []);
+});
+
+test('the event limit also pages runs with only small state readings', (t) => {
+  const { store, session } = fixture(t);
+  for (let i = 0; i < 1001; i++)
+    store.append(session.id, randomUUID(), { type: 'native.notice', text: String(i) });
+  const page = store.history(session.id, randomUUID());
+  assert.equal(page.events.length, 1000);
+  assert.equal(page.firstSequence, 2);
+  assert.equal(page.hasEarlier, true);
+  const earlier = store.history(session.id, randomUUID(), 0, page.firstSequence);
+  assert.equal(earlier.hasEarlier, false);
+  assert.deepEqual([...earlier.events, ...page.events], store.snapshot(session.id).events);
+});
+
 test('merging an old library keeps tool identities, stream distinctions and message boundaries, and leaves a copy with a note', (t) => {
   const f = fixture(t);
   const { session } = f;
