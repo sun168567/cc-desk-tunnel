@@ -452,6 +452,12 @@ test('native rejection without utilization holds its login until reset; allowed 
     2,
   );
   assert.equal(quotas.blockedUntil('a', null, 2), 30_000);
+  quotas.clear();
+  assert.equal(
+    quotas.blockedUntil('a', null, 2),
+    null,
+    'a replaced setup token keeps no rejection',
+  );
 });
 
 test('the quota the CLI passes on in its stream becomes the windows of its own reading', () => {

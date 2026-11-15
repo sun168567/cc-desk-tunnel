@@ -185,6 +185,7 @@ export class Quotas {
   // Setup tokens need not expose an account identity, so replacing one can keep the same login key.
   clear() {
     this.observed = new ObservedQuotas();
+    this.limits.clear();
     this.reads.clear();
     this.login = undefined;
   }
