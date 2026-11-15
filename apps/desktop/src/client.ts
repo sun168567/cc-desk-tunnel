@@ -105,6 +105,8 @@ export type HistoryState = {
   hasEarlier: boolean;
   loading: boolean;
   loadingEarlier: boolean;
+  // Live events received after a failed snapshot must not advance a cursor past missing history.
+  needsReload?: boolean;
 };
 export type ClientState = {
   status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
@@ -222,6 +224,11 @@ export class ProxyClient {
       reject: (error: Error) => void;
       timer: ReturnType<typeof setTimeout>;
       type: Command['type'];
+      sessionId?: string;
+      renew: () => void;
+      parts?: string[];
+      following?: ServerMessage[];
+      done?: Promise<Response>;
     }
   >();
   getSnapshot = () => this.state;
@@ -411,6 +418,57 @@ export class ProxyClient {
         socket.close();
         return;
       }
+      receive(message);
+    };
+    const receive = (message: ServerMessage) => {
+      if (message.type === 'session.history.part') {
+        const request = this.pending.get(message.requestId);
+        if (!request || request.sessionId !== message.sessionId) return;
+        request.renew();
+        request.parts ??= [];
+        request.parts.push(message.data);
+        socket.send(JSON.stringify({ type: 'session.history.next', requestId: message.requestId }));
+        if (!message.last) return;
+        const following = request.following ?? [];
+        let page: ServerMessage[];
+        try {
+          page = JSON.parse(request.parts.join('')).map((value: unknown) =>
+            serverMessageSchema.parse(value),
+          );
+        } catch {
+          this.update({ error: '历史消息格式不兼容，已断开连接。' });
+          this.credentials = null;
+          socket.close();
+          return;
+        }
+        request.parts = undefined;
+        request.following = undefined;
+        for (const item of [...page, ...following]) receive(item);
+        return;
+      }
+      if (message.type === 'session.deleted') this.cancelHistory(message.sessionId);
+      // A subscribing snapshot replaces live state. Preserve the events which followed its
+      // captured boundary until the whole snapshot and its unfinished fragment have arrived.
+      const sessionId =
+        message.type === 'session.event'
+          ? message.event.sessionId
+          : message.type === 'session.updated'
+            ? message.session.id
+            : message.type === 'session.fragment'
+              ? message.sessionId
+              : undefined;
+      if (sessionId) {
+        const reading = [...this.pending.values()].find(
+          (request) =>
+            request.type === 'session.subscribe' &&
+            request.sessionId === sessionId &&
+            request.parts,
+        );
+        if (reading) {
+          (reading.following ??= []).push(message);
+          return;
+        }
+      }
       if (message.type === 'ready') {
         if (message.adapter === 'claude-code' && !credentials.bridge && !credentials.browser)
           credentials.reconnect = false;
@@ -528,8 +586,9 @@ export class ProxyClient {
         this.update({ sessions, events, live, history, selectedId });
       } else if (message.type === 'session.snapshot') {
         this.flushStream();
+        const request = this.pending.get(message.requestId);
         if (
-          !this.pending.has(message.requestId) ||
+          !request ||
           !this.cacheOrder.includes(message.session.id) ||
           !this.state.sessions.some((session) => session.id === message.session.id)
         )
@@ -543,6 +602,7 @@ export class ProxyClient {
         }
         const previous = this.state.history[id];
         const history = {
+          ...(message.mode === 'prepend' && previous?.needsReload ? { needsReload: true } : {}),
           firstSequence:
             message.mode === 'append'
               ? (previous?.firstSequence ?? message.firstSequence)
@@ -557,6 +617,16 @@ export class ProxyClient {
           loadingEarlier: false,
         };
         this.merge(id, message.events, history, message.mode === 'replace');
+        if (request.type === 'session.history') {
+          clearTimeout(request.timer);
+          this.pending.delete(message.requestId);
+          request.resolve({
+            type: 'response',
+            requestId: message.requestId,
+            ok: true,
+            sessionId: id,
+          });
+        }
       } else if (message.type === 'session.event') {
         const payload = message.event.payload;
         const at = Date.parse(message.event.createdAt);
@@ -750,7 +820,7 @@ export class ProxyClient {
   }
   private load(sessionId: string) {
     const previous = this.state.history[sessionId];
-    const afterSequence = previous?.lastSequence ?? 0;
+    const afterSequence = previous?.needsReload ? 0 : (previous?.lastSequence ?? 0);
     this.update({
       history: {
         ...this.state.history,
@@ -767,11 +837,15 @@ export class ProxyClient {
     });
     void this.request({ type: 'session.subscribe', sessionId, afterSequence }).catch(
       (error: Error) => {
+        if (error.name === 'AbortError' || this.state.selectedId !== sessionId) return;
         const history = this.state.history[sessionId];
         if (history)
           this.update({
             error: error.message,
-            history: { ...this.state.history, [sessionId]: { ...history, loading: false } },
+            history: {
+              ...this.state.history,
+              [sessionId]: { ...history, loading: false, needsReload: true },
+            },
           });
       },
     );
@@ -798,6 +872,8 @@ export class ProxyClient {
     }
   }
   select(sessionId: string) {
+    if (this.state.selectedId === sessionId && this.state.history[sessionId]?.loading) return;
+    this.cancelHistory();
     this.flushStream();
     this.cacheOrder = [...this.cacheOrder.filter((id) => id !== sessionId), sessionId];
     const events = { ...this.state.events };
@@ -832,21 +908,78 @@ export class ProxyClient {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
       throw new Error('服务未连接。');
     const requestId = crypto.randomUUID();
-    return new Promise<Response>((resolve, reject) => {
-      const timer = setTimeout(
-        () => {
-          this.pending.delete(requestId);
-          this.results.delete(requestId);
-          reject(new Error('请求超时；请查看历史确认结果，未自动重发。'));
-        },
+    const done = new Promise<Response>((resolve, reject) => {
+      const history = command.type === 'session.subscribe' || command.type === 'session.history';
+      const expire = () => {
+        this.pending.delete(requestId);
+        this.results.delete(requestId);
+        if (history)
+          this.socket?.send(JSON.stringify({ type: 'session.history.cancel', requestId }));
+        reject(
+          new Error(
+            history
+              ? '历史读取连续 30 秒没有新内容，请重试。'
+              : '请求超时；请查看历史确认结果，未自动重发。',
+          ),
+        );
+      };
+      const wait =
+        history ||
         command.type === 'session.status' ||
-          command.type.startsWith('account.') ||
-          command.type.startsWith('service.')
+        command.type.startsWith('account.') ||
+        command.type.startsWith('service.')
           ? 30000
-          : 10000,
-      );
-      this.pending.set(requestId, { resolve, reject, timer, type: command.type });
+          : 10000;
+      const request = {
+        resolve,
+        reject,
+        timer: setTimeout(expire, wait),
+        type: command.type,
+        sessionId: history ? command.sessionId : undefined,
+        renew: () => {
+          clearTimeout(request.timer);
+          request.timer = setTimeout(expire, wait);
+        },
+      };
+      this.pending.set(requestId, request);
       this.socket!.send(JSON.stringify({ ...command, requestId }));
     });
+    this.pending.get(requestId)!.done = done;
+    return done;
+  }
+  async waitForHistory(sessionId: string) {
+    await Promise.all(
+      [...this.pending.values()]
+        .filter((request) => request.sessionId === sessionId)
+        .map((request) => request.done),
+    );
+    if (this.state.selectedId !== sessionId) throw new Error('已切换会话，读取取消。');
+    if (this.state.history[sessionId]?.needsReload)
+      throw new Error('会话历史尚未完整加载，请重新打开会话后重试。');
+  }
+  private cancelHistory(sessionId?: string) {
+    for (const [requestId, request] of this.pending) {
+      if (request.type !== 'session.subscribe' && request.type !== 'session.history') continue;
+      if (sessionId && request.sessionId !== sessionId) continue;
+      clearTimeout(request.timer);
+      this.pending.delete(requestId);
+      if (this.socket?.readyState === WebSocket.OPEN)
+        this.socket.send(JSON.stringify({ type: 'session.history.cancel', requestId }));
+      const id = request.sessionId!;
+      const history = this.state.history[id];
+      if (history)
+        this.update({
+          history: {
+            ...this.state.history,
+            [id]: {
+              ...history,
+              loading: false,
+              loadingEarlier: false,
+              ...(request.type === 'session.subscribe' ? { needsReload: true } : {}),
+            },
+          },
+        });
+      request.reject(Object.assign(new Error('历史读取已取消。'), { name: 'AbortError' }));
+    }
   }
 }

@@ -32,6 +32,27 @@ for (const mode of ['standard', 'expanded']) {
     };
     await page.routeWebSocket('ws://127.0.0.1:18894/ws', (route) => {
       const reply = (value: unknown) => route.send(JSON.stringify(value));
+      let history:
+        { requestId: string; text: string; offset: number; outstanding: number } | undefined;
+      const deliver = () => {
+        if (!history) return;
+        while (history.outstanding < 4 && history.offset < history.text.length) {
+          const data = history.text.slice(history.offset, history.offset + 32768);
+          history.offset += data.length;
+          history.outstanding++;
+          reply({
+            type: 'session.history.part',
+            requestId: history.requestId,
+            sessionId: session.id,
+            data,
+            last: history.offset === history.text.length,
+          });
+        }
+        if (!history.outstanding) {
+          reply({ type: 'response', requestId: history.requestId, ok: true });
+          history = undefined;
+        }
+      };
       let sequence = 0;
       const at = Date.now() - 3_600_000;
       const event = (payload: unknown) => ({
@@ -86,16 +107,30 @@ for (const mode of ['standard', 'expanded']) {
           return;
         }
         if (message.type === 'session.subscribe') {
-          reply({
-            type: 'session.snapshot',
+          history = {
             requestId: message.requestId,
-            session,
-            mode: 'replace',
-            firstSequence: 1,
-            lastSequence: sequence,
-            hasEarlier: false,
-            events,
-          });
+            offset: 0,
+            outstanding: 0,
+            text: JSON.stringify([
+              {
+                type: 'session.snapshot',
+                requestId: message.requestId,
+                session,
+                mode: 'replace',
+                firstSequence: 1,
+                lastSequence: sequence,
+                hasEarlier: false,
+                events,
+              },
+            ]),
+          };
+          deliver();
+          return;
+        }
+        if (message.type === 'session.history.next' && history) {
+          history.outstanding--;
+          deliver();
+          return;
         }
         reply({ type: 'response', requestId: message.requestId, ok: true });
       });

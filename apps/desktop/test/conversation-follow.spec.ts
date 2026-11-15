@@ -23,7 +23,7 @@ function reply(n: number) {
 }
 
 // Opens the session; what is returned starts a reply streaming into it, fast, and stops it when called.
-async function open(page: Page) {
+async function open(page: Page, historyFailure = '') {
   const now = new Date().toISOString();
   const connectionId = randomUUID();
   let stream = (): (() => void) => () => {};
@@ -121,9 +121,18 @@ async function open(page: Page) {
           mode: 'replace',
           firstSequence: 1,
           lastSequence: sequence,
-          hasEarlier: false,
+          hasEarlier: !!historyFailure,
           events,
         });
+      if (message.type === 'session.history' && historyFailure) {
+        send({
+          type: 'response',
+          requestId: message.requestId,
+          ok: false,
+          message: historyFailure,
+        });
+        return;
+      }
       send({ type: 'response', requestId: message.requestId, ok: true });
     });
   });
@@ -160,6 +169,60 @@ async function fromEnd(page: Page) {
 test('a long conversation opens at its end', async ({ page }) => {
   await open(page);
   expect(await fromEnd(page)).toBeLessThan(2);
+});
+
+test.describe('narrow conversation navigation', () => {
+  test.use({ viewport: { width: 600, height: 900 }, hasTouch: true });
+
+  test('mouse selection leaves the drawer closed', async ({ page }) => {
+    await open(page);
+    await page.locator('.conversation').hover();
+    await page.mouse.wheel(0, -200);
+    await fromEnd(page);
+    const text = page.locator('.message.assistant').last().locator('.message-content p').first();
+    await text.scrollIntoViewIfNeeded();
+    const box = (await text.boundingBox())!;
+    await page.mouse.move(box.x + 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 180, box.y + box.height / 2, { steps: 12 });
+    await page.mouse.up();
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toContain('轮的回答');
+    await expect(page.locator('.shell')).toHaveClass(/side-closed/);
+  });
+
+  test('touch swipes still open and close the drawer', async ({ page, context }) => {
+    await open(page);
+    const touch = await context.newCDPSession(page);
+    async function swipe(from: number, to: number) {
+      await touch.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: from, y: 200 }],
+      });
+      for (let step = 1; step <= 8; step++)
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{ x: from + ((to - from) * step) / 8, y: 200 }],
+        });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    }
+    await swipe(60, 250);
+    await expect(page.locator('.shell')).not.toHaveClass(/side-closed/);
+    await expect(page.getByRole('button', { name: '设置与账号', exact: true })).toBeVisible();
+    await swipe(250, 60);
+    await expect(page.locator('.shell')).toHaveClass(/side-closed/);
+  });
+});
+
+test('approaching the top preloads history and preserves the actual failure reason', async ({
+  page,
+}) => {
+  const reason = '历史传输连续 30 秒没有收到接收确认，请重试。';
+  await open(page, reason);
+  await page.locator('.conversation').evaluate((box) => {
+    box.scrollTop = 200;
+  });
+  await expect(page.getByText(reason, { exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '加载更早记录', exact: true })).toBeEnabled();
 });
 
 test('coming back from the settings, the conversation is at its end again', async ({ page }) => {

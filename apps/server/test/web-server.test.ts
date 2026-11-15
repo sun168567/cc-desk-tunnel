@@ -127,6 +127,44 @@ async function fixture(t: TestContext, stepMs = 1) {
   };
 }
 
+test('browser history parts are connection-owned, cancellable and leave ordinary reads available', async (t) => {
+  const f = await fixture(t);
+  const desktop = await f.desktop();
+  const created = await desktop.request({
+    type: 'session.create',
+    title: 'large',
+    projectPath: 'D:\\fixture',
+  });
+  const sessionId = created.sessionId!;
+  f.server.store.append(sessionId, randomUUID(), {
+    type: 'text.delta',
+    messageId: randomUUID(),
+    text: 'history'.repeat(50000),
+  });
+  await desktop.request({ type: 'web.settings.update', values: { enabled: true } });
+  const login = await f.login();
+  const { client } = await f.browser(login.cookie);
+  const requestId = randomUUID();
+  client.send({ type: 'session.subscribe', sessionId, requestId });
+  await client.wait((message) => message.type === 'session.history.part');
+  const other = (await f.browser(login.cookie)).client;
+  other.send({ type: 'session.history.cancel', requestId });
+  const usage = await client.request({ type: 'usage.summary' });
+  assert.ok(usage.ok);
+  assert.equal(
+    client.messages.some(
+      (message) => message.type === 'response' && message.requestId === requestId,
+    ),
+    false,
+  );
+  client.send({ type: 'session.history.cancel', requestId });
+  const ended = await client.wait(
+    (message) => message.type === 'response' && message.requestId === requestId,
+  );
+  assert.ok(ended.type === 'response' && ended.code === 'history_cancelled');
+  assert.ok((await client.request({ type: 'usage.summary' })).ok);
+});
+
 test('desktop explicitly enables Web, disabling only ends browsers, and desktop behavior stays intact', async (t) => {
   const f = await fixture(t);
   const desktop = await f.desktop();

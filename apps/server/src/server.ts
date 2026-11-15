@@ -28,6 +28,7 @@ import {
   continues,
   deviceIdentitySchema,
   isFragment,
+  historyControlSchema,
   leaveSchema,
   MAX_FRAME_BYTES,
   pathKey,
@@ -64,6 +65,7 @@ import {
 import type { ClaudeOptions, Unanswered } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
+import { HistoryDelivery } from './history-delivery.ts';
 import type { NativeLogin } from './native-account.ts';
 import { IdleCompactions } from './idle-compaction.ts';
 import { NativeInput } from './native-input.ts';
@@ -111,6 +113,7 @@ type Peer = {
   // The client keeps the plan quota current on its screen, so the service reads it while runs go on.
   quotaWanted?: boolean;
   subscriptions: Set<string>;
+  history?: HistoryDelivery;
   responses: Map<string, { command: string; response: Promise<ServerMessage> }>;
 };
 // A run belongs to the computer its session is on, not to the connection that started it: connections come
@@ -261,7 +264,7 @@ export function createProxyServer(options: ServerOptions) {
   // or changes the state the CLI keeps for all of them — a status read or session change (`mutations`), an
   // account change — waits until none is going.
   const runs = new Map<string, Run>();
-  const mutations = new Set<string>();
+  const mutations = new Map<string, 'status' | 'session'>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
   const compactions = new IdleCompactions(store.directory, compactIdle);
@@ -368,7 +371,11 @@ export function createProxyServer(options: ServerOptions) {
         handler,
       )
     : createServer(handler);
-  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_FRAME_BYTES,
+    perMessageDeflate: { serverNoContextTakeover: true, clientNoContextTakeover: true },
+  });
   server.on('upgrade', (request, socket, head) => {
     if (!closing && web.matchesUpgrade(request)) {
       const address = web.address(request);
@@ -411,7 +418,11 @@ export function createProxyServer(options: ServerOptions) {
   });
 
   function send(peer: Peer, message: ServerMessage) {
-    if (peer.socket.readyState === WebSocket.OPEN) peer.socket.send(JSON.stringify(message));
+    // History benefits from compression; small live events and control replies do not need it.
+    if (peer.socket.readyState === WebSocket.OPEN)
+      peer.socket.send(JSON.stringify(message), {
+        compress: message.type === 'session.snapshot' || message.type === 'session.history.part',
+      });
   }
   function broadcast(message: ServerMessage, sessionId?: string) {
     for (const peer of peers) {
@@ -842,7 +853,7 @@ export function createProxyServer(options: ServerOptions) {
       throw new DomainError('native_busy', '运行结束后再刷新原生状态。');
     const resume = !terminals.has(command.sessionId);
     const last = resume ? null : store.lastMetrics(command.sessionId);
-    mutations.add(command.sessionId);
+    mutations.set(command.sessionId, 'status');
     const controller = new AbortController();
     const closed = () => controller.abort();
     peer.socket.once('close', closed);
@@ -1264,7 +1275,7 @@ export function createProxyServer(options: ServerOptions) {
     session: Session,
   ) {
     if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再管理会话。');
-    mutations.add(command.sessionId);
+    mutations.set(command.sessionId, 'session');
     try {
       if (options.claude && store.hasNativeContext(command.sessionId)) {
         const nativeOptions = {
@@ -1312,7 +1323,7 @@ export function createProxyServer(options: ServerOptions) {
     const title = `${session.title.slice(0, 116)}（分叉）`;
     let id: string = randomUUID();
     let resumable = false;
-    mutations.add(command.sessionId);
+    mutations.set(command.sessionId, 'session');
     try {
       if (options.claude && store.hasNativeContext(command.sessionId)) {
         const dir = nativeDirectory(store.directory, nativeRoot(command.sessionId));
@@ -1672,7 +1683,13 @@ export function createProxyServer(options: ServerOptions) {
       }
     }
     const { session } = store.get(command.sessionId);
-    if (mutations.has(command.sessionId))
+    // Native status reads leave the stored history available, including to other windows.
+    const readingHistory =
+      command.type === 'session.subscribe' || command.type === 'session.history';
+    if (
+      mutations.has(command.sessionId) &&
+      !(readingHistory && mutations.get(command.sessionId) === 'status')
+    )
       throw new DomainError('session_busy', '会话正在更新，请稍后重试。');
     switch (command.type) {
       case 'session.status':
@@ -1684,30 +1701,38 @@ export function createProxyServer(options: ServerOptions) {
       case 'terminal.open':
         await openTerminal(peer, command, session);
         return command.sessionId;
-      case 'session.subscribe':
+      case 'session.subscribe': {
         peer.subscriptions.clear();
         peer.subscriptions.add(command.sessionId);
-        send(peer, {
-          type: 'session.snapshot',
-          ...store.history(command.sessionId, command.requestId, command.afterSequence),
-        });
+        const messages: ServerMessage[] = [
+          {
+            type: 'session.snapshot',
+            ...store.history(command.sessionId, command.requestId, command.afterSequence),
+          },
+        ];
         // The history ends where the run's unfinished output begins.
         {
           const run = runs.get(command.sessionId);
           if (run?.open)
-            send(peer, {
+            messages.push({
               type: 'session.fragment',
               sessionId: run.sessionId,
               runId: run.id,
               payload: run.open,
             });
         }
+        peer.history ??= new HistoryDelivery((message) => send(peer, message));
+        await peer.history.deliver(command.requestId, command.sessionId, messages);
         return command.sessionId;
+      }
       case 'session.history':
-        send(peer, {
-          type: 'session.snapshot',
-          ...store.history(command.sessionId, command.requestId, 0, command.beforeSequence),
-        });
+        peer.history ??= new HistoryDelivery((message) => send(peer, message));
+        await peer.history.deliver(command.requestId, command.sessionId, [
+          {
+            type: 'session.snapshot',
+            ...store.history(command.sessionId, command.requestId, 0, command.beforeSequence),
+          },
+        ]);
         return command.sessionId;
       case 'run.cancel':
       case 'run.task.stop':
@@ -2035,6 +2060,7 @@ export function createProxyServer(options: ServerOptions) {
   // to come back, unless the client said it was leaving; nothing is replayed for a later connection either way.
   function release(peer: Peer) {
     peers.delete(peer);
+    peer.history?.cancel();
     if (login?.owner === peer) login.process.cancel();
     for (const terminal of terminals.values())
       if (terminal.owner !== peer) continue;
@@ -2207,6 +2233,13 @@ export function createProxyServer(options: ServerOptions) {
         if (control.success) {
           if (peer.browser && control.data.type === 'terminal.input') web.touch(peer.browser);
           controlTerminal(peer, control.data);
+          return;
+        }
+        const historyControl = historyControlSchema.safeParse(value);
+        if (historyControl.success) {
+          if (historyControl.data.type === 'session.history.next')
+            peer.history?.next(historyControl.data.requestId);
+          else peer.history?.cancel(historyControl.data.requestId);
           return;
         }
         const command = commandSchema.safeParse(value);
