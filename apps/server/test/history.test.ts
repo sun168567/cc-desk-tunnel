@@ -32,6 +32,34 @@ function reopenAsOld(made: { store: SessionStore; directory: string }) {
 const texts = (events: { payload: EventPayload }[]) =>
   events.map(({ payload }) => (payload.type === 'text.delta' ? payload.text : '')).join('');
 
+test('history proofs survive restart and appends, and change when stored history is rewritten', (t) => {
+  const { made, session } = fixture(t);
+  const run = randomUUID(),
+    messageId = randomUUID();
+  made.store.append(session.id, run, { type: 'text.delta', messageId, text: 'first' });
+  const event = made.store.append(session.id, run, {
+    type: 'text.delta',
+    messageId,
+    text: 'second',
+  });
+  const cursor = made.store.cursor(session.id, event.sequence);
+  made.store.close();
+  made.store = new SessionStore(made.directory);
+  assert.equal(made.store.matches(session.id, cursor), true);
+  made.store.append(session.id, randomUUID(), { type: 'native.notice', text: 'appended' });
+  assert.equal(made.store.matches(session.id, cursor), true);
+  reopenAsOld(made);
+  assert.equal(made.store.matches(session.id, cursor), false);
+  const next = made.store.cursor(session.id, event.sequence);
+  assert.notEqual(next.epoch, cursor.epoch);
+  const range = made.store.history(session.id, randomUUID(), 0, 4, 2);
+  assert.deepEqual(
+    range.events.map((event) => event.sequence),
+    [3],
+  );
+  assert.equal(range.hasEarlier, false);
+});
+
 test('history pages retain complete runs of a merged library without losing content or cursors', (t) => {
   const f = fixture(t);
   const { session } = f;

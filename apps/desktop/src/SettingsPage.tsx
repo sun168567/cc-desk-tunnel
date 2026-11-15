@@ -1,3 +1,4 @@
+import CacheSettings from './CacheSettings.tsx';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { platformOf } from '@cc-desk-tunnel/protocol';
@@ -40,6 +41,7 @@ import { IconButton, Page, Row, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
 export type Section =
+  | 'cache'
   | 'general'
   | 'appearance'
   | 'connection'
@@ -57,6 +59,13 @@ export type Section =
 // connected to it), or Claude Code's own files on the cloud host. `words` is what the search box matches besides the
 // name: the settings found inside.
 const sections: { id: Section; name: string; group: string; icon: typeof Bell; words: string }[] = [
+  {
+    id: 'cache',
+    name: '对话缓存',
+    group: '本机',
+    icon: FileText,
+    words: '离线 历史 磁盘 占用 扫描 清理',
+  },
   {
     id: 'general',
     name: '常规',
@@ -884,6 +893,7 @@ export default function SettingsPage({
   const shown = sections.filter(
     (item) =>
       (!back || item.group === '本机') &&
+      (item.id !== 'cache' || window.desktop?.historyCache) &&
       (item.id !== 'connection' || window.desktop) &&
       (!browser || !['context', 'account', 'claude', 'instructions'].includes(item.id)) &&
       (item.id !== 'context' || native) &&
@@ -932,7 +942,9 @@ export default function SettingsPage({
         </nav>
       </aside>
       <main className="workspace">
-        {section === 'account' ? (
+        {section === 'cache' ? (
+          <CacheSettings client={client} />
+        ) : section === 'account' ? (
           account
         ) : section === 'claude' ? (
           native ? (

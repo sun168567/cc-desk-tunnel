@@ -29,6 +29,7 @@ export default function LoginPage({
   showNotes,
   submit,
   openSettings,
+  offline,
 }: {
   form: ConnectionForm;
   change: (values: Partial<ConnectionForm>) => void;
@@ -51,6 +52,7 @@ export default function LoginPage({
   submit: () => void;
   // This computer's own settings, which need no connection.
   openSettings: () => void;
+  offline?: () => void;
 }) {
   const connectionName = useConnectionName();
   const [serviceUpgrade, setServiceUpgrade] = useState<{
@@ -268,6 +270,11 @@ export default function LoginPage({
           </button>
         </form>
         <div className="login-links">
+          {offline && (
+            <button className="project-link" type="button" disabled={connecting} onClick={offline}>
+              离线查看缓存
+            </button>
+          )}
           <button className="project-link" type="button" onClick={openSettings}>
             <Settings />
             本机设置

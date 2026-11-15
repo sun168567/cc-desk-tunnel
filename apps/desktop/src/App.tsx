@@ -155,6 +155,10 @@ export function App({
     remember: false,
     autoLogin: false,
   }));
+  useEffect(() => {
+    if (window.desktop?.historyCache && state.status === 'disconnected' && !state.offline)
+      client.useCache(form.url, window.desktop.historyCache);
+  }, [form.url, state.status, state.offline, client]);
   const changeForm = useCallback(
     (values: Partial<ConnectionForm>) => setForm((current) => ({ ...current, ...values })),
     [],
@@ -213,7 +217,7 @@ export function App({
   const [renameProject, setRenameProject] = useState<string | null>(null);
   const [repointProject, setRepointProject] = useState<string | null>(null);
 
-  const nativeMode = state.adapter === 'claude-code';
+  const nativeMode = state.offline || state.adapter === 'claude-code';
   const connected = state.status === 'connected';
   const selfSigned = !!browser && (state.browser?.selfSigned ?? browser.selfSigned);
   const othersBusy = useShared('busy');
@@ -616,6 +620,7 @@ export function App({
   // Remote mode connects through the main process, which opens the tunnel and returns a loopback address.
   async function login(form: ConnectionForm) {
     setError(null);
+    if (window.desktop?.historyCache) client.useCache(form.url, window.desktop.historyCache);
     try {
       if (form.mode === 'remote') {
         setProxyConnecting(true);
@@ -958,7 +963,7 @@ export function App({
       {
         label: '导出为 Markdown',
         icon: <FileDown />,
-        disabled: !connected,
+        disabled: !connected && !state.offline,
         run: () => {
           void act(async () => {
             await exportSession(client, session);
@@ -1132,7 +1137,7 @@ export function App({
       };
     });
   }
-  const adapterName = nativeMode ? 'Claude Code' : 'Simulation';
+  const adapterName = state.offline ? '本地记录' : nativeMode ? 'Claude Code' : 'Simulation';
   const accountName = signedOut
     ? '未登录'
     : (state.account?.email ?? capabilities?.account.email ?? (nativeMode ? '账号' : '离线模拟'));
@@ -1230,7 +1235,7 @@ export function App({
           : []),
         {
           label: '导出当前会话…',
-          disabled: !selected || !connected,
+          disabled: !selected || (!connected && !state.offline),
           separated: true,
           run: () => {
             void act(async () => {
@@ -1355,7 +1360,7 @@ export function App({
       </main>
     );
 
-  if (state.status === 'disconnected' || state.status === 'connecting')
+  if (!state.offline && (state.status === 'disconnected' || state.status === 'connecting'))
     return localSettings ? (
       <div className="settings-only">
         <div className="window-drag" />
@@ -1389,6 +1394,15 @@ export function App({
           showNotes={setNotes}
           newer={upgrade ?? ahead}
           openSettings={() => setLocalSettings('general')}
+          offline={
+            window.desktop?.historyCache
+              ? () =>
+                  void act(async () => {
+                    client.useCache(form.url, window.desktop!.historyCache);
+                    await client.openOffline(await thisDevice());
+                  })
+              : undefined
+          }
           form={form}
           change={changeForm}
           error={
@@ -1452,6 +1466,7 @@ export function App({
                     items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
                   };
   const sectionNames: Record<Section, string> = {
+    cache: '对话缓存',
     general: '常规',
     appearance: '外观',
     connection: '连接',
@@ -1486,6 +1501,7 @@ export function App({
         menus={barMenus}
         openMenu={(item, position) => setMenu({ kind: 'bar', label: item.label, ...position })}
         connected={connected}
+        offline={state.offline}
         adapterName={adapterName}
       />
       <Rail
@@ -1593,7 +1609,17 @@ export function App({
             {!connected && (
               <div className="connection-banner" role="status">
                 <Unplug />
-                连接中断，等待恢复
+                {state.offline ? '离线查看 · 显示本机已缓存的记录' : '连接中断，等待恢复'}
+                {state.offline && (
+                  <button type="button" className="button" onClick={disconnect}>
+                    返回连接页
+                  </button>
+                )}
+              </div>
+            )}
+            {state.cacheError && (
+              <div className="connection-banner" role="alert">
+                本地缓存：{state.cacheError}
               </div>
             )}
             <Conversation
@@ -1603,6 +1629,7 @@ export function App({
               events={events}
               history={history}
               connected={connected}
+              cached={!!client.cache}
               native={nativeMode}
               ownsRun={ownsRun}
               clock={clock}

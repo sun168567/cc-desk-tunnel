@@ -2,6 +2,7 @@ import { test, expect, _electron } from '@playwright/test';
 import { readFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
+import { smokeHistoryCache } from '../../../scripts/smoke-history-cache.mjs';
 
 test.use({ trace: 'off' });
 
@@ -67,6 +68,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
     await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
     await expect(page.getByLabel('服务证书指纹', { exact: true })).toBeVisible();
     expect(await application.evaluate(({ app }) => app.isPackaged)).toBe(true);
+    await smokeHistoryCache(page);
     expect(await page.evaluate((path) => window.desktop!.gitBranch(path), project)).toBe(
       'package-smoke',
     );

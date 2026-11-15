@@ -94,6 +94,7 @@ export async function stageDesktop(root, app, { description, files = [], depende
   );
   for (const file of [...commonjs, 'release-download.mjs', 'ccdt.mjs', 'icon.png', ...files])
     cpSync(join(root, 'apps/desktop/electron', file), join(app, 'electron', file));
+  cpSync(join(root, 'packages/protocol/src/history.cjs'), join(app, 'electron/history.cjs'));
   // A file the main process loads by path is only missed when its feature is used, so each is looked for here.
   for (const file of commonjs)
     for (const [, name] of readFileSync(join(app, 'electron', file), 'utf8').matchAll(

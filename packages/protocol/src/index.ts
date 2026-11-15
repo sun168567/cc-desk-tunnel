@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 26;
+export const PROTOCOL_VERSION = 27;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -24,7 +24,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.10': 23,
   '0.3.12': 24,
   '0.3.14': 25,
-  '0.3.15': 26,
+  '0.3.15': 27,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -524,9 +524,17 @@ export function runWorking(run: Session['activeRun']) {
 export const FORCED_UPGRADE_SINCE = '0.3.15';
 export const snapshotSchema = z.object({ session: sessionSchema, events: z.array(eventSchema) });
 export type SessionSnapshot = z.infer<typeof snapshotSchema>;
+export const historyCursorSchema = z.object({
+  epoch: id,
+  sequence: z.number().int().nonnegative(),
+  hash: z.string().regex(/^(?:[0-9a-f]{64})?$/),
+});
+export type HistoryCursor = z.infer<typeof historyCursorSchema>;
 export const historyPageSchema = snapshotSchema.extend({
   requestId: id,
   mode: z.enum(['replace', 'prepend', 'append']),
+  cursor: historyCursorSchema.optional(),
+  reset: z.boolean().optional(),
   firstSequence: z.number().int().nonnegative(),
   lastSequence: z.number().int().nonnegative(),
   hasEarlier: z.boolean(),
@@ -740,6 +748,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       sessionId: id,
       afterSequence: z.number().int().nonnegative().default(0),
+      cursor: historyCursorSchema.optional(),
     })
     .strict(),
   z
@@ -748,6 +757,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       sessionId: id,
       beforeSequence: z.number().int().positive(),
+      afterSequence: z.number().int().nonnegative().optional(),
+      cursor: historyCursorSchema.optional(),
     })
     .strict(),
   z
@@ -897,7 +908,11 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.snapshot'), ...historyPageSchema.shape }),
   z.object({ type: z.literal('session.updated'), session: sessionSchema }),
   z.object({ type: z.literal('session.deleted'), sessionId: id }),
-  z.object({ type: z.literal('session.event'), event: eventSchema }),
+  z.object({
+    type: z.literal('session.event'),
+    event: eventSchema,
+    cursor: historyCursorSchema.optional(),
+  }),
   z.object({
     type: z.literal('session.fragment'),
     sessionId: id,

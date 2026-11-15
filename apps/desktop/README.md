@@ -14,6 +14,14 @@ Electron 44.5.1 的 npm 包将二进制安装改为显式步骤：先运行 `npm
 
 macOS 与 Linux 上是同一个客户端，实验性支持：本机的 SSH 服务换成应用自身的一个进程，脚本由使用者的 shell 执行。安装、差别和实现见 [macOS 客户端](../../docs/macos.md)与 [Linux 客户端](../../docs/linux.md)。
 
+## 对话缓存
+
+桌面客户端把已读取的会话记录保存到当前连接用户目录的 `history-cache/`，按服务地址隔离。打开会话先读取本机记录，再向服务端核对并补充变化；登录页的“离线查看缓存”可在服务端离线时阅读、搜索和复制已经同步的内容。历史中的缺口会提示，完整导出需要补齐缺失部分。
+
+“设置 → 本机 → 对话缓存”显示当前服务的会话数、事件数及数据库文件占用，可重新扫描或清理。清理保留服务端记录、连接设置和草稿；后续读取重新建立缓存。工具输出和图片也属于缓存内容。
+
+缓存使用 Electron 内置 SQLite，由工作线程处理读写和空间回收。与服务端共用协议事件及 `@cc-desk-tunnel/protocol/history` 的分页查询；新增事件字段和显示功能沿用原始 JSON。同步按服务端历史代际和续接位置校验，历史改写或回退时重新读取，服务端删除的会话也从本地移除。
+
 ## 浏览器访问
 
 在桌面「设置 → 浏览器访问」中启用。Web 首次默认关闭，选择保存在服务端，重启后保持；不另开端口或容器。浏览器使用服务凭据和可选验证器动态码登录，与桌面复用同一套 React 页面和 `ProxyClient`，直接连接服务端，不经过桌面中继。
@@ -61,6 +69,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 
 | 文件 | 职责 |
 | --- | --- |
+| `electron/history-cache.cjs`、`history-cache-worker.cjs`、`src/history-cache.ts`、`CacheSettings.tsx` | 本地历史存储、同步接入、占用统计与清理 |
 | `src/client.ts` | 唯一的 WebSocket 连接与状态仓库：会话目录、事件缓存、历史分页、请求 / 响应配对。组件经 `useSyncExternalStore` 读取 |
 | `src/transcript.ts` | 把会话事件流折叠成界面条目（消息、推理、工具、提示） |
 | `src/ConversationFind.tsx`、`conversationSearch.ts`、`messageTime.ts`、`copy.tsx` | 对话内查找、消息日期与复制 |

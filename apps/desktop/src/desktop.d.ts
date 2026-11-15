@@ -3,6 +3,7 @@ export {};
 declare global {
   interface Window {
     desktop?: {
+      historyCache: import('./history-cache.ts').CachePort;
       // Run from the source tree, not installed: the login page then also offers the simulation service.
       dev: boolean;
       platform: 'win32' | 'darwin' | 'linux';

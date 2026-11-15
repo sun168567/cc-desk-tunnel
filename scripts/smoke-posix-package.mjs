@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { smokeHistoryCache } from './smoke-history-cache.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -45,6 +46,7 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.getByRole('heading', { name: '连接代理服务', exact: true }).waitFor();
   assert.equal(await application.evaluate(({ app }) => app.isPackaged), true);
+  await smokeHistoryCache(page);
   assert.equal(await page.evaluate(() => window.desktop.platform), process.platform);
   execFileSync(
     executable,

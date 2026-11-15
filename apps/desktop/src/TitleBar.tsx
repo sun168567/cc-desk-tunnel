@@ -15,6 +15,7 @@ export default function TitleBar({
   menus,
   openMenu,
   connected,
+  offline = false,
   adapterName,
 }: {
   title: string;
@@ -26,6 +27,7 @@ export default function TitleBar({
   menus: BarMenu[];
   openMenu: (menu: BarMenu, position: MenuPosition) => void;
   connected: boolean;
+  offline?: boolean;
   adapterName: string;
 }) {
   return (
@@ -57,7 +59,7 @@ export default function TitleBar({
       <h1>{title}</h1>
       <span className="connection-status" title={adapterName}>
         <span className={`connection-dot ${connected ? 'online' : ''}`} />
-        <span>{connected ? '已连接' : '重连中'}</span>
+        <span>{offline ? '离线' : connected ? '已连接' : '重连中'}</span>
         <small>{adapterName}</small>
       </span>
     </header>

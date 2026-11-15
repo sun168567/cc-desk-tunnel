@@ -90,6 +90,32 @@ function event(sessionId, sequence, text = 'text') {
   };
 }
 
+test('a disk read does not let an early live event skip the initial history', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  let resolveRead;
+  client.useCache('wss://cache.test/ws', (command) =>
+    command.type === 'read'
+      ? new Promise((resolve) => {
+          resolveRead = resolve;
+        })
+      : Promise.resolve(),
+  );
+  const session = sessions[0];
+  client.select(session.id);
+  socket.message({ type: 'session.event', event: event(session.id, 50) });
+  await new Promise((resolve) => setTimeout(resolve, 45));
+  resolveRead({ value: null, generation: 0 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(socket.sent.at(-1).type, 'session.subscribe');
+  assert.equal(socket.sent.at(-1).afterSequence, 0);
+  snapshot(session, [event(session.id, 1), event(session.id, 50)]);
+  await client.waitForHistory(session.id);
+  assert.deepEqual(
+    client.state.events[session.id].map((event) => event.sequence),
+    [1, 50],
+  );
+});
+
 test('history parts preserve the snapshot boundary while live output continues and renew only their own wait', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const { client, socket, sessions } = fixture(t);

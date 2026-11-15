@@ -61,6 +61,8 @@ export async function exportSession(client: ProxyClient, session: Session) {
     await client.loadEarlier(session.id);
     await client.waitForHistory(session.id);
   }
+  if (client.state.history[session.id]?.incomplete)
+    throw new Error('缓存历史有缺口，请连接服务端并重新打开会话后导出。');
   const text = markdown(session, client.shown(session.id));
   const name = `${session.title.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || '会话'}.md`;
   if (window.desktop) return window.desktop.saveFile(name, text);

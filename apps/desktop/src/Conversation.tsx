@@ -616,6 +616,7 @@ export default function Conversation({
   events,
   history,
   connected,
+  cached = false,
   native,
   ownsRun,
   clock,
@@ -637,6 +638,7 @@ export default function Conversation({
   events: SessionEvent[];
   history: HistoryState | undefined;
   connected: boolean;
+  cached?: boolean;
   native: boolean;
   ownsRun: boolean;
   busy: boolean;
@@ -848,7 +850,13 @@ export default function Conversation({
     setAway(false);
   };
   const loadMore = () => {
-    if (!session || !connected || !history?.hasEarlier || history.loadingEarlier || history.loading)
+    if (
+      !session ||
+      (!connected && !cached) ||
+      !history?.hasEarlier ||
+      history.loadingEarlier ||
+      history.loading
+    )
       return;
     setLoadError('');
     if (scroll.current)
@@ -1070,11 +1078,16 @@ export default function Conversation({
                 {loadError}
               </div>
             )}
+            {history?.incomplete && (
+              <div className="history-status" role="status">
+                部分记录尚未缓存，连接服务端后可补齐。
+              </div>
+            )}
             {history?.hasEarlier && (
               <button
                 type="button"
                 className="history-load"
-                disabled={!connected || history.loadingEarlier || history.loading}
+                disabled={(!connected && !cached) || history.loadingEarlier || history.loading}
                 onClick={loadMore}
               >
                 <ArrowUpToLine />

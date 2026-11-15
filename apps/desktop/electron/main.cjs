@@ -120,6 +120,17 @@ function handle(channel, listener) {
   });
 }
 
+let historyCache;
+handle('history-cache', (_event, command) => {
+  historyCache ??= new (require('./history-cache.cjs').HistoryCache)(
+    path.join(app.getPath('userData'), 'history-cache'),
+    app.isPackaged
+      ? path.join(__dirname, 'history.cjs')
+      : require.resolve('@cc-desk-tunnel/protocol/history'),
+  );
+  return historyCache.request(command);
+});
+
 handle('project:choose', async (event) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   const result = await dialog.showOpenDialog(window, {
@@ -963,10 +974,10 @@ let quitting = false;
 let exiting = false;
 app.on('before-quit', (event) => {
   quitting = true;
-  if (exiting || !bridge) return;
+  if (exiting || (!bridge && !historyCache)) return;
   event.preventDefault();
   exiting = true;
-  bridge.close().finally(() => app.quit());
+  Promise.allSettled([bridge?.close(), historyCache?.close()]).finally(() => app.quit());
 });
 app.on('window-all-closed', () => app.quit());
 app.on('quit', () => {

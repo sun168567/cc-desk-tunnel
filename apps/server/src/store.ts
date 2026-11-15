@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { readEvents, readHistory } from '@cc-desk-tunnel/protocol/history';
 import {
   continues,
   isFragment,
@@ -21,6 +22,7 @@ import type {
   Effort,
   EventPayload,
   HistoryPage,
+  HistoryCursor,
   PermissionMode,
   Session,
   SessionEvent,
@@ -28,8 +30,6 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 
 type StoredSession = SessionSnapshot & { createRequestId: string };
-const pageEvents = 1000;
-const pageBytes = 512 * 1024;
 
 // What goes beside the copy of the history made before it is rewritten.
 const backupNote = (file: string) => `CC Desk Tunnel：会话历史备份
@@ -89,6 +89,7 @@ export class SessionStore {
         PRIMARY KEY (session_id, sequence)
       );
       CREATE INDEX IF NOT EXISTS events_run ON events(session_id, run_id, sequence);
+      CREATE TABLE IF NOT EXISTS history_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS native_roots (
         device_id TEXT NOT NULL, path_key TEXT NOT NULL, root TEXT NOT NULL,
@@ -98,6 +99,9 @@ export class SessionStore {
         device_id TEXT PRIMARY KEY, shells TEXT NOT NULL, preferred TEXT
       );
     `);
+    this.database
+      .prepare('INSERT OR IGNORE INTO history_meta VALUES (?, ?)')
+      .run('epoch', randomUUID());
     try {
       this.importJson();
       this.restoreUpdatedAt();
@@ -286,6 +290,9 @@ export class SessionStore {
         close();
       }
       this.database.prepare("INSERT INTO migrations VALUES ('merged-fragments')").run();
+      this.database
+        .prepare("UPDATE history_meta SET value = ? WHERE key = 'epoch'")
+        .run(randomUUID());
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -342,13 +349,9 @@ export class SessionStore {
   }
 
   private events(sessionId: string, after = 0, before = Number.MAX_SAFE_INTEGER) {
-    return this.database
-      .prepare(
-        'SELECT data FROM events WHERE session_id = ? AND sequence > ? AND sequence < ? ORDER BY sequence',
-      )
-      .all(sessionId, after, before)
-      .map((row) => JSON.parse(String(row.data)) as SessionEvent);
+    return readEvents(this.database, sessionId, after, before);
   }
+
   private runEvents(sessionId: string, runId: string) {
     return this.database
       .prepare('SELECT data FROM events WHERE session_id = ? AND run_id = ? ORDER BY sequence')
@@ -536,78 +539,39 @@ export class SessionStore {
     return { session, events: this.events(sessionId, afterSequence) };
   }
 
+  cursor(sessionId: string, sequence: number): HistoryCursor {
+    const row = this.database
+      .prepare('SELECT data FROM events WHERE session_id = ? AND sequence = ?')
+      .get(sessionId, sequence);
+    return {
+      epoch: String(
+        this.database.prepare("SELECT value FROM history_meta WHERE key = 'epoch'").get()!.value,
+      ),
+      sequence,
+      hash: row ? createHash('sha256').update(String(row.data)).digest('hex') : '',
+    };
+  }
+  matches(sessionId: string, cursor: HistoryCursor) {
+    const actual = this.cursor(sessionId, cursor.sequence);
+    return (
+      actual.epoch === cursor.epoch &&
+      actual.hash === cursor.hash &&
+      (cursor.sequence === 0 || !!actual.hash)
+    );
+  }
   history(
     sessionId: string,
     requestId: string,
     afterSequence = 0,
     beforeSequence?: number,
+    lower = 0,
   ): HistoryPage {
     const { session } = this.get(sessionId);
     const last = this.lastSequence(sessionId);
     if (afterSequence > last || (beforeSequence !== undefined && beforeSequence > last + 1))
       throw new DomainError('invalid_cursor', '历史游标超出范围。');
-    if (afterSequence > 0) {
-      const size = this.database
-        .prepare(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(octet_length(data)), 0) AS bytes FROM events WHERE session_id = ? AND sequence > ?',
-        )
-        .get(sessionId, afterSequence)!;
-      if (Number(size.count) <= pageEvents && Number(size.bytes) <= pageBytes) {
-        const events = this.events(sessionId, afterSequence);
-        return {
-          session,
-          requestId,
-          mode: 'append',
-          events,
-          firstSequence: events[0]?.sequence ?? 0,
-          lastSequence: last,
-          hasEarlier: false,
-        };
-      }
-    }
-    // Keep a complete run together: a single unusually large run may exceed the soft page budget.
-    const groups = this.database
-      .prepare(
-        `
-      SELECT run_id, MIN(sequence) AS first
-      FROM events WHERE session_id = ? AND sequence < ? GROUP BY run_id ORDER BY first DESC LIMIT 1000
-    `,
-      )
-      .all(sessionId, beforeSequence ?? last + 1);
-    // Find recent runs through the covering index; only read sizes until this page is full.
-    const sizeOf = this.database.prepare(
-      `SELECT COUNT(*) AS count, SUM(octet_length(data)) AS bytes
-       FROM events WHERE session_id = ? AND run_id = ? AND sequence < ?`,
-    );
-    let first = 0,
-      count = 0,
-      bytes = 0;
-    for (const group of groups) {
-      const size = sizeOf.get(sessionId, group.run_id, beforeSequence ?? last + 1)!;
-      if (
-        first &&
-        (count + Number(size.count) > pageEvents || bytes + Number(size.bytes) > pageBytes)
-      )
-        break;
-      first = Number(group.first);
-      count += Number(size.count);
-      bytes += Number(size.bytes);
-    }
-    const events = first ? this.events(sessionId, first - 1, beforeSequence) : [];
-    return {
-      session,
-      requestId,
-      mode: beforeSequence === undefined ? 'replace' : 'prepend',
-      events,
-      firstSequence: first,
-      lastSequence: events.at(-1)?.sequence ?? 0,
-      // Numbers are not consecutive in history that was merged, so the first of a session need not be 1.
-      hasEarlier:
-        !!first &&
-        !!this.database
-          .prepare('SELECT 1 FROM events WHERE session_id = ? AND sequence < ? LIMIT 1')
-          .get(sessionId, first),
-    };
+    const page = readHistory(this.database, sessionId, afterSequence, beforeSequence, lower);
+    return { session, requestId, ...page, cursor: this.cursor(sessionId, page.lastSequence) };
   }
 
   // `createdAt` is given for what happened before it is recorded, such as a terminal's turns.

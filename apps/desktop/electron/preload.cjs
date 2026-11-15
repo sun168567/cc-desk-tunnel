@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer, webFrame, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
+  historyCache: (command) => ipcRenderer.invoke('history-cache', command),
   dev: process.argv.includes('--cc-desk-tunnel-dev'),
   platform: process.platform,
   // Read once, before the page draws: see `boot` in main.cjs.

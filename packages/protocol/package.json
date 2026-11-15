@@ -4,7 +4,10 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./history": "./src/history.cjs"
+  },
   "dependencies": {
     "zod": "4.6.7"
   }

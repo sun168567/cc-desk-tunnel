@@ -524,7 +524,10 @@ export function createProxyServer(options: ServerOptions) {
     if (payload.type === 'native.metrics' && payload.rateLimits?.available)
       usage.observe(payload.rateLimits);
     const event = store.append(sessionId, runId, payload, createdAt);
-    broadcast({ type: 'session.event', event }, sessionId);
+    broadcast(
+      { type: 'session.event', event, cursor: store.cursor(event.sessionId, event.sequence) },
+      sessionId,
+    );
     if (payload.type === 'native.metrics' && payload.cacheTtl)
       compactions.arm(sessionId, Date.parse(event.createdAt), payload);
     else if (payload.type === 'message.user' || payload.type === 'native.compact')
@@ -873,7 +876,11 @@ export function createProxyServer(options: ServerOptions) {
             : { ...read, context: last?.context ?? null, usage: last?.usage ?? null };
         const event = record(command.sessionId, command.requestId, payload);
         if (!peer.subscriptions.has(command.sessionId))
-          send(peer, { type: 'session.event', event });
+          send(peer, {
+            type: 'session.event',
+            event,
+            cursor: store.cursor(event.sessionId, event.sequence),
+          });
       }
       updated(command.sessionId);
     } finally {
@@ -1208,7 +1215,11 @@ export function createProxyServer(options: ServerOptions) {
       usage: last?.usage ?? null,
       rateLimits,
     });
-    broadcast({ type: 'session.event', event });
+    broadcast({
+      type: 'session.event',
+      event,
+      cursor: store.cursor(event.sessionId, event.sequence),
+    });
   }
   // A turn the user interrupts runs no hook and leaves nothing in the CLI's record (CLI 2.1.293). A key that
   // interrupts it, typed while the CLI works, with no hook after it in a while, is taken for the end of the turn:
@@ -1702,12 +1713,21 @@ export function createProxyServer(options: ServerOptions) {
         await openTerminal(peer, command, session);
         return command.sessionId;
       case 'session.subscribe': {
+        const reset =
+          !!command.cursor &&
+          (command.cursor.sequence < command.afterSequence ||
+            !store.matches(command.sessionId, command.cursor));
         peer.subscriptions.clear();
         peer.subscriptions.add(command.sessionId);
         const messages: ServerMessage[] = [
           {
             type: 'session.snapshot',
-            ...store.history(command.sessionId, command.requestId, command.afterSequence),
+            ...store.history(
+              command.sessionId,
+              command.requestId,
+              reset ? 0 : command.afterSequence,
+            ),
+            ...(reset ? { reset: true } : {}),
           },
         ];
         // The history ends where the run's unfinished output begins.
@@ -1726,11 +1746,19 @@ export function createProxyServer(options: ServerOptions) {
         return command.sessionId;
       }
       case 'session.history':
+        if (command.cursor && !store.matches(command.sessionId, command.cursor))
+          throw new DomainError('history_changed', '服务端历史已变更，请重新打开会话。');
         peer.history ??= new HistoryDelivery((message) => send(peer, message));
         await peer.history.deliver(command.requestId, command.sessionId, [
           {
             type: 'session.snapshot',
-            ...store.history(command.sessionId, command.requestId, 0, command.beforeSequence),
+            ...store.history(
+              command.sessionId,
+              command.requestId,
+              0,
+              command.beforeSequence,
+              command.afterSequence,
+            ),
           },
         ]);
         return command.sessionId;
