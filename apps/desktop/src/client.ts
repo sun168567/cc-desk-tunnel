@@ -7,6 +7,7 @@ import {
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
 import type {
   AccountState,
+  SetupTokenResult,
   Command,
   Device,
   IdleCompaction,
@@ -138,6 +139,8 @@ export type ClientState = {
   capabilities: NativeCapabilities | null;
   metrics: NativeMetrics | null;
   account: AccountState | null;
+  // A newly generated token is held only until its one-time dialog closes or this connection ends.
+  setupToken: SetupTokenResult | null;
   // The service's idle compaction setting, as it last said; every window is told when it changes.
   compaction: IdleCompaction | null;
   // What each session's background tasks last said of themselves, by task: kept while the window is open
@@ -173,6 +176,7 @@ export class ProxyClient {
     capabilities: null,
     metrics: null,
     account: null,
+    setupToken: null,
     compaction: null,
     progress: {},
   };
@@ -494,6 +498,9 @@ export class ProxyClient {
             ? { update, error: `服务端已升级到 ${update.latest}，正在重启；请稍候重新连接。` }
             : { update },
         );
+      } else if (message.type === 'account.token.created') {
+        const { type: _type, ...setupToken } = message;
+        this.update({ setupToken });
       } else if (message.type === 'account.state') {
         const { type: _type, ...account } = message;
         // A signed-out account must not keep showing the previous one's identity and quota.
@@ -592,10 +599,11 @@ export class ProxyClient {
           status: 'disconnected',
           connectionId: null,
           error: this.state.error ?? (nativeClosed ? '原生连接已结束，请重新连接。' : null),
+          setupToken: null,
         });
         return;
       }
-      this.update({ status: 'reconnecting', connectionId: null, devices: [] });
+      this.update({ status: 'reconnecting', connectionId: null, devices: [], setupToken: null });
       this.retryTimer = setTimeout(
         () => {
           this.retryTimer = undefined;
@@ -630,7 +638,7 @@ export class ProxyClient {
     socket?.close();
     this.rejectPending();
     this.retryAttempt = 0;
-    this.update({ status: 'disconnected', connectionId: null });
+    this.update({ status: 'disconnected', connectionId: null, setupToken: null });
   }
   private rejectPending() {
     for (const [requestId, request] of this.pending) {

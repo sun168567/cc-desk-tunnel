@@ -296,6 +296,7 @@ test('browser controls an existing device session but cannot claim a device or i
     { type: 'session.move', sessionId: created.sessionId, projectPath: '/tmp' },
     { type: 'project.move', from: 'C:\\project', to: 'C:\\other' },
     { type: 'account.logout' },
+    { type: 'account.token', token: 'test-only-token' },
     { type: 'web.certificate.get' },
     { type: 'service.update.check' },
   ])

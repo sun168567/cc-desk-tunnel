@@ -285,6 +285,23 @@ test('a signed-in account skips the first-run wizard; a signed-out one keeps it'
   assert.equal(completeOnboarding(directory), false);
 });
 
+test('a setup token skips onboarding without stored browser credentials', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-onboarding-token-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const statePath = join(directory, '.claude.json');
+  writeFileSync(statePath, JSON.stringify({ userID: 'kept' }));
+  writeFileSync(
+    join(directory, 'settings.json'),
+    JSON.stringify({ env: { CLAUDE_CODE_OAUTH_TOKEN: 'placeholder' } }),
+  );
+  assert.equal(completeOnboarding(directory), true);
+  assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')), {
+    userID: 'kept',
+    hasCompletedOnboarding: true,
+  });
+  assert.equal(completeOnboarding(directory), false);
+});
+
 test('official sign-in: the link is read from the command output, the pasted code is typed back, exit decides the result', async () => {
   let data!: (text: string) => void, exit!: (event: { exitCode: number; signal?: number }) => void;
   const written: string[] = [];
@@ -320,7 +337,7 @@ test('official sign-in: the link is read from the command output, the pasted cod
     (text) => {
       replies.push(text);
     },
-    spawn,
+    { spawn },
   );
   assert.deepEqual(launched, ['auth', 'login']);
   data(

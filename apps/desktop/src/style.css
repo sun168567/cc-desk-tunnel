@@ -2817,6 +2817,7 @@ details[open] > summary > .fold-chevron {
 }
 .account-identity {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   padding: 16px 0;
@@ -2853,6 +2854,12 @@ details[open] > summary > .fold-chevron {
 .account-identity > .button {
   margin-left: auto;
   flex-shrink: 0;
+}
+.account-identity > .account-login-actions {
+  margin-left: auto;
+}
+.account-login.setup-token-login p {
+  display: block;
 }
 .account-confirm {
   display: flex;
@@ -3444,6 +3451,15 @@ dialog::backdrop {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 10px;
+}
+.setup-token-value {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: monospace;
+  resize: none;
 }
 .delete-question {
   overflow-wrap: anywhere;

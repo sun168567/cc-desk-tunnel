@@ -181,6 +181,12 @@ export class Quotas {
   constructor(interval = 60_000) {
     this.interval = interval;
   }
+  // Setup tokens need not expose an account identity, so replacing one can keep the same login key.
+  clear() {
+    this.observed = new ObservedQuotas();
+    this.reads.clear();
+    this.login = undefined;
+  }
   private heard(login: string) {
     if (this.login === undefined) this.observed.adopt('', login);
     this.login = login;

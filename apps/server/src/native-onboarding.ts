@@ -1,19 +1,24 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { readSettingsFile, settingsPath } from './native-settings.ts';
 
 // The CLI marks its first-run wizard done only when the user confirms the wizard's last screen. An account signed in
 // without reaching that screen would be asked to pick a theme and sign in again on every terminal start.
 export function completeOnboarding(configDirectory = process.env.CLAUDE_CONFIG_DIR) {
   const statePath = join(configDirectory ?? homedir(), '.claude.json');
   try {
-    const credentials = JSON.parse(
-      readFileSync(
-        join(configDirectory ?? join(homedir(), '.claude'), '.credentials.json'),
-        'utf8',
-      ),
-    );
-    if (!credentials?.claudeAiOauth?.accessToken) return false;
+    const settings = readSettingsFile(settingsPath(configDirectory));
+    const env = settings.env as Record<string, string> | undefined;
+    if (!env?.CLAUDE_CODE_OAUTH_TOKEN) {
+      const credentials = JSON.parse(
+        readFileSync(
+          join(configDirectory ?? join(homedir(), '.claude'), '.credentials.json'),
+          'utf8',
+        ),
+      );
+      if (!credentials?.claudeAiOauth?.accessToken) return false;
+    }
     const state = JSON.parse(readFileSync(statePath, 'utf8'));
     if (state.hasCompletedOnboarding === true) return false;
     writeFileSync(

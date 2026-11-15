@@ -3,6 +3,14 @@ import { Page } from './ui.tsx';
 
 const topics: { title: string; lines: string[] }[] = [
   {
+    title: 'Claude 登录方式',
+    lines: [
+      '“账号与额度”可选普通登录或 Setup token 登录。普通登录沿用官方授权；Setup token 可以由服务端生成，完成授权后自动保存并展示一次供你复制，也可以直接粘贴已有令牌。',
+      'Setup token 可能不提供邮箱、订阅类型、完整订阅额度及到期时间。回复携带的额度和本项目的调用统计仍按原有方式显示；配置成功不等于令牌有效，实际以请求结果为准。',
+      '令牌失效后需要退出并重新生成或配置。桌面“退出登录”会移除服务端保存的令牌，保留会话记录，不会撤销它在其他地方的使用；在 ccdt 中单独执行官方 /logout 不会移除用户设置中的令牌。',
+    ],
+  },
+  {
     title: '它是怎么工作的',
     lines: [
       'Claude Code 运行在你的云端服务器上，项目和工具留在这台电脑上。客户端连接服务后会临时打开一条只通向本机的执行通道，Claude 通过它读写项目文件、执行命令（Windows 上是 PowerShell，装了 Git for Windows 时也可以用 Git Bash；macOS 和 Linux 上是你自己的 shell）。',
