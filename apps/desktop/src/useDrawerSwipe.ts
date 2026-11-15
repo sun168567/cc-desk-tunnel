@@ -29,7 +29,8 @@ export function useDrawerSwipe(enabled: boolean, open: boolean, change: (open: b
   return {
     onPointerDown(event: PointerEvent<HTMLDivElement>) {
       suppressClick.current = false;
-      if (!enabled || !event.isPrimary || event.button !== 0) return;
+      if (!enabled || event.pointerType !== 'touch' || !event.isPrimary || event.button !== 0)
+        return;
       if (
         !(event.target instanceof Element) ||
         !event.target.closest(open ? '.rail, .sidebar, .sidebar-shade' : '.workspace, .titlebar') ||
