@@ -68,7 +68,7 @@ import { DomainError } from './errors.ts';
 import type { NativeLogin } from './native-account.ts';
 import { IdleCompactions } from './idle-compaction.ts';
 import { NativeInput } from './native-input.ts';
-import { loginOf, statusLineQuota } from './native-controls.ts';
+import { statusLineQuota } from './native-controls.ts';
 import { completeOnboarding } from './native-onboarding.ts';
 import { readNativeSettings, updateNativeSettings } from './native-settings.ts';
 import { readInstructions, writeInstructions } from './native-instructions.ts';
@@ -273,9 +273,7 @@ export function createProxyServer(options: ServerOptions) {
   const mutations = new Set<string>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
-  const compactions = new IdleCompactions(store.directory, compactIdle, (sessionId) =>
-    quotas.blockedUntil(loginOf(store.lastAccount(sessionId) ?? {}), store.lastQuota(sessionId)),
-  );
+  const compactions = new IdleCompactions(store.directory, compactIdle);
   armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
   let login: Login | undefined;
@@ -544,20 +542,18 @@ export function createProxyServer(options: ServerOptions) {
   // runs here whether or not a window or the session's computer is there. A session that runs is left alone, and so
   // is one a terminal holds: the terminal's CLI compacts it by the same setting (see `terminalSettings`), and when the
   // terminal ends first, its last turn is looked at again.
-  function compactIdle(sessionId: string, endedAt: number) {
+  function compactIdle(sessionId: string) {
     if (closing || !options.claude) return;
     try {
       const { session } = store.get(sessionId);
       if (session.activeRun || terminals.has(sessionId) || !session.device) return;
       submit(undefined, { type: 'session.compact', requestId: randomUUID(), sessionId }, session);
       const run = runs.get(sessionId);
-      if (run) {
-        const minutes = Math.floor((Date.now() - endedAt) / 60_000);
+      if (run)
         emit(run, {
           type: 'native.notice',
-          text: `上一轮结束已 ${minutes} 分钟，提示缓存即将过期：按设置自动压缩上下文，压缩读取的是缓存。`,
+          text: `上一轮结束已 ${compactions.settings.afterMinutes} 分钟，提示缓存即将过期：按设置自动压缩上下文，压缩读取的是缓存。`,
         });
-      }
     } catch {
       // As many runs as the service holds are going, or the session's native record is gone: left as it is.
     }

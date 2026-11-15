@@ -370,15 +370,6 @@ export class SessionStore {
       .get(sessionId);
   }
   // The session's last reading of its native state.
-  lastAccount(sessionId: string) {
-    const row = this.database
-      .prepare(
-        "SELECT data FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') = 'native.capabilities' ORDER BY sequence DESC LIMIT 1",
-      )
-      .get(sessionId);
-    const payload = row ? (JSON.parse(String(row.data)) as SessionEvent).payload : undefined;
-    return payload?.type === 'native.capabilities' ? payload.account : null;
-  }
   lastMetrics(sessionId: string) {
     const row = this.database
       .prepare(
@@ -387,16 +378,6 @@ export class SessionStore {
       .get(sessionId);
     const payload = row ? (JSON.parse(String(row.data)) as SessionEvent).payload : undefined;
     return payload?.type === 'native.metrics' ? payload : null;
-  }
-  // Context-only readings, including a terminal's last turn, do not erase a known quota window.
-  lastQuota(sessionId: string) {
-    const row = this.database
-      .prepare(
-        "SELECT data FROM events WHERE session_id = ? AND json_extract(data, '$.payload.type') = 'native.metrics' AND json_type(data, '$.payload.rateLimits') = 'object' ORDER BY sequence DESC LIMIT 1",
-      )
-      .get(sessionId);
-    const payload = row ? (JSON.parse(String(row.data)) as SessionEvent).payload : undefined;
-    return payload?.type === 'native.metrics' ? payload.rateLimits : null;
   }
   // The figures of the last turn that wrote a prompt cache, and when it ended; none once the session was compacted
   // after it, as a terminal's CLI does by itself while it is idle.
