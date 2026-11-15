@@ -25,7 +25,7 @@ export type ObservedQuota = { windows: Windows; measuredAt: string };
 type UnifiedWindow = { utilization?: number; resetsAt?: number };
 
 // Who the CLI is signed in as. A reading seen under one login says nothing about another.
-export function loginOf(account: AccountInfo) {
+export function loginOf(account: NativeCapabilities['account']) {
   const { apiProvider, tokenSource, apiKeySource, email, organization, subscriptionType } = account;
   return JSON.stringify([
     apiProvider,
@@ -171,6 +171,7 @@ export class Quotas {
   wanted: () => boolean = () => true;
   private readonly interval: number;
   private observed = new ObservedQuotas();
+  private limits = new Map<string, SDKRateLimitEvent['rate_limit_info']>();
   private reads = new Map<
     string,
     { at: number; rateLimits: Metrics['rateLimits']; pending?: Promise<unknown> }
@@ -193,7 +194,35 @@ export class Quotas {
   }
   observe(login: string, event: SDKRateLimitEvent, now = Date.now()) {
     this.heard(login);
+    this.limits.set(login, event.rate_limit_info);
     this.observed.observe(login, event, now);
+  }
+  // Automatic work must wait for a known rejection or an exhausted account-wide window. A rejection can omit
+  // utilization entirely; without a reset time there is no time at which to schedule it safely.
+  blockedUntil(login: string, previous: Metrics['rateLimits'], now = Date.now()): number | null {
+    const limit = this.limits.get(login);
+    let until: number | null = null;
+    if (limit?.status === 'rejected') {
+      const reset =
+        limit.rateLimitType === 'overage'
+          ? (limit.overageResetsAt ?? limit.resetsAt)
+          : limit.resetsAt;
+      if (reset === undefined) return Infinity;
+      if (reset * 1000 > now) until = reset * 1000;
+    } else if (limit?.isUsingOverage || limit?.overageInUse) {
+      // A full subscription window is not a rejection when native requests are using extra usage.
+      return null;
+    }
+    const reading = this.of(login, now) ?? previous;
+    if (reading?.available)
+      for (const window of reading.windows) {
+        if (!['five_hour', 'seven_day'].includes(window.name) || (window.utilization ?? 0) < 100)
+          continue;
+        const reset = window.resetsAt === null ? NaN : Date.parse(window.resetsAt);
+        if (!Number.isFinite(reset)) return Infinity;
+        if (reset > now) until = Math.max(until ?? 0, reset);
+      }
+    return until;
   }
   // The windows a terminal's status line showed (see `statusLineQuota`), and the quota as it now stands.
   observeTerminal(windows: Windows, now = Date.now()) {

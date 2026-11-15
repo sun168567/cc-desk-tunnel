@@ -15,6 +15,7 @@ import {
   writeIdleCompaction,
 } from '../src/idle-compaction.ts';
 import { SessionStore } from '../src/store.ts';
+import { Quotas, loginOf } from '../src/native-controls.ts';
 
 type Metrics = Extract<EventPayload, { type: 'native.metrics' }>;
 const MINUTE = 60_000;
@@ -85,7 +86,11 @@ test('a session is compacted once when due, not after a message, and not once it
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   const path = directory(t);
   const fired: string[] = [];
-  const compactions = new IdleCompactions(path, (sessionId) => fired.push(sessionId));
+  const compactions = new IdleCompactions(
+    path,
+    (sessionId) => fired.push(sessionId),
+    () => null,
+  );
   compactions.update({ enabled: true });
   compactions.arm('a', 0, metrics(150_000, '1h'), 0);
   compactions.arm('b', 0, metrics(150_000, '1h'), 0);
@@ -108,6 +113,141 @@ test('a session is compacted once when due, not after a message, and not once it
   compactions.update({ enabled: false });
   t.mock.timers.tick(60 * MINUTE);
   assert.deepEqual(fired, ['a', 'due']);
+});
+
+test('quota resets postpone idle compaction only while the original cache remains usable', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const quotas = new Quotas();
+  const reading = (resetsAt: number) => ({
+    available: true,
+    windows: [{ name: 'five_hour', utilization: 100, resetsAt: new Date(resetsAt).toISOString() }],
+  });
+  const fired: string[] = [];
+  const compactions = new IdleCompactions(
+    directory(t),
+    (id) => fired.push(id),
+    (id) => quotas.blockedUntil(id, reading((id === 'soon' ? 55 : 65) * MINUTE)),
+  );
+  t.after(() => compactions.clear());
+  compactions.update({ enabled: true });
+  for (const id of ['soon', 'expired']) compactions.arm(id, 0, metrics(150_000, '1h'));
+  assert.equal(compactions.armed('expired'), false);
+  t.mock.timers.tick(50 * MINUTE);
+  assert.deepEqual(fired, []);
+  t.mock.timers.tick(5 * MINUTE - 1);
+  assert.deepEqual(fired, []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(fired, ['soon']);
+  t.mock.timers.tick(10 * MINUTE);
+  assert.deepEqual(fired, ['soon'], 'no full-price catch-up after the cache expires');
+});
+
+test('a limit reached after arming is rechecked at the deadline and at a changed reset time', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const quotas = new Quotas();
+  const fired: string[] = [];
+  const compactions = new IdleCompactions(
+    directory(t),
+    (id) => fired.push(id),
+    () => quotas.blockedUntil('same-account', null),
+  );
+  t.after(() => compactions.clear());
+  compactions.update({ enabled: true });
+  for (const id of ['waiting', 'cancelled']) compactions.arm(id, 0, metrics(150_000, '1h'));
+  const reject = (minutes: number) =>
+    quotas.observe('same-account', {
+      type: 'rate_limit_event',
+      uuid: randomUUID(),
+      session_id: 'other-session',
+      rate_limit_info: { status: 'rejected', rateLimitType: 'five_hour', resetsAt: minutes * 60 },
+    });
+  // Another session exhausts the account while the timer is waiting. The rejection need not carry a percentage.
+  t.mock.timers.tick(49 * MINUTE);
+  reject(55);
+  t.mock.timers.tick(MINUTE);
+  assert.deepEqual(fired, []);
+  assert.equal(compactions.armed('waiting'), true);
+  compactions.cancel('cancelled');
+  reject(57);
+  t.mock.timers.tick(5 * MINUTE);
+  assert.deepEqual(fired, []);
+  t.mock.timers.tick(2 * MINUTE);
+  assert.deepEqual(fired, ['waiting']);
+});
+
+test('a deferred compaction is dropped at the cache margin, for an unknown reset, or when disabled', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  let blocked: number | null = null;
+  const fired: string[] = [];
+  const compactions = new IdleCompactions(
+    directory(t),
+    (id) => fired.push(id),
+    () => blocked,
+  );
+  t.after(() => compactions.clear());
+  compactions.update({ enabled: true });
+  compactions.arm('margin', 0, metrics(150_000, '1h'));
+  blocked = 59 * MINUTE;
+  t.mock.timers.tick(50 * MINUTE);
+  assert.equal(compactions.armed('margin'), false);
+  blocked = Infinity;
+  compactions.arm('unknown-reset', 0, metrics(150_000, '1h'));
+  assert.equal(compactions.armed('unknown-reset'), false);
+  blocked = 55 * MINUTE;
+  compactions.arm('disabled', 0, metrics(150_000, '1h'));
+  compactions.update({ enabled: false });
+  t.mock.timers.tick(10 * MINUTE);
+  assert.deepEqual(fired, []);
+});
+
+test('restart restores quota scheduling even after a context-only reading', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const path = directory(t);
+  let store = new SessionStore(path);
+  const session = store.create(randomUUID(), '限额会话', '/tmp/project', {
+    id: randomUUID(),
+    name: '测试设备',
+  });
+  const account = { email: 'quota@example.invalid', apiProvider: 'firstParty' };
+  store.append(session.id, 'run', {
+    type: 'native.capabilities',
+    models: [],
+    commands: [],
+    account,
+  });
+  store.append(session.id, 'run', {
+    ...metrics(150_000, '1h'),
+    rateLimits: {
+      available: true,
+      windows: [
+        { name: 'five_hour', utilization: 100, resetsAt: new Date(55 * MINUTE).toISOString() },
+      ],
+    },
+  });
+  store.append(session.id, 'read', metrics(150_000));
+  store.close();
+  store = new SessionStore(path);
+  const quotas = new Quotas();
+  const fired: string[] = [];
+  const compactions = new IdleCompactions(
+    path,
+    (id) => fired.push(id),
+    (id) => quotas.blockedUntil(loginOf(store.lastAccount(id) ?? {}), store.lastQuota(id)),
+  );
+  t.after(() => {
+    compactions.clear();
+    store.close();
+  });
+  compactions.update({ enabled: true });
+  const turn = store.lastCachedTurn(session.id)!;
+  assert.deepEqual(store.lastAccount(session.id), account);
+  assert.equal(store.lastMetrics(session.id)?.rateLimits, null);
+  assert.equal(store.lastQuota(session.id)?.windows[0]?.utilization, 100);
+  compactions.arm(session.id, turn.endedAt, turn.metrics);
+  t.mock.timers.tick(50 * MINUTE);
+  assert.deepEqual(fired, []);
+  t.mock.timers.tick(5 * MINUTE);
+  assert.deepEqual(fired, [session.id]);
 });
 
 test('the store finds the last turn that wrote a cache, and when it ended', (t) => {

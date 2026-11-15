@@ -102,10 +102,16 @@ export class IdleCompactions {
   settings: IdleCompaction;
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private directory: string;
-  private fire: (sessionId: string) => void;
-  constructor(directory: string, fire: (sessionId: string) => void) {
+  private fire: (sessionId: string, endedAt: number) => void;
+  private blockedUntil: (sessionId: string) => number | null;
+  constructor(
+    directory: string,
+    fire: (sessionId: string, endedAt: number) => void,
+    blockedUntil: (sessionId: string) => number | null,
+  ) {
     this.directory = directory;
     this.fire = fire;
+    this.blockedUntil = blockedUntil;
     this.settings = readIdleCompaction(directory);
   }
   update(values: Partial<IdleCompaction>) {
@@ -118,15 +124,24 @@ export class IdleCompactions {
     const due = compactionDue(this.settings, endedAt, metrics);
     const lapses = endedAt + LASTS_MS - SPARE_MS;
     if (due === null || now >= lapses) return;
-    const timer = setTimeout(
-      () => {
-        this.timers.delete(sessionId);
-        if (Date.now() < lapses) this.fire(sessionId);
-      },
-      Math.max(0, due - now),
-    );
-    timer.unref?.();
-    this.timers.set(sessionId, timer);
+    const schedule = (at: number, scheduledAt: number) => {
+      // Waiting for quota must not turn a cache-saving compaction into an uncached request.
+      if (at >= lapses) return;
+      const timer = setTimeout(
+        () => {
+          this.timers.delete(sessionId);
+          const current = Date.now();
+          if (current >= lapses) return;
+          const blocked = this.blockedUntil(sessionId);
+          if (blocked !== null && blocked > current) schedule(blocked, current);
+          else this.fire(sessionId, endedAt);
+        },
+        Math.max(0, at - scheduledAt),
+      );
+      timer.unref?.();
+      this.timers.set(sessionId, timer);
+    };
+    schedule(Math.max(due, this.blockedUntil(sessionId) ?? 0), now);
   }
   armed(sessionId: string) {
     return this.timers.has(sessionId);
