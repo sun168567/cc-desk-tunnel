@@ -236,6 +236,111 @@ test('Web index uses its HTTP CSP without changing the desktop build or static a
   assert.equal((await f.http('/assets/app.js')).text, JSON.stringify(meta));
 });
 
+test('installation names keep a stable identity and discard unrelated URL data', async (t) => {
+  const f = await fixture(t);
+  const html = readFileSync(new URL('../../desktop/index.html', import.meta.url), 'utf8');
+  const manifest = readFileSync(
+    new URL('../../desktop/public/manifest.webmanifest', import.meta.url),
+    'utf8',
+  );
+  writeFileSync(join(f.directory, 'index.html'), html);
+  writeFileSync(join(f.directory, 'manifest.webmanifest'), manifest);
+  f.command({ type: 'web.settings.update', values: { enabled: true, path: 'private' } });
+  const defaultPage = (await f.http('/private/')).text;
+  for (const [name, title] of [
+    ['档案查询窗口01', '档案查询窗口01'],
+    ['</title><script>$&', '&lt;/title&gt;&lt;script&gt;$&amp;'],
+  ]) {
+    const query = new URLSearchParams({ appName: name }).toString();
+    const extra = '&password=discard-me&session=old-session';
+    const page = await f.http(`/private/?${query}${extra}`);
+    const response = await f.http(`/private/manifest.webmanifest?${query}${extra}`);
+    assert.deepEqual(response.data, {
+      ...JSON.parse(manifest),
+      name,
+      short_name: name,
+      id: '/private/',
+      start_url: `/private/?${query}`,
+    });
+    assert.ok(page.text.includes(`<title>${title}</title>`));
+    assert.ok(page.text.includes(`href="./manifest.webmanifest?${query}"`));
+    assert.doesNotMatch(page.text, /discard-me|old-session|<script>\$/);
+    assert.equal((await f.http(`/private?${query}`)).headers.location, `/private/?${query}`);
+  }
+  for (const value of ['', 'x'.repeat(41), 'name\n']) {
+    const query = new URLSearchParams({ appName: value });
+    assert.equal((await f.http(`/private/manifest.webmanifest?${query}`)).text, manifest);
+  }
+  assert.equal((await f.http('/private/manifest.webmanifest?appName=a&appName=b')).text, manifest);
+  assert.equal((await f.http('/private/')).text, defaultPage);
+  assert.equal((await f.http('/private/manifest.webmanifest')).text, manifest);
+});
+
+test('installation badges use independent text of up to three safe graphemes without login', async (t) => {
+  const f = await fixture(t);
+  const manifest = readFileSync(
+    new URL('../../desktop/public/manifest.webmanifest', import.meta.url),
+  );
+  writeFileSync(join(f.directory, 'manifest.webmanifest'), manifest);
+  writeFileSync(
+    join(f.directory, 'index.html'),
+    readFileSync(new URL('../../desktop/index.html', import.meta.url)),
+  );
+  const icon = readFileSync(new URL('../../desktop/public/assets/icon-512.png', import.meta.url));
+  writeFileSync(join(f.directory, 'assets', 'icon-512.png'), icon);
+  f.command({ type: 'web.settings.update', values: { enabled: true, path: 'private' } });
+  const cases = [
+    [undefined, '01', '01'],
+    ['档案查询窗口01', '开发版', '开发版'],
+    ['工作台', '👩‍💻e\u0301窗', '👩‍💻e\u0301窗'],
+    ['01', '<&窗', '&lt;&amp;窗'],
+  ] as const;
+  for (const [name, text, label] of cases) {
+    const query = new URLSearchParams(name ? { appName: name } : {});
+    const plain = (await f.http(`/private/manifest.webmanifest?${query}`)).data;
+    query.set('appLabel', text);
+    const response = await f.http(`/private/manifest.webmanifest?${query}&session=discard-me`);
+    const source = `./app-icon.svg?${new URLSearchParams({ appLabel: text })}`;
+    assert.deepEqual(response.data, {
+      ...plain,
+      id: '/private/',
+      start_url: `/private/?${query}`,
+      icons: [{ src: source, sizes: 'any', type: 'image/svg+xml' }],
+    });
+    const page = (await f.http(`/private/?${query}`)).text;
+    assert.ok(
+      page.includes(`href="./manifest.webmanifest?${query.toString().replaceAll('&', '&amp;')}"`),
+    );
+    if (!name) assert.ok(page.includes('<title>CC Desk Tunnel</title>'));
+    const path = `/private/${source.slice(2)}`;
+    const svg = await f.http(path);
+    assert.equal(svg.status, 200);
+    assert.match(svg.headers['content-type']!, /^image\/svg\+xml(?:;|$)/);
+    assert.equal(svg.text.match(/<text\b[^>]*>([\s\S]*?)<\/text>/)?.[1], label);
+    assert.ok(svg.text.includes(`data:image/png;base64,${icon.toString('base64')}`));
+    const head = await f.http(path, undefined, {}, 'HEAD');
+    assert.equal(head.text, '');
+    assert.equal(head.headers['content-length'], svg.headers['content-length']);
+  }
+  for (const value of ['', '超过三个', 'name\n']) {
+    const query = new URLSearchParams({ appName: '01', appLabel: value });
+    const response = await f.http(`/private/manifest.webmanifest?${query}`);
+    assert.deepEqual(
+      response.data,
+      (await f.http('/private/manifest.webmanifest?appName=01')).data,
+    );
+    assert.equal((await f.http(`/private/app-icon.svg?${query}`)).status, 404);
+  }
+  assert.deepEqual(
+    (await f.http('/private/manifest.webmanifest?appName=01&appBadge=1&appLabel=a&appLabel=b'))
+      .data,
+    (await f.http('/private/manifest.webmanifest?appName=01')).data,
+  );
+  assert.equal((await f.http('/private/app-icon.svg?appLabel=a&appLabel=b')).status, 404);
+  assert.equal((await f.http('/private/app-icon.svg')).status, 404);
+  assert.equal((await f.http('/app-icon.svg?appLabel=01')).status, 404);
+});
+
 test('login checks origin/password, stores hashes only, sends protected cookies, and logout revokes sockets', async (t) => {
   const f = await fixture(t, true);
   f.enable();

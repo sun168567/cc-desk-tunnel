@@ -7,6 +7,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
 import {
+  webAppBadgeSchema,
+  webAppNameSchema,
   webCommandSchema,
   webLoginSchema,
   webStoredSettingsSchema,
@@ -22,6 +24,7 @@ import type {
 import { DomainError } from './errors.ts';
 import { Throttle } from './throttle.ts';
 import { WebCertificates } from './web-certificate.ts';
+import { escapeMarkup, webAppIcon } from './web-app-icon.ts';
 import { totpSecret, totpStep } from './web-totp.ts';
 
 const DAY = 86_400_000;
@@ -569,7 +572,11 @@ export class WebAccess {
     const pathname = (request.url ?? '').split('?')[0];
     const reading = ['GET', 'HEAD'].includes(request.method ?? '');
     if (this.prefix && pathname === this.prefix && reading) {
-      response.writeHead(308, { Location: `${this.prefix}/` }).end();
+      response
+        .writeHead(308, {
+          Location: `${this.prefix}/${(request.url ?? '').slice(pathname.length)}`,
+        })
+        .end();
       return true;
     }
     const route = this.route(request);
@@ -651,18 +658,51 @@ export class WebAccess {
         !(
           file === 'index.html' ||
           file.startsWith('assets/') ||
-          ['favicon.ico', 'icon.png', 'manifest.webmanifest'].includes(file)
+          ['favicon.ico', 'icon.png', 'manifest.webmanifest', 'app-icon.svg'].includes(file)
         )
       )
         return this.empty(response, 404);
+      const search = new URL(request.url ?? '/', 'http://localhost').searchParams;
+      const names = search.getAll('appName');
+      const name = webAppNameSchema.safeParse(names.length === 1 ? names[0] : undefined).data;
+      const labels = search.getAll('appLabel');
+      const label = webAppBadgeSchema.safeParse(labels.length === 1 ? labels[0] : undefined).data;
+      const query = new URLSearchParams();
+      if (name) query.set('appName', name);
+      if (label) query.set('appLabel', label);
+      const icon = file === 'app-icon.svg';
+      if (icon && !label) return this.empty(response, 404);
       const root = await realpath(this.options.directory);
-      const target = await realpath(resolve(root, file));
+      const target = await realpath(resolve(root, icon ? 'assets/icon-512.png' : file));
       if (!webStaticPath(root, target)) return this.empty(response, 404);
       const info = await stat(target);
       if (!info.isFile() || info.size > 20 * 1024 * 1024) return this.empty(response, 404);
-      const data = file === 'index.html' ? await this.page(target) : await readFile(target);
+      let data =
+        file === 'index.html' ? await this.page(target, name, query) : await readFile(target);
+      if (icon) data = webAppIcon(data, label!);
+      if (file === 'manifest.webmanifest' && query.size) {
+        data = Buffer.from(
+          JSON.stringify({
+            ...JSON.parse(data.toString('utf8')),
+            ...(name ? { name, short_name: name } : {}),
+            id: `${this.prefix}/`,
+            start_url: `${this.prefix}/?${query}`,
+            ...(label
+              ? {
+                  icons: [
+                    {
+                      src: `./app-icon.svg?${new URLSearchParams({ appLabel: label })}`,
+                      sizes: 'any',
+                      type: 'image/svg+xml',
+                    },
+                  ],
+                }
+              : {}),
+          }),
+        );
+      }
       response.writeHead(200, {
-        'Content-Type': types[extname(target)] ?? 'application/octet-stream',
+        'Content-Type': types[extname(file)] ?? 'application/octet-stream',
         'Content-Length': data.length,
       });
       response.end(request.method === 'HEAD' ? undefined : data);
@@ -673,14 +713,28 @@ export class WebAccess {
     return true;
   }
   // The shared build carries the desktop's CSP in a meta tag; the Web page has the HTTP policy above instead.
-  private async page(target: string) {
+  private async page(target: string, name: string | undefined, query: URLSearchParams) {
     this.index ??= Buffer.from(
       (await readFile(target, 'utf8')).replace(
         /<meta\b[^>]*\bhttp-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi,
         '',
       ),
     );
-    return this.index;
+    if (!query.size) return this.index;
+    const manifest = escapeMarkup(`./manifest.webmanifest?${query}`);
+    return Buffer.from(
+      this.index
+        .toString('utf8')
+        .replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, (title) =>
+          name
+            ? `<title>${escapeMarkup(name)}</title><meta name="apple-mobile-web-app-title" content="${escapeMarkup(name)}">`
+            : title,
+        )
+        .replace(
+          /<link\b[^>]*\brel=["']manifest["'][^>]*>/i,
+          () => `<link rel="manifest" href="${manifest}">`,
+        ),
+    );
   }
   close() {
     this.closed = true;
