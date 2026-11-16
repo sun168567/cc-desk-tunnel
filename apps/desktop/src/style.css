@@ -2972,7 +2972,7 @@ details[open] > summary > .fold-chevron {
   font-size: 12px;
   text-align: left;
 }
-.quota-period:hover {
+button.quota-period:hover {
   color: var(--accent);
 }
 .account-body.usage-body {
@@ -3625,6 +3625,18 @@ dialog::backdrop {
     width: 44px;
     height: 44px;
   }
+  /* Keep the same page action, aligned with the mobile titlebar's empty right slot. */
+  .page-settings .page-header:has(> .quota-page-refresh) {
+    display: contents;
+  }
+  .page-settings .quota-page-refresh {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top));
+    right: 12px;
+    z-index: 3;
+    width: 44px;
+    height: 44px;
+  }
   .page-settings:not([data-settings-index]) > .sidebar,
   .page-settings[data-settings-index] > .workspace {
     display: none;
@@ -3699,6 +3711,9 @@ dialog::backdrop {
   .setting-row,
   .settings-list label {
     flex-wrap: wrap;
+  }
+  .quota-card > .setting-row {
+    flex-wrap: nowrap;
   }
   .account-heading {
     padding: 13px 14px;

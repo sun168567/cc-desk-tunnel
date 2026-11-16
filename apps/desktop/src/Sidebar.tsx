@@ -65,6 +65,7 @@ export default function Sidebar({
   createInProject,
   sessionMenu,
   projectMenu,
+  footer,
 }: {
   localProjects?: boolean;
   sessions: Session[];
@@ -87,6 +88,7 @@ export default function Sidebar({
   createInProject: (path: string) => void;
   sessionMenu: (session: Session, position: MenuPosition) => void;
   projectMenu: (path: string, position: MenuPosition) => void;
+  footer?: ReactNode;
 }) {
   const prefs = usePrefs();
   const connectionName = useConnectionName();
@@ -497,6 +499,7 @@ export default function Sidebar({
           pinned.length === 0 &&
           othersCount === 0 && <p className="list-empty">没有匹配会话</p>}
       </nav>
+      {footer}
       {card && (
         <div className="session-card" role="tooltip" style={{ top: card.top, left: card.left }}>
           <strong>{card.session.title}</strong>

@@ -892,16 +892,23 @@ export default function SettingsPage({
   const term = search.trim().toLowerCase();
   // Before a connection only this computer's; in a browser no computer's own nor Claude Code's files; the service's
   // where there is one to keep them. A page with nothing to set where it is shown is not listed.
-  const shown = sections.filter(
-    (item) =>
-      (!back || item.group === '本机') &&
-      (item.id !== 'connection' || window.desktop) &&
-      (!browser || !['context', 'account', 'claude', 'instructions'].includes(item.id)) &&
-      (item.id !== 'context' || native) &&
-      (item.id !== 'shell' || (native && !browser && !!here && platformOf(here) === 'win32')) &&
-      (item.id !== 'web' || native || browser) &&
-      `${item.name} ${item.words}`.toLowerCase().includes(term),
-  );
+  const shown = sections
+    .map((item) =>
+      browser && item.id === 'account'
+        ? { ...item, name: '订阅用量', words: '订阅 用量 额度 周期统计 重置 自动读取额度' }
+        : item,
+    )
+    .filter(
+      (item) =>
+        (!back || item.group === '本机') &&
+        (item.id !== 'connection' || window.desktop) &&
+        (!browser || !['context', 'claude', 'instructions'].includes(item.id)) &&
+        (item.id !== 'account' || native || !browser) &&
+        (item.id !== 'context' || native) &&
+        (item.id !== 'shell' || (native && !browser && !!here && platformOf(here) === 'win32')) &&
+        (item.id !== 'web' || native || browser) &&
+        `${item.name} ${item.words}`.toLowerCase().includes(term),
+    );
   return (
     <>
       <aside className="sidebar">

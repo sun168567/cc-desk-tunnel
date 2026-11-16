@@ -65,7 +65,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `src/transcript.ts` | 把会话事件流折叠成界面条目（消息、推理、工具、提示） |
 | `src/ConversationFind.tsx`、`conversationSearch.ts`、`messageTime.ts`、`copy.tsx` | 对话内查找、消息日期与复制 |
 | `src/App.tsx` | 编排：连接与登录、当前会话、所有请求和禁用条件；不含具体界面 |
-| `src/LoginPage.tsx`、`TitleBar.tsx`、`Rail.tsx`、`Sidebar.tsx`、`Conversation.tsx`、`Composer.tsx`、`SessionDialogs.tsx` | 各界面区域，只渲染并上报用户意图：标题栏、图标栏、会话侧栏、会话区、输入区、对话框 |
+| `src/LoginPage.tsx`、`TitleBar.tsx`、`Rail.tsx`、`Sidebar.tsx`、`QuotaSummary.tsx`、`Conversation.tsx`、`Composer.tsx`、`SessionDialogs.tsx` | 各界面区域，只渲染并上报用户意图：标题栏、图标栏、会话侧栏及额度摘要、会话区、输入区、对话框 |
 | `src/SettingsPage.tsx`、`SettingsPanel.tsx`、`Help.tsx` | 设置页的分类与客户端自身的设置；云端 Claude Code 的设置项；帮助文案 |
 | `src/useDrawerSwipe.ts`、`useWebNavigation.ts` | 窄屏抽屉的触摸手势；浏览器前进后退与页面、抽屉状态同步 |
 | `src/WebAccessSettings.tsx`、`WebGate.tsx`、`browser-api.ts`、`host-capabilities.ts` | Web 设置与证书管理；浏览器登录和会话；桌面与浏览器的宿主能力区分 |
