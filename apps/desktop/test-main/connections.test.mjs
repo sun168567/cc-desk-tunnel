@@ -14,7 +14,7 @@ const profile = (context) => {
 
 test('the first connection leads the list and keeps the program profile', (context) => {
   const base = profile(context);
-  assert.deepEqual(connections.list(base), [{ id: '', name: '主连接' }]);
+  assert.deepEqual(connections.list(base), [{ id: '', name: '01' }]);
   assert.equal(connections.directory(base, ''), base);
   const work = connections.create(base, '  工作   账号 ');
   assert.equal(work.name, '工作 账号');
@@ -28,12 +28,21 @@ test('the first connection leads the list and keeps the program profile', (conte
   assert.throws(() => connections.rename(base, 'missing0', '别的'), /不存在/);
 });
 
-test('a command line names only a connection that is in the list', (context) => {
+test('startup uses the saved default unless a connection is explicitly requested', (context) => {
   const base = profile(context);
   const { id } = connections.create(base, '工作');
+  assert.equal(connections.requested(['app'], base), '');
+  connections.setDefault(base, id);
+  assert.equal(connections.requested(['app'], base), id);
+  assert.equal(connections.requested(['app', '--connection='], base), '');
+  assert.throws(() => connections.setDefault(base, 'missing0'), /不存在/);
+  assert.equal(connections.requested(['app'], base), id);
+  connections.setDefault(base, '');
   assert.equal(connections.requested(['app', `--connection=${id}`], base), id);
   assert.equal(connections.requested(['app', '--connection=../../else'], base), '');
   assert.equal(connections.requested(['app', '--connection=abcdefgh'], base), '');
+  assert.equal(connections.requested(['app'], base), '');
+  writeFileSync(join(base, 'shared/default-connection.json'), '{');
   assert.equal(connections.requested(['app'], base), '');
 });
 
@@ -54,9 +63,11 @@ test('a connection is removed with its profile, unless its window is open', (con
   assert.equal(connections.running(base, id), false);
   assert.deepEqual(connections.busy(base, ''), []);
   assert.throws(() => connections.remove(base, ''), /不存在/);
+  connections.setDefault(base, id);
   connections.remove(base, id);
+  assert.equal(connections.requested(['app'], base), '');
   assert.equal(existsSync(connections.directory(base, id)), false);
-  assert.deepEqual(connections.list(base), [{ id: '', name: '主连接' }]);
+  assert.deepEqual(connections.list(base), [{ id: '', name: '01' }]);
   assert.ok(existsSync(base));
 });
 
@@ -72,7 +83,7 @@ test('a damaged list and a shared value that is not there are passed over', (con
     null,
   ]);
   assert.deepEqual(connections.list(base), [
-    { id: '', name: '主连接' },
+    { id: '', name: '01' },
     { id: 'abcd1234', name: '好' },
   ]);
 });

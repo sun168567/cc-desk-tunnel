@@ -83,7 +83,7 @@ export const sections: {
     name: '连接',
     group: '本机',
     icon: Cable,
-    words: '记住凭据 自动登录 多开 多个连接 窗口 服务端 等待 超时 SSH 执行通道',
+    words: '记住凭据 自动登录 多开 多个连接 默认连接 窗口 服务端 等待 超时 SSH 执行通道',
   },
   {
     id: 'notifications',
@@ -447,6 +447,15 @@ function Connections() {
               </form>
             ) : (
               <span className="setting-actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={entry.default}
+                  aria-label={`${entry.default ? '默认连接' : '设为默认连接'} ${entry.name}`}
+                  onClick={() => void act(window.desktop!.setDefaultConnection(entry.id))}
+                >
+                  {entry.default ? '默认' : '设为默认连接'}
+                </button>
                 {!entry.current && (
                   <button
                     type="button"

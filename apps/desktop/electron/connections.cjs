@@ -6,7 +6,7 @@ const { randomBytes } = require('node:crypto');
 // its own profile directory: the first one's is the program's profile (`base`), the others live under it.
 // What they have in common is under `shared` there, one file a value, so that a window replaces a value whole
 // and never part of another window's.
-const main = { id: '', name: '主连接' };
+const main = { id: '', name: '01' };
 const idPattern = /^[a-z0-9]{8}$/;
 const directory = (base, id) => (id ? path.join(base, 'connections', id) : base);
 const sharedFile = (base, key) => path.join(base, 'shared', `${key}.json`);
@@ -126,10 +126,17 @@ function remove(base, id) {
   );
   rmSync(directory(base, id), { recursive: true, force: true });
 }
-// The connection a command line asks for; one that is not in the list is the first connection.
+function setDefault(base, id) {
+  if (!list(base).some((entry) => entry.id === id)) throw new Error('这个连接已不存在。');
+  writeShared(base, 'default-connection', id);
+}
+// An explicit ID, including the empty first ID, overrides the saved default. Missing entries fall back
+// to the first connection, so removing the default never prevents the program from opening.
 function requested(argv, base) {
-  const id = argv.find((item) => item.startsWith('--connection='))?.slice(13);
-  return id && list(base).some((entry) => entry.id === id) ? id : '';
+  const id =
+    argv.find((item) => item.startsWith('--connection='))?.slice(13) ??
+    readShared(base, 'default-connection');
+  return list(base).some((entry) => entry.id === id) ? id : '';
 }
 
 module.exports = {
@@ -143,5 +150,6 @@ module.exports = {
   rename,
   requested,
   running,
+  setDefault,
   writeShared,
 };

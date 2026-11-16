@@ -573,12 +573,15 @@ function label() {
 }
 const titled = () => (label() ? `CC Desk Tunnel · ${label()}` : 'CC Desk Tunnel');
 const others = () => connections.list(base).filter((entry) => entry.id !== connectionId);
-const listed = () =>
-  connections.list(base).map((entry) => ({
+const listed = () => {
+  const defaultId = connections.requested([], base);
+  return connections.list(base).map((entry) => ({
     ...entry,
     current: entry.id === connectionId,
     open: entry.id === connectionId || connections.running(base, entry.id),
+    default: entry.id === defaultId,
   }));
+};
 // Starts a connection's process. One that is open already shows its window instead: see `second-instance`.
 function launch(id, ...flags) {
   spawn(
@@ -589,7 +592,7 @@ function launch(id, ...flags) {
         (item) =>
           item.startsWith('--user-data-dir=') || item === '--smoke-test' || item === '--no-sandbox',
       ),
-      ...(id ? [`--connection=${id}`] : []),
+      `--connection=${id}`,
       ...flags,
     ],
     { detached: true, stdio: 'ignore' },
@@ -673,6 +676,10 @@ handle('busy:set', (_event, runs) => {
   );
 });
 handle('connections:list', listed);
+handle('connections:default', (_event, id) => {
+  connections.setDefault(base, id);
+  return listed();
+});
 handle('connections:create', (_event, name) => {
   launch(connections.create(base, name).id);
   takeShared();

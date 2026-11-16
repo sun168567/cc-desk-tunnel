@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 // profile (see electron/connections.cjs); these values live outside the profiles, and a change made in one
 // window reaches the others within seconds. A browser has one window and shares nothing.
 export type Connection = { id: string; name: string };
-export type ListedConnection = Connection & { current: boolean; open: boolean };
+export type ListedConnection = Connection & { current: boolean; open: boolean; default: boolean };
 // A running session of a connection and the folder on this computer it works in.
 export type Run = { id: string; folder: string };
 export type Shared = {

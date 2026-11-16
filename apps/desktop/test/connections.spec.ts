@@ -55,7 +55,7 @@ test('Electron: a second connection is a window of its own and shares what is th
     const own = resolve(profile, 'connections', id);
     const instance = resolve(own, 'instance.json');
     await expect.poll(() => existsSync(instance), { timeout: 30000 }).toBe(true);
-    await expect.poll(() => title(first)).toBe('CC Desk Tunnel · 主连接');
+    await expect.poll(() => title(first)).toBe('CC Desk Tunnel · 01');
     const row = page
       .locator('.setting-row')
       .filter({ has: page.getByText('工作', { exact: true }) });
@@ -69,8 +69,10 @@ test('Electron: a second connection is a window of its own and shares what is th
     await expect.poll(() => existsSync(instance), { timeout: 30000 }).toBe(false);
     await expect(row).toContainText('未打开');
 
-    // The same connection under Playwright's eye: its own profile and sign-in, the computer's identity.
-    second = await _electron.launch({ args: [...args, `--connection=${id}`], env });
+    // The saved default starts directly, keeping its own profile and the computer's shared identity.
+    await row.getByRole('button', { name: '设为默认连接 工作', exact: true }).click();
+    await expect(row.getByRole('button', { name: '默认连接 工作', exact: true })).toBeDisabled();
+    second = await _electron.launch({ args, env });
     const other = await second.firstWindow();
     await expect(other.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
     await expect(other.locator('.brand-connection')).toHaveText('工作');
@@ -108,13 +110,26 @@ test('Electron: a second connection is a window of its own and shares what is th
       resolve('..'),
     );
     await expect(other.locator('.elsewhere-bar')).toContainText(
-      '连接“主连接”里有会话正在这个文件夹里运行',
+      '连接“01”里有会话正在这个文件夹里运行',
     );
     await page.evaluate(() => window.desktop!.setBusy([]));
     await expect(other.locator('.elsewhere-bar')).toHaveCount(0);
 
     // A choice made in one window is the other's within seconds; how the window closes is the computer's too.
-    await settings(other, '外观');
+    await settings(other, '连接');
+    await expect(other.getByRole('button', { name: '默认连接 工作', exact: true })).toBeDisabled();
+    await other.getByRole('button', { name: '打开 01', exact: true }).click();
+    await expect
+      .poll(() =>
+        first.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()),
+      )
+      .toBe(true);
+    await other.getByRole('button', { name: '设为默认连接 01', exact: true }).click();
+    await expect(page.getByRole('button', { name: '默认连接 01', exact: true })).toBeDisabled();
+    await row.getByRole('button', { name: '设为默认连接 工作', exact: true }).click();
+    await page.screenshot({ path: resolve('.local/screenshots/default-connection.png') });
+    await first.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].hide());
+    await section(other, '外观');
     const stats = (target: Page) =>
       target.getByRole('switch', { name: '显示回复小结', exact: true });
     await expect(stats(other)).not.toBeChecked();
@@ -129,7 +144,7 @@ test('Electron: a second connection is a window of its own and shares what is th
     // The connection's own settings hold its sign-in and nothing of the computer's.
     expect(JSON.parse(readFileSync(resolve(own, 'settings.json'), 'utf8'))).toEqual({});
     await section(other, '连接');
-    await other.getByRole('button', { name: '改名 主连接', exact: true }).click();
+    await other.getByRole('button', { name: '改名 01', exact: true }).click();
     await other.getByRole('textbox', { name: '连接的名称', exact: true }).fill('个人');
     await other.getByRole('button', { name: '保存', exact: true }).click();
     await expect.poll(() => title(first)).toBe('CC Desk Tunnel · 个人');
@@ -142,6 +157,7 @@ test('Electron: a second connection is a window of its own and shares what is th
     await page.getByRole('button', { name: '删除 工作', exact: true }).click();
     await expect(row).toHaveCount(0);
     expect(existsSync(own)).toBe(false);
+    await expect(page.getByRole('button', { name: '默认连接 个人', exact: true })).toBeDisabled();
     await expect.poll(() => title(first)).toBe('CC Desk Tunnel');
   } finally {
     await second?.close().catch(() => {});

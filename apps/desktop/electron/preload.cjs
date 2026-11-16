@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   setBusy: (runs) => ipcRenderer.invoke('busy:set', runs),
   connections: () => ipcRenderer.invoke('connections:list'),
+  setDefaultConnection: (id) => ipcRenderer.invoke('connections:default', id),
   createConnection: (name) => ipcRenderer.invoke('connections:create', name),
   openConnection: (id) => ipcRenderer.invoke('connections:open', id),
   renameConnection: (id, name) => ipcRenderer.invoke('connections:rename', id, name),
