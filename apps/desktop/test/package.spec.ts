@@ -2,6 +2,7 @@ import { test, expect, _electron } from '@playwright/test';
 import { readFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
+import { connectionArgs } from './helpers.ts';
 
 test.use({ trace: 'off' });
 
@@ -55,7 +56,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
   env.PATH = `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`;
   const application = await _electron.launch({
     executablePath,
-    args: ['--smoke-test', `--user-data-dir=${join(directory, 'profile')}`],
+    args: ['--smoke-test', ...connectionArgs(join(directory, 'profile'))],
     cwd: directory,
     env,
   });

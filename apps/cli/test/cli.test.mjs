@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
-import { Config, directories } from '../src/config.mjs';
+import { Config, directories, sameService, serviceKey } from '../src/config.mjs';
 import { proxyFor } from '../src/connection.mjs';
 import { RESTORE, relay } from '../src/terminal.mjs';
 import { readKeys } from '../src/keys.mjs';
@@ -184,14 +184,30 @@ test('ccdt login offers the services the desktop client signs in to, by their na
     join(paths.desktop, 'connections', 'abcdefgh', 'settings.json'),
     login('wss://other/ws', ''),
   );
+  // The same service written another way, and one not signed in to yet, are not offered again.
+  for (const [id, settings] of [
+    ['ijklmnop', { login: { url: 'wss://OTHER:443/ws', fingerprint: '' } }],
+    ['qrstuvwx', { login: { url: 'wss://typo/ws', fingerprint: '' }, pending: 1 }],
+  ]) {
+    mkdirSync(join(paths.desktop, 'connections', id), { recursive: true });
+    writeFileSync(
+      join(paths.desktop, 'connections', id, 'settings.json'),
+      JSON.stringify(settings),
+    );
+  }
   writeFileSync(
     join(paths.desktop, 'shared', 'connections.json'),
     JSON.stringify([{ id: 'abcdefgh', name: '家里' }]),
   );
-  assert.deepEqual(new Config(paths).desktopLogins(), [
+  const config = new Config(paths);
+  assert.deepEqual(config.desktopLogins(), [
     { url: 'wss://main/ws', fingerprint: 'AA:BB', name: 'main/ws' },
     { url: 'wss://other/ws', fingerprint: '', name: '家里' },
   ]);
+  // Its names are found by the service, however the address is written.
+  assert.equal(config.names().get(serviceKey('wss://Other:443/ws')), '家里');
+  assert.ok(sameService('wss://Other:443/ws', 'wss://other/ws'));
+  assert.ok(!sameService('wss://other/a/ws', 'wss://other/b/ws'));
 });
 
 // Three services signed in to, the desktop client calling one of them 公司.

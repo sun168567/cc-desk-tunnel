@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
-import { screenshots } from './helpers.ts';
+import { connectionArgs, screenshots } from './helpers.ts';
 
 const folder = resolve(screenshots, 'ccdt-open');
 mkdirSync(folder, { recursive: true });
@@ -82,7 +82,7 @@ test('a session opens in ccdt signed in as the window is, or the window says how
   env.Path = `${bin};${process.env.SystemRoot}\\System32`;
   env.LOCALAPPDATA = resolve(root, 'local');
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', `--user-data-dir=${resolve(root, 'profile')}`],
+    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(resolve(root, 'profile'))],
     env,
   });
   try {

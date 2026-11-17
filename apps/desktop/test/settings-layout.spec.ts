@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
-import { login, screenshots } from './helpers.ts';
+import { connectionArgs, login, screenshots } from './helpers.ts';
 
 const shots = resolve(screenshots, 'settings-layout');
 const every = [
@@ -261,7 +261,7 @@ test('Electron: this computer’s settings as the desktop client shows them', as
   const profile = resolve('.local/ui-test/profile-settings-layout');
   rmSync(profile, { recursive: true, force: true });
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', `--user-data-dir=${profile}`],
+    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
     env,
   });
   try {

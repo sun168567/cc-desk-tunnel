@@ -413,85 +413,88 @@ function Connections() {
     <>
       <h2 className="page-heading">登录过的服务</h2>
       <div className="card">
-        {list.map((entry) => (
-          <Row
-            key={entry.id}
-            title={entry.label}
-            detail={[
-              entry.name ? entry.url : '',
-              entry.current ? '当前窗口' : entry.open ? '已打开' : '未打开',
-              entry.autoLogin ? '自动登录' : '',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          >
-            {editing?.id === entry.id ? (
-              <form
-                className="setting-actions"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void act(window.desktop!.renameAccount(entry.id, editing.name)).then(
-                    (done) => done && setEditing(null),
-                  );
-                }}
-              >
-                <input
-                  className="setting-name"
-                  aria-label="备注名"
-                  placeholder="不填则显示服务地址"
-                  maxLength={24}
-                  autoFocus
-                  value={editing.name}
-                  onChange={(event) => setEditing({ id: entry.id, name: event.target.value })}
-                />
-                <button type="submit" className="button">
-                  保存
-                </button>
-                <button type="button" className="button" onClick={() => setEditing(null)}>
-                  取消
-                </button>
-              </form>
-            ) : (
-              <span className="setting-actions">
-                {!entry.current && (
+        {list
+          .map((item) => ({ ...item, label: item.label || '未保存地址的连接' }))
+          .map((entry) => (
+            <Row
+              key={entry.id}
+              title={entry.label}
+              detail={[
+                entry.name ? entry.url : '',
+                entry.url ? '' : '旧连接，未保存服务地址',
+                entry.current ? '当前窗口' : entry.open ? '已打开' : '未打开',
+                entry.autoLogin ? '自动登录' : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            >
+              {editing?.id === entry.id ? (
+                <form
+                  className="setting-actions"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void act(window.desktop!.renameAccount(entry.id, editing.name)).then(
+                      (done) => done && setEditing(null),
+                    );
+                  }}
+                >
+                  <input
+                    className="setting-name"
+                    aria-label="备注名"
+                    placeholder="不填则显示服务地址"
+                    maxLength={24}
+                    autoFocus
+                    value={editing.name}
+                    onChange={(event) => setEditing({ id: entry.id, name: event.target.value })}
+                  />
+                  <button type="submit" className="button">
+                    保存
+                  </button>
+                  <button type="button" className="button" onClick={() => setEditing(null)}>
+                    取消
+                  </button>
+                </form>
+              ) : (
+                <span className="setting-actions">
+                  {!entry.current && (
+                    <button
+                      type="button"
+                      className="button"
+                      aria-label={`打开 ${entry.label}`}
+                      onClick={() => void act(window.desktop!.openAccount(entry.id))}
+                    >
+                      {entry.open ? '切换到' : '打开'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="button"
-                    aria-label={`打开 ${entry.label}`}
-                    onClick={() => void act(window.desktop!.openAccount(entry.id))}
+                    aria-label={`备注名 ${entry.label}`}
+                    onClick={() => setEditing({ id: entry.id, name: entry.name })}
                   >
-                    {entry.open ? '切换到' : '打开'}
+                    备注名
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="button"
-                  aria-label={`备注名 ${entry.label}`}
-                  onClick={() => setEditing({ id: entry.id, name: entry.name })}
-                >
-                  备注名
-                </button>
-                {!entry.current && (
-                  <button
-                    type="button"
-                    className="button danger"
-                    aria-label={`删除 ${entry.label}`}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `删除“${entry.label}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+                  {!entry.current && (
+                    <button
+                      type="button"
+                      className="button danger"
+                      aria-label={`删除 ${entry.label}`}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `删除“${entry.label}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+                          )
                         )
-                      )
-                        void act(window.desktop!.forgetAccount(entry.id));
-                    }}
-                  >
-                    删除
-                  </button>
-                )}
-              </span>
-            )}
-          </Row>
-        ))}
+                          void act(window.desktop!.forgetAccount(entry.id));
+                      }}
+                    >
+                      删除
+                    </button>
+                  )}
+                </span>
+              )}
+            </Row>
+          ))}
         <Row
           title="新的登录窗口"
           detail="再开一个窗口登录另一台服务端，与再次打开程序相同。每个服务各有自己的凭据、草稿和定时任务；项目列表、通知、快捷键等本机设置是共用的"

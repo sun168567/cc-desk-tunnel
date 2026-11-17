@@ -4,7 +4,7 @@ import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
-import { Config, hostOf } from './config.mjs';
+import { Config, hostOf, sameService, serviceKey } from './config.mjs';
 import { Service, proxyFor } from './connection.mjs';
 import { readKeys } from './keys.mjs';
 import { pad, pick } from './picker.mjs';
@@ -128,7 +128,7 @@ async function readLine(prompt, text = '') {
 }
 
 // What a service is called here: the desktop client's name for the connection to it, else its host.
-const called = (server, names) => names.get(server.url) ?? hostOf(server.url);
+const called = (server, names) => names.get(serviceKey(server.url)) ?? hostOf(server.url);
 // The services signed in to, the one connected to last first, each line its name, when it was last used and its
 // address; the one used when none is named is marked.
 function serverLines(config, names) {
@@ -137,7 +137,7 @@ function serverLines(config, names) {
     servers,
     lines: servers.map(
       (server) =>
-        `${pad(called(server, names), 18)}${pad(server.usedAt ? when(server.usedAt) : '', 14)}${dim(server.url)}${server.url === config.server()?.url ? '  （当前）' : ''}`,
+        `${pad(called(server, names), 18)}${pad(server.usedAt ? when(server.usedAt) : '', 14)}${dim(server.url)}${sameService(server.url, config.server()?.url) ? '  （当前）' : ''}`,
     ),
   };
 }
@@ -247,7 +247,7 @@ async function login(config, values, url) {
         [
           ...saved.map(
             (login) =>
-              `${pad(login.name, 18)}${dim(login.url)}${config.servers.some((server) => server.url === login.url) ? '  （已登录）' : ''}`,
+              `${pad(login.name, 18)}${dim(login.url)}${config.servers.some((server) => sameService(server.url, login.url)) ? '  （已登录）' : ''}`,
           ),
           '输入其他地址…',
         ],

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { _electron } from '@playwright/test';
@@ -101,32 +101,6 @@ try {
       },
     },
   );
-  // A second connection is a process of its own: the packaged program has to start itself once more under
-  // another profile, tell that it runs, and go when a command line asks it to.
-  const { id } = (await page.evaluate(() => window.desktop.createConnection('另一个'))).find(
-    (entry) => entry.id,
-  );
-  const until = async (open) => {
-    for (let waited = 0; ; waited += 500) {
-      const listed = await page.evaluate(() => window.desktop.connections());
-      if (listed.find((entry) => entry.id === id).open === open) return;
-      assert.ok(waited < 30_000, `The second connection is ${open ? 'not open' : 'still open'}.`);
-      await delay(500);
-    }
-  };
-  const dismiss = () =>
-    execFileSync(executable, [...args, `--connection=${id}`, '--quit-connection'], {
-      cwd: directory,
-      env,
-      timeout: 30_000,
-    });
-  try {
-    await until(true);
-  } finally {
-    dismiss();
-  }
-  await until(false);
-  await page.evaluate((connection) => window.desktop.removeConnection(connection), id);
   assert.deepEqual(errors, []);
   // A picture of the window as the system draws it, for whoever reviews a build without a Mac at hand.
   if (process.env.SMOKE_SCREENSHOT) {
@@ -153,10 +127,40 @@ try {
       path: resolve(process.env.SMOKE_SCREENSHOT).replace(/\.png$/, '-page.png'),
     });
   }
+  // A connection is a process of its own: the sign-in window starts the packaged program once more under the
+  // connection's profile and goes once that runs, and a command line asks that one to go.
+  const profile = join(directory, 'profile');
+  const id = 'smoke000';
+  const instance = join(profile, 'connections', id, 'instance.json');
+  mkdirSync(join(profile, 'connections', id), { recursive: true });
+  mkdirSync(join(profile, 'shared'), { recursive: true });
+  writeFileSync(
+    join(profile, 'shared', 'connections.json'),
+    JSON.stringify([{ id, name: '另一个' }]),
+  );
+  const until = async (open) => {
+    for (let waited = 0; existsSync(instance) !== open; waited += 500) {
+      assert.ok(waited < 30_000, `The second connection is ${open ? 'not open' : 'still open'}.`);
+      await delay(500);
+    }
+  };
+  // The sign-in window goes as the connection's window runs, and with it the page.
+  await page.evaluate((connection) => window.desktop.openLegacy(connection), id).catch(() => {});
+  try {
+    await until(true);
+  } finally {
+    execFileSync(executable, [...args, `--connection=${id}`, '--quit-connection'], {
+      cwd: directory,
+      env,
+      timeout: 30_000,
+    });
+  }
+  await until(false);
   console.log(
-    'PASS: the packaged client starts offline, its SSH service runs a script and a second connection opens.',
+    'PASS: the packaged client starts offline, its SSH service runs a script and a connection opens in a process of its own.',
   );
 } finally {
-  await application.close();
+  // The sign-in window may have gone already.
+  if (application.process().exitCode === null) await application.close().catch(() => {});
   rmSync(directory, { recursive: true, force: true });
 }

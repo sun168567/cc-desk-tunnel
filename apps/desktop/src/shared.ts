@@ -6,8 +6,11 @@ import { useSyncExternalStore } from 'react';
 // `label`: the name the user gave, or else the service's address; empty for a window that has not signed in yet.
 export type Connection = { id: string; name: string; label: string };
 // A connection that has signed in somewhere: `saved` when its token is remembered, `open` when its window runs.
+// `url` is empty for a connection an earlier version made that kept no address.
 export type Account = Connection & {
   url: string;
+  fingerprint: string;
+  mode: 'local' | 'remote';
   saved: boolean;
   autoLogin: boolean;
   usedAt: number;
@@ -53,6 +56,15 @@ export function saveShared(key: 'prefs' | 'projects', value: unknown) {
 // The first connection had these values to itself before they were shared, and brings them along.
 export function shareOnce(key: 'prefs' | 'projects', value: unknown) {
   if (boot?.connection === '' && values[key] === undefined) saveShared(key, value);
+}
+// Two addresses are one service when they name the same place; see `serviceKey` in electron/connections.cjs.
+export function serviceKey(url: string) {
+  const text = url.trim();
+  try {
+    return new URL(text).href;
+  } catch {
+    return text;
+  }
 }
 // The connection's name or service, once there are several to tell apart.
 export function useConnectionName() {

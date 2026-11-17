@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import WebGate from './WebGate.tsx';
 import { App } from './App.tsx';
+import Launcher from './Launcher.tsx';
 import { getPrefs, onPrefs } from './prefs.ts';
 import './style.css';
 
@@ -16,6 +17,12 @@ onPrefs(showTheme);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {!window.desktop && !import.meta.env.DEV ? <WebGate /> : <App />}
+    {window.desktop?.boot?.launcher ? (
+      <Launcher />
+    ) : !window.desktop && !import.meta.env.DEV ? (
+      <WebGate />
+    ) : (
+      <App />
+    )}
   </React.StrictMode>,
 );

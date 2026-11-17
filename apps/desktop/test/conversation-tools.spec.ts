@@ -3,7 +3,15 @@ import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { createSession, login, send, settled, screenshots } from './helpers.ts';
+import {
+  connectionArgs,
+  connectionDirectory,
+  createSession,
+  login,
+  send,
+  settled,
+  screenshots,
+} from './helpers.ts';
 
 test('message dates, selection menu, code copy and conversation find work together', async ({
   page,
@@ -179,7 +187,7 @@ test('Electron copies text and supplies the native editing context menu', async 
     ),
   );
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', `--user-data-dir=${profile}`],
+    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
     env,
   });
   const previous = await application.evaluate(({ clipboard }) => clipboard.readText());
@@ -200,7 +208,7 @@ test('Electron copies text and supplies the native editing context menu', async 
     const saved = await page.evaluate(() =>
       window.desktop!.saveImage('image/png', new Uint8Array([137, 80, 78, 71])),
     );
-    expect(saved.startsWith(resolve(profile, 'pasted'))).toBe(true);
+    expect(saved.startsWith(resolve(connectionDirectory(profile), 'pasted'))).toBe(true);
     expect(readFileSync(saved)).toEqual(Buffer.from([137, 80, 78, 71]));
     await expect(
       page.evaluate(() => window.desktop!.saveImage('text/plain', new Uint8Array([1]))),

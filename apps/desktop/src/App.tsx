@@ -163,6 +163,8 @@ export function App({
     [],
   );
   const [proxyConnecting, setProxyConnecting] = useState(false);
+  // The window's connection has its service already: see `login:load` in electron/main.cjs.
+  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | RequestInterruptedError | null>(null);
   // One request at a time from this window; `refreshing` is the slower native status read.
   const [busy, setBusy] = useState(false);
@@ -555,7 +557,8 @@ export function App({
     loaded.current = true;
     void window.desktop?.loadLogin().then((saved) => {
       if (!saved) return;
-      const { signIn, ...values } = saved;
+      const { signIn, locked, ...values } = saved;
+      setLocked(!!locked);
       // The installed client has no simulation mode, whatever an earlier version saved.
       const restored = window.desktop!.dev ? values : { ...values, mode: 'remote' as const };
       setForm(restored);
@@ -738,24 +741,15 @@ export function App({
       setProxyConnecting(false);
     }
   }
-  // A service another window has signed in to is that window's; see `login:route` in electron/main.cjs.
+  // A connection is one service's: a window an earlier version made without keeping its address may not sign in
+  // to a service another connection has.
   async function signIn(form: ConnectionForm) {
-    if (window.desktop) {
-      setError(null);
-      setProxyConnecting(true);
-      const where = await window.desktop.routeLogin(form).catch((failure: unknown) => {
-        setError(
-          String((failure as Error)?.message ?? failure).replace(
-            /^.*?'login:route': (Error: )?/,
-            '',
-          ),
-        );
-        return null;
-      });
-      // A window started for the service takes over, and this one closes.
-      if (where !== 'moved') setProxyConnecting(false);
-      if (where === 'shown') setError('这个服务已在另一个窗口登录，已切换到那个窗口。');
-      if (where !== 'here') return;
+    if (window.desktop && !locked) {
+      const owner = await window.desktop.loginOwner(form.url).catch(() => null);
+      if (owner) {
+        setError(`“${owner}”已有自己的连接，请从登录窗口登录它。`);
+        return;
+      }
     }
     await login(form);
   }
@@ -1566,6 +1560,8 @@ export function App({
           submit={() => {
             void signIn(form);
           }}
+          locked={locked}
+          elsewhere={window.desktop ? () => void window.desktop!.signInElsewhere() : undefined}
         />
       </>
     );

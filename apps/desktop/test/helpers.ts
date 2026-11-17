@@ -1,11 +1,23 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Screenshots are for the eye and stay on this machine.
 export const screenshots = resolve('.local/screenshots');
 mkdirSync(resolve(screenshots, 'redesign'), { recursive: true });
+// The arguments that start the program as a connection's own window on `profile`, the way a sign-in window starts
+// it (see electron/connections.cjs), with the connection made there for it. Its files are in `connectionDirectory`.
+export const testConnection = 'test0000';
+export const connectionDirectory = (profile: string) =>
+  resolve(profile, 'connections', testConnection);
+export function connectionArgs(profile: string) {
+  mkdirSync(connectionDirectory(profile), { recursive: true });
+  mkdirSync(resolve(profile, 'shared'), { recursive: true });
+  const list = resolve(profile, 'shared', 'connections.json');
+  if (!existsSync(list)) writeFileSync(list, JSON.stringify([{ id: testConnection, name: '' }]));
+  return [`--user-data-dir=${profile}`, `--connection=${testConnection}`];
+}
 export function connection() {
   return JSON.parse(readFileSync(resolve('.local/ui-test/dev-connection.json'), 'utf8')) as {
     serverUrl: string;

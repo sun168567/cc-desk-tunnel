@@ -34,6 +34,19 @@ function writeJson(path, value) {
   renameSync(temporary, path);
 }
 
+// Two addresses are one service when they name the same place: scheme and host in any case, the default port
+// written or not; the path and query count as they are. The desktop client tells its connections apart the same
+// way (see apps/desktop/electron/connections.cjs).
+export function serviceKey(url) {
+  const text = String(url ?? '').trim();
+  try {
+    return new URL(text).href;
+  } catch {
+    return text;
+  }
+}
+export const sameService = (a, b) =>
+  typeof a === 'string' && typeof b === 'string' && serviceKey(a) === serviceKey(b);
 // A service as ccdt calls it where the desktop client has no name for it.
 export const hostOf = (url) => {
   try {
@@ -67,7 +80,8 @@ export class Config {
   server(url) {
     const wanted = url ?? this.current;
     return (
-      this.servers.find((server) => server.url === wanted) ?? (url ? undefined : this.servers[0])
+      this.servers.find((server) => sameService(server.url, wanted)) ??
+      (url ? undefined : this.servers[0])
     );
   }
   // The services `wanted` names: by address, by the desktop client's name for the connection to it or by host, else
@@ -75,7 +89,7 @@ export class Config {
   find(wanted, names = this.names()) {
     const text = wanted.toLowerCase();
     const called = (server) =>
-      [server.url, names.get(server.url) ?? '', hostOf(server.url)].map((name) =>
+      [server.url, names.get(serviceKey(server.url)) ?? '', hostOf(server.url)].map((name) =>
         name.toLowerCase(),
       );
     const exact = this.servers.filter((server) => called(server).includes(text));
@@ -83,13 +97,13 @@ export class Config {
       ? exact
       : this.servers.filter((server) => called(server).some((name) => name.includes(text)));
   }
-  // The desktop client's names for the services it connects to, by address.
+  // The desktop client's names for the services it connects to, by address (see `serviceKey`).
   names() {
-    return new Map(this.desktopLogins().map(({ url, name }) => [url, name]));
+    return new Map(this.desktopLogins().map(({ url, name }) => [serviceKey(url), name]));
   }
   remember(server) {
     const used = { ...server, usedAt: new Date().toISOString() };
-    this.servers = [...this.servers.filter((other) => other.url !== server.url), used];
+    this.servers = [...this.servers.filter((other) => !sameService(other.url, server.url)), used];
     this.current = server.url;
     this.save();
   }
@@ -97,17 +111,17 @@ export class Config {
   // have changed the file since this one read it, so it is read again first.
   use(url, connected = true) {
     const fresh = new Config(this.paths);
-    const server = fresh.servers.find((other) => other.url === url);
+    const server = fresh.servers.find((other) => sameService(other.url, url));
     if (!server) return;
     if (connected) server.usedAt = new Date().toISOString();
-    fresh.current = url;
+    fresh.current = server.url;
     fresh.save();
     this.servers = fresh.servers;
     this.current = fresh.current;
   }
   forget(url) {
-    this.servers = this.servers.filter((server) => server.url !== url);
-    if (this.current === url) this.current = this.servers.at(-1)?.url;
+    this.servers = this.servers.filter((server) => !sameService(server.url, url));
+    if (sameService(this.current, url)) this.current = this.servers.at(-1)?.url;
     this.save();
   }
   // The services the desktop client signs in to, one a connection, for `ccdt login` to offer: the address, the
@@ -132,11 +146,12 @@ export class Config {
     const logins = ['', ...ids]
       .map((id) => ({
         id,
-        login: readJson(join(id ? join(connections, id) : this.paths.desktop, 'settings.json'))
-          .login,
+        ...readJson(join(id ? join(connections, id) : this.paths.desktop, 'settings.json')),
       }))
+      // One that has not signed in yet may be a mistyped address.
       .filter(
-        ({ login }) => login && typeof login.url === 'string' && login.url.startsWith('wss://'),
+        ({ login, pending }) =>
+          !pending && login && typeof login.url === 'string' && login.url.startsWith('wss://'),
       )
       .map(({ id, login }) => ({
         url: login.url,
@@ -144,7 +159,7 @@ export class Config {
         name: nameOf(id) || login.url.replace(/^wss:\/\//, ''),
       }));
     return logins.filter(
-      (login, index) => logins.findIndex((other) => other.url === login.url) === index,
+      (login, index) => logins.findIndex((other) => sameService(other.url, login.url)) === index,
     );
   }
   // The desktop client's ID for this computer when it is installed; ccdt's own otherwise.
