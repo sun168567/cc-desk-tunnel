@@ -547,17 +547,19 @@ export function App({
               },
             };
 
-  // A saved sign-in fills the form once per launch and, when asked, connects without a click.
+  // A saved sign-in fills the form once per launch and connects without a click when the program was started
+  // to sign in: see `choose` in electron/connections.cjs.
   const loaded = useRef(false);
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
     void window.desktop?.loadLogin().then((saved) => {
       if (!saved) return;
+      const { signIn, ...values } = saved;
       // The installed client has no simulation mode, whatever an earlier version saved.
-      const restored = window.desktop!.dev ? saved : { ...saved, mode: 'remote' as const };
+      const restored = window.desktop!.dev ? values : { ...values, mode: 'remote' as const };
       setForm(restored);
-      if (restored.autoLogin) void login(restored);
+      if (signIn) void login(restored);
     });
   }, []);
   useEffect(() => {
@@ -735,6 +737,27 @@ export function App({
     } finally {
       setProxyConnecting(false);
     }
+  }
+  // A service another window has signed in to is that window's; see `login:route` in electron/main.cjs.
+  async function signIn(form: ConnectionForm) {
+    if (window.desktop) {
+      setError(null);
+      setProxyConnecting(true);
+      const where = await window.desktop.routeLogin(form).catch((failure: unknown) => {
+        setError(
+          String((failure as Error)?.message ?? failure).replace(
+            /^.*?'login:route': (Error: )?/,
+            '',
+          ),
+        );
+        return null;
+      });
+      // A window started for the service takes over, and this one closes.
+      if (where !== 'moved') setProxyConnecting(false);
+      if (where === 'shown') setError('这个服务已在另一个窗口登录，已切换到那个窗口。');
+      if (where !== 'here') return;
+    }
+    await login(form);
   }
   function stopRun() {
     if (!selected?.activeRun) return;
@@ -1541,7 +1564,7 @@ export function App({
           install={install}
           connecting={state.status === 'connecting' || proxyConnecting || busy}
           submit={() => {
-            void login(form);
+            void signIn(form);
           }}
         />
       </>

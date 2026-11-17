@@ -14,15 +14,17 @@ declare global {
       ) => () => void;
       // The sessions running in this window, for the other connections' windows to warn about.
       setBusy: (runs: import('./shared.ts').Run[]) => Promise<void>;
-      // Each connection is a window of its own; `open` tells whether it is running now.
-      connections: () => Promise<import('./shared.ts').ListedConnection[]>;
-      createConnection: (name: string) => Promise<import('./shared.ts').ListedConnection[]>;
-      openConnection: (id: string) => Promise<void>;
-      renameConnection: (
-        id: string,
-        name: string,
-      ) => Promise<import('./shared.ts').ListedConnection[]>;
-      removeConnection: (id: string) => Promise<import('./shared.ts').ListedConnection[]>;
+      // Each connection is a window of its own, signed in to one service; the ones that have signed in somewhere,
+      // the latest first.
+      accounts: () => Promise<import('./shared.ts').Account[]>;
+      // Shows the connection's window, or starts it on its sign-in page.
+      openAccount: (id: string) => Promise<void>;
+      // An empty name has the connection go by its service's address.
+      renameAccount: (id: string, name: string) => Promise<import('./shared.ts').Account[]>;
+      // Forgets the sign-in, and with it what the connection kept on this computer.
+      forgetAccount: (id: string) => Promise<import('./shared.ts').Account[]>;
+      // A sign-in page in a window of its own, as starting the program again opens.
+      newLoginWindow: () => Promise<void>;
       chooseProject: () => Promise<string | null>;
       asOnDisk: (path: string) => Promise<string>;
       // Whether each folder is on this computer, in the order given.
@@ -63,8 +65,17 @@ declare global {
       chooseWorkspace: (reset: boolean) => Promise<string[]>;
       createWorkspace: () => Promise<string>;
       removeWorkspace: (directory: string) => Promise<void>;
-      loadLogin: () => Promise<import('./LoginPage.tsx').ConnectionForm | null>;
+      // This window's sign-in, or with `id` another connection's. `signIn`: connect at once, as the program was
+      // started to.
+      loadLogin: (
+        id?: string,
+      ) => Promise<(import('./LoginPage.tsx').ConnectionForm & { signIn?: boolean }) | null>;
       saveLogin: (login: import('./LoginPage.tsx').ConnectionForm) => Promise<void>;
+      // Where signing in to the form's service belongs: here; in another connection's window, which is shown; or
+      // in one started for it, as this window closes.
+      routeLogin: (
+        login: import('./LoginPage.tsx').ConnectionForm,
+      ) => Promise<'here' | 'shown' | 'moved'>;
       loadDrafts: () => Promise<Record<string, string>>;
       saveDrafts: (drafts: Record<string, string>) => Promise<void>;
       loadSchedules: (initial: string) => Promise<{ path: string; text: string }>;

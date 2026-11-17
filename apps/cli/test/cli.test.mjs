@@ -171,7 +171,7 @@ test('a lost connection, a terminal taken elsewhere and output left behind end t
   assert.deepEqual(await three, { how: 'stalled' });
 });
 
-test('ccdt login offers the services the desktop client signs in to, by its names, without their tokens', (t) => {
+test('ccdt login offers the services the desktop client signs in to, by their names or addresses, without their tokens', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ccdt-logins-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = { cli: join(root, 'cli'), desktop: join(root, 'desktop') };
@@ -189,7 +189,7 @@ test('ccdt login offers the services the desktop client signs in to, by its name
     JSON.stringify([{ id: 'abcdefgh', name: '家里' }]),
   );
   assert.deepEqual(new Config(paths).desktopLogins(), [
-    { url: 'wss://main/ws', fingerprint: 'AA:BB', name: '主连接' },
+    { url: 'wss://main/ws', fingerprint: 'AA:BB', name: 'main/ws' },
     { url: 'wss://other/ws', fingerprint: '', name: '家里' },
   ]);
 });

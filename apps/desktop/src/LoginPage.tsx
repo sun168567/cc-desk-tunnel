@@ -1,16 +1,18 @@
-import { Download, Settings, SquareTerminal, Unplug } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, Download, Settings, SquareTerminal, Unplug, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import { thisDevice } from './device.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import { useConnectionName } from './shared.ts';
+import type { Account } from './shared.ts';
 
 export type ConnectionForm = {
   url: string;
   token: string;
   fingerprint: string;
   mode: 'local' | 'remote';
-  // Desktop only: keep the token (encrypted for this Windows account) and connect on the next launch.
+  // Desktop only: keep the token (encrypted for this Windows account), and sign in when the program is started
+  // with no window open, which only one service does.
   remember: boolean;
   autoLogin: boolean;
 };
@@ -53,6 +55,49 @@ export default function LoginPage({
   openSettings: () => void;
 }) {
   const connectionName = useConnectionName();
+  // The services this computer has signed in to, each a window of its own (see electron/connections.cjs): one
+  // fills the form, and its record can be forgotten.
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [listOpen, setListOpen] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  // The address of a service chosen whose token another connection keeps: its window signs in with that one.
+  const [remembered, setRemembered] = useState<string | null>(null);
+  const picker = useRef<HTMLDivElement>(null);
+  const readAccounts = () => void window.desktop?.accounts().then(setAccounts);
+  useEffect(readAccounts, []);
+  useEffect(() => {
+    if (!listOpen) return;
+    const away = (event: PointerEvent) => {
+      if (!picker.current?.contains(event.target as Node)) setListOpen(false);
+    };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [listOpen]);
+  function choose(account: Account) {
+    setListOpen(false);
+    setListError(null);
+    setRemembered(account.saved && !account.current ? account.url : null);
+    void window.desktop!.loadLogin(account.id).then((login) => login && change(login));
+  }
+  function forget(account: Account) {
+    if (
+      !window.confirm(
+        `删除“${account.label}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+      )
+    )
+      return;
+    window.desktop!.forgetAccount(account.id).then(
+      (next) => {
+        setListError(null);
+        setAccounts(next);
+        if (!next.length) setListOpen(false);
+      },
+      (failure) =>
+        setListError(
+          String(failure?.message ?? failure).replace(/^.*?'accounts:\w+': (Error: )?/, ''),
+        ),
+    );
+  }
   const [serviceUpgrade, setServiceUpgrade] = useState<{
     phase: 'running' | 'done' | 'failed';
     text: string;
@@ -101,7 +146,8 @@ export default function LoginPage({
       .finally(stop);
   }
   const shownError =
-    serviceUpgrade && serviceUpgrade.phase !== 'running' ? serviceUpgrade.text : error;
+    listError ??
+    (serviceUpgrade && serviceUpgrade.phase !== 'running' ? serviceUpgrade.text : error);
   return (
     <main className="login-page">
       <div className="window-drag" />
@@ -141,17 +187,75 @@ export default function LoginPage({
               </button>
             </div>
           )}
-          <label>
-            服务地址
-            <input
-              autoFocus
-              type="url"
-              value={form.url}
-              onChange={(event) => change({ url: event.target.value })}
-              required
-              spellCheck={false}
-            />
-          </label>
+          <div
+            className="login-account"
+            ref={picker}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && listOpen) {
+                event.stopPropagation();
+                setListOpen(false);
+              }
+            }}
+          >
+            <label>
+              服务地址
+              <input
+                autoFocus
+                type="url"
+                value={form.url}
+                onChange={(event) => change({ url: event.target.value })}
+                required
+                spellCheck={false}
+              />
+            </label>
+            {accounts.length > 0 && (
+              <button
+                type="button"
+                className="icon-button login-account-toggle"
+                aria-label="登录过的服务"
+                aria-expanded={listOpen}
+                onClick={() => {
+                  if (!listOpen) readAccounts();
+                  setListOpen(!listOpen);
+                }}
+              >
+                <ChevronDown />
+              </button>
+            )}
+            {listOpen && accounts.length > 0 && (
+              <ul className="login-accounts" aria-label="登录过的服务">
+                {accounts.map((account) => (
+                  <li key={account.id}>
+                    <button
+                      type="button"
+                      className="login-account-choice"
+                      onClick={() => choose(account)}
+                    >
+                      <span className="login-account-name">{account.label}</span>
+                      <span className="login-account-detail">
+                        {[
+                          account.name ? account.url : '',
+                          account.current ? '当前窗口' : account.open ? '已打开' : '',
+                          account.saved ? '' : '未记住凭据',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`删除 ${account.label} 的登录记录`}
+                      title="删除登录记录"
+                      onClick={() => forget(account)}
+                    >
+                      <X />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {form.mode === 'remote' && (
             <label>
               服务证书指纹（可选）
@@ -170,7 +274,8 @@ export default function LoginPage({
               type="password"
               value={form.token}
               onChange={(event) => change({ token: event.target.value })}
-              required
+              required={remembered !== form.url}
+              placeholder={remembered === form.url ? '已记住，可直接连接' : undefined}
               autoComplete="off"
             />
           </label>

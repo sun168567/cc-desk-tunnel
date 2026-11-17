@@ -111,8 +111,8 @@ export class Config {
     this.save();
   }
   // The services the desktop client signs in to, one a connection, for `ccdt login` to offer: the address, the
-  // certificate pin and the connection's name, the first one's "主连接" unless the user renamed it. Its saved tokens
-  // are encrypted for the desktop program alone and are not read.
+  // certificate pin and the name the user gave the connection, else the address. Its saved tokens are encrypted
+  // for the desktop program alone and are not read. Earlier desktop versions called the first one "主连接".
   desktopLogins() {
     const connections = join(this.paths.desktop, 'connections');
     let ids = [];
@@ -125,9 +125,10 @@ export class Config {
         readFileSync(join(this.paths.desktop, 'shared', 'connections.json'), 'utf8'),
       );
     } catch {}
-    const nameOf = (id) =>
-      (Array.isArray(named) && named.find((entry) => entry?.id === id)?.name) ||
-      (id ? id : '主连接');
+    const nameOf = (id) => {
+      const name = Array.isArray(named) && named.find((entry) => entry?.id === id)?.name;
+      return typeof name === 'string' && name !== '主连接' ? name : '';
+    };
     const logins = ['', ...ids]
       .map((id) => ({
         id,
@@ -140,7 +141,7 @@ export class Config {
       .map(({ id, login }) => ({
         url: login.url,
         fingerprint: String(login.fingerprint ?? ''),
-        name: String(nameOf(id)),
+        name: nameOf(id) || login.url.replace(/^wss:\/\//, ''),
       }));
     return logins.filter(
       (login, index) => logins.findIndex((other) => other.url === login.url) === index,

@@ -34,7 +34,7 @@ import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
 import { useShared } from './shared.ts';
-import type { ListedConnection } from './shared.ts';
+import type { Account } from './shared.ts';
 import ShellSettings from './ShellSettings.tsx';
 import ShortcutSettings from './ShortcutSettings.tsx';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
@@ -83,7 +83,7 @@ export const sections: {
     name: '连接',
     group: '本机',
     icon: Cable,
-    words: '记住凭据 自动登录 多开 多个连接 窗口 服务端 等待 超时 SSH 执行通道',
+    words: '记住凭据 自动登录 多开 多个连接 登录过的服务 备注名 窗口 服务端 等待 超时 SSH 执行通道',
   },
   {
     id: 'notifications',
@@ -384,19 +384,18 @@ function Seconds({
 
 // The computer's connections, each a window of its own to a service of its own: see electron/connections.cjs.
 function Connections() {
-  const [list, setList] = useState<ListedConnection[]>([]);
-  const [name, setName] = useState('');
+  const [list, setList] = useState<Account[]>([]);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState('');
   const names = useShared('connections');
   // Whether a window is open is its process's to tell, so it is asked again while the page is shown.
   useEffect(() => {
-    const read = () => void window.desktop!.connections().then(setList);
+    const read = () => void window.desktop!.accounts().then(setList);
     read();
     const timer = setInterval(read, 2000);
     return () => clearInterval(timer);
   }, [names]);
-  const act = (work: Promise<ListedConnection[] | void>) =>
+  const act = (work: Promise<Account[] | void>) =>
     work.then(
       (next) => {
         setError('');
@@ -405,40 +404,47 @@ function Connections() {
       },
       (failure) => {
         setError(
-          String(failure?.message ?? failure).replace(/^.*?'connections:\w+': (Error: )?/, ''),
+          String(failure?.message ?? failure).replace(/^.*?'(accounts|login):\w+': (Error: )?/, ''),
         );
         return false;
       },
     );
   return (
     <>
-      <h2 className="page-heading">多个连接</h2>
+      <h2 className="page-heading">登录过的服务</h2>
       <div className="card">
         {list.map((entry) => (
           <Row
             key={entry.id}
-            title={entry.name}
-            detail={entry.current ? '当前窗口' : entry.open ? '已打开' : '未打开'}
+            title={entry.label}
+            detail={[
+              entry.name ? entry.url : '',
+              entry.current ? '当前窗口' : entry.open ? '已打开' : '未打开',
+              entry.autoLogin ? '自动登录' : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           >
             {editing?.id === entry.id ? (
               <form
                 className="setting-actions"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void act(window.desktop!.renameConnection(entry.id, editing.name)).then(
+                  void act(window.desktop!.renameAccount(entry.id, editing.name)).then(
                     (done) => done && setEditing(null),
                   );
                 }}
               >
                 <input
                   className="setting-name"
-                  aria-label="连接的名称"
+                  aria-label="备注名"
+                  placeholder="不填则显示服务地址"
                   maxLength={24}
                   autoFocus
                   value={editing.name}
                   onChange={(event) => setEditing({ id: entry.id, name: event.target.value })}
                 />
-                <button type="submit" className="button" disabled={!editing.name.trim()}>
+                <button type="submit" className="button">
                   保存
                 </button>
                 <button type="button" className="button" onClick={() => setEditing(null)}>
@@ -451,8 +457,8 @@ function Connections() {
                   <button
                     type="button"
                     className="button"
-                    aria-label={`打开 ${entry.name}`}
-                    onClick={() => void act(window.desktop!.openConnection(entry.id))}
+                    aria-label={`打开 ${entry.label}`}
+                    onClick={() => void act(window.desktop!.openAccount(entry.id))}
                   >
                     {entry.open ? '切换到' : '打开'}
                   </button>
@@ -460,23 +466,23 @@ function Connections() {
                 <button
                   type="button"
                   className="button"
-                  aria-label={`改名 ${entry.name}`}
+                  aria-label={`备注名 ${entry.label}`}
                   onClick={() => setEditing({ id: entry.id, name: entry.name })}
                 >
-                  改名
+                  备注名
                 </button>
-                {entry.id && !entry.current && (
+                {!entry.current && (
                   <button
                     type="button"
                     className="button danger"
-                    aria-label={`删除 ${entry.name}`}
+                    aria-label={`删除 ${entry.label}`}
                     onClick={() => {
                       if (
                         window.confirm(
-                          `删除连接“${entry.name}”？它在这台电脑上保存的服务地址、凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+                          `删除“${entry.label}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
                         )
                       )
-                        void act(window.desktop!.removeConnection(entry.id));
+                        void act(window.desktop!.forgetAccount(entry.id));
                     }}
                   >
                     删除
@@ -487,28 +493,16 @@ function Connections() {
           </Row>
         ))}
         <Row
-          title="新建连接"
-          detail="再开一个窗口去连另一台服务端。每个连接各有自己的服务地址、凭据、草稿和定时任务；项目列表、通知、快捷键等本机设置是共用的"
+          title="新的登录窗口"
+          detail="再开一个窗口登录另一台服务端，与再次打开程序相同。每个服务各有自己的凭据、草稿和定时任务；项目列表、通知、快捷键等本机设置是共用的"
         >
-          <form
-            className="setting-actions"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void act(window.desktop!.createConnection(name)).then((done) => done && setName(''));
-            }}
+          <button
+            type="button"
+            className="button"
+            onClick={() => void act(window.desktop!.newLoginWindow())}
           >
-            <input
-              className="setting-name"
-              aria-label="新连接的名称"
-              placeholder="例如：工作"
-              maxLength={24}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-            <button type="submit" className="button" disabled={!name.trim()}>
-              新建并打开
-            </button>
-          </form>
+            打开
+          </button>
         </Row>
       </div>
       {error && (
@@ -643,7 +637,10 @@ function ConnectionSettings({
             onChange={(remember) => changeForm({ remember, autoLogin: remember && form.autoLogin })}
           />
         </Row>
-        <Row title="自动登录" detail="启动客户端后直接连接上次的服务">
+        <Row
+          title="自动登录"
+          detail="没有窗口开着时打开客户端，直接登录这个服务；只能有一个服务自动登录"
+        >
           <Switch
             label="自动登录"
             checked={form.autoLogin}

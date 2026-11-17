@@ -50,7 +50,12 @@ protocol.registerSchemesAsPrivileged([
 // See connections.cjs. The profile is chosen before anything is read from it, the instance lock included:
 // each connection is then a single instance of its own.
 const base = app.getPath('userData');
-const connectionId = connections.requested(process.argv, base);
+const { id: connectionId, signIn: signInAtStart } = connections.choose(base, process.argv);
+// A token typed in the window that started this one (see `handOff`). A saved token is encrypted with a key kept in
+// the profile of its connection, which another connection cannot read; so this one comes in the environment, and
+// no process started from here inherits it.
+const handedToken = process.env.CC_DESK_TUNNEL_HANDOFF ?? '';
+delete process.env.CC_DESK_TUNNEL_HANDOFF;
 if (connectionId) {
   app.setPath('userData', connections.directory(base, connectionId));
   app.setPath('sessionData', connections.directory(base, connectionId));
@@ -461,37 +466,100 @@ handle('ccdt:open', async (_event, request) => {
   return openSession(request, { version: app.getVersion() });
 });
 // The service token is kept only when the user asks, encrypted for the current account of the system (DPAPI on
-// Windows, the login keychain on macOS).
-handle('login:load', () => {
-  const { login } = readSettings();
-  if (!login) return null;
-  let token = '';
+// Windows, the login keychain on macOS). The address is kept from the first sign-in on, for the sign-in page to
+// offer again.
+const encrypt = (token) =>
+  token && safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(String(token)).toString('base64')
+    : '';
+function decrypt(token) {
   try {
-    if (login.token && safeStorage.isEncryptionAvailable())
-      token = safeStorage.decryptString(Buffer.from(login.token, 'base64'));
+    if (token && safeStorage.isEncryptionAvailable())
+      return safeStorage.decryptString(Buffer.from(token, 'base64'));
   } catch {}
+  return '';
+}
+// Whether this window signs in as soon as its page asks for its sign-in: see `choose` in connections.cjs.
+let signInNow = signInAtStart;
+// `id`: another connection, whose sign-in fills this window's form. Its token stays with it: `remember` tells
+// that the window started for it signs in with the one it keeps. This connection's own sign-in may have been
+// handed over by another window (see `login:route`), which is taken once and only while fresh.
+handle('login:load', (_event, id) => {
+  const own = id === undefined || id === connectionId;
+  const target = own ? connectionId : String(id);
+  if (!connections.list(base).some((entry) => entry.id === target)) return null;
+  const file = path.join(connections.directory(base, target), 'settings.json');
+  const settings = readSettings(file);
+  const passed = own ? settings.handoff : undefined;
+  if (passed) writeSettings({ handoff: undefined }, file);
+  const handed = !!passed?.url && Date.now() - Number(passed.at) < 120_000;
+  const login = handed ? passed : settings.login;
+  const signIn = own && signInNow;
+  if (own) signInNow = false;
+  if (!login?.url) return null;
+  const token = !own
+    ? ''
+    : handed
+      ? handedToken || decrypt(settings.login?.token)
+      : decrypt(login.token);
   return {
-    url: String(login.url ?? ''),
+    url: String(login.url),
     fingerprint: String(login.fingerprint ?? ''),
     mode: login.mode === 'local' ? 'local' : 'remote',
     token,
-    remember: !!token,
-    autoLogin: !!token && login.autoLogin === true,
+    remember: handed ? login.remember === true : !!login.token,
+    autoLogin: handed ? login.autoLogin === true : connections.autoLogin(base) === target,
+    ...(signIn && token ? { signIn: true } : {}),
   };
 });
+// Saved once signed in. Only one connection signs in by itself, so choosing it here takes it from another.
 handle('login:save', (_event, login) => {
   const remember = login?.remember === true && safeStorage.isEncryptionAvailable();
   writeSettings({
-    login: remember
-      ? {
-          url: String(login.url),
-          fingerprint: String(login.fingerprint),
-          mode: login.mode === 'local' ? 'local' : 'remote',
-          token: safeStorage.encryptString(String(login.token)).toString('base64'),
-          autoLogin: login.autoLogin === true,
-        }
-      : undefined,
+    login: {
+      url: String(login.url),
+      fingerprint: String(login.fingerprint),
+      mode: login.mode === 'local' ? 'local' : 'remote',
+      ...(remember ? { token: encrypt(login.token) } : {}),
+      usedAt: Date.now(),
+    },
   });
+  connections.setAutoLogin(base, connectionId, remember && login.autoLogin === true);
+  takeShared();
+});
+// A service another connection has signed in to is that connection's: its window is shown when open, and is
+// otherwise started to sign in with what was typed here, as this window closes. So is a service new to a window
+// that has signed in elsewhere, which gets a connection of its own.
+function handOff(id, form) {
+  writeSettings(
+    {
+      handoff: {
+        url: String(form.url),
+        fingerprint: String(form.fingerprint ?? ''),
+        mode: form.mode === 'local' ? 'local' : 'remote',
+        remember: form.remember === true,
+        autoLogin: form.autoLogin === true,
+        at: Date.now(),
+      },
+    },
+    path.join(connections.directory(base, id), 'settings.json'),
+  );
+  launch(id, ['--sign-in'], String(form.token ?? ''));
+  setImmediate(() => app.quit());
+}
+handle('login:route', (_event, form) => {
+  const key = connections.serviceKey(form?.url);
+  const other = connections
+    .accounts(base)
+    .find((entry) => entry.id !== connectionId && connections.serviceKey(entry.url) === key);
+  if (other && connections.running(base, other.id)) {
+    launch(other.id);
+    return 'shown';
+  }
+  const own = connections.loginOf(base, connectionId);
+  if (!other && (!own || connections.serviceKey(own.url) === key)) return 'here';
+  handOff(other?.id ?? connections.create(base).id, form);
+  return 'moved';
 });
 // Replaces a file whole through a flushed temporary file, so a crash or power loss in the middle of a write
 // leaves the previous content in place.
@@ -566,21 +634,28 @@ handle('device:get', () => ({
   id: readComputer().deviceId ?? writeComputer({ deviceId: randomUUID() }).deviceId,
   name: hostname(),
 }));
-// A connection is named in its window, on its tray icon and in its notifications once there are several.
-function label() {
-  const entries = connections.list(base);
-  return entries.length > 1 ? (entries.find((entry) => entry.id === connectionId)?.name ?? '') : '';
-}
+// A connection is named in its window and on its tray icon by its name or its service, and in its notifications
+// once there are several.
+const label = () =>
+  connections.labelOf(
+    base,
+    connections.list(base).find((entry) => entry.id === connectionId) ?? {
+      id: connectionId,
+      name: '',
+    },
+  );
+const several = () => connections.accounts(base).length > 1;
 const titled = () => (label() ? `CC Desk Tunnel · ${label()}` : 'CC Desk Tunnel');
 const others = () => connections.list(base).filter((entry) => entry.id !== connectionId);
 const listed = () =>
-  connections.list(base).map((entry) => ({
+  connections.accounts(base).map((entry) => ({
     ...entry,
     current: entry.id === connectionId,
     open: entry.id === connectionId || connections.running(base, entry.id),
   }));
 // Starts a connection's process. One that is open already shows its window instead: see `second-instance`.
-function launch(id, ...flags) {
+// Without an ID it is a start as by the user's hand, a sign-in page of its own. `token`: see `handedToken`.
+function launch(id, flags = [], token = '') {
   spawn(
     process.execPath,
     [
@@ -589,22 +664,26 @@ function launch(id, ...flags) {
         (item) =>
           item.startsWith('--user-data-dir=') || item === '--smoke-test' || item === '--no-sandbox',
       ),
-      ...(id ? [`--connection=${id}`] : []),
+      ...(id === null ? [] : [`--connection=${id}`]),
       ...flags,
     ],
-    { detached: true, stdio: 'ignore' },
+    {
+      detached: true,
+      stdio: 'ignore',
+      env: token ? { ...process.env, CC_DESK_TUNNEL_HANDOFF: token } : process.env,
+    },
   ).unref();
 }
 function dismissOthers() {
   for (const entry of others())
-    if (connections.running(base, entry.id)) launch(entry.id, '--quit-connection');
+    if (connections.running(base, entry.id)) launch(entry.id, ['--quit-connection']);
 }
 // The page's choices that are the computer's (see prefs.ts) and the list of connections, as last read. Every
 // connection's window looks at the files every two seconds and takes what another one wrote.
 const sharedKeys = ['prefs', 'projects'];
 const snapshot = (key) =>
   key === 'connections'
-    ? connections.list(base)
+    ? connections.list(base).map((entry) => ({ ...entry, label: connections.labelOf(base, entry) }))
     : key === 'busy'
       ? connections.busy(base, connectionId)
       : connections.readShared(base, key);
@@ -672,28 +751,28 @@ handle('busy:set', (_event, runs) => {
       .map((run) => ({ id: String(run?.id), folder: String(run?.folder) })),
   );
 });
-handle('connections:list', listed);
-handle('connections:create', (_event, name) => {
-  launch(connections.create(base, name).id);
-  takeShared();
-  return listed();
-});
-handle('connections:open', (_event, id) => {
+handle('accounts:list', listed);
+handle('accounts:open', (_event, id) => {
   if (!connections.list(base).some((entry) => entry.id === id))
     throw new Error('这个连接已不存在。');
   launch(id);
 });
-handle('connections:rename', (_event, id, name) => {
+handle('accounts:rename', (_event, id, name) => {
   connections.rename(base, String(id), name);
   takeShared();
   return listed();
 });
-handle('connections:remove', (_event, id) => {
-  if (id === connectionId) throw new Error('不能删除正在使用的连接。');
-  connections.remove(base, String(id));
+// Forgetting a sign-in forgets its connection with what it kept here (see `remove` in connections.cjs). This
+// window's own, from its sign-in page, leaves the window as one that has signed in nowhere.
+handle('accounts:forget', (_event, id) => {
+  if (id === connectionId) {
+    connections.setAutoLogin(base, connectionId, false);
+    connections.clearLogin(base, connectionId);
+  } else connections.remove(base, String(id));
   takeShared();
   return listed();
 });
+handle('login:window', () => launch(null));
 handle('app:quit', (_event, all) => {
   if (all === true) dismissOthers();
   app.quit();
@@ -713,7 +792,10 @@ handle('notify:show', (event, notice) => {
   const inFront = window.isVisible() && window.isFocused() && !window.isMinimized();
   if (inFront && notice?.always !== true) return;
   const toast = new Notification({
-    title: `${label() ? `${label()} · ` : ''}${String(notice?.title ?? '')}`.slice(0, 80),
+    title: `${several() && label() ? `${label()} · ` : ''}${String(notice?.title ?? '')}`.slice(
+      0,
+      80,
+    ),
     body: String(notice?.body ?? '').slice(0, 300),
     silent: notice?.silent === true,
     icon: path.join(__dirname, 'icon.png'),
@@ -906,10 +988,14 @@ app.whenReady().then(() => {
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: '显示窗口', click: showWindow },
-        ...others().map((entry) => ({
-          label: `打开“${entry.name}”`,
-          click: () => launch(entry.id),
-        })),
+        ...connections
+          .accounts(base)
+          .filter((entry) => entry.id !== connectionId)
+          .map((entry) => ({
+            label: `打开“${entry.label}”`,
+            click: () => launch(entry.id),
+          })),
+        { label: '新的登录窗口', click: () => launch(null) },
         {
           label: '关闭窗口时留在后台',
           type: 'checkbox',
