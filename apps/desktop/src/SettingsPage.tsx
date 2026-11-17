@@ -72,7 +72,7 @@ export const sections: {
     name: '常规',
     group: '本机',
     icon: Settings,
-    words: '窗口 托盘 后台 启动 普通会话 文件夹 审批 绕过权限',
+    words: '窗口 托盘 后台 启动 普通会话 文件夹 对话记录 缓存 占用 清理 审批 绕过权限',
   },
   {
     id: 'appearance',
@@ -513,11 +513,47 @@ function Connections() {
   );
 }
 
+// The history read before and kept here; clearing it has every session read from the service again.
+function HistoryCacheCard({ client }: { client: ProxyClient }) {
+  const [stats, setStats] = useState<Awaited<ReturnType<ProxyClient['disk']['stats']>>>(null);
+  const read = () => void client.disk.stats().then(setStats);
+  useEffect(read, [client]);
+  if (!stats) return null;
+  const size = stats.bytes === null ? '' : `约 ${(stats.bytes / 1024 / 1024).toFixed(1)} MB · `;
+  return (
+    <>
+      <h2 className="page-heading">对话记录</h2>
+      <div className="card">
+        <Row title="本机缓存" detail="读过的对话留在本机，再次打开只补新内容">
+          <span className="setting-actions">
+            <span className="setting-value">
+              {size}
+              {stats.sessions} 个会话
+            </span>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                client.resync();
+                read();
+              }}
+            >
+              清理
+            </button>
+          </span>
+        </Row>
+      </div>
+    </>
+  );
+}
+
 function General({
+  client,
   browser,
   workspaceRoot,
   chooseWorkspace,
 }: {
+  client: ProxyClient;
   browser: boolean;
   workspaceRoot: string;
   chooseWorkspace: (reset: boolean) => void;
@@ -571,6 +607,7 @@ function General({
           </div>
         </>
       )}
+      <HistoryCacheCard client={client} />
       <h2 className="page-heading">审批</h2>
       <div className="card">
         <Row
@@ -988,6 +1025,7 @@ export default function SettingsPage({
           <InstallAppSettings />
         ) : section === 'general' ? (
           <General
+            client={client}
             browser={browser}
             workspaceRoot={workspaceRoot}
             chooseWorkspace={chooseWorkspace}
