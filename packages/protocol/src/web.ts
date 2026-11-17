@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { webCertificateCommandSchemas } from './web-certificate.ts';
 
+export const webAppNameSchema = z
+  .string()
+  .regex(/^[^\u0000-\u001f\u007f-\u009f]*$/)
+  .trim()
+  .min(1)
+  .max(40);
+export const webAppBadgeSchema = webAppNameSchema.refine(
+  (value) => Array.from(new Intl.Segmenter().segment(value)).length <= 3,
+);
 export const webDomainSchema = z
   .string()
   .trim()
