@@ -160,6 +160,9 @@ export type QuotaAnswer = {
   usage?: UsageReading;
 };
 
+// The limits that hold one model's weekly use: a refusal under one leaves requests with the other models.
+const MODEL_LIMITS = new Set(['seven_day_opus', 'seven_day_sonnet', 'seven_day_overage_included']);
+
 // The plan quota is the account's, not a session's: the service holds one per login, and every session and device
 // reads it here. Most of it comes with the replies: the CLI passes on the quota every model response carries
 // (`rate_limit_event`) whenever it moves, at no cost. A read adds what only `/usage` gives (the per-model rows, and
@@ -171,6 +174,9 @@ export class Quotas {
   wanted: () => boolean = () => true;
   private readonly interval: number;
   private observed = new ObservedQuotas();
+  // The last `rate_limit_event` of each login and when it came: whether its requests are refused, which the
+  // windows need not say.
+  private limits = new Map<string, { info: SDKRateLimitEvent['rate_limit_info']; at: number }>();
   private reads = new Map<
     string,
     { at: number; rateLimits: Metrics['rateLimits']; pending?: Promise<unknown> }
@@ -184,6 +190,7 @@ export class Quotas {
   // Setup tokens need not expose an account identity, so replacing one can keep the same login key.
   clear() {
     this.observed = new ObservedQuotas();
+    this.limits.clear();
     this.reads.clear();
     this.login = undefined;
   }
@@ -193,7 +200,42 @@ export class Quotas {
   }
   observe(login: string, event: SDKRateLimitEvent, now = Date.now()) {
     this.heard(login);
+    this.limits.set(login, { info: event.rate_limit_info, at: now });
     this.observed.observe(login, event, now);
+  }
+  // Whether the account last heard can take no request now, as far as the service knows; work the service starts on
+  // its own leaves it alone then (see `compactIdle`). What was heard last decides, so an early reset (a reset card)
+  // counts once a reply or a reading shows it:
+  // - A reply's `rate_limit_event` says it in its status, which only the plan's limiter sets: refused by an
+  //   account-wide limit until its reset, or until the next event when it names none. A full window alone is not a
+  //   refusal, and one model's weekly limit leaves the others.
+  // - A later reading (`/usage`, a terminal's status line) has the windows only: a used-up session or weekly window,
+  //   until it resets.
+  // Extra usage the last event allowed carries requests past a full window.
+  exhausted(now = Date.now()) {
+    const login = this.login ?? '';
+    const heard = this.limits.get(login);
+    const info = heard?.info;
+    if (info?.overageStatus === 'allowed' || info?.overageStatus === 'allowed_warning')
+      return false;
+    const reading = this.of(login, now);
+    const later =
+      reading?.available && Date.parse(reading.measuredAt ?? '') > (heard?.at ?? -Infinity);
+    if (info && !later) {
+      if (info.status !== 'rejected' || MODEL_LIMITS.has(info.rateLimitType ?? '')) return false;
+      const reset = info.resetsAt ?? info.overageResetsAt;
+      return reset === undefined || reset * 1000 > now;
+    }
+    return Boolean(
+      reading?.available &&
+      reading.windows.some(
+        (window) =>
+          (window.name === 'five_hour' || window.name === 'seven_day') &&
+          (window.utilization ?? 0) >= 100 &&
+          window.resetsAt !== null &&
+          Date.parse(window.resetsAt) > now,
+      ),
+    );
   }
   // The windows a terminal's status line showed (see `statusLineQuota`), and the quota as it now stands.
   observeTerminal(windows: Windows, now = Date.now()) {

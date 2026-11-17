@@ -370,6 +370,68 @@ const unified = rateLimitEvent({
   },
 });
 
+test('an account is out of quota while its replies are refused by an account-wide limit, until the reset', () => {
+  const quotas = new Quotas();
+  assert.equal(quotas.exhausted(0), false, 'nothing heard');
+  const refused = (info: Record<string, unknown>, at = 0) =>
+    quotas.observe('a', rateLimitEvent({ status: 'rejected', ...info }), at);
+  refused({ rateLimitType: 'five_hour', resetsAt: 10 });
+  assert.equal(quotas.exhausted(0), true, 'a refusal need not carry utilization');
+  assert.equal(quotas.exhausted(10_000), false, 'the reset has come');
+  refused({});
+  assert.equal(
+    quotas.exhausted(1e12),
+    true,
+    'a refusal without a reset holds until the next event',
+  );
+  refused({ rateLimitType: 'seven_day_overage_included', resetsAt: 10 });
+  assert.equal(quotas.exhausted(0), false, "one model's weekly limit leaves the others");
+  refused({ rateLimitType: 'five_hour', resetsAt: 10, overageStatus: 'allowed' });
+  assert.equal(quotas.exhausted(0), false, 'extra usage carries on');
+  refused({ rateLimitType: 'five_hour', resetsAt: 10, overageStatus: 'rejected' });
+  assert.equal(quotas.exhausted(0), true, 'extra usage refused too');
+  refused({ rateLimitType: 'overage', overageResetsAt: 30 });
+  assert.equal(quotas.exhausted(20_000), true);
+  quotas.observe(
+    'a',
+    rateLimitEvent({
+      status: 'allowed_warning',
+      unifiedWindows: { five_hour: { utilization: 1.02, resetsAt: 20 } },
+    }),
+    0,
+  );
+  assert.equal(quotas.exhausted(0), false, 'a reply let through past a full window is not refused');
+  quotas.observe('b', rateLimitEvent({ status: 'allowed' }), 0);
+  refused({ rateLimitType: 'five_hour', resetsAt: 10 });
+  quotas.observe('b', rateLimitEvent({ status: 'allowed' }), 0);
+  assert.equal(quotas.exhausted(0), false, 'another login is told apart');
+  quotas.clear();
+  refused({ rateLimitType: 'five_hour', resetsAt: 10 });
+  quotas.clear();
+  assert.equal(quotas.exhausted(0), false, 'a new sign-in keeps nothing of the old');
+});
+
+test('a reading later than the last refusal decides by its windows, so an early reset counts', () => {
+  const window = (utilization: number, resetsAt = 3_600) => [
+    { name: 'five_hour', utilization, resetsAt: new Date(resetsAt * 1000).toISOString() },
+  ];
+  const quotas = new Quotas();
+  quotas.observe(
+    'a',
+    rateLimitEvent({ status: 'rejected', rateLimitType: 'five_hour', resetsAt: 3_600 }),
+    0,
+  );
+  assert.equal(quotas.exhausted(1), true);
+  quotas.observeTerminal(window(100), 1_000);
+  assert.equal(quotas.exhausted(1_000), true, 'a terminal shows the window used up');
+  quotas.observeTerminal(window(3, 18_000), 2_000);
+  assert.equal(quotas.exhausted(2_000), false, 'reset early, as by a reset card');
+  const terminal = new Quotas();
+  terminal.observeTerminal(window(100), 0);
+  assert.equal(terminal.exhausted(0), true, 'a terminal alone, with no event heard');
+  assert.equal(terminal.exhausted(3_600_000), false, 'the window has reset');
+});
+
 test('the quota the CLI passes on in its stream becomes the windows of its own reading', () => {
   assert.deepEqual(observedQuota(unified, null, 0), {
     windows: [
