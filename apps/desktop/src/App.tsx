@@ -632,7 +632,8 @@ export function App({
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'account.status' }).catch(() => {});
   }, [nativeMode, connected, accountOpen]);
-  // The browser has no local sessions; its account quota can be read before it opens a conversation.
+  // The browser has no local sessions; before it opens a conversation it shows the quota the service holds, as the
+  // desktop account page does. Only the refresh button asks the service to read it anew.
   useEffect(() => {
     if (!connected || signedOut) quotaPrimed.current = null;
     if (
@@ -649,7 +650,7 @@ export function App({
     )
       return;
     quotaPrimed.current = quotaSession.id;
-    refreshQuota();
+    refreshQuota(false);
   }, [
     inBrowser,
     nativeMode,
@@ -848,10 +849,11 @@ export function App({
       setRefreshing(false);
     }
   }
-  function refreshQuota() {
+  // `quota`: read the plan quota anew (the refresh button); without it the service answers with what it holds.
+  function refreshQuota(quota = true) {
     if (!connected || signedOut || !quotaSession || statusPending.current) return;
     setQuotaError(null);
-    void refreshStatus(quotaSession.id, true, (error) =>
+    void refreshStatus(quotaSession.id, quota, (error) =>
       setQuotaError(
         error instanceof RequestInterruptedError
           ? error.describe(client.state.status === 'connected')
