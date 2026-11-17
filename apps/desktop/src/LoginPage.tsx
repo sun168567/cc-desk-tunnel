@@ -6,6 +6,9 @@ import { GithubMark, openProject, project } from './project.tsx';
 import { serviceKey, useConnectionName } from './shared.ts';
 import type { Account } from './shared.ts';
 
+// What the token field shows for a token its connection keeps, which this window never reads.
+const keptToken = '\u2022'.repeat(10);
+
 export type ConnectionForm = {
   url: string;
   token: string;
@@ -89,10 +92,14 @@ export default function LoginPage({
         '',
       ),
     );
-  const remembered = !form.token
-    ? accounts.find((account) => account.url && serviceKey(account.url) === serviceKey(form.url))
-        ?.saved
-    : false;
+  // A service whose token its connection keeps shows the field filled. Typing there replaces it; emptied, the
+  // field asks for one again.
+  const [replaced, setReplaced] = useState<string | null>(null);
+  const remembered =
+    !form.token &&
+    replaced !== serviceKey(form.url) &&
+    !!accounts.find((account) => account.url && serviceKey(account.url) === serviceKey(form.url))
+      ?.saved;
   function choose(account: Account) {
     setListOpen(false);
     setListError(null);
@@ -104,6 +111,7 @@ export default function LoginPage({
       }, failed);
       return;
     }
+    setReplaced(null);
     change({
       url: account.url,
       fingerprint: account.fingerprint,
@@ -263,19 +271,9 @@ export default function LoginPage({
                       <span className="login-account-name">
                         {account.label || '未保存地址的连接'}
                       </span>
-                      <span className="login-account-detail">
-                        {[
-                          account.name ? account.url : '',
-                          account.open ? '已打开' : '',
-                          !account.url
-                            ? '旧连接，在它自己的窗口里登录'
-                            : account.saved
-                              ? ''
-                              : '未记住凭据',
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
+                      {account.name && account.url && (
+                        <span className="login-account-detail">{account.url}</span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -307,10 +305,13 @@ export default function LoginPage({
             服务凭据
             <input
               type="password"
-              value={form.token}
-              onChange={(event) => change({ token: event.target.value })}
-              required={!remembered}
-              placeholder={remembered ? '已记住，可直接连接' : undefined}
+              value={remembered ? keptToken : form.token}
+              onChange={(event) => {
+                if (!remembered) return change({ token: event.target.value });
+                setReplaced(serviceKey(form.url));
+                change({ token: event.target.value.replaceAll('\u2022', '') });
+              }}
+              required
               autoComplete="off"
             />
           </label>

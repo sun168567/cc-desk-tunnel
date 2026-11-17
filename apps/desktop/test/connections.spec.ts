@@ -128,6 +128,8 @@ test('Electron: a sign-in window starts each service’s window, one window to a
       0,
     );
     await expect(launcher.getByLabel('服务地址')).toHaveValue('');
+    // Its defaults are not the computer's preferences: the first connection's own are.
+    expect(existsSync(resolve(desk.profile, 'shared', 'prefs.json'))).toBe(false);
     // Signing in starts the service's window, made for it, and the sign-in window goes once that runs.
     await signIn(launcher, { url: serverUrl, token });
     await exited(first);
@@ -158,8 +160,10 @@ test('Electron: a sign-in window starts each service’s window, one window to a
     await expect(heading(other)).toBeVisible();
     await other.getByRole('button', { name: '登录过的服务', exact: true }).click();
     const records = other.getByRole('list', { name: '登录过的服务', exact: true });
-    await expect(records).toContainText('已打开');
-    await expect(records).toContainText('未记住凭据');
+    // A service without a name is listed by its address alone.
+    await expect(
+      records.getByRole('button', { name: shown(serverUrl), exact: true }),
+    ).toBeVisible();
     await records.getByRole('button', { name: new RegExp(`^${shown(serverUrl)}`) }).click();
     await expect(other.getByLabel('服务地址')).toHaveValue(serverUrl);
     await signIn(other, { token });
@@ -248,8 +252,7 @@ test('Electron: a sign-in window starts each service’s window, one window to a
     const row = page
       .locator('.setting-row')
       .filter({ has: page.getByText(shown(elsewhere), { exact: true }) });
-    await expect(row).toContainText('已打开');
-    await expect(row).toContainText('自动登录');
+    await expect(row).toBeVisible();
     // An open connection is not removed from under its window.
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('button', { name: `删除 ${shown(elsewhere)}`, exact: true }).click();
@@ -280,10 +283,12 @@ test('Electron: a sign-in window starts each service’s window, one window to a
       .getByRole('list', { name: '登录过的服务', exact: true })
       .getByRole('button', { name: /^工作/ })
       .click();
-    await expect(choose.getByLabel('服务凭据')).toHaveAttribute(
-      'placeholder',
-      '已记住，可直接连接',
-    );
+    const kept = choose.getByLabel('服务凭据');
+    await expect(kept).toHaveValue('\u2022'.repeat(10));
+    // Emptied, the field asks for a token again.
+    await kept.press('End');
+    await kept.press('Backspace');
+    await expect(kept).toHaveValue('');
     // A token typed for a service not remembered goes to the window started for it.
     await choose.getByRole('button', { name: '登录过的服务', exact: true }).click();
     await choose

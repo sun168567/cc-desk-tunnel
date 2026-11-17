@@ -525,7 +525,7 @@ handle('login:load', () => {
       ? form(connections.loginOf(base, latest.id), '', latest.saved, latest.autoLogin)
       : null;
   }
-  const own = readSettings().login;
+  const { login: own, pending } = readSettings();
   const login = handed ?? own;
   const signIn = signInNow;
   signInNow = false;
@@ -538,7 +538,8 @@ handle('login:load', () => {
       handed ? handed.remember === true : !!token,
       handed ? handed.autoLogin === true : connections.autoLogin(base) === connectionId,
     ),
-    ...(own?.url ? { locked: true } : {}),
+    // One that has not signed in yet may have a mistyped address, which can still be corrected here.
+    ...(own?.url && !pending ? { locked: true } : {}),
     ...(signIn && token ? { signIn: true } : {}),
   };
 });

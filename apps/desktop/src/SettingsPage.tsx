@@ -416,18 +416,7 @@ function Connections() {
         {list
           .map((item) => ({ ...item, label: item.label || '未保存地址的连接' }))
           .map((entry) => (
-            <Row
-              key={entry.id}
-              title={entry.label}
-              detail={[
-                entry.name ? entry.url : '',
-                entry.url ? '' : '旧连接，未保存服务地址',
-                entry.current ? '当前窗口' : entry.open ? '已打开' : '未打开',
-                entry.autoLogin ? '自动登录' : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            >
+            <Row key={entry.id} title={entry.label} detail={entry.name ? entry.url : undefined}>
               {editing?.id === entry.id ? (
                 <form
                   className="setting-actions"
@@ -495,10 +484,7 @@ function Connections() {
               )}
             </Row>
           ))}
-        <Row
-          title="新的登录窗口"
-          detail="再开一个窗口登录另一台服务端，与再次打开程序相同。每个服务各有自己的凭据、草稿和定时任务；项目列表、通知、快捷键等本机设置是共用的"
-        >
+        <Row title="新的登录窗口">
           <button
             type="button"
             className="button"
@@ -640,10 +626,7 @@ function ConnectionSettings({
             onChange={(remember) => changeForm({ remember, autoLogin: remember && form.autoLogin })}
           />
         </Row>
-        <Row
-          title="自动登录"
-          detail="没有窗口开着时打开客户端，直接登录这个服务；只能有一个服务自动登录"
-        >
+        <Row title="自动登录" detail="打开程序时直接登录这个服务">
           <Switch
             label="自动登录"
             checked={form.autoLogin}

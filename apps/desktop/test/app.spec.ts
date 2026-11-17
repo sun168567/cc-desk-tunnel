@@ -183,7 +183,7 @@ test('Electron loads the built UI with sandbox and closes its execution connecti
     args: [
       resolve('apps/desktop'),
       '--smoke-test',
-      ...connectionArgs(resolve('.local/ui-test/profile-smoke')),
+      ...connectionArgs(resolve('.local/ui-test/profile-smoke'), true),
     ],
     env,
   });

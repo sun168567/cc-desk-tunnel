@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Screenshots are for the eye and stay on this machine.
@@ -11,7 +11,9 @@ mkdirSync(resolve(screenshots, 'redesign'), { recursive: true });
 export const testConnection = 'test0000';
 export const connectionDirectory = (profile: string) =>
   resolve(profile, 'connections', testConnection);
-export function connectionArgs(profile: string) {
+// `fresh` starts from an empty profile: a connection that signed in before keeps to its service.
+export function connectionArgs(profile: string, fresh = false) {
+  if (fresh) rmSync(profile, { recursive: true, force: true });
   mkdirSync(connectionDirectory(profile), { recursive: true });
   mkdirSync(resolve(profile, 'shared'), { recursive: true });
   const list = resolve(profile, 'shared', 'connections.json');

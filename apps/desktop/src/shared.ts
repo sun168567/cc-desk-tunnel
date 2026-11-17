@@ -53,9 +53,11 @@ export function saveShared(key: 'prefs' | 'projects', value: unknown) {
   values[key] = value;
   void window.desktop?.saveShared(key, value).catch(() => {});
 }
-// The first connection had these values to itself before they were shared, and brings them along.
+// A connection had these values to itself before they were shared, and brings them along: the first to start, an
+// earlier version's first connection after its move (see `adopt` in electron/connections.cjs). A sign-in window
+// has none of its own.
 export function shareOnce(key: 'prefs' | 'projects', value: unknown) {
-  if (boot?.connection === '' && values[key] === undefined) saveShared(key, value);
+  if (boot && !boot.launcher && values[key] === undefined) saveShared(key, value);
 }
 // Two addresses are one service when they name the same place; see `serviceKey` in electron/connections.cjs.
 export function serviceKey(url: string) {

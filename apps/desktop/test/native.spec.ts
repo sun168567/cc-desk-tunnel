@@ -89,7 +89,7 @@ test('official subscription: account metrics, Windows execution, running input, 
     args: [
       resolve('apps/desktop'),
       '--smoke-test',
-      ...connectionArgs(resolve('.local/ui-test/profile-native')),
+      ...connectionArgs(resolve('.local/ui-test/profile-native'), true),
     ],
     env,
   });
