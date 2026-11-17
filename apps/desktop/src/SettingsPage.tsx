@@ -16,11 +16,13 @@ import {
   Search,
   Settings,
   SlidersHorizontal,
+  Smartphone,
   SquareTerminal,
   UserRound,
 } from 'lucide-react';
 import type { ConnectedDevice, ProxyClient } from './client.ts';
 import WebAccessSettings from './WebAccessSettings.tsx';
+import InstallAppSettings from './InstallAppSettings.tsx';
 import Help from './Help.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
 import { connectionWaits, setPrefs, themes, usePrefs, waitRange } from './prefs.ts';
@@ -52,6 +54,7 @@ export type Section =
   | 'account'
   | 'claude'
   | 'instructions'
+  | 'install'
   | 'help'
   | 'about';
 // The groups say where their settings are kept and what they apply to: this computer, the service (for every device
@@ -140,6 +143,13 @@ export const sections: {
     group: 'Claude Code',
     icon: FileText,
     words: 'CLAUDE.md AGENTS.md 提示词 说明',
+  },
+  {
+    id: 'install',
+    name: '手机应用',
+    group: '其他',
+    icon: Smartphone,
+    words: '添加至手机 安装 名称 图标 角标',
   },
   { id: 'help', name: '帮助', group: '其他', icon: CircleHelp, words: '说明 常见问题' },
   {
@@ -902,6 +912,8 @@ export default function SettingsPage({
       (item) =>
         (!back || item.group === '本机') &&
         (item.id !== 'connection' || window.desktop) &&
+        (item.id !== 'install' ||
+          (browser && /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent))) &&
         (!browser || !['context', 'claude', 'instructions'].includes(item.id)) &&
         (item.id !== 'account' || native || !browser) &&
         (item.id !== 'context' || native) &&
@@ -989,6 +1001,8 @@ export default function SettingsPage({
           <Page title="浏览器访问" intro={everyDevice}>
             <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
           </Page>
+        ) : section === 'install' && browser ? (
+          <InstallAppSettings />
         ) : section === 'general' ? (
           <General
             browser={browser}
