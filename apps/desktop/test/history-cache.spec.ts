@@ -134,7 +134,7 @@ test('history read before shows from disk, the service sends only what came sinc
       .getByRole('navigation', { name: '设置分类' })
       .getByRole('button', { name: '常规', exact: true })
       .click();
-    await expect(page.getByText(/MB · 1 个会话/)).toBeVisible();
+    await expect(page.getByText(/^(约 .+ · )?1 个会话$/)).toBeVisible();
     await page.screenshot({ path: resolve(screenshots, 'history-cache-settings.png') });
     // Clearing reads the shown session from the service again, from its start.
     sent = [];

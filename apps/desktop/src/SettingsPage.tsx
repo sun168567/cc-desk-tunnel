@@ -519,7 +519,13 @@ function HistoryCacheCard({ client }: { client: ProxyClient }) {
   const read = () => void client.disk.stats().then(setStats);
   useEffect(read, [client]);
   if (!stats) return null;
-  const size = stats.bytes === null ? '' : `约 ${(stats.bytes / 1024 / 1024).toFixed(1)} MB · `;
+  const size = !stats.bytes
+    ? ''
+    : stats.bytes < 1024 * 1024
+      ? `约 ${Math.ceil(stats.bytes / 1024)} KB · `
+      : stats.bytes < 1024 * 1024 * 1024
+        ? `约 ${(stats.bytes / 1024 / 1024).toFixed(1)} MB · `
+        : `约 ${(stats.bytes / 1024 / 1024 / 1024).toFixed(2)} GB · `;
   return (
     <>
       <h2 className="page-heading">对话记录</h2>
