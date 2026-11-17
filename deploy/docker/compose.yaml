@@ -9,7 +9,7 @@ services:
     ports:
       - "${CONTROL_BIND:-0.0.0.0}:${CONTROL_PORT:-8787}:8787"
     volumes:
-      - "${DATA_DIR:?Run manage.sh init}:/data"
+      - "${DATA_DIR:?Run manage.sh init}:/data:Z"
     security_opt:
       - no-new-privileges:true
     cap_drop:

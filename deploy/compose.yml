@@ -7,7 +7,7 @@ services:
     ports:
       - "${CONTROL_BIND:-0.0.0.0}:${CONTROL_PORT:-8787}:8787"
     volumes:
-      - "${DATA_DIR:?Specify the initialized data directory in .env}:/data"
+      - "${DATA_DIR:?Specify the initialized data directory in .env}:/data:Z"
     security_opt:
       - no-new-privileges:true
     cap_drop:

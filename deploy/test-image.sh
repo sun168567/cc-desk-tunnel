@@ -23,7 +23,7 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
 '
 manage init --host 127.0.0.1 --mode nginx --data "$TEMP/data" --control-port 19874
 seed_old_data() {
-docker run --rm -i --entrypoint node -v "$TEMP/data:/data" "$IMAGE" --input-type=module <<'JS'
+docker run --rm -i --entrypoint node -v "$TEMP/data:/data:Z" "$IMAGE" --input-type=module <<'JS'
 import { SessionStore } from '/app/apps/server/src/store.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
