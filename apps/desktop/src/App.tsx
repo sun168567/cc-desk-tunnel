@@ -163,6 +163,8 @@ export function App({
     [],
   );
   const [proxyConnecting, setProxyConnecting] = useState(false);
+  // The window's connection has its service already: see `login:load` in electron/main.cjs.
+  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | RequestInterruptedError | null>(null);
   // One request at a time from this window; `refreshing` is the slower native status read.
   const [busy, setBusy] = useState(false);
@@ -547,17 +549,20 @@ export function App({
               },
             };
 
-  // A saved sign-in fills the form once per launch and, when asked, connects without a click.
+  // A saved sign-in fills the form once per launch and connects without a click when the program was started
+  // to sign in: see `choose` in electron/connections.cjs.
   const loaded = useRef(false);
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
     void window.desktop?.loadLogin().then((saved) => {
       if (!saved) return;
+      const { signIn, locked, ...values } = saved;
+      setLocked(!!locked);
       // The installed client has no simulation mode, whatever an earlier version saved.
-      const restored = window.desktop!.dev ? saved : { ...saved, mode: 'remote' as const };
+      const restored = window.desktop!.dev ? values : { ...values, mode: 'remote' as const };
       setForm(restored);
-      if (restored.autoLogin) void login(restored);
+      if (signIn) void login(restored);
     });
   }, []);
   useEffect(() => {
@@ -735,6 +740,18 @@ export function App({
     } finally {
       setProxyConnecting(false);
     }
+  }
+  // A connection is one service's: a window an earlier version made without keeping its address may not sign in
+  // to a service another connection has.
+  async function signIn(form: ConnectionForm) {
+    if (window.desktop && !locked) {
+      const owner = await window.desktop.loginOwner(form.url).catch(() => null);
+      if (owner) {
+        setError(`“${owner}”已有自己的连接，请从登录窗口登录它。`);
+        return;
+      }
+    }
+    await login(form);
   }
   function stopRun() {
     if (!selected?.activeRun) return;
@@ -1541,8 +1558,10 @@ export function App({
           install={install}
           connecting={state.status === 'connecting' || proxyConnecting || busy}
           submit={() => {
-            void login(form);
+            void signIn(form);
           }}
+          locked={locked}
+          elsewhere={window.desktop ? () => void window.desktop!.signInElsewhere() : undefined}
         />
       </>
     );

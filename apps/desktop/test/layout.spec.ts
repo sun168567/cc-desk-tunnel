@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import {
+  connectionArgs,
   createSession,
   expandActivity,
   login,
@@ -616,7 +617,7 @@ test('Electron: frameless window, the project branch, files by path and window s
   const profile = resolve('.local/ui-test/profile-layout');
   rmSync(profile, { recursive: true, force: true });
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', `--user-data-dir=${profile}`],
+    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
     env,
   });
   try {

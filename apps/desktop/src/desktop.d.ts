@@ -7,22 +7,25 @@ declare global {
       dev: boolean;
       platform: 'win32' | 'darwin' | 'linux';
       // Which of this computer's connections the window is ('' the first), and what they all share.
-      boot: { connection: string; shared: import('./shared.ts').Shared };
+      // `launcher`: a sign-in window, which is no connection's (see Launcher.tsx).
+      boot: { connection: string; launcher?: boolean; shared: import('./shared.ts').Shared };
       saveShared: (key: 'prefs' | 'projects', value: unknown) => Promise<void>;
       onSharedChanged: (
         callback: (key: keyof import('./shared.ts').Shared, value: unknown) => void,
       ) => () => void;
       // The sessions running in this window, for the other connections' windows to warn about.
       setBusy: (runs: import('./shared.ts').Run[]) => Promise<void>;
-      // Each connection is a window of its own; `open` tells whether it is running now.
-      connections: () => Promise<import('./shared.ts').ListedConnection[]>;
-      createConnection: (name: string) => Promise<import('./shared.ts').ListedConnection[]>;
-      openConnection: (id: string) => Promise<void>;
-      renameConnection: (
-        id: string,
-        name: string,
-      ) => Promise<import('./shared.ts').ListedConnection[]>;
-      removeConnection: (id: string) => Promise<import('./shared.ts').ListedConnection[]>;
+      // Each connection is a window of its own, signed in to one service; the ones that have signed in somewhere,
+      // the latest first.
+      accounts: () => Promise<import('./shared.ts').Account[]>;
+      // Shows the connection's window, or starts it on its sign-in page.
+      openAccount: (id: string) => Promise<void>;
+      // An empty name has the connection go by its service's address.
+      renameAccount: (id: string, name: string) => Promise<import('./shared.ts').Account[]>;
+      // Forgets the sign-in, and with it what the connection kept on this computer.
+      forgetAccount: (id: string) => Promise<import('./shared.ts').Account[]>;
+      // A sign-in page in a window of its own, as starting the program again opens.
+      newLoginWindow: () => Promise<void>;
       chooseProject: () => Promise<string | null>;
       asOnDisk: (path: string) => Promise<string>;
       // Whether each folder is on this computer, in the order given.
@@ -63,8 +66,24 @@ declare global {
       chooseWorkspace: (reset: boolean) => Promise<string[]>;
       createWorkspace: () => Promise<string>;
       removeWorkspace: (directory: string) => Promise<void>;
-      loadLogin: () => Promise<import('./LoginPage.tsx').ConnectionForm | null>;
+      // A sign-in window's form: the latest service whose window is not open, its token left out. A connection's
+      // window's own sign-in: `signIn` to connect at once, as the window was started to; `locked` once the
+      // connection has its service.
+      loadLogin: () => Promise<
+        (import('./LoginPage.tsx').ConnectionForm & { signIn?: boolean; locked?: boolean }) | null
+      >;
       saveLogin: (login: import('./LoginPage.tsx').ConnectionForm) => Promise<void>;
+      // The name of another connection that has signed in to the service, if one has.
+      loginOwner: (url: string) => Promise<string | null>;
+      // A sign-in window for another service, as this window closes.
+      signInElsewhere: () => Promise<void>;
+      // A sign-in window's: starts the service's window, which signs in, and closes once it runs. `shown`: the
+      // service's window was open already and is shown.
+      startService: (
+        login: import('./LoginPage.tsx').ConnectionForm,
+      ) => Promise<{ shown?: string; error?: string }>;
+      // Opens an earlier version's connection that kept no address, to sign in from its own window.
+      openLegacy: (id: string) => Promise<{ shown?: boolean; error?: string }>;
       loadDrafts: () => Promise<Record<string, string>>;
       saveDrafts: (drafts: Record<string, string>) => Promise<void>;
       loadSchedules: (initial: string) => Promise<{ path: string; text: string }>;

@@ -2,6 +2,7 @@ import { test, expect, _electron } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { connectionArgs } from './helpers.ts';
 
 test.use({ trace: 'off' });
 const project = resolve('.local/gui-subscription/中文 项目');
@@ -84,7 +85,14 @@ test('official subscription: account metrics, Windows execution, running input, 
         entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE',
     ),
   );
-  const app = await _electron.launch({ args: [resolve('apps/desktop'), '--smoke-test'], env });
+  const app = await _electron.launch({
+    args: [
+      resolve('apps/desktop'),
+      '--smoke-test',
+      ...connectionArgs(resolve('.local/ui-test/profile-native'), true),
+    ],
+    env,
+  });
   const errors: string[] = [];
   try {
     await app.evaluate(({ dialog }, path) => {
