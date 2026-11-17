@@ -80,10 +80,11 @@ test('packaged exe runs without development dependencies and reclaims bundled re
       }),
     ).toBe('function');
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
+    // The connection started once more shows its window and goes: one window to a connection.
     await new Promise<void>((accept, reject) => {
       execFile(
         executablePath,
-        ['--smoke-test', `--user-data-dir=${join(directory, 'profile')}`],
+        ['--smoke-test', ...connectionArgs(join(directory, 'profile'))],
         { env, windowsHide: true, timeout: 10000 },
         (error) => (error ? reject(error) : accept()),
       );
