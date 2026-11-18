@@ -168,6 +168,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # The runner's Ubuntu mirror now and then stops sending in the middle of a file, and apt would wait until the
+      # job times out: a download that sends nothing for 30 seconds is dropped and tried again, from the next
+      # mirror in the runner's list.
+      - run: printf 'Acquire::http::Timeout "30";\nAcquire::https::Timeout "30";\nAcquire::Retries "5";\n' | sudo tee /etc/apt/apt.conf.d/90retry-stalled
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb imagemagick
       # Electron and the packaging tools, kept from one run to the next: they are fetched from release pages
       # that now and then time out, and change only with the versions the lock file names.
