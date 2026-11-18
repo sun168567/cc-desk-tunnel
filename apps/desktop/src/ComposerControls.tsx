@@ -11,6 +11,7 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import ContextMeter from './ContextMeter.tsx';
 import { IconButton } from './ui.tsx';
+import { modelDetail, modelName } from './modelNames.ts';
 
 const effortNames: Record<Effort, string> = {
   low: '低',
@@ -77,7 +78,7 @@ export default function ComposerControls({
   const levels = chosen?.supportedEffortLevels ?? [];
   const actual = nativeSession?.effort;
   const shownEffort = preview ?? effort ?? actual;
-  const label = chosen?.displayName ?? model ?? '原生默认';
+  const label = chosen ? modelName(chosen) : (model ?? '原生默认');
   async function saveEffort() {
     dragging.current = false;
     if (!commitPending.current || disabled) return;
@@ -137,7 +138,11 @@ export default function ComposerControls({
           <ChevronDown />
         </button>
         {open && (
-          <div className="model-menu" role="dialog" aria-label="模型与推理强度">
+          <div
+            className={`model-menu${choosing ? ' choosing' : ''}`}
+            role="dialog"
+            aria-label="模型与推理强度"
+          >
             <div className="effort-view" hidden={choosing}>
               <div className="effort-heading">
                 <strong>{shownEffort ? effortNames[shownEffort] : '原生默认'}</strong>
@@ -265,23 +270,20 @@ export default function ComposerControls({
                         disabled={disabled}
                         aria-selected={model !== null && chosen?.value === row.value}
                         key={row.value}
+                        title={[row.resolvedModel, modelDetail(row)].filter(Boolean).join('\n')}
                         onClick={() => {
                           void configure({ model: row.value, effort: null });
                           setOpen(false);
                         }}
                       >
-                        <span>
-                          {row.displayName}
-                          {row.resolvedModel && <small>{row.resolvedModel}</small>}
-                          <small>{row.description}</small>
-                        </span>
+                        <span>{modelName(row)}</span>
                         {model !== null && chosen?.value === row.value && <Check />}
                       </button>
                     ))}
                 </div>
                 <button
                   type="button"
-                  className="model-back"
+                  className="model-refresh"
                   disabled={disabled || refreshing || !canRefreshModels}
                   title={canRefreshModels ? undefined : '有会话正在运行，结束后可刷新'}
                   onClick={refresh}

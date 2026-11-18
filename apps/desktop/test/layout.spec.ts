@@ -579,7 +579,10 @@ test('approval modes are described where they are chosen, and models sit behind 
   await expect(refreshModels).toBeEnabled();
   publishNewModel = true;
   await refreshModels.click();
-  await expect(models.getByRole('option', { name: /Haiku/ })).toContainText('claude-haiku-5-5');
+  await expect(models.getByRole('option', { name: /Haiku/ })).toHaveAttribute(
+    'title',
+    /claude-haiku-5-5/,
+  );
   await expect(models.getByRole('option')).toHaveCount(2);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '设置与账号', exact: true }).click();

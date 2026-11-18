@@ -74,6 +74,7 @@ export class NativeLogin {
   private output = '';
   private timer: ReturnType<typeof setTimeout>;
   private errorTimer?: ReturnType<typeof setTimeout>;
+  private tokenTimer?: ReturnType<typeof setTimeout>;
   private submitted?: { code: string; reply: string; timer?: ReturnType<typeof setTimeout> };
   cancelled = false;
   // `reply` carries what the command prints after a code and keeps waiting, such as its invalid-code message.
@@ -85,6 +86,8 @@ export class NativeLogin {
       method?: 'browser' | 'setup-token';
       spawn?: TerminalSpawner;
       timeoutMs?: number;
+      // How long the command may take to end by itself once it has shown the token.
+      tokenGraceMs?: number;
     } = {},
   ) {
     this.method = options.method ?? 'browser';
@@ -135,6 +138,14 @@ export class NativeLogin {
           setupToken =
             /Your OAuth token[^\n]*\n\s*(sk-ant-oat01-[A-Za-z0-9_-]+)(?=\s)/.exec(output)?.[1] ??
             setupToken;
+          // Once it has shown the token the command has nothing left to ask, but it ends only after reporting its
+          // usage, which a server whose network holds that up can wait on for a long time. The token is taken then.
+          if (setupToken && !exited)
+            this.tokenTimer ??= setTimeout(() => {
+              try {
+                this.process.kill();
+              } catch {}
+            }, options.tokenGraceMs ?? 3000);
           if (!exited && output.includes('OAuth error:')) {
             clearTimeout(this.errorTimer);
             this.errorTimer = setTimeout(() => this.process.kill(), 400);
@@ -169,9 +180,11 @@ export class NativeLogin {
     const finish = (exitCode: number) => {
       clearTimeout(this.timer);
       clearTimeout(this.errorTimer);
+      clearTimeout(this.tokenTimer);
       clearTimeout(this.submitted?.timer);
       const token = setupToken;
-      const succeeded = exitCode === 0 && (this.method === 'browser' || !!token);
+      // The command shows a token only once it has been created, however it ends afterwards.
+      const succeeded = this.method === 'browser' ? exitCode === 0 : !!token;
       if (!succeeded && !this.cancelled && !this.error) {
         // Only redact secrets; preserve the CLI's explanation, including multiline network and policy errors.
         let output = this.output
