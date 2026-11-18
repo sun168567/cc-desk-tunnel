@@ -30,7 +30,9 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { isWindowsPath } from '@cc-desk-tunnel/protocol';
 import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
+import { fileName, pieces } from './attachments.ts';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
 import type { HistoryState, TaskProgress } from './client.ts';
@@ -47,11 +49,11 @@ import TurnStats from './TurnStats.tsx';
 import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
 import { IconButton, Menu } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
-import { LinkPlace, linkTarget } from './links.ts';
+import { isPicture, LinkPlace, linkTarget, localPicture } from './links.ts';
 import type { Link } from './links.ts';
 import { followLink, linkMenu } from './linkActions.ts';
 import { pictureUrl, toolPictures } from './pictures.ts';
-import { Picture } from './Picture.tsx';
+import { Picture, PictureDialog } from './Picture.tsx';
 
 const RichText = lazy(() => import('./RichText.tsx'));
 const Rich = ({ text }: { text: string }) => (
@@ -391,6 +393,56 @@ function WorkGroup({
 // closes a turn: copy, the turn's figures and the time, always shown on the latest. Replies said along the way have
 // nothing under them. A delivery that did not plainly arrive stays in sight. Replies of the simulated service keep the
 // heading, which says they are not real.
+// A file put in a question, where it stands in the words, as it stood in the box. A picture on this computer shows
+// small and opens whole; any other file, or a picture that cannot be shown here, is a link to it by name, with the
+// conversation's link menu and the card that tells where it leads.
+function FileInText({ path }: { path: string }) {
+  const place = useContext(LinkPlace);
+  const [broken, setBroken] = useState(false);
+  const [open, setOpen] = useState(false);
+  if (!broken && isPicture(path) && linkTarget(path, place)?.kind === 'path')
+    return (
+      <>
+        <button
+          type="button"
+          className="path-chip"
+          title={path}
+          data-link={path}
+          onClick={() => setOpen(true)}
+        >
+          <img src={localPicture(path)} alt="" onError={() => setBroken(true)} />
+          <span className="path-chip-name">{fileName(path)}</span>
+        </button>
+        {open && (
+          <PictureDialog
+            src={localPicture(path)}
+            alt={fileName(path)}
+            onClose={() => setOpen(false)}
+          />
+        )}
+      </>
+    );
+  return (
+    <a className="path-chip file" href={path} data-link={path}>
+      <span className="path-chip-name">{fileName(path)}</span>
+    </a>
+  );
+}
+
+// A question as it was sent; the files in it are shown as files (see attachments.ts).
+function Question({ text }: { text: string }) {
+  const place = useContext(LinkPlace);
+  const windows = isWindowsPath(place?.projectPath ?? 'C:\\');
+  const parts = useMemo(() => pieces(text, windows), [text, windows]);
+  return (
+    <p>
+      {parts.map((piece, index) =>
+        'path' in piece ? <FileInText key={index} path={piece.path} /> : piece.text,
+      )}
+    </p>
+  );
+}
+
 function Message({
   item,
   native,
@@ -427,7 +479,7 @@ function Message({
         </div>
       )}
       <div className="message-content" data-search-content data-copy-text={item.text}>
-        {user ? <p>{item.text}</p> : <Rich text={item.text} />}
+        {user ? <Question text={item.text} /> : <Rich text={item.text} />}
       </div>
       {user && (
         <div className="message-footer">

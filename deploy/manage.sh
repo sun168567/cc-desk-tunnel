@@ -17,8 +17,8 @@ Usage:
   manage.sh client INSTALLER_EXE              offer a Windows installer to connected clients
   manage.sh token [SECRET]                    replace the service token (random when omitted) and restart
   manage.sh release-token [FILE]              save a read-only GitHub token for following releases (none: remove)
-  manage.sh backup ABSOLUTE_ARCHIVE_PATH
-  manage.sh restore ABSOLUTE_ARCHIVE_PATH
+  manage.sh backup [FILE|DIRECTORY]            save all data in one .tar.gz (default: a dated file here)
+  manage.sh restore BACKUP [--yes]            replace this deployment's data with a backup, saving it first
   manage.sh certificate FULLCHAIN PRIVATE_KEY
   manage.sh renew
 
@@ -30,10 +30,22 @@ The image is the prebuilt one of this program's version (ghcr.io/sun168567/cc-de
 when it cannot be pulled. CC_DESK_TUNNEL_BUILD=1 always builds here, CC_DESK_TUNNEL_BUILD=0 never does.
 upgrade fetches the newest release; CC_DESK_TUNNEL_VERSION=X.Y.Z picks another.
 After an install with sudo, `sudo cc-desk-tunnel COMMAND` runs this script from anywhere.
-Uninstall keeps all data; backup/restore pause the service.
+Uninstall keeps all data; backup/restore pause the service. To move to another server, back up here, install
+there, copy the file over and restore it there.
 HELP
 }
 fail() { echo "$*" >&2; exit 1; }
+# An IPv4 address or a DNS name. Underscores are allowed: some hosts and internal zones have them, and the client
+# and OpenSSL take them. An internationalized name is written in its xn-- form.
+valid_host() {
+  [[ ${#1} -le 253 && "$1" =~ ^[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?(\.[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?)*$ ]]
+}
+# The host as people paste it: with a scheme, a port or a path, a trailing dot, capitals.
+host_of() {
+  local host="${1//[[:space:]]/}"
+  host="${host#*://}"; host="${host%%/*}"; host="${host%:[0-9]*}"; host="${host%.}"
+  printf '%s' "${host,,}"
+}
 valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && ((10#$1 >= 1024 && 10#$1 <= 65535)); }
 safe_value() { [[ "$1" != *"'"* && "$1" != *$'\n'* && "$1" != *$'\r'* && "$1" != *'$'* && "$1" != *'`'* ]]; }
 write_var() { safe_value "$2" || fail "Unsupported characters in $1"; printf "%s='%s'\n" "$1" "$2"; }
@@ -46,6 +58,7 @@ load() {
   DATA_DIR="$(realpath -- "$DATA_DIR")"
 }
 cert_pair() {
+  [[ -f "$1" && -f "$2" ]] || fail "Certificate or key file not found."
   openssl x509 -in "$1" -noout -checkend 86400 >/dev/null || fail "Certificate expires within one day."
   local public private
   public="$(openssl x509 -in "$1" -pubkey -noout | openssl pkey -pubin -outform DER | sha256sum)"
@@ -205,6 +218,30 @@ summary() {
   echo "以上凭据等同于服务器登录权限，请勿外传。"
   echo "======================================================="
 }
+# A backup is the whole data directory: the Claude login and settings in the native home, the sessions and their
+# working folders, this service's token, certificates and settings. Left out: SSH credentials of the moment, caches,
+# and the copies earlier migrations kept of the session database. A note ahead of the data says where and when.
+NOTE=cc-desk-tunnel-backup.txt
+backup_name() {
+  local host
+  host="$(hostname 2>/dev/null || true)"; host="${host%%.*}"; host="${host//[^A-Za-z0-9_-]/-}"
+  printf 'cc-desk-tunnel-backup-%s-%s%s.tar.gz' "${host:-server}" "$(date +%Y%m%d-%H%M%S)" "${1:-}"
+}
+# With the service stopped, for SQLite and the native files to agree. Written aside and renamed when complete.
+make_backup() {
+  local note
+  note="$(mktemp -d)"
+  printf 'CC Desk Tunnel 服务端备份\nversion=%s\ncreated=%s\nhost=%s\nmode=%s\nurl=%s\n' "$(version_of)" \
+    "$(date '+%Y-%m-%d %H:%M:%S %z')" "$(hostname 2>/dev/null || true)" "$MODE" "$CONNECTION_URL" > "$note/$NOTE"
+  if ! tar --exclude=./state/connections --exclude=./state/devices --exclude=./state/backups --exclude=./home/.cache \
+    --exclude=./.restore --exclude=./.replaced -czf "$1.partial" -C "$note" "$NOTE" -C "$DATA_DIR" .; then
+    rm -rf -- "$note" "$1.partial"
+    return 1
+  fi
+  rm -rf -- "$note"
+  chmod 600 "$1.partial"
+  mv -- "$1.partial" "$1"
+}
 command="${1:-help}"
 shift || true
 case "$command" in
@@ -217,23 +254,58 @@ case "$command" in
       echo "CC Desk Tunnel 首次安装。直接回车使用方括号内的默认值。"
       detected="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
       [[ "$detected" =~ ^[0-9.]+$ ]] || detected="$(hostname -I 2>/dev/null | awk '{print $1}')"
-      host="$(ask "Windows 能访问到的公网 IP 或域名" "$detected")"
+      # Each answer is checked as it is given and asked again, not after all the questions.
+      while :; do
+        host="$(host_of "$(ask "Windows 能访问到的公网 IP 或域名" "$detected")")"
+        valid_host "$host" && break
+        echo "“${host}”不是 IPv4 地址或域名：只填地址本身，不带 https://、端口和路径；中文域名填 xn-- 开头的形式；暂不支持 IPv6。" >&2
+      done
       echo "入口方式：1) 自签证书 + 指纹（无域名时用）  2) 已有域名证书  3) 已有 nginx 反代"
-      case "$(ask "选择 1 / 2 / 3" 1)" in
-        1) mode=fingerprint ;; 2) mode=certificate ;; 3) mode=nginx ;; *) fail "Invalid choice." ;;
-      esac
+      while :; do
+        case "$(ask "选择 1 / 2 / 3" 1)" in
+          1) mode=fingerprint ;; 2) mode=certificate ;; 3) mode=nginx ;; *) echo "请输入 1、2 或 3。" >&2; continue ;;
+        esac
+        break
+      done
       options=(--host "$host" --mode "$mode")
       if [[ "$mode" = certificate ]]; then
-        options+=(--cert "$(ask "证书链文件 fullchain.pem 的路径")" --key "$(ask "私钥文件 privkey.pem 的路径")")
+        while :; do
+          cert="$(ask "证书链文件 fullchain.pem 的路径")"
+          key="$(ask "私钥文件 privkey.pem 的路径")"
+          (cert_pair "$cert" "$key" && cert_name "$cert" "$host") && break
+          echo "请重新填写证书和私钥。" >&2
+        done
+        options+=(--cert "$cert" --key "$key")
       fi
       if [[ "$mode" = nginx ]]; then
-        options+=(--url "$(ask "客户端使用的 WSS 地址" "wss://$host/ws")")
+        while :; do
+          url="$(ask "客户端使用的 WSS 地址" "wss://$host/ws")"
+          [[ "$url" =~ ^wss://[^/@?#]+/ws$ ]] && break
+          echo "WSS 地址应写成 wss://域名/ws。" >&2
+        done
+        options+=(--url "$url")
       fi
-      options+=(--control-port "$(ask "控制端口" 8787)")
+      while :; do
+        port="$(ask "控制端口" 8787)"
+        valid_port "$port" && break
+        echo "端口应在 1024 到 65535 之间。" >&2
+      done
+      options+=(--control-port "$port")
       default_data="${HOME}/.local/share/cc-desk-tunnel-container"
       [[ "$(id -u)" != 0 ]] || default_data=/srv/cc-desk-tunnel
-      options+=(--data "$(ask "数据目录（新建，存放账号、会话与证书）" "$default_data")")
-      token="$(ask "服务凭据（至少 24 位；留空自动生成）")"
+      while :; do
+        data="$(ask "数据目录（新建，存放账号、会话与证书）" "$default_data")"
+        [[ "$data" = /* && "$data" != / && "$(realpath -m -- "$data")" != "$(realpath -- "$HOME")" ]] && safe_value "$data" \
+          || { echo "请填写一个专用的绝对路径，例如 ${default_data}。" >&2; continue; }
+        [[ ! -e "$data" ]] && break
+        echo "$data 已存在。数据目录必须是新的，以免覆盖已有内容；换一个路径。" >&2
+      done
+      options+=(--data "$data")
+      while :; do
+        token="$(ask "服务凭据（至少 24 位；留空自动生成）")"
+        [[ -z "$token" || "$token" =~ ^[A-Za-z0-9._~+/=-]{24,512}$ ]] && break
+        echo "凭据需要 24 到 512 位，只用字母、数字和 . _ ~ + / = -。" >&2
+      done
       [[ -z "$token" ]] || options+=(--token "$token")
       bash "${BASH_SOURCE[0]}" init "${options[@]}"
     fi
@@ -260,7 +332,7 @@ case "$command" in
       esac
       shift 2
     done
-    [[ "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || fail "--host needs an IPv4 address or DNS name reachable by Windows (no IPv6 yet)."
+    valid_host "$HOST" || fail "--host needs an IPv4 address or DNS name reachable by Windows (no IPv6 yet)."
     [[ "$MODE" =~ ^(fingerprint|certificate|nginx)$ ]] || fail "Invalid mode."
     valid_port "$CONTROL_PORT" || fail "The port must be 1024..65535."
     [[ "$DATA_DIR" = /* && "$DATA_DIR" != / && "$DATA_DIR" != "$HOME" ]] || fail "Choose an absolute dedicated data directory."
@@ -425,26 +497,119 @@ case "$command" in
     grep '^PROXY_TOKEN=' "$DATA_DIR/config/service.env"
     ;;
   backup)
-    [[ $# = 1 && "$1" = /* && ! -e "$1" ]] || fail "Specify a new absolute archive path."
-    archive="$(realpath -m -- "$1")"
+    # A directory, or nothing for the current one, gets a file named for this machine and the moment.
+    [[ $# -le 1 ]] || fail "Specify at most one file or directory."
+    archive="${1:-.}"
+    [[ ! -d "$archive" ]] || archive="$archive/$(backup_name)"
+    archive="$(realpath -m -- "$archive")"
+    [[ ! -e "$archive" ]] || fail "$archive already exists."
+    [[ -d "$(dirname -- "$archive")" ]] || fail "No directory $(dirname -- "$archive")."
     [[ "$archive" != "$DATA_DIR/"* ]] || fail "Backup must be outside the data directory."
     was_running=false; running && was_running=true
     trap 'if $was_running; then dc start >/dev/null; fi' EXIT
+    echo "备份期间服务暂停，数据多时需要几分钟…"
     dc stop
-    tar --exclude=./state/connections --exclude=./state/devices --exclude=./state/backups --exclude=./home/.cache -czf "$1" -C "$DATA_DIR" .
-    chmod 600 "$1"
-    echo "Backup saved; contains private credentials and conversation data."
+    make_backup "$archive" || fail "Backup failed; nothing was saved."
+    echo "备份完成：${archive}（$(du -h -- "$archive" | cut -f1)）"
+    echo "内含 Claude 账号登录、服务凭据、证书、设置和全部会话与工作目录，请像密码一样保管。"
+    echo "迁移到另一台服务器：在那里安装好，把这个文件拷过去，执行 sudo $(self) restore 文件路径。"
     ;;
   restore)
-    [[ $# = 1 && "$1" = /* && -f "$1" ]] || fail "Specify an absolute backup path."
-    running && fail "Stop the service first."
-    [[ -z "$(find "$DATA_DIR/state" "$DATA_DIR/home" "$DATA_DIR/workspace" -mindepth 1 -print -quit)" ]] \
-      || fail "Restore only into a fresh initialized deployment; existing data will not be overwritten."
-    tar -tzf "$1" | grep -Fx './.cc-desk-tunnel-data' >/dev/null || fail "Not a managed backup."
-    if tar -tzf "$1" | grep -E '(^/|(^|/)\.\.(/|$))' >/dev/null; then fail "Unsafe archive paths."; fi
-    tar -xzf "$1" -C "$DATA_DIR" --no-same-owner
+    yes=false archive=''
+    for argument; do
+      case "$argument" in
+        --yes|-y) yes=true ;;
+        *) [[ -z "$archive" ]] || fail "Specify one backup."; archive="$argument" ;;
+      esac
+    done
+    [[ -n "$archive" && -f "$archive" ]] || fail "Specify the backup file: restore /path/cc-desk-tunnel-backup-….tar.gz"
+    archive="$(realpath -- "$archive")"
+    [[ "$archive" != "$DATA_DIR/"* ]] || fail "Move the backup out of the data directory first; restoring replaces it."
+    listing="$(mktemp)"
+    trap 'rm -f -- "$listing"' EXIT
+    echo "检查备份文件…"
+    tar -tzf "$archive" > "$listing" 2>/dev/null || fail "Cannot read $archive as a .tar.gz archive."
+    grep -Fxq './.cc-desk-tunnel-data' "$listing" && grep -Fxq './config/service.env' "$listing" \
+      || fail "Not a CC Desk Tunnel backup."
+    if grep -E '(^/|(^|/)\.\.(/|$))' "$listing" >/dev/null; then fail "Unsafe archive paths."; fi
+    # Data written by a newer version may not be readable by this one; migrations only go forward.
+    note="$(tar -xzOf "$archive" "$NOTE" 2>/dev/null || true)"
+    from="$(sed -n 's/^version=//p' <<< "$note")" current="$(version_of)"
+    if [[ -n "$from" && -n "$current" && "$from" != "$current" \
+      && "$(printf '%s\n' "$from" "$current" | sort -V | tail -n 1)" = "$from" ]]; then
+      fail "这份备份来自 $from 版，比这里的 $current 新。先执行 sudo $(self) upgrade 升级，再还原。"
+    fi
+    source_text="（早期版本做的备份，没有记录来源）"
+    if [[ -n "$note" ]]; then
+      source_text="主机 $(sed -n 's/^host=//p' <<< "$note") · 版本 ${from:-未知} · $(sed -n 's/^created=//p' <<< "$note")"
+    fi
+    safety="$(dirname -- "$archive")/$(backup_name -before-restore)"
+    red='' plain=''
+    if [[ -t 1 ]]; then red=$'\e[1;31m' plain=$'\e[0m'; fi
+    cat <<NOTICE
+
+${red}================ 还原备份：覆盖这台服务器上的现有数据 ================${plain}
+  备份文件   ${archive}（$(du -h -- "$archive" | cut -f1)）
+  备份来源   $source_text
+  覆盖目标   ${DATA_DIR}（现占用 $(du -sh -- "$DATA_DIR" 2>/dev/null | cut -f1)）
+
+  还原会用备份替换这里的全部会话和工作目录、Claude 账号登录、服务凭据和设置，
+  ${red}现有的这些内容都会被覆盖。${plain}覆盖之前，现有数据先另存为
+    $safety
+  这台服务器的访问地址、端口和入口方式不变。服务暂停，还原后自动启动。
+${red}======================================================================${plain}
+
+NOTICE
+    if ! $yes; then
+      [[ -t 0 ]] || fail "No terminal to confirm on; add --yes to restore without asking."
+      read -r -p "确认覆盖请输入 yes（其他输入都会取消）: " answer
+      [[ "$answer" = yes ]] || { echo "已取消，没有改动。"; exit 0; }
+    fi
+    was_running=false; running && was_running=true
+    dc stop
+    echo "另存现有数据…"
+    if ! make_backup "$safety"; then
+      if $was_running; then dc start >/dev/null; fi
+      fail "Could not save the current data; nothing was restored."
+    fi
+    echo "还原…"
+    # Unpacked beside the data, on the same disk even when the data directory is a mount of its own, then put in
+    # place by renaming.
+    stage="$DATA_DIR/.restore" old="$DATA_DIR/.replaced"
+    rm -rf -- "$stage" "$old"
+    mkdir -- "$stage" "$old"
+    if ! tar -xzf "$archive" -C "$stage" --no-same-owner; then
+      rm -rf -- "$stage" "$old"
+      if $was_running; then dc start >/dev/null; fi
+      fail "Could not unpack the backup; the data is as it was."
+    fi
+    rm -f -- "$stage/$NOTE"
+    # This machine's way in stays its own. A self-signed certificate comes with the backup when this machine uses
+    # one too: it names no host, so clients that pinned its fingerprint keep it.
+    if ! [[ "$MODE" = fingerprint ]] || ! grep -qx "PROXY_CERT_NAME='cc-desk-tunnel.local'" "$stage/config/service.env" \
+      || ! grep -qx "PROXY_TLS_MODE='direct'" "$stage/config/service.env"; then
+      way_in='^PROXY_(TLS_MODE|TLS_CERT|TLS_KEY|CERT_NAME)='
+      rm -rf -- "$stage/tls"
+      cp -a -- "$DATA_DIR/tls" "$stage/tls"
+      { grep -Ev "$way_in" "$stage/config/service.env" || true; grep -E "$way_in" "$DATA_DIR/config/service.env"; } \
+        > "$stage/config/service.env.new"
+      mv -- "$stage/config/service.env.new" "$stage/config/service.env"
+    fi
+    for entry in "$DATA_DIR"/* "$DATA_DIR"/.[!.]* "$DATA_DIR"/..?*; do
+      [[ -e "$entry" || -L "$entry" ]] && [[ "$entry" != "$stage" && "$entry" != "$old" ]] || continue
+      mv -- "$entry" "$old/"
+    done
+    for entry in "$stage"/* "$stage"/.[!.]* "$stage"/..?*; do
+      [[ -e "$entry" || -L "$entry" ]] || continue
+      mv -- "$entry" "$DATA_DIR/"
+    done
+    rm -rf -- "$stage" "$old"
+    chmod 700 "$DATA_DIR"
     [[ "$(id -u)" != 0 ]] || chown -R 1000:1000 "$DATA_DIR"
-    echo "Restored. Confirm config/service.env, host, port and certificate settings before up."
+    echo "已还原。还原前的数据另存在 ${safety}，确认无误后可以删除。"
+    docker image inspect "$PROXY_IMAGE" >/dev/null 2>&1 || prepare_image
+    dc up -d --no-build; wait_healthy
+    summary
     ;;
   certificate|renew)
     [[ "$MODE" != nginx ]] || fail "nginx owns and renews the frontend certificate; reload nginx there."
