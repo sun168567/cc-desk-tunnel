@@ -8,6 +8,7 @@ import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import {
   connectionArgs,
+  signInWindow,
   createSession,
   expandActivity,
   login,
@@ -624,9 +625,11 @@ test('Electron: frameless window, the project branch, files by path and window s
     env,
   });
   try {
-    const page = await application.firstWindow();
-    await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
-    await login(page);
+    const launcher = await application.firstWindow();
+    await expect(
+      launcher.getByRole('heading', { name: '连接代理服务', exact: true }),
+    ).toBeVisible();
+    const page = await signInWindow(application);
     // This repository stands in for the user's project.
     const repository = resolve('.');
     const picked = resolve('package.json');

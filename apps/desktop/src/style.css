@@ -291,16 +291,6 @@ button.chip.danger:hover:not(:disabled) {
   font-size: 20px;
   white-space: nowrap;
 }
-.brand-connection {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 500;
-  vertical-align: middle;
-}
 .setting-name {
   width: 150px;
 }

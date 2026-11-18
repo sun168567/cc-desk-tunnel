@@ -59,8 +59,8 @@ import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
-import LoginPage from './LoginPage.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
+import type { SignInReport } from './Launcher.tsx';
 import { exportSession } from './exportSession.ts';
 import { onSharedChange, saveShared, shared, useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
@@ -122,9 +122,21 @@ function savedProjects(value: unknown = shared('projects')): string[] {
 }
 
 // Owns the connection, the selection and every request; the components below render and report user intent.
+// On the desktop the window is a connection's: it signs in with what its sign-in window handed over, tells that
+// window how it goes until it has connected, and gives way to a sign-in window when the connection ends for good
+// (see Launcher.tsx). Run in a browser from the source tree, the page that signs in passes the same as `signIn`,
+// `report` and `leave` (see main.tsx). `browser`: the service's own page, signed in already.
 export function App({
   browser,
-}: { browser?: { selfSigned: boolean; expired: () => void; logout: () => Promise<void> } } = {}) {
+  signIn,
+  report,
+  leave,
+}: {
+  browser?: { selfSigned: boolean; expired: () => void; logout: () => Promise<void> };
+  signIn?: ConnectionForm;
+  report?: (report: SignInReport) => void;
+  leave?: (error: string | null) => void;
+} = {}) {
   const host = hostCapabilities(!!browser);
   const [client] = useState(() => new ProxyClient());
   useEffect(() => {
@@ -162,9 +174,6 @@ export function App({
     (values: Partial<ConnectionForm>) => setForm((current) => ({ ...current, ...values })),
     [],
   );
-  const [proxyConnecting, setProxyConnecting] = useState(false);
-  // The window's connection has its service already: see `login:load` in electron/main.cjs.
-  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | RequestInterruptedError | null>(null);
   // One request at a time from this window; `refreshing` is the slower native status read.
   const [busy, setBusy] = useState(false);
@@ -173,11 +182,6 @@ export function App({
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const quotaPrimed = useRef<string | null>(null);
   const [findRequest, setFindRequest] = useState(0);
-  // Which of this computer's settings is open on the login page.
-  const [localSettings, setLocalSettings] = useState<Section | null>(null);
-  useEffect(() => {
-    if (state.status !== 'disconnected' && state.status !== 'connecting') setLocalSettings(null);
-  }, [state.status]);
   const refreshed = useRef(new Set<string>());
   const [projects, setProjects] = useState(savedProjects);
   // The folders that hold sessions without a project; new ones are made in the first.
@@ -404,41 +408,12 @@ export function App({
     selfUpdating && version && state.release && isNewer(state.release, version)
       ? state.release
       : null;
-  // The service refused this client as the older one: its version can also be fetched from the release page,
-  // whether or not the service holds the installer.
-  const direct =
-    selfUpdating &&
-    state.mismatch &&
-    window.desktop &&
-    version &&
-    state.service &&
-    isNewer(state.service, version)
-      ? state.service
-      : null;
   // A service of a newer version: what that version changed can be read here, whether or not this system's
   // client upgrades itself.
   const ahead =
     state.mismatch && version && state.service && isNewer(state.service, version)
       ? state.service
       : null;
-  // How far an installer being fetched from the release page is, from 0 to 1.
-  const [downloaded, setDownloaded] = useState<number | null>(null);
-  useEffect(
-    () =>
-      window.desktop?.onUpdateProgress(({ received, size }) =>
-        setDownloaded(size ? received / size : 0),
-      ),
-    [],
-  );
-  const install = (version?: string) => {
-    void act(async () => {
-      try {
-        await window.desktop!.installUpdate(version);
-      } finally {
-        setDownloaded(null);
-      }
-    });
-  };
 
   // A check or an upgrade of the service that failed says why to whoever asked for it. The checks a window makes by
   // itself while it is in use fail quietly, to be made again within the hour.
@@ -549,27 +524,55 @@ export function App({
               },
             };
 
-  // A saved sign-in fills the form once per launch and connects without a click when the program was started
-  // to sign in: see `choose` in electron/connections.cjs.
-  const loaded = useRef(false);
+  // The sign-in handed over connects once the page is up. Until it has connected, the sign-in window hears how
+  // it goes; once it has, the window is the connection's.
+  const attempted = useRef(false);
+  const entered = useRef(false);
+  const tell = (next: SignInReport) => void (report ?? window.desktop?.reportSignIn)?.(next);
+  const signOut = (why: string | null) => void (leave ?? window.desktop?.signOut)?.(why);
+  // Taken after the page is up, once: a page mounted twice in development leaves its first client disconnected.
   useEffect(() => {
-    if (loaded.current) return;
-    loaded.current = true;
-    void window.desktop?.loadLogin().then((saved) => {
-      if (!saved) return;
-      const { signIn, locked, ...values } = saved;
-      setLocked(!!locked);
-      // The installed client has no simulation mode, whatever an earlier version saved.
-      const restored = window.desktop!.dev ? values : { ...values, mode: 'remote' as const };
-      setForm(restored);
-      if (signIn) void login(restored);
-    });
+    if (browser) return;
+    let current = true;
+    void (signIn ? Promise.resolve(signIn) : (window.desktop?.loadLogin() ?? null))?.then(
+      (saved) => {
+        if (!current || !saved) return;
+        // The installed client has no simulation mode, whatever an earlier version saved.
+        const restored =
+          !window.desktop || window.desktop.dev ? saved : { ...saved, mode: 'remote' as const };
+        setForm(restored);
+        void login(restored);
+      },
+    );
+    return () => {
+      current = false;
+    };
   }, []);
+  useEffect(() => {
+    if (browser || entered.current || !attempted.current || state.status === 'reconnecting') return;
+    if (state.status === 'connected') entered.current = true;
+    tell({
+      status:
+        state.status === 'connected' || state.status === 'disconnected'
+          ? state.status
+          : 'connecting',
+      error: state.error,
+      mismatch: state.mismatch,
+      service: state.service,
+      release: state.release,
+      preparing: state.preparing,
+    });
+  }, [state.status, state.error, state.mismatch, state.service, state.release, state.preparing]);
   useEffect(() => {
     if (connected) void window.desktop?.saveLogin(form);
   }, [connected, form.remember, form.autoLogin]);
+  // A page that goes with its window, as the program quits, has not signed out.
+  const unloading = useRef(false);
   useEffect(() => {
-    const close = () => client.disconnect();
+    const close = () => {
+      unloading.current = true;
+      client.disconnect();
+    };
     // The system says the network is back: the attempt that was waiting for its turn is made now.
     const retry = () => client.retryNow();
     window.addEventListener('beforeunload', close);
@@ -580,8 +583,9 @@ export function App({
       client.disconnect();
     };
   }, [client, changeForm]);
-  // A connection that breaks is made again by the client, and the window stays where it is. It comes back to
-  // the sign-in page only when the connection is over for good: ended here, or refused by the service.
+  // A connection that breaks is made again by the client, and the window stays where it is. Over for good, ended
+  // here or refused by the service, it gives way to a sign-in window that says why; the service's own page signs in
+  // again by itself.
   const signedIn = useRef(false);
   useEffect(() => {
     if (state.status === 'connected' || state.status === 'reconnecting') {
@@ -591,7 +595,7 @@ export function App({
     if (state.status !== 'disconnected' || !signedIn.current) return;
     signedIn.current = false;
     void window.desktop?.disconnectProxy();
-    setForm((current) => (current.remember ? current : { ...current, token: '' }));
+    if (!browser) return unloading.current ? undefined : signOut(client.state.error);
     if (client.state.error)
       notifications.push({
         kind: 'connection',
@@ -712,9 +716,9 @@ export function App({
   // Remote mode connects through the main process, which opens the tunnel and returns a loopback address.
   async function login(form: ConnectionForm) {
     setError(null);
+    attempted.current = true;
     try {
       if (form.mode === 'remote') {
-        setProxyConnecting(true);
         // The address here only has to be a loopback one; each attempt gets its own from the bridge it opens.
         client.connect(
           'ws://127.0.0.1/ws',
@@ -736,22 +740,15 @@ export function App({
       localStorage.setItem('proxy-url', form.url);
     } catch (error) {
       if (form.mode === 'remote') await window.desktop?.disconnectProxy();
-      setError(error instanceof Error ? error.message : '连接失败。');
-    } finally {
-      setProxyConnecting(false);
+      tell({
+        status: 'disconnected',
+        error: error instanceof Error ? error.message : '连接失败。',
+        mismatch: false,
+        service: null,
+        release: null,
+        preparing: null,
+      });
     }
-  }
-  // A connection is one service's: a window an earlier version made without keeping its address may not sign in
-  // to a service another connection has.
-  async function signIn(form: ConnectionForm) {
-    if (window.desktop && !locked) {
-      const owner = await window.desktop.loginOwner(form.url).catch(() => null);
-      if (owner) {
-        setError(`“${owner}”已有自己的连接，请从登录窗口登录它。`);
-        return;
-      }
-    }
-    await login(form);
   }
   function stopRun() {
     if (!selected?.activeRun) return;
@@ -765,9 +762,10 @@ export function App({
       void act(browser.logout);
       return;
     }
+    signedIn.current = false;
     client.disconnect();
-    setForm((current) => (current.remember ? current : { ...current, token: '' }));
     void window.desktop?.disconnectProxy();
+    signOut(null);
   }
   // Moves the window to a place and remembers it; going back or forward revisits without adding to the trail.
   function visit(next: Place, record = true) {
@@ -1501,76 +1499,9 @@ export function App({
       </main>
     );
 
+  // Not connected yet, the window is not shown: its sign-in window tells how the sign-in goes.
   if (state.status === 'disconnected' || state.status === 'connecting')
-    return localSettings ? (
-      <div className="settings-only">
-        <div className="window-drag" />
-        <SettingsPage
-          client={client}
-          section={localSettings}
-          go={setLocalSettings}
-          back={() => setLocalSettings(null)}
-          native={false}
-          account={null}
-          form={form}
-          changeForm={changeForm}
-          workspaceRoot={workspaceRoots[0] ?? ''}
-          chooseWorkspace={(reset) => {
-            void act(async () => {
-              setWorkspaceRoots(await window.desktop!.chooseWorkspace(reset));
-            });
-          }}
-          version={version}
-          service={null}
-          adapterName=""
-          updates={[]}
-          showNotes={setNotes}
-        />
-        {notesDialog}
-      </div>
-    ) : (
-      <>
-        {notesDialog}
-        <LoginPage
-          showNotes={setNotes}
-          newer={upgrade ?? ahead}
-          openSettings={() => setLocalSettings('general')}
-          form={form}
-          change={changeForm}
-          error={
-            currentError && state.mismatch && !upgrade && state.service && version
-              ? `${currentError}${
-                  isNewer(version, state.service)
-                    ? '此客户端较新，请先升级服务端。'
-                    : !selfUpdating
-                      ? '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。'
-                      : state.preparing !== null
-                        ? `服务端正在下载这一版的安装包（${Math.floor(state.preparing * 100)}%），稍后重新连接就能从服务端升级；也可以现在直接从 GitHub 发布页下载。`
-                        : '服务端还没有这一版的安装包，它会继续尝试下载；可以直接从 GitHub 发布页下载，或稍后重试。'
-                }`
-              : currentError
-          }
-          upgrade={state.mismatch && window.desktop ? upgrade : null}
-          older={
-            form.mode === 'remote' &&
-            state.mismatch &&
-            state.service &&
-            isNewer(version, state.service)
-              ? state.service
-              : null
-          }
-          direct={direct}
-          downloaded={downloaded}
-          install={install}
-          connecting={state.status === 'connecting' || proxyConnecting || busy}
-          submit={() => {
-            void signIn(form);
-          }}
-          locked={locked}
-          elsewhere={window.desktop ? () => void window.desktop!.signInElsewhere() : undefined}
-        />
-      </>
-    );
+    return <main className="app-waiting" aria-busy="true" />;
   const menuSession =
     menu?.kind === 'session' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
   const moved =

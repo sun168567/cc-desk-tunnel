@@ -1,13 +1,15 @@
 import { expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { ElectronApplication, Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Screenshots are for the eye and stay on this machine.
 export const screenshots = resolve('.local/screenshots');
 mkdirSync(resolve(screenshots, 'redesign'), { recursive: true });
-// The arguments that start the program as a connection's own window on `profile`, the way a sign-in window starts
-// it (see electron/connections.cjs), with the connection made there for it. Its files are in `connectionDirectory`.
+// The arguments that start the program on `profile` for a connection made there, as one an earlier version made
+// without keeping its address (see `launcher:load` in electron/main.cjs): signed in to from the sign-in window, it
+// keeps the address given there. Its files are in `connectionDirectory`.
 export const testConnection = 'test0000';
 export const connectionDirectory = (profile: string) =>
   resolve(profile, 'connections', testConnection);
@@ -26,14 +28,56 @@ export function connection() {
     token: string;
   };
 }
-export async function login(page: Page) {
+// Signs in on the sign-in page; in a browser the page signed in takes its place in the tab.
+export async function login(page: Page, wait = true) {
   const config = connection();
   const localMode = page.getByRole('button', { name: '本地模拟', exact: true });
   if (await localMode.isVisible()) await localMode.click();
   await page.getByLabel('服务地址').fill(config.serverUrl);
   await page.getByLabel('服务凭据').fill(config.token);
   await page.getByRole('button', { name: '连接', exact: true }).click();
+  if (wait) await expect(page.locator('.connection-status')).toContainText('已连接');
+}
+// The window of the connection the program's sign-in window signs in to: made while it signs in, and shown, the
+// sign-in window gone, once it has connected.
+export async function connectionWindow(application: ElectronApplication) {
+  let found: Page | undefined;
+  await expect
+    .poll(
+      async () => {
+        for (const page of application.windows())
+          if (
+            await page.evaluate(() => window.desktop?.boot?.launcher === false).catch(() => false)
+          ) {
+            found = page;
+            return true;
+          }
+        return false;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  return found!;
+}
+// The processes of the program on `profile` that it started by itself, outside Playwright: the sign-in window a
+// connection signed out of gives way to, or one it hands a sign-in to. Ended here.
+export function endStrays(profile: string) {
+  if (process.platform !== 'win32') return;
+  const pattern = `*--user-data-dir=${profile}*`.replaceAll("'", "''");
+  execFileSync('powershell.exe', [
+    '-NoProfile',
+    '-Command',
+    `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '${pattern}' -and $_.CommandLine -notlike '*--type=*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+  ]);
+}
+// Signs in on the program's sign-in window, as the user does; the connection's window, connected.
+export async function signInWindow(application: ElectronApplication) {
+  const launcher = await application.firstWindow();
+  await expect(launcher.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
+  await login(launcher, false);
+  const page = await connectionWindow(application);
   await expect(page.locator('.connection-status')).toContainText('已连接');
+  return page;
 }
 // Finished turns, runs of tool calls and each call are folded; open them all to inspect the details.
 export async function expandActivity(page: Page) {

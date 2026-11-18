@@ -1,7 +1,7 @@
 import { test, expect, _electron } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { connectionArgs, login, screenshots } from './helpers.ts';
+import { connectionArgs, signInWindow, screenshots } from './helpers.ts';
 
 // Files put in a message show as files where they stand, in the box and in the question sent; the text holds
 // their quoted paths, as before.
@@ -18,9 +18,11 @@ test('Electron: files in a message show as files, and are sent as their paths', 
     env,
   });
   try {
-    const page = await application.firstWindow();
-    await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
-    await login(page);
+    const launcher = await application.firstWindow();
+    await expect(
+      launcher.getByRole('heading', { name: '连接代理服务', exact: true }),
+    ).toBeVisible();
+    const page = await signInWindow(application);
     const repository = resolve('.');
     const picture = resolve('apps/desktop/electron/icon.png');
     const file = resolve('package.json');

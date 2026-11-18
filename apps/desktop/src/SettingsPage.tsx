@@ -513,12 +513,13 @@ function Connections() {
   );
 }
 
-// The history read before and kept here; clearing it has every session read from the service again.
+// The history read before and kept here; clearing it has every session read from the service again. Each
+// connection keeps its own: a sign-in window, no connection's, has none to show.
 function HistoryCacheCard({ client }: { client: ProxyClient }) {
   const [stats, setStats] = useState<Awaited<ReturnType<ProxyClient['disk']['stats']>>>(null);
   const read = () => void client.disk.stats().then(setStats);
   useEffect(read, [client]);
-  if (!stats) return null;
+  if (!stats || window.desktop?.boot?.launcher) return null;
   const size = !stats.bytes
     ? ''
     : stats.bytes < 1024 * 1024
