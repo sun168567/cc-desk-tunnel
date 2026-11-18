@@ -2492,7 +2492,7 @@ details[open] > summary > .fold-chevron {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-.composer textarea {
+.composer .message-input {
   display: block;
   width: 100%;
   border: 0;
@@ -2507,8 +2507,94 @@ details[open] > summary > .fold-chevron {
   border-radius: var(--radius-l) var(--radius-l) 0 0;
   color: var(--text);
 }
-.composer textarea:focus-visible {
+.composer .message-input:focus-visible {
   outline: none;
+}
+/* The desktop's box: rich text that stands for plain text, its files shown as files. */
+div.message-input {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+div.message-input[data-empty]::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--faint);
+  pointer-events: none;
+}
+div.message-input[aria-disabled] {
+  cursor: default;
+  color: var(--muted);
+}
+/* A file in a message: a small picture or a file's icon, and its name. */
+.path-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(100%, 260px);
+  height: 24px;
+  margin: 0 1px;
+  padding: 0 7px 0 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1;
+  vertical-align: -6px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.path-chip:hover,
+.path-chip:hover {
+  border-color: var(--focus-line);
+  color: var(--text);
+}
+.path-chip img {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+.path-chip.file {
+  padding-left: 6px;
+}
+.path-chip.file::before,
+.path-chip-remove {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+.path-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5;
+}
+.path-chip-remove {
+  display: none;
+  width: 12px;
+  height: 12px;
+  margin-right: -2px;
+  color: var(--muted);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E");
+}
+.path-chip-remove:hover {
+  color: var(--text);
+}
+div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
+  display: block;
+}
+.message-content .path-chip {
+  vertical-align: -5px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1;
 }
 .composer-toolbar {
   display: flex;

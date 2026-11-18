@@ -641,7 +641,10 @@ test('Electron: frameless window, the project branch, files by path and window s
     const branch = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim();
     await expect(page.locator('.composer-context')).toContainText(branch);
     await page.getByRole('button', { name: /^添加文件/ }).click();
-    await expect(page.getByRole('textbox', { name: '消息' })).toHaveValue(`"${picked}" `);
+    await expect(page.getByRole('textbox', { name: '消息' }).locator('.path-chip')).toHaveAttribute(
+      'data-path',
+      picked,
+    );
     await page.screenshot({ path: resolve(screenshots, 'redesign', '15-桌面窗口.png') });
     // Zoom is the page's own shortcut, one step a press: Electron's default menu no longer adds its own.
     const zoom = () =>
