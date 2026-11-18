@@ -138,10 +138,27 @@ test('links are followed by the conversation and pictures from the web are not f
   await config.click();
   await expect(card.locator('strong')).toContainText('浏览器');
   await page.mouse.move(0, 0);
-  await answer.getByRole('link', { name: '文档', exact: true }).click();
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { opened?: string }).opened))
-    .toBe('https://example.com/docs');
+  // A web address opens after it was shown whole and confirmed, or at once with Ctrl or ⌘ held.
+  const opened = () => page.evaluate(() => (window as unknown as { opened?: string }).opened);
+  const docs = answer.getByRole('link', { name: '文档', exact: true });
+  await expect(card).toHaveCount(0, { timeout: 6000 });
+  await docs.hover();
+  await expect(card).toContainText('单击确认后打开');
+  await docs.click();
+  const leave = page.getByRole('dialog').filter({ hasText: '打开外部链接' });
+  await expect(leave).toContainText('https://example.com/docs');
+  expect(await opened()).toBeUndefined();
+  await leave.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(leave).toHaveCount(0);
+  expect(await opened()).toBeUndefined();
+  await docs.click();
+  await leave.getByRole('button', { name: '打开', exact: true }).click();
+  await expect(leave).toHaveCount(0);
+  await expect.poll(opened).toBe('https://example.com/docs');
+  await page.evaluate(() => delete (window as unknown as { opened?: string }).opened);
+  await docs.click({ modifiers: ['ControlOrMeta'] });
+  await expect(leave).toHaveCount(0);
+  await expect.poll(opened).toBe('https://example.com/docs');
   // A picture is a link here: the one from the web is never loaded.
   await expect(answer.locator('img')).toHaveCount(0);
   await expect(answer.locator('.picture-link')).toHaveText(['截图', '远程图']);

@@ -241,6 +241,13 @@ export const cliSettingGroups = (
         detail:
           '工具的说明不再随每次请求全部发出，Claude 用到时再查找，工具多（例如接了 MCP）时能明显减少上下文占用。默认：官方账号开启，第三方接口关闭；第三方接口要能转发 tool_reference 才能开启',
       },
+      {
+        key: 'enableArtifact',
+        kind: 'toggle',
+        title: 'Artifact 网页',
+        detail:
+          'Claude 可以把文档、方案、图表等发布成 claude.ai 上的网页（claude.ai/artifact/…），默认只有自己能看，可以分享。关闭后不再提供这个工具，Claude 也不会主动发布。默认：账号可用时开启',
+      },
     ],
   },
   {

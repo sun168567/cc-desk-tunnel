@@ -1696,6 +1696,22 @@ a.link-elsewhere {
 .link-card strong {
   font-weight: 600;
 }
+.leave-lead {
+  margin: 0 0 8px;
+  color: var(--text-2);
+}
+.leave-url {
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  font-family: Consolas, 'Cascadia Code', monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow-y: auto;
+}
 /* A picture stands small in the conversation and opens whole in a dialog. */
 .picture {
   display: inline-block;

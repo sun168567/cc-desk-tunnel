@@ -123,6 +123,9 @@ export const nativeSettingsSchema = z.object({
   // anything else as unset.
   attribution: z.literal(false).nullable(),
   includeGitInstructions: toggle,
+  // The Artifact tool, which publishes pages to claude.ai. The CLI turns it on by default once it is available to
+  // the account; off in the user's settings keeps it off.
+  enableArtifact: toggle,
   // Not a key of its own in the file: ENABLE_TOOL_SEARCH under `env`. Tools are then described to the model
   // only when it looks for them, instead of all of them with every request.
   toolSearch: toggle,
