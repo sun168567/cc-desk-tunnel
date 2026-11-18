@@ -296,7 +296,7 @@ case "$command" in
       while :; do
         data="$(ask "数据目录（新建，存放账号、会话与证书）" "$default_data")"
         [[ "$data" = /* && "$data" != / && "$(realpath -m -- "$data")" != "$(realpath -- "$HOME")" ]] && safe_value "$data" \
-          || { echo "请填写一个专用的绝对路径，例如 $default_data。" >&2; continue; }
+          || { echo "请填写一个专用的绝对路径，例如 ${default_data}。" >&2; continue; }
         [[ ! -e "$data" ]] && break
         echo "$data 已存在。数据目录必须是新的，以免覆盖已有内容；换一个路径。" >&2
       done
@@ -510,7 +510,7 @@ case "$command" in
     echo "备份期间服务暂停，数据多时需要几分钟…"
     dc stop
     make_backup "$archive" || fail "Backup failed; nothing was saved."
-    echo "备份完成：$archive（$(du -h -- "$archive" | cut -f1)）"
+    echo "备份完成：${archive}（$(du -h -- "$archive" | cut -f1)）"
     echo "内含 Claude 账号登录、服务凭据、证书、设置和全部会话与工作目录，请像密码一样保管。"
     echo "迁移到另一台服务器：在那里安装好，把这个文件拷过去，执行 sudo $(self) restore 文件路径。"
     ;;
@@ -549,9 +549,9 @@ case "$command" in
     cat <<NOTICE
 
 ${red}================ 还原备份：覆盖这台服务器上的现有数据 ================${plain}
-  备份文件   $archive（$(du -h -- "$archive" | cut -f1)）
+  备份文件   ${archive}（$(du -h -- "$archive" | cut -f1)）
   备份来源   $source_text
-  覆盖目标   $DATA_DIR（现占用 $(du -sh -- "$DATA_DIR" 2>/dev/null | cut -f1)）
+  覆盖目标   ${DATA_DIR}（现占用 $(du -sh -- "$DATA_DIR" 2>/dev/null | cut -f1)）
 
   还原会用备份替换这里的全部会话和工作目录、Claude 账号登录、服务凭据和设置，
   ${red}现有的这些内容都会被覆盖。${plain}覆盖之前，现有数据先另存为
@@ -606,7 +606,7 @@ NOTICE
     rm -rf -- "$stage" "$old"
     chmod 700 "$DATA_DIR"
     [[ "$(id -u)" != 0 ]] || chown -R 1000:1000 "$DATA_DIR"
-    echo "已还原。还原前的数据另存在 $safety，确认无误后可以删除。"
+    echo "已还原。还原前的数据另存在 ${safety}，确认无误后可以删除。"
     docker image inspect "$PROXY_IMAGE" >/dev/null 2>&1 || prepare_image
     dc up -d --no-build; wait_healthy
     summary
