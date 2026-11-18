@@ -191,7 +191,9 @@ jobs:
         shell: bash
       - run: npm run package:linux || (sleep 60 && npm run package:linux)
         shell: bash
-      - run: sudo apt-get install -y ./artifacts/linux/*.deb
+      # Without what it only recommends: that is the Chinese font, 61 MB that the runner's Ubuntu mirror has more
+      # than once sent so slowly the job timed out, and a start of the app does not need it.
+      - run: sudo apt-get install -y --no-install-recommends ./artifacts/linux/*.deb
       - run: xvfb-run -a -s "-screen 0 1280x900x24" node scripts/smoke-posix-package.mjs "/opt/CC Desk Tunnel/cc-desk-tunnel"
         env:
           SMOKE_SCREENSHOT: artifacts/linux/window-x64.png
