@@ -105,7 +105,7 @@ declare global {
       // 1 and -1 step the interface size, 0 restores it.
       zoom: (direction: number) => void;
       // `all` also closes the windows of the other connections.
-      quit: (all?: boolean) => Promise<void>;
+      quit: () => Promise<void>;
       version: () => Promise<string>;
       // The notes of a released version, read from its page on GitHub.
       releaseNotes: (version: string) => Promise<string>;

@@ -584,6 +584,13 @@ html[data-platform='darwin'] .titlebar {
   color: var(--faint);
   font-size: 11px;
 }
+.connection-name {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-weight: 500;
+}
 .connection-dot,
 .running-dot {
   width: 7px;
@@ -3878,6 +3885,9 @@ dialog::backdrop {
   .titlebar-menus,
   .connection-status small {
     display: none;
+  }
+  .connection-name {
+    max-width: 120px;
   }
   .titlebar h1 {
     text-align: left;

@@ -1,11 +1,12 @@
 import { ArrowLeft, ArrowRight, PanelLeft } from 'lucide-react';
+import { useConnectionName } from './shared.ts';
 import { IconButton } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 
 export type BarMenu = { label: string; items: MenuItem[] };
 
 // The window's own top edge: it is the drag handle of the frameless desktop window, and carries the way back,
-// the side column's switch, the menus and the state of the connection.
+// the side column's switch, the menus and the state of the connection, named once there are several.
 export default function TitleBar({
   title,
   back,
@@ -28,6 +29,7 @@ export default function TitleBar({
   connected: boolean;
   adapterName: string;
 }) {
+  const connectionName = useConnectionName();
   return (
     <header className="titlebar">
       <IconButton className="history-back" title="后退" disabled={!back} onClick={back}>
@@ -59,10 +61,14 @@ export default function TitleBar({
         ))}
       </nav>
       <h1>{title}</h1>
-      <span className="connection-status" title={adapterName}>
+      <span
+        className="connection-status"
+        title={connectionName ? `${connectionName} · ${adapterName}` : adapterName}
+      >
         <span className={`connection-dot ${connected ? 'online' : ''}`} />
+        {connectionName && <span className="connection-name">{connectionName}</span>}
         <span>{connected ? '已连接' : '重连中'}</span>
-        <small>{adapterName}</small>
+        {!connectionName && <small>{adapterName}</small>}
       </span>
     </header>
   );
