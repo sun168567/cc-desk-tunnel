@@ -108,8 +108,14 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
   await shot(page, '07-设置菜单');
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
   const sections = page.getByRole('navigation', { name: '设置分类' });
-  // Grouped by where they are kept; the service's own need a service that keeps them.
-  await expect(page.locator('.sidebar .list-heading')).toHaveText(['本机', 'Claude Code', '其他']);
+  // Grouped by where they are kept; the service's own need a service that keeps them, as even the simulated one keeps
+  // its pushes.
+  await expect(page.locator('.sidebar .list-heading')).toHaveText([
+    '本机',
+    '服务端',
+    'Claude Code',
+    '其他',
+  ]);
   for (const [name, heading] of [
     ['常规', '常规'],
     ['外观', '外观'],

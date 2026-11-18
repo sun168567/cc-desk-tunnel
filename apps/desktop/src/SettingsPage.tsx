@@ -4,6 +4,7 @@ import { platformOf } from '@cc-desk-tunnel/protocol';
 import {
   ArrowLeft,
   Bell,
+  BellRing,
   Cable,
   CircleHelp,
   FileText,
@@ -34,6 +35,7 @@ import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts'
 import { GithubMark, openProject, project } from './project.tsx';
 import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
+import PushSettings from './PushSettings.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
 import { useShared } from './shared.ts';
 import type { Account } from './shared.ts';
@@ -50,6 +52,7 @@ export type Section =
   | 'shortcuts'
   | 'context'
   | 'shell'
+  | 'push'
   | 'web'
   | 'account'
   | 'claude'
@@ -115,6 +118,13 @@ export const sections: {
     group: '服务端',
     icon: SquareTerminal,
     words: 'PowerShell Git Bash 命令 脚本 终端 偏好',
+  },
+  {
+    id: 'push',
+    name: '外部推送',
+    group: '服务端',
+    icon: BellRing,
+    words: '通知 订阅 钉钉 飞书 企业微信 Telegram PushPlus Bark Webhook 机器人 手机 模板',
   },
   {
     id: 'web',
@@ -1022,6 +1032,13 @@ export default function SettingsPage({
         ) : section === 'shell' && here ? (
           <Page title="Shell" intro={thisDevice}>
             <ShellSettings client={client} here={here} />
+          </Page>
+        ) : section === 'push' ? (
+          <Page
+            title="外部推送"
+            intro={`${everyDevice}不在电脑前时，把会话的通知推送到聊天机器人或手机应用；在输入框旁的铃铛里订阅会话。`}
+          >
+            <PushSettings client={client} />
           </Page>
         ) : section === 'web' ? (
           <Page title="浏览器访问" intro={everyDevice}>
