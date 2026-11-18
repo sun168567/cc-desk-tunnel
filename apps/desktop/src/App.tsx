@@ -37,6 +37,7 @@ import type {
   Effort,
   EventPayload,
   PermissionMode,
+  PushMode,
   Session,
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
@@ -668,6 +669,17 @@ export function App({
     !!quota?.rateLimits,
     refreshing,
   ]);
+  // Whether the service has somewhere to push to decides whether a session can be subscribed to.
+  useEffect(() => {
+    if (connected) void client.request({ type: 'push.get' }).catch(() => {});
+  }, [connected]);
+  // A push's link opens the page at its session. The address is left as it was opened otherwise.
+  useEffect(() => {
+    const sessionId = /^#session=([0-9a-f-]{36})$/.exec(location.hash)?.[1];
+    if (!inBrowser || !connected || !sessionId) return;
+    window.history.replaceState(window.history.state, '', location.pathname + location.search);
+    if (client.state.sessions.some((session) => session.id === sessionId)) show(sessionId);
+  }, [inBrowser, connected]);
   // The service's idle compaction setting decides which reminder a session shows.
   useEffect(() => {
     if (nativeMode && connected) void client.request({ type: 'compaction.get' }).catch(() => {});
@@ -1054,6 +1066,13 @@ export function App({
         permissionMode: selected.permissionMode,
         ...values,
       });
+    });
+  }
+  function subscribe(mode: PushMode) {
+    if (!selected) return;
+    const sessionId = selected.id;
+    void act(async () => {
+      await client.request({ type: 'session.push', sessionId, mode });
     });
   }
   function sessionMenu(session: Session): MenuItem[] {
@@ -1956,6 +1975,11 @@ export function App({
                   void refreshStatus();
                 }}
                 configure={configure}
+                subscribe={
+                  state.push?.enabled && state.push.channels.some((channel) => channel.enabled)
+                    ? subscribe
+                    : undefined
+                }
                 stop={stopRun}
               />
             )}

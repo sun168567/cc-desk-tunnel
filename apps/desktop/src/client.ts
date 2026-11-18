@@ -13,6 +13,7 @@ import type {
   Command,
   Device,
   IdleCompaction,
+  PushState,
   NativeCapabilities,
   NativeMetrics,
   ServerMessage,
@@ -44,6 +45,7 @@ type DataMessage = Extract<
       | 'session.stats'
       | 'settings.state'
       | 'compaction.state'
+      | 'push.state'
       | 'instructions.state'
       | 'web.settings.state'
       | 'web.totp.setup'
@@ -59,6 +61,12 @@ type Replies = {
   'settings.update': 'settings.state';
   'compaction.get': 'compaction.state';
   'compaction.update': 'compaction.state';
+  'push.get': 'push.state';
+  'push.update': 'push.state';
+  'push.channel.add': 'push.state';
+  'push.channel.update': 'push.state';
+  'push.channel.enable': 'push.state';
+  'push.channel.delete': 'push.state';
   'instructions.get': 'instructions.state';
   'instructions.update': 'instructions.state';
   'web.settings.get': 'web.settings.state';
@@ -93,6 +101,7 @@ export class RequestInterruptedError extends Error {
       'session.stats',
       'settings.get',
       'compaction.get',
+      'push.get',
       'instructions.get',
       'web.settings.get',
       'web.certificate.get',
@@ -160,6 +169,8 @@ export type ClientState = {
   setupToken: SetupTokenResult | null;
   // The service's idle compaction setting, as it last said; every window is told when it changes.
   compaction: IdleCompaction | null;
+  // The service's pushes, as it last said: whether a session can be subscribed to, and the settings page.
+  push: PushState | null;
   // What each session's background tasks last said of themselves, by task: kept while the window is open
   // and nowhere else.
   progress: Record<string, Record<string, TaskProgress>>;
@@ -195,6 +206,7 @@ export class ProxyClient {
     account: null,
     setupToken: null,
     compaction: null,
+    push: null,
     progress: {},
   };
   results = new Map<string, DataMessage>();
@@ -307,6 +319,7 @@ export class ProxyClient {
       metrics: null,
       account: null,
       compaction: null,
+      push: null,
     });
     this.open();
   }
@@ -572,6 +585,10 @@ export class ProxyClient {
         if (message.requestId && this.pending.has(message.requestId))
           this.results.set(message.requestId, message);
         this.update({ compaction: message.values });
+      } else if (message.type === 'push.state') {
+        if (message.requestId && this.pending.has(message.requestId))
+          this.results.set(message.requestId, message);
+        this.update({ push: message.values });
       } else if (message.type === 'service.update') {
         const { type: _type, ...update } = message;
         this.update(
