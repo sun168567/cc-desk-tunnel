@@ -47,7 +47,8 @@ import { CopyButton, copyText } from './copy.tsx';
 import { messageTime } from './messageTime.ts';
 import TurnStats from './TurnStats.tsx';
 import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
-import { IconButton, Menu } from './ui.tsx';
+import { IconButton, Menu, Modal } from './ui.tsx';
+import { isMac } from './platform.ts';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 import { isPicture, LinkPlace, linkTarget, localPicture } from './links.ts';
 import type { Link } from './links.ts';
@@ -136,7 +137,7 @@ function LinkCardView({ card }: { card: LinkCard }) {
         : link.path;
   const hint =
     link.kind === 'web'
-      ? '点击在浏览器中打开 · 右键可复制地址'
+      ? `单击确认后打开 · ${commandKey ? '⌘' : 'Ctrl'} + 单击直接打开 · 右键可复制地址`
       : link.kind === 'path'
         ? '点击打开 · 右键查看更多操作'
         : `${link.reason}右键可复制路径。`;
@@ -153,6 +154,39 @@ function LinkCardView({ card }: { card: LinkCard }) {
         <small className={link.kind === 'elsewhere' ? 'link-card-warn' : undefined}>{hint}</small>
       )}
     </div>
+  );
+}
+
+// The key held to open a web link at once: ⌘ on a Mac, in the desktop client or a browser, Ctrl elsewhere.
+const commandKey =
+  isMac || (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform));
+
+// A web address is left for only when asked twice: a reply's link may read as one place and lead to another, so a
+// plain click shows the whole address first. The address is as the browser will take it, so a look-alike name shows
+// as the xn-- it really is.
+function LeaveDialog({ url, open, close }: { url: string; open: () => void; close: () => void }) {
+  return (
+    <Modal title="打开外部链接" onClose={close}>
+      <p className="leave-lead">
+        {url.startsWith('mailto:') ? '将用邮件程序打开：' : '将在浏览器中打开：'}
+      </p>
+      <p className="leave-url">{url}</p>
+      <div className="dialog-actions">
+        <button type="button" className="button" onClick={close}>
+          取消
+        </button>
+        <button
+          type="button"
+          className="button primary"
+          onClick={() => {
+            close();
+            open();
+          }}
+        >
+          打开
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -759,6 +793,8 @@ export default function Conversation({
     [session?.projectPath, here],
   );
   const [linkCard, setLinkCard] = useState<LinkCard | null>(null);
+  // The web address a plain click asks about.
+  const [leaving, setLeaving] = useState<string | null>(null);
   const resting = useRef<ReturnType<typeof setTimeout>>(undefined);
   const showLink = (element: Element, link: Link, note?: string) => {
     const box = element.getBoundingClientRect();
@@ -785,6 +821,7 @@ export default function Conversation({
     setContextMenu(null);
     setCopyStatus('');
     setLinkCard(null);
+    setLeaving(null);
   }, [session?.id]);
   // What came of a click stays a while, then goes.
   useEffect(() => {
@@ -1036,7 +1073,10 @@ export default function Conversation({
           event.preventDefault();
           const link = anchor.dataset.link ? linkTarget(anchor.dataset.link, place) : null;
           clearTimeout(resting.current);
-          if (link) void followLink(link, (note) => showLink(anchor, link, note));
+          if (link?.kind === 'web' && !(commandKey ? event.metaKey : event.ctrlKey)) {
+            setLinkCard(null);
+            setLeaving(link.url);
+          } else if (link) void followLink(link, (note) => showLink(anchor, link, note));
         }}
         onPointerOver={(event) => {
           const anchor = (event.target as HTMLElement).closest<HTMLElement>('a[data-link]');
@@ -1275,6 +1315,13 @@ export default function Conversation({
         <Menu label="对话文字操作" {...contextMenu} onClose={() => setContextMenu(null)} />
       )}
       {linkCard && !contextMenu && <LinkCardView card={linkCard} />}
+      {leaving && (
+        <LeaveDialog
+          url={leaving}
+          close={() => setLeaving(null)}
+          open={() => void followLink({ kind: 'web', url: leaving }, setCopyStatus)}
+        />
+      )}
     </SearchExpanded.Provider>
   );
 }

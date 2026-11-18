@@ -69,11 +69,20 @@ process.stdout.write('DONE ' + result.how + '\\r\\n');
         await new Promise((r) => setTimeout(r, 100));
       assert.match(screen, pattern);
     };
-    const sentOf = () =>
-      readFileSync(sent, 'utf8')
+    // READY is on the screen before ccdt has sent anything: until it does, there is no file of what it sent.
+    const sentOf = () => {
+      let text;
+      try {
+        text = readFileSync(sent, 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') return [];
+        throw error;
+      }
+      return text
         .trim()
         .split('\n')
         .map((line) => JSON.parse(line));
+    };
     await until(/READY/);
     child.write('a');
     child.write('\x03');
