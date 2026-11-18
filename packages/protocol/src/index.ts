@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 26;
+export const PROTOCOL_VERSION = 27;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -25,6 +25,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.12': 24,
   '0.3.14': 25,
   '0.3.15': 26,
+  '0.3.16': 27,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -530,6 +531,8 @@ export const historyPageSchema = snapshotSchema.extend({
   firstSequence: z.number().int().nonnegative(),
   lastSequence: z.number().int().nonnegative(),
   hasEarlier: z.boolean(),
+  // The service's history no longer goes on from the events the client said it held: they are to be dropped.
+  reset: z.literal(true).optional(),
 });
 export type HistoryPage = z.infer<typeof historyPageSchema>;
 
@@ -740,6 +743,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       sessionId: id,
       afterSequence: z.number().int().nonnegative().default(0),
+      // When the event at `afterSequence` was recorded, as the client holds it: one that is no longer there resets.
+      afterCreatedAt: timestamp.optional(),
     })
     .strict(),
   z
@@ -748,6 +753,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       sessionId: id,
       beforeSequence: z.number().int().positive(),
+      // Events at or before this one are held already: the page stops there.
+      afterSequence: z.number().int().nonnegative().default(0),
     })
     .strict(),
   z
@@ -884,6 +891,9 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     // The newest Windows installer the service holds, for clients that want to upgrade themselves.
     client: installerSchema.optional(),
     sessions: z.array(sessionSchema),
+    // Names the stored history: it changes when history is rewritten, and what a client kept of the old goes.
+    // Without it a client keeps nothing.
+    historyId: id.optional(),
     browser: z.object({ sessionId: id, serverDeviceId: id, selfSigned: z.boolean() }).optional(),
   }),
   z.object({

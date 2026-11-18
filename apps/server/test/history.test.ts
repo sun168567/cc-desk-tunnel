@@ -32,6 +32,41 @@ function reopenAsOld(made: { store: SessionStore; directory: string }) {
 const texts = (events: { payload: EventPayload }[]) =>
   events.map(({ payload }) => (payload.type === 'text.delta' ? payload.text : '')).join('');
 
+test('the history keeps its name across restarts and gets a new one when rewritten; a held end is checked and pages stop above what is held', (t) => {
+  const { made, session } = fixture(t);
+  const first = made.store.append(session.id, randomUUID(), {
+    type: 'native.notice',
+    text: 'first',
+  });
+  const second = made.store.append(session.id, randomUUID(), {
+    type: 'native.notice',
+    text: 'second',
+  });
+  const third = made.store.append(session.id, randomUUID(), {
+    type: 'native.notice',
+    text: 'third',
+  });
+  const name = made.store.historyId;
+  assert.equal(made.store.holds(session.id, second.sequence, second.createdAt), true);
+  assert.equal(made.store.holds(session.id, second.sequence, '2000-01-01T00:00:00.000Z'), false);
+  assert.equal(made.store.holds(session.id, third.sequence + 5, third.createdAt), false);
+  made.store.close();
+  made.store = new SessionStore(made.directory);
+  assert.equal(made.store.historyId, name);
+  const page = made.store.history(session.id, randomUUID(), 0, third.sequence, first.sequence);
+  assert.deepEqual(
+    page.events.map((event) => event.sequence),
+    [second.sequence],
+  );
+  assert.equal(page.hasEarlier, false);
+  assert.deepEqual(
+    made.store.history(session.id, randomUUID(), 0, third.sequence).events.map((e) => e.sequence),
+    [first.sequence, second.sequence],
+  );
+  reopenAsOld(made);
+  assert.notEqual(made.store.historyId, name);
+});
+
 test('history pages retain complete runs of a merged library without losing content or cursors', (t) => {
   const f = fixture(t);
   const { session } = f;
