@@ -16,6 +16,10 @@ Linux 上的代理服务：认证客户端、管理会话、驱动官方 Claude 
 
 `web-access.ts` 管登录、Cookie 会话、域名 / 子路径和静态资源；`web-totp.ts` 管可选验证器动态码；`web-commands.ts` 明确浏览器命令白名单；`web-certificate.ts` 管指定域名的 SNI 证书，原默认 TLS 上下文和健康检查保持原样。Web 状态不放进客户端的通用会话仓库。启用步骤、权限和部署边界见[浏览器访问](../../docs/server-web.md)。
 
+## 外部推送
+
+`push.ts` 读写数据目录的 `push.json`（0600、原子替换，含渠道密钥，只有服务端读），按每个渠道自己的格式和模板（变量与替换规则在协议的 `pushVariables`、`renderPush`）组装各服务文档里的请求（钉钉、飞书加签）并发送。`server.ts` 把每个聊天运行的事件交给它：订阅的会话立即推送，未订阅的按设置推送审批和提问，可延迟到仍没有窗口处理时。“完成”和 `once` 订阅的清除都等运行真正结束，只剩后台任务不算：Claude 多半在那里等构建或测试，之后自己接着做，`once` 不能耗在这个停顿上。服务端自己发起的空闲压缩和终端里的轮次不经过这里。会话链接用最近一次连接到服务端的地址和 Web 访问路径，Web 未开启时不带。渠道以去掉 `pushSecrets` 字段的 `push.state` 告诉所有窗口；修改渠道时留空的这些字段沿用原值。浏览器与桌面权限相同。见[外部推送](../../docs/push.md)。
+
 ## 原生连接
 
 账号由 `native-account.ts` 驱动官方授权与状态命令；`account.token` 复用 `native-settings.ts` 的原子写入，把 setup token 存到官方用户设置的 `env.CLAUDE_CODE_OAUTH_TOKEN`，供 SDK 与交互终端共用。退出同时移除这项设置，账号变更清空额度缓存。它不出现在账号状态或常用设置响应里；生成后的 `account.token.created` 只发给发起连接一次，供用户复制，不广播或重放。`setup-token` 的屏幕重绘由已有的 xterm 组件解析，错误保留具体原因；浏览器工作台无账号变更权限。配置与验证差异见[登录方式](../../docs/native-runtime.md#登录方式)。

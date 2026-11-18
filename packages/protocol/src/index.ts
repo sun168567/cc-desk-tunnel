@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 27;
+export const PROTOCOL_VERSION = 28;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -26,6 +26,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.14': 25,
   '0.3.15': 26,
   '0.3.16': 27,
+  '0.3.17': 28,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -143,6 +144,332 @@ export const idleCompactionSchema = z.object({
   minTokens: z.number().int().min(20_000).max(1_000_000),
 });
 export type IdleCompaction = z.infer<typeof idleCompactionSchema>;
+// The service's own pushes to a chat robot or a phone app, for a user away from every window, as in a browser: what a
+// session subscribed to says, and if asked, the approvals and questions of the others. What a channel sends with — its
+// address, which holds the robot's key, and its secret — is only ever given, never read back by any window.
+export const pushKindSchema = z.enum(['approval', 'question', 'done', 'failed']);
+export type PushKind = z.infer<typeof pushKindSchema>;
+// `once` lasts until the session's run now going, or the next one, ends; background tasks it waits on are part of it.
+export const pushModeSchema = z.enum(['off', 'once', 'always']);
+export type PushMode = z.infer<typeof pushModeSchema>;
+export const pushChannelKindSchema = z.enum([
+  'dingtalk',
+  'feishu',
+  'wecom',
+  'telegram',
+  'bark',
+  'pushplus',
+  'webhook',
+]);
+export type PushChannelKind = z.infer<typeof pushChannelKindSchema>;
+const pushUrl = z.url({ protocol: /^https?$/ }).max(2048);
+const pushSecret = z.string().trim().min(1).max(512);
+// What a channel says, with the variables of `pushVariables` in it. A format without a title of its own begins its
+// text with the title.
+const pushTitle = z.string().max(200);
+const pushBody = z.string().max(4000);
+// Where a push leads: {url} as it is, any other variable written into it as a part of an address.
+const pushLink = z.string().max(2048);
+export const pushChannelConfigSchema = z.discriminatedUnion('kind', [
+  // The robots' optional signing secrets; without one the robot must allow the request by keyword or address. An
+  // actionCard is a card with one button; with no address for it, it is sent as markdown.
+  z
+    .object({
+      kind: z.literal('dingtalk'),
+      url: pushUrl,
+      secret: pushSecret.optional(),
+      format: z.enum(['actionCard', 'markdown', 'text']),
+      title: pushTitle,
+      body: pushBody,
+      button: z.string().max(40),
+      buttonUrl: pushLink,
+    })
+    .strict(),
+  // Markdown goes in a card, whose header is the title.
+  z
+    .object({
+      kind: z.literal('feishu'),
+      url: pushUrl,
+      secret: pushSecret.optional(),
+      format: z.enum(['markdown', 'text']),
+      title: pushTitle,
+      body: pushBody,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('wecom'),
+      url: pushUrl,
+      format: z.enum(['markdown', 'text']),
+      title: pushTitle,
+      body: pushBody,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('telegram'),
+      token: z
+        .string()
+        .trim()
+        .regex(/^\d+:[\w-]+$/),
+      chatId: z.string().trim().min(1).max(64),
+      format: z.enum(['html', 'text']),
+      title: pushTitle,
+      body: pushBody,
+    })
+    .strict(),
+  // The app's address with the device key, as the Bark app shows it: https://api.day.app/<key>.
+  z
+    .object({
+      kind: z.literal('bark'),
+      url: pushUrl,
+      title: pushTitle,
+      body: pushBody,
+      clickUrl: pushLink,
+    })
+    .strict(),
+  // PushPlus sends where its account says (`channel` empty: its WeChat account), to a group of its users with `topic`.
+  // Its own page shows the title, so the text does not repeat it.
+  z
+    .object({
+      kind: z.literal('pushplus'),
+      token: z
+        .string()
+        .trim()
+        .regex(/^[\w-]{16,64}$/),
+      channel: z.enum(['', 'cp', 'mail', 'extension', 'app']),
+      topic: z.string().trim().max(64),
+      format: z.enum(['html', 'markdown', 'text']),
+      title: pushTitle,
+      body: pushBody,
+    })
+    .strict(),
+  // Any other service: the body, JSON with the variables in it, is posted; without one the address is fetched with
+  // them filled into it.
+  z.object({ kind: z.literal('webhook'), url: pushUrl, body: pushBody }).strict(),
+]);
+export type PushChannelConfig = z.infer<typeof pushChannelConfigSchema>;
+// The fields that hold what a channel sends with: never told to a window, and kept as they are when a change leaves
+// them out.
+export const pushSecrets: Record<PushChannelKind, readonly string[]> = {
+  dingtalk: ['url', 'secret'],
+  feishu: ['url', 'secret'],
+  wecom: ['url'],
+  telegram: ['token'],
+  bark: ['url'],
+  pushplus: ['token'],
+  webhook: ['url'],
+};
+// A channel as a window gives it: a field of `pushSecrets` left out or empty keeps what it was, and null takes an
+// optional one away. The service checks the whole once it is put together.
+export const pushChannelInputSchema = z
+  .object({ kind: pushChannelKindSchema })
+  .catchall(z.string().max(4000).nullable());
+export const pushChannelSchema = z.object({
+  id,
+  name: z.string().trim().min(1).max(40),
+  enabled: z.boolean(),
+  config: pushChannelConfigSchema,
+});
+export type PushChannel = z.infer<typeof pushChannelSchema>;
+export const pushOptionsSchema = z.object({
+  enabled: z.boolean(),
+  events: z.object({
+    approval: z.boolean(),
+    question: z.boolean(),
+    done: z.boolean(),
+    failed: z.boolean(),
+  }),
+  // What a new or forked session starts with.
+  defaultMode: z.enum(['off', 'always']),
+  // Sessions not subscribed to also push their approvals and questions, `delayMinutes` after they began waiting
+  // if no window answered them by then; 0 pushes at once.
+  fallback: z.boolean(),
+  delayMinutes: z.number().int().min(0).max(60),
+  // Where the user is, so that times read as theirs: the service's own clock is often UTC. A window sends its own
+  // with every change it makes.
+  timeZone: z
+    .string()
+    .max(64)
+    .refine((zone) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: zone });
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+});
+export type PushOptions = z.infer<typeof pushOptionsSchema>;
+export const pushSettingsSchema = pushOptionsSchema.extend({
+  channels: z.array(pushChannelSchema).max(20),
+});
+export type PushSettings = z.infer<typeof pushSettingsSchema>;
+// What every window is told: each channel's config without the fields of `pushSecrets`, which `secrets` names where
+// they are set, and its last failure since the service started.
+export const pushStateSchema = pushOptionsSchema.extend({
+  channels: z.array(
+    z.object({
+      id,
+      name: z.string(),
+      kind: pushChannelKindSchema,
+      enabled: z.boolean(),
+      config: z.record(z.string(), z.string()),
+      secrets: z.array(z.string()),
+      failure: z.object({ at: timestamp, message: z.string() }).optional(),
+    }),
+  ),
+});
+export type PushState = z.infer<typeof pushStateSchema>;
+// What a push may say of itself, nothing of the conversation: each with what a sample push fills in.
+export const pushVariables = [
+  { name: 'event', label: '事件', sample: '任务失败' },
+  { name: 'session', label: '会话标题', sample: '修复登录页样式' },
+  { name: 'device', label: '设备', sample: 'Office-PC' },
+  { name: 'project', label: '项目文件夹', sample: 'cc-desk-tunnel' },
+  { name: 'model', label: '模型', sample: 'Opus 5.5' },
+  { name: 'duration', label: '这次运行的用时', sample: '12 分 30 秒' },
+  { name: 'time', label: '时间', sample: '11-18 21:30' },
+  { name: 'error', label: '失败原因，只在失败时有', sample: '原生进程适配失败' },
+  { name: 'quota5h', label: '5 小时额度已用', sample: '32%' },
+  { name: 'quota5hReset', label: '5 小时额度重置时间', sample: '11-19 02:00' },
+  { name: 'quotaWeek', label: '每周额度已用', sample: '58%' },
+  { name: 'quotaWeekReset', label: '每周额度重置时间', sample: '11-24 04:00' },
+  {
+    name: 'quotaModel',
+    label: '按模型单独计的每周额度已用（当前模型的，或用得最多的）',
+    sample: '71%',
+  },
+  { name: 'quotaModelName', label: '上面这项额度的模型', sample: 'Fable' },
+  { name: 'quotaModelReset', label: '上面这项额度的重置时间', sample: '11-24 04:00' },
+  {
+    name: 'url',
+    label: '会话页面，开启浏览器访问时才有',
+    sample: 'https://example.com/#session=…',
+  },
+] as const;
+// The formats each kind of channel offers, the first being what a new one starts with.
+export const pushFormats: Record<PushChannelKind, readonly { value: string; label: string }[]> = {
+  dingtalk: [
+    { value: 'actionCard', label: '卡片（带按钮）' },
+    { value: 'markdown', label: 'Markdown' },
+    { value: 'text', label: '纯文本' },
+  ],
+  feishu: [
+    { value: 'markdown', label: '卡片（Markdown）' },
+    { value: 'text', label: '纯文本' },
+  ],
+  wecom: [
+    { value: 'markdown', label: 'Markdown' },
+    { value: 'text', label: '纯文本' },
+  ],
+  telegram: [
+    { value: 'html', label: 'HTML' },
+    { value: 'text', label: '纯文本' },
+  ],
+  bark: [],
+  pushplus: [
+    { value: 'html', label: 'HTML' },
+    { value: 'markdown', label: 'Markdown' },
+    { value: 'text', label: '纯文本' },
+  ],
+  webhook: [],
+};
+// A page for a channel that shows HTML. Each line is one element whole, so that a line of variables that have no
+// value, as the error of a turn that did not fail, goes without leaving a tag open; a bar is as wide as its figure.
+const pushPage = [
+  `<div style="max-width:480px;margin:0 auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">`,
+  `<div style="background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;padding:18px 20px"><div style="font-size:13px;opacity:.85">{event}</div><div style="font-size:18px;font-weight:600;margin-top:4px">{session}</div></div>`,
+  `<div style="padding:14px 20px 4px;font-size:14px;color:#374151;line-height:2">`,
+  `<div>🖥️ 设备：{device}</div>`,
+  `<div>📁 项目：{project}</div>`,
+  `<div>🤖 模型：{model}</div>`,
+  `<div>⏱️ 用时：{duration}</div>`,
+  `<div style="margin:6px 0;padding:8px 12px;background:#fef2f2;border-left:3px solid #dc2626;color:#b91c1c;border-radius:4px;line-height:1.6">⚠️ {error}</div>`,
+  `</div>`,
+  `<div style="padding:4px 20px 14px;font-size:12px;color:#6b7280">`,
+  `<div style="display:flex;justify-content:space-between;margin-top:8px"><span>5 小时额度</span><b style="color:#374151">{quota5h}</b></div>`,
+  `<div style="height:6px;background:#e5e7eb;border-radius:3px;margin-top:4px"><div style="width:{quota5h};height:6px;background:#2563eb;border-radius:3px"></div></div>`,
+  `<div style="margin-top:3px;font-size:11px;color:#9ca3af">{quota5hReset} 重置</div>`,
+  `<div style="display:flex;justify-content:space-between;margin-top:10px"><span>每周额度</span><b style="color:#374151">{quotaWeek}</b></div>`,
+  `<div style="height:6px;background:#e5e7eb;border-radius:3px;margin-top:4px"><div style="width:{quotaWeek};height:6px;background:#7c3aed;border-radius:3px"></div></div>`,
+  `<div style="margin-top:3px;font-size:11px;color:#9ca3af">{quotaWeekReset} 重置</div>`,
+  `<div style="display:flex;justify-content:space-between;margin-top:10px"><span>{quotaModelName} 每周额度</span><b style="color:#374151">{quotaModel}</b></div>`,
+  `<div style="height:6px;background:#e5e7eb;border-radius:3px;margin-top:4px"><div style="width:{quotaModel};height:6px;background:#0891b2;border-radius:3px"></div></div>`,
+  `<div style="margin-top:3px;font-size:11px;color:#9ca3af">{quotaModelReset} 重置</div>`,
+  `</div>`,
+  `<div style="padding:0 20px 18px"><a href="{url}" style="display:block;text-align:center;background:#2563eb;color:#fff;text-decoration:none;padding:11px;border-radius:8px;font-size:15px">打开会话</a></div>`,
+  `<div style="padding:10px 20px;background:#f9fafb;color:#9ca3af;font-size:12px;border-top:1px solid #f3f4f6">CC Desk Tunnel · {time}</div>`,
+  `</div>`,
+].join('\n');
+// What a channel of `kind` says when the user has not written it: in `format`, or its first.
+export function pushDefaults(
+  kind: PushChannelKind,
+  format = pushFormats[kind][0]?.value,
+): Record<string, string> {
+  const title = '「{event}」{session}';
+  const body = [
+    '设备：{device} · 项目：{project}',
+    '错误：{error}',
+    '5 小时额度：{quota5h}（{quota5hReset} 重置） · 每周：{quotaWeek}',
+  ].join('\n');
+  const link =
+    format === 'markdown'
+      ? '\n[打开会话]({url})'
+      : format === 'html'
+        ? '\n<a href="{url}">打开会话</a>'
+        : '';
+  if (kind === 'webhook')
+    return { body: '{"title": "「{event}」{session}", "text": "设备：{device}", "url": "{url}"}' };
+  if (kind === 'bark') return { title, body, clickUrl: '{url}' };
+  if (kind === 'pushplus')
+    return {
+      format: format!,
+      title,
+      body: format === 'html' ? pushPage : body + link,
+      channel: '',
+      topic: '',
+    };
+  return {
+    format: format!,
+    title,
+    body: body + link,
+    ...(kind === 'dingtalk' ? { button: '打开会话', buttonUrl: '{url}' } : {}),
+  };
+}
+// A value written into HTML, inside an element or an attribute in either quotes.
+export const escapeHtml = (text: string) =>
+  text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+// Fills in the {name}s that `values` has, as `encode` writes them; any other text in braces is left as it is.
+export const fillPush = (
+  template: string,
+  values: Record<string, string | undefined>,
+  encode = (value: string) => value,
+) =>
+  template.replace(/\{(\w+)\}/g, (whole, name: string) =>
+    name in values ? encode(values[name] ?? '') : whole,
+  );
+// A push's text: a line whose variables all have no value, as the error of a turn that did not fail or the link where
+// the service serves no browser, is left out.
+export const renderPush = (
+  template: string,
+  values: Record<string, string | undefined>,
+  encode?: (value: string) => string,
+) =>
+  template
+    .split('\n')
+    .filter((line) => {
+      const used = [...line.matchAll(/\{(\w+)\}/g)].filter(([, name]) => name in values);
+      return !used.length || used.some(([, name]) => values[name]);
+    })
+    .map((line) => fillPush(line, values, encode))
+    .join('\n')
+    .trim();
 export const contextUsageSchema = z.object({
   model: z.string(),
   usedTokens: z.number().nonnegative(),
@@ -474,6 +801,8 @@ export const sessionSchema = z.object({
   permissionMode: permissionModeSchema.default('auto'),
   model: z.string().trim().min(1).max(200).nullable().default(null),
   effort: effortSchema.nullable().default(null),
+  // The session's subscription to the service's pushes; none is `off`.
+  push: pushModeSchema.exclude(['off']).optional(),
   // The directory on the service that Claude Code works in, under its native/ folder: the one of the session's
   // project, which all sessions of the project share. A fork keeps it from the session it was forked from.
   // Sessions from before projects had one leave it out and work in a directory named after themselves.
@@ -619,6 +948,45 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       values: idleCompactionSchema.partial().strict(),
     })
+    .strict(),
+  z.object({ type: z.literal('push.get'), ...request }).strict(),
+  z
+    .object({
+      type: z.literal('push.update'),
+      ...request,
+      values: pushOptionsSchema.partial().strict(),
+    })
+    .strict(),
+  // A channel's config is given whole when it is added; a change may leave out what it sends with (`pushSecrets`).
+  z
+    .object({
+      type: z.literal('push.channel.add'),
+      ...request,
+      name: pushChannelSchema.shape.name,
+      config: pushChannelInputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('push.channel.update'),
+      ...request,
+      channelId: id,
+      name: pushChannelSchema.shape.name,
+      config: pushChannelInputSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('push.channel.enable'),
+      ...request,
+      channelId: id,
+      enabled: z.boolean(),
+    })
+    .strict(),
+  z.object({ type: z.literal('push.channel.delete'), ...request, channelId: id }).strict(),
+  z.object({ type: z.literal('push.test'), ...request, channelId: id }).strict(),
+  z
+    .object({ type: z.literal('session.push'), ...request, sessionId: id, mode: pushModeSchema })
     .strict(),
   // The shell the user prefers Claude to run scripts in on the computer of this connection; null leaves it to Claude.
   z
@@ -927,6 +1295,7 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     requestId: id.optional(),
     values: idleCompactionSchema,
   }),
+  z.object({ type: z.literal('push.state'), requestId: id.optional(), values: pushStateSchema }),
   z.object({
     type: z.literal('instructions.state'),
     requestId: id,

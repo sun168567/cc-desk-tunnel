@@ -68,6 +68,7 @@ import { DomainError } from './errors.ts';
 import { HistoryDelivery } from './history-delivery.ts';
 import type { NativeLogin } from './native-account.ts';
 import { IdleCompactions } from './idle-compaction.ts';
+import { Pushes } from './push.ts';
 import { NativeInput } from './native-input.ts';
 import { statusLineQuota } from './native-controls.ts';
 import { completeOnboarding } from './native-onboarding.ts';
@@ -140,6 +141,7 @@ export function upgradeHeld(sessions: Session[], mutating: boolean, signingIn: b
 export type Run = {
   id: string;
   sessionId: string;
+  startedAt: number;
   device: string;
   connectionId: string;
   controller: AbortController;
@@ -310,6 +312,30 @@ export function createProxyServer(options: ServerOptions) {
     host: options.host ?? '127.0.0.1',
   });
   const serverDevice: Device = { id: web.serverDeviceId, name: '服务端', platform: 'linux' };
+  // The address the service was last reached at, which a push's link to the session is made from: the service is
+  // not told its own.
+  let pageOrigin: string | undefined;
+  const pushes = new Pushes(store.directory, {
+    session: (sessionId) => {
+      try {
+        return store.get(sessionId).session;
+      } catch {
+        return undefined;
+      }
+    },
+    facts: (sessionId) => ({
+      startedAt: runs.get(sessionId)?.startedAt,
+      metrics: store.lastMetrics(sessionId),
+    }),
+    page: () => (web.enabled ? web.url(pageOrigin) : undefined),
+    ended: (sessionId) => store.setPush(sessionId, 'off'),
+    changed: (values) => broadcast({ type: 'push.state', values }),
+  });
+  // A new session, or a fork, starts with the subscription the setting gives it.
+  const subscribed = (session: Session) =>
+    pushes.settings.defaultMode === 'always' && !session.push
+      ? store.setPush(session.id, 'always')
+      : session;
   const originOf = (request: IncomingMessage) =>
     `${options.tls || options.reverseProxy ? 'https' : 'http'}://${request.headers.host}`;
   // Behind the reverse proxy every socket comes from the proxy itself; it passes the client on in X-Real-IP.
@@ -596,6 +622,9 @@ export function createProxyServer(options: ServerOptions) {
         session: store.renameNative(run.sessionId, payload.title),
       });
     if (payload.type === 'native.compact') store.compacted(run.sessionId);
+    // The service's own compactions of idle sessions are nobody's turn. A `once` subscription the turn ends goes
+    // with the session's update below.
+    if (run.connectionId !== serverDevice.id) pushes.observe(run.sessionId, payload);
     if (payload.type === 'run.status') updated(run.sessionId);
   }
   // The CLI reports its model requests a moment after the turn ends. Wait for as many as the turn made, then
@@ -1349,14 +1378,8 @@ export function createProxyServer(options: ServerOptions) {
           }
         }
       }
-      const created = store.fork(
-        command.requestId,
-        command.sessionId,
-        id,
-        title,
-        resumable,
-        place,
-        before,
+      const created = subscribed(
+        store.fork(command.requestId, command.sessionId, id, title, resumable, place, before),
       );
       broadcast({ type: 'session.updated', session: created });
       return created.id;
@@ -1417,6 +1440,7 @@ export function createProxyServer(options: ServerOptions) {
     const run: Run = {
       id: randomUUID(),
       sessionId: command.sessionId,
+      startedAt: Date.now(),
       device,
       connectionId: peer?.id ?? serverDevice.id,
       controller: new AbortController(),
@@ -1552,7 +1576,9 @@ export function createProxyServer(options: ServerOptions) {
     }
     switch (command.type) {
       case 'server.session.create': {
-        const session = store.createOnServer(command.requestId, command.title, serverDevice);
+        const session = subscribed(
+          store.createOnServer(command.requestId, command.title, serverDevice),
+        );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
         broadcast({ type: 'session.updated', session });
@@ -1597,6 +1623,39 @@ export function createProxyServer(options: ServerOptions) {
         broadcast({ type: 'compaction.state', requestId: command.requestId, values });
         return undefined;
       }
+      case 'push.get':
+        send(peer, { type: 'push.state', requestId: command.requestId, values: pushes.state() });
+        return undefined;
+      case 'push.update':
+      case 'push.channel.add':
+      case 'push.channel.update':
+      case 'push.channel.enable':
+      case 'push.channel.delete': {
+        const values =
+          command.type === 'push.update'
+            ? pushes.update(command.values)
+            : command.type === 'push.channel.add' || command.type === 'push.channel.update'
+              ? pushes.put(
+                  command.type === 'push.channel.update' ? command.channelId : undefined,
+                  command.name,
+                  command.config,
+                )
+              : command.type === 'push.channel.enable'
+                ? pushes.enable(command.channelId, command.enabled)
+                : pushes.remove(command.channelId);
+        broadcast({ type: 'push.state', requestId: command.requestId, values });
+        return undefined;
+      }
+      case 'push.test':
+        await pushes.test(command.channelId);
+        return undefined;
+      // Changes nothing the session's run goes by, so it may change while one goes.
+      case 'session.push':
+        broadcast({
+          type: 'session.updated',
+          session: store.setPush(command.sessionId, command.mode),
+        });
+        return command.sessionId;
       // Sessions on the computer are told with the user's next message to each (see `store.notice`).
       case 'device.shell':
         store.prefer(deviceOf(peer).id, command.shell);
@@ -1671,11 +1730,8 @@ export function createProxyServer(options: ServerOptions) {
         return undefined;
       }
       case 'session.create': {
-        const session = store.create(
-          command.requestId,
-          command.title,
-          command.projectPath,
-          deviceOf(peer),
+        const session = subscribed(
+          store.create(command.requestId, command.title, command.projectPath, deviceOf(peer)),
         );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
@@ -1814,6 +1870,7 @@ export function createProxyServer(options: ServerOptions) {
         return false;
       }
       peer.authenticated = true;
+      pageOrigin = peer.origin ?? pageOrigin;
       send(peer, {
         type: 'ready',
         protocolVersion: PROTOCOL_VERSION,
@@ -1867,6 +1924,7 @@ export function createProxyServer(options: ServerOptions) {
       return false;
     }
     peer.authenticated = true;
+    pageOrigin = peer.origin ?? pageOrigin;
     peer.name = auth.data.deviceName;
     send(peer, {
       type: 'ready',
@@ -2331,6 +2389,7 @@ export function createProxyServer(options: ServerOptions) {
       for (const run of runs.values()) cancel(run, '服务停止，运行未重放。');
       for (const seat of seats.values()) clearTimeout(seat.away);
       compactions.clear();
+      pushes.close();
       const cleanup = [
         ...[...peers].map((peer) => peer.tunnel?.close()),
         ...[...seats.values()].map((seat) => seat.door?.close()),
