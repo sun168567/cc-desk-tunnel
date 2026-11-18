@@ -134,7 +134,8 @@ sudo bash deploy/manage.sh stop
 sudo bash deploy/manage.sh up
 sudo bash deploy/manage.sh restart
 sudo bash deploy/manage.sh upgrade
-sudo bash deploy/manage.sh backup /secure/backup.tar.gz
+sudo bash deploy/manage.sh backup
+sudo bash deploy/manage.sh restore cc-desk-tunnel-backup-….tar.gz
 sudo bash deploy/manage.sh uninstall
 ```
 
@@ -146,15 +147,17 @@ Compose 崩溃 / 主机重启恢复，`tini -g` 管理信号与孤儿进程；�
 
 镜像构建后，`sudo bash deploy/test.sh` 可运行不调用模型的隔离部署回归；占用测试端口 19871..19874，创建临时数据并在结束时回收。不会改既有服务；测试数据被删除，不用来测试生产数据。`sudo bash deploy/test-image.sh` 用临时的本地镜像仓库走一遍拉取、拉取失败、替换容器和旧数据迁移；`bash deploy/test-scripts.sh` 不需要 Docker，用替身检查部署脚本的各种选择。三者都在 CI 里运行。
 
-备份先停服务保证 SQLite / WAL 与原生数据一致，结束后恢复之前运行状态；排除临时 SSH 凭据、缓存和升级时留下的会话库副本（`state/backups`）。备份**含 token、API / 账号秘密、证书私钥和历史**，权限 0600，需安全离线保存。恢复仅允许已 stop 且长期数据为空的新初始化部署：
+### 备份、还原与迁移
 
-```sh
-sudo bash deploy/manage.sh restore /secure/backup.tar.gz
-# 核对 config/service.env 中 public host 与证书设置，docker.env 中 URL / 端口。
-sudo bash deploy/manage.sh up
-```
+`sudo cc-desk-tunnel backup` 把整个数据目录打成一个压缩包，放在当前目录，文件名带主机名和时间，例如 `cc-desk-tunnel-backup-vm-0-12-20261118-153012.tar.gz`；也可以给一个目录或完整文件名。包里有原生 Claude Code 的登录、设置和记忆，全部会话与工作目录，服务凭据、证书和本项目的设置；不含临时 SSH 凭据、缓存和升级时留下的会话库副本（`state/backups`）。备份期间服务暂停，保证 SQLite / WAL 与原生数据一致，结束后恢复原来的运行状态。备份**含 token、API / 账号秘密、证书私钥和历史**，权限 0600，需安全离线保存。
 
-恢复只接受自己可信的备份，不执行未知归档。卸载仅删除容器与网络，保留数据、配置、镜像和宿主 Docker；要永久删除数据必须由用户确认准确目录后单独删除，不自动卸载其他程序依赖的 Docker。
+`sudo cc-desk-tunnel restore 备份文件` 用备份替换这台服务器上的数据。它先列出备份来源和要覆盖的目录，输入 `yes` 才继续；覆盖之前把现有数据另存为备份文件旁边的 `…-before-restore.tar.gz`，还原后自动启动服务并打印部署汇总。脚本里调用加 `--yes`。比当前程序新的版本做的备份会被拒绝，先升级再还原。
+
+还原保留这台服务器自己的入口：访问地址、端口、入口方式和证书都不变，服务凭据、账号和会话来自备份。两边都是自签证书（指纹模式）时证书也来自备份，客户端记下的指纹不用改。
+
+迁移到新服务器：在旧服务器 `backup`，在新服务器照常安装，把备份文件拷过去（例如 `scp`）后 `restore`。客户端只需把服务地址改成新服务器；用证书或 nginx 入口时还要核对域名与证书。
+
+还原只接受自己可信的备份，不执行未知归档。卸载仅删除容器与网络，保留数据、配置、镜像和宿主 Docker；要永久删除数据必须由用户确认准确目录后单独删除，不自动卸载其他程序依赖的 Docker。
 
 自签续期：`manage.sh renew`，重启后重新交付客户端指纹。真实证书续期：`manage.sh certificate FULLCHAIN KEY`；可在既有 ACME deploy hook 中调用。nginx 的证书由既有 ACME / nginx 续期流程处理，无需重建容器。替换会断开在途会话，先结束任务。
 

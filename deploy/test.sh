@@ -34,7 +34,13 @@ curl --cacert "$TEMP/data/tls/control.crt" --resolve cc-desk-tunnel.local:19871:
 manage renew
 manage backup "$TEMP/backup.tar.gz"
 [[ "$(stat -c %a "$TEMP/backup.tar.gz")" = 600 ]]
-if manage restore "$TEMP/backup.tar.gz" 2>/dev/null; then echo "Restore over existing data was accepted." >&2; exit 1; fi
+# A restore over the running deployment: asked for first, then back to the backup's data and running again.
+docker exec "$id" bash -c 'printf changed > /data/home/deploy-marker'
+if manage restore "$TEMP/backup.tar.gz" < /dev/null >/dev/null 2>&1; then echo "Restore went on unconfirmed." >&2; exit 1; fi
+manage restore "$TEMP/backup.tar.gz" --yes
+[[ "$(cat "$TEMP/data/home/deploy-marker")" = native-memory ]]
+ls "$TEMP"/cc-desk-tunnel-backup-*-before-restore.tar.gz >/dev/null
+curl --cacert "$TEMP/data/tls/control.crt" --resolve cc-desk-tunnel.local:19871:127.0.0.1 -fsS https://cc-desk-tunnel.local:19871/health
 manage stop
 manage uninstall
 [[ -f "$TEMP/data/home/deploy-marker" ]]
@@ -42,9 +48,10 @@ manage uninstall
 export PROXY_DEPLOY_CONFIG="$TEMP/restore.env"
 manage init --host "$HOST" --data "$TEMP/restored" --control-port 19871
 sed -i "s|cc-desk-tunnel:local|$IMAGE|" "$PROXY_DEPLOY_CONFIG"
-manage restore "$TEMP/backup.tar.gz"
-manage up
+manage restore "$TEMP/backup.tar.gz" --yes
 [[ "$(cat "$TEMP/restored/home/deploy-marker")" = native-memory ]]
+# Both self-signed: the certificate came along, and with it the fingerprint clients pinned.
+cmp "$TEMP/data/tls/control.crt" "$TEMP/restored/tls/control.crt"
 [[ "$(cat "$TEMP/restored/workspace/deploy-marker")" = workspace-memory ]]
 manage stop
 manage uninstall

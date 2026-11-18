@@ -149,9 +149,41 @@ deployment 1.2.3 old:1
 if manage upgrade > /dev/null 2>&1; then echo 'A tampered archive was accepted.' >&2; exit 1; fi
 grep -q '"version": "1.2.3"' "$DEPLOYED/apps/desktop/package.json"
 
+# A backup holds the data without what is of the moment, and says where it is from. A restore asks first, saves
+# what it replaces, takes the backup's data and token and keeps this machine's way in.
+deployment 1.2.3
+data="$TEMP/data" backups="$TEMP/backups"
+mkdir -p "$data"/{home,workspace,tls,state/connections} "$backups"
+printf "PROXY_TOKEN='from-backup'\nPROXY_TLS_MODE='direct'\nPROXY_CERT_NAME='old.example'\n" > "$data/config/service.env"
+echo kept > "$data/home/marker"; echo moment > "$data/state/connections/key"; echo old > "$data/tls/control.crt"
+(cd "$backups" && manage backup > /dev/null)
+archive="$(ls "$backups"/cc-desk-tunnel-backup-*.tar.gz)"
+tar -tzf "$archive" | grep -Fxq ./home/marker
+! tar -tzf "$archive" | grep -q 'connections/key'
+tar -xzOf "$archive" cc-desk-tunnel-backup.txt | grep -qx 'version=1.2.3'
+if manage backup "$data/home/inside.tar.gz" > /dev/null 2>&1; then echo 'A backup inside the data was accepted.' >&2; exit 1; fi
+printf "PROXY_TOKEN='here'\nPROXY_TLS_MODE='reverse-proxy'\nPROXY_CERT_NAME='new.example'\n" > "$data/config/service.env"
+echo changed > "$data/home/marker"; echo added > "$data/home/added"; echo new > "$data/tls/control.crt"
+if manage restore "$archive" < /dev/null > /dev/null 2>&1; then echo 'A restore went on unconfirmed.' >&2; exit 1; fi
+test "$(cat "$data/home/marker")" = changed
+manage restore "$archive" --yes > /dev/null
+test "$(cat "$data/home/marker")" = kept
+test ! -e "$data/home/added" && test ! -e "$data/.restore" && test ! -e "$data/.replaced"
+grep -qx "PROXY_TOKEN='from-backup'" "$data/config/service.env"
+grep -qx "PROXY_TLS_MODE='reverse-proxy'" "$data/config/service.env"
+grep -qx "PROXY_CERT_NAME='new.example'" "$data/config/service.env"
+test "$(cat "$data/tls/control.crt")" = new
+grep -q ' up -d --no-build' "$MOCK_LOG"
+test "$(tar -xzOf "$(ls "$backups"/*-before-restore.tar.gz)" ./home/added)" = added
+# Data of a newer version is not given to an older one.
+deployment 1.2.0
+if manage restore "$archive" --yes > /dev/null 2>&1; then echo 'A newer backup was restored.' >&2; exit 1; fi
+# A host is checked before anything else is done; underscores are fine (see the installer below).
+if manage init --host https://example.com --data "$TEMP/none" > /dev/null 2>&1; then echo 'A URL was taken for a host.' >&2; exit 1; fi
+
 # The one-line installer, as root on Linux: a first install, then the command it leaves, then an upgrade.
 if [[ "$(uname -s)" != Linux ]]; then
-  echo 'PASS: image choice, failures, release upgrade. SKIP: the installer, which needs Linux.'
+  echo 'PASS: image choice, failures, release upgrade, backup and restore. SKIP: the installer, which needs Linux.'
   exit 0
 fi
 for tool in id chown uname openssl; do
@@ -169,9 +201,9 @@ export CC_DESK_TUNNEL_DIR="$TEMP/installed"
 release 1.3.0
 : > "$MOCK_LOG"
 tr -d '\r' < "$ROOT/deploy/install.sh" > "$TEMP/install.sh"
-printf 'y\n' | bash "$TEMP/install.sh" init --host 127.0.0.1 --mode nginx --data "$TEMP/installed-data" > "$TEMP/install.log"
+printf 'y\n' | bash "$TEMP/install.sh" init --host my_box.example.com --mode nginx --data "$TEMP/installed-data" > "$TEMP/install.log"
 grep -q '"version": "1.3.0"' "$TEMP/installed/apps/desktop/package.json"
-test -f "$TEMP/installed/.local/docker.env"
+grep -q "CONNECTION_URL='wss://my_box.example.com/ws'" "$TEMP/installed/.local/docker.env"
 grep -q "deploy/manage.sh" "$CC_DESK_TUNNEL_COMMAND"
 MISSING_IMAGE=1 bash "$CC_DESK_TUNNEL_COMMAND" up > /dev/null
 grep -q "PROXY_IMAGE='ghcr.io/sun168567/cc-desk-tunnel:1.3.0'" "$TEMP/installed/.local/docker.env"
@@ -182,4 +214,4 @@ grep -q "PROXY_IMAGE='ghcr.io/sun168567/cc-desk-tunnel:1.4.0'" "$TEMP/installed/
 test "$(grep -c '^pull ' "$MOCK_LOG")" = 1
 bash "$CC_DESK_TUNNEL_COMMAND" uninstall > /dev/null
 test ! -e "$CC_DESK_TUNNEL_COMMAND"
-echo 'PASS: image choice, failures, release upgrade, installer, management command.'
+echo 'PASS: image choice, failures, release upgrade, backup and restore, installer, management command.'
