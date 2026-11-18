@@ -2851,10 +2851,11 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   justify-content: space-between;
   gap: 8px;
   width: 100%;
+  min-height: 32px;
   text-align: left;
   border: 0;
   background: transparent;
-  padding: 8px 10px;
+  padding: 5px 10px;
   border-radius: var(--radius-s);
   font-size: 13px;
 }

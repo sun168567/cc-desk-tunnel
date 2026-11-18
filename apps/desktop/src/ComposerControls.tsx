@@ -11,6 +11,7 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import ContextMeter from './ContextMeter.tsx';
 import { IconButton } from './ui.tsx';
+import { modelDetail, modelName } from './modelNames.ts';
 
 const effortNames: Record<Effort, string> = {
   low: '低',
@@ -77,7 +78,7 @@ export default function ComposerControls({
   const levels = chosen?.supportedEffortLevels ?? [];
   const actual = nativeSession?.effort;
   const shownEffort = preview ?? effort ?? actual;
-  const label = chosen?.displayName ?? model ?? '原生默认';
+  const label = chosen ? modelName(chosen) : (model ?? '原生默认');
   async function saveEffort() {
     dragging.current = false;
     if (!commitPending.current || disabled) return;
@@ -265,16 +266,13 @@ export default function ComposerControls({
                         disabled={disabled}
                         aria-selected={model !== null && chosen?.value === row.value}
                         key={row.value}
+                        title={[row.resolvedModel, modelDetail(row)].filter(Boolean).join('\n')}
                         onClick={() => {
                           void configure({ model: row.value, effort: null });
                           setOpen(false);
                         }}
                       >
-                        <span>
-                          {row.displayName}
-                          {row.resolvedModel && <small>{row.resolvedModel}</small>}
-                          <small>{row.description}</small>
-                        </span>
+                        <span>{modelName(row)}</span>
                         {model !== null && chosen?.value === row.value && <Check />}
                       </button>
                     ))}

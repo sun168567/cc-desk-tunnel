@@ -5,6 +5,7 @@ import { folderName } from './paths.ts';
 import { describeSchedule, parseTasks, stamp } from './schedules.ts';
 import type { Schedule, Schedules, Task } from './schedules.ts';
 import { IconButton } from './ui.tsx';
+import { modelName } from './modelNames.ts';
 
 // The editor's fields: every kind of rule and target keeps its own input, so switching kinds loses nothing.
 type Form = {
@@ -256,7 +257,10 @@ function Editor({
             <option value="">不改动</option>
             {models.map((model) => (
               <option key={model} value={model}>
-                {capabilities?.models.find((item) => item.value === model)?.displayName ?? model}
+                {(() => {
+                  const found = capabilities?.models.find((item) => item.value === model);
+                  return found ? modelName(found) : model;
+                })()}
               </option>
             ))}
           </select>
