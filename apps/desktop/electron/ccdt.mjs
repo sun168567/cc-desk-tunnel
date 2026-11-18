@@ -137,9 +137,18 @@ export async function openSession(
   if (!ccdt) return { status: 'missing' };
   const installed = (await run(ccdt, ['--version'], system)).trim().replace(/^ccdt\s+/, '');
   if (installed !== version) return { status: 'outdated', installed };
+  // The window's token reaches ccdt on its standard input, never on a command line, and is saved there for ccdt to
+  // open the session with, and for ccdt run here later. It is in use by this window's connection, so ccdt is not
+  // made to connect only to check it.
   await run(
     ccdt,
-    ['login', url, ...(fingerprint ? ['--fingerprint', fingerprint] : []), '--token-stdin'],
+    [
+      'login',
+      url,
+      ...(fingerprint ? ['--fingerprint', fingerprint] : []),
+      '--token-stdin',
+      '--no-verify',
+    ],
     system,
     token,
   );

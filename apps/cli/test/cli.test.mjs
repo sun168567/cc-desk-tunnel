@@ -302,6 +302,29 @@ test('upgrading with no service saved says to log in, rather than failing inside
   }
 });
 
+test('a token handed over by the desktop client is saved without connecting to check it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ccdt-handover-'));
+  try {
+    const ccdt = (args, input = '') =>
+      spawnSync(process.execPath, ['apps/cli/bin/ccdt.mjs', ...args], {
+        encoding: 'utf8',
+        input,
+        env: { ...process.env, CCDT_CONFIG_DIR: join(root, 'cli'), APPDATA: join(root, 'appdata') },
+      });
+    // An address that resolves nowhere: connecting to it could only fail.
+    const login = ccdt(
+      ['login', 'wss://nowhere.invalid/ws', '--token-stdin', '--no-verify', '--no-save'],
+      's'.repeat(32),
+    );
+    assert.equal(login.status, 0, login.stderr);
+    assert.match(login.stderr, /已登录 wss:\/\/nowhere\.invalid\/ws/);
+    assert.doesNotMatch(login.stderr, /正在验证/);
+    assert.match(ccdt(['server']).stderr, /nowhere\.invalid/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('reading keys leaves the input open for the terminal shown next', async () => {
   const input = new PassThrough();
   input.setRawMode = (on) => (input.raw = on);

@@ -155,7 +155,7 @@ esac
       assert.fail(`the terminal ran no ccdt open: ${readFileSync(log, 'utf8')}`);
     };
     const [login, open] = await lines();
-    assert.equal(login, 'login wss://a.test/ws --token-stdin|secret');
+    assert.equal(login, 'login wss://a.test/ws --token-stdin --no-verify|secret');
     const [words, folder] = open.split('|');
     assert.equal(words, `open ${sessionId} --server wss://a.test/ws`);
     assert.equal(realpathSync(folder), realpathSync(project));

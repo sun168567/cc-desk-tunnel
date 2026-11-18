@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, WebSocketServer } from 'ws';
 import { TUNNEL_CLOSE } from '@cc-desk-tunnel/protocol';
+import { spawnSync } from 'node:child_process';
 import { openChannels } from '../electron/tunnel-channels.mjs';
 
 const offer = { connectionId: randomUUID(), secret: 's'.repeat(43) };
@@ -209,4 +210,40 @@ test('closing ends every channel and its local connection; a local service that 
   t.after(() => orphan.close());
   orphan.open(randomUUID());
   await f.until(() => f.arrivals[2]?.closed, 'the channel without a local service to end');
+});
+
+// ccdt ends when nothing is left to do: a channel closed from here leaves nothing behind that would keep it running.
+test('a program ends at once after closing its channels', () => {
+  const script = `
+    import { createServer } from 'node:net';
+    import { once } from 'node:events';
+    import { WebSocket, WebSocketServer } from 'ws';
+    import { openChannels } from ${JSON.stringify(new URL('../electron/tunnel-channels.mjs', import.meta.url).href)};
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+    await once(wss, 'listening');
+    const ssh = createServer((socket) => socket.on('error', () => {}).resume().write('SSH-2.0-local\\r\\n'));
+    ssh.listen(0, '127.0.0.1');
+    await once(ssh, 'listening');
+    const joined = new Promise((resolve) => ssh.once('connection', resolve));
+    const dial = async () => {
+      const socket = new WebSocket('ws://127.0.0.1:' + wss.address().port);
+      await once(socket, 'open');
+      return socket;
+    };
+    const channels = openChannels({ connectionId: 'c', secret: 's' }, ssh.address().port, dial, () => {});
+    channels.open('one');
+    await joined;
+    channels.close();
+    for (const client of wss.clients) client.terminate();
+    wss.close();
+    ssh.close();
+  `;
+  const started = Date.now();
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+    timeout: 20000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(Date.now() - started < 5000, `ended after ${Date.now() - started} ms`);
 });
