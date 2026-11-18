@@ -82,8 +82,10 @@ export function openChannels(
     stream.on('error', () => local.destroy());
     local.on('error', () => stream.destroy());
     // What the SSH service sent before it ended goes on first; a channel that does not answer its end is cut after
-    // a while.
+    // a while. Closed from this side, nothing waits for the rest: the channel goes at once, and no timer is left
+    // behind to keep a program that is ending (ccdt) running for that while.
     local.once('close', () => {
+      if (closed) return stream.destroy();
       stream.end();
       const cut = setTimeout(() => stream.destroy(), closingMs);
       stream.once('close', () => clearTimeout(cut));
