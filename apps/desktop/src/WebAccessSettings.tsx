@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { ReactNode } from 'react';
 import { ChevronRight, Copy, ExternalLink, RotateCcw, Trash2 } from 'lucide-react';
 import type {
   WebCertificateState,
@@ -8,7 +7,7 @@ import type {
   WebTotpSetup,
 } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
-import { IconButton, Modal, Row, Switch } from './ui.tsx';
+import { DialogForm, IconButton, Modal, Row, Switch } from './ui.tsx';
 import { CopyButton } from './copy.tsx';
 import ReverseProxyHelp from './ReverseProxyHelp.tsx';
 
@@ -68,55 +67,6 @@ function useSubmit() {
     }
   }
   return { busy, error, setError, run };
-}
-function DialogForm({
-  title,
-  busy,
-  error,
-  submit,
-  submitLabel,
-  close,
-  children,
-}: {
-  title: string;
-  busy: boolean;
-  error: string;
-  submit: () => void;
-  submitLabel?: string;
-  close: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Modal
-      title={title}
-      onClose={() => {
-        if (!busy) close();
-      }}
-    >
-      <form
-        className="web-settings-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!busy) submit();
-        }}
-      >
-        <fieldset disabled={busy}>{children}</fieldset>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="dialog-actions">
-          <button type="button" className="button" disabled={busy} onClick={close}>
-            取消
-          </button>
-          <button className="button primary" disabled={busy}>
-            {submitLabel ?? (busy ? '正在保存…' : '确认')}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
 }
 export function displayWebAddress(value: string) {
   try {
