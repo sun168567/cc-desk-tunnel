@@ -2841,8 +2841,46 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   color: var(--text);
   font-weight: 600;
 }
+/* The list of models: a quiet heading, one even row a model with the chosen one ticked, and the refresh below a
+   line; the text of all of them starts at one edge. */
+.model-menu.choosing {
+  padding: 6px;
+}
+.model-menu.choosing .model-back,
+.model-refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.model-refresh {
+  margin-top: 4px;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 8px 8px;
+}
+.model-menu.choosing .model-back:hover,
+.model-refresh:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.model-refresh:disabled {
+  opacity: 0.6;
+}
+.model-menu.choosing .model-back svg,
+.model-refresh svg {
+  width: 13px;
+  height: 13px;
+}
 .model-options {
-  max-height: min(320px, 40dvh);
+  max-height: min(330px, 42dvh);
   overflow-y: auto;
 }
 .model-options button {
@@ -2851,33 +2889,32 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  min-height: 32px;
-  text-align: left;
+  height: 30px;
+  padding: 0 10px;
   border: 0;
+  border-radius: 8px;
   background: transparent;
-  padding: 5px 10px;
-  border-radius: var(--radius-s);
+  color: var(--text);
   font-size: 13px;
+  text-align: left;
 }
-.model-options button:hover {
+.model-options button:hover:not(:disabled) {
   background: var(--hover);
 }
 .model-options button[aria-selected='true'] {
-  background: var(--surface-2);
+  font-weight: 600;
 }
 .model-options span {
   min-width: 0;
-  overflow-wrap: anywhere;
-}
-.model-options small {
-  display: block;
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .model-options svg {
-  width: 15px;
-  height: 15px;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
 }
 .slash-menu {
   bottom: calc(100% - 44px);

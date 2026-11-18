@@ -138,7 +138,11 @@ export default function ComposerControls({
           <ChevronDown />
         </button>
         {open && (
-          <div className="model-menu" role="dialog" aria-label="模型与推理强度">
+          <div
+            className={`model-menu${choosing ? ' choosing' : ''}`}
+            role="dialog"
+            aria-label="模型与推理强度"
+          >
             <div className="effort-view" hidden={choosing}>
               <div className="effort-heading">
                 <strong>{shownEffort ? effortNames[shownEffort] : '原生默认'}</strong>
@@ -279,7 +283,7 @@ export default function ComposerControls({
                 </div>
                 <button
                   type="button"
-                  className="model-back"
+                  className="model-refresh"
                   disabled={disabled || refreshing || !canRefreshModels}
                   title={canRefreshModels ? undefined : '有会话正在运行，结束后可刷新'}
                   onClick={refresh}
