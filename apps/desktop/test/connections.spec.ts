@@ -63,8 +63,8 @@ function program(name: string) {
       opened.push(application);
       return application;
     },
-    // What the program starts by itself is not Playwright's to close: it is asked to go as the tray's "退出全部
-    // 连接" asks it.
+    // What the program starts by itself is not Playwright's to close: it is asked to go as an upgrade asks the
+    // other windows.
     dismiss(id: string) {
       execFileSync(
         createRequire(import.meta.url)('electron') as unknown as string,
@@ -152,7 +152,7 @@ test('Electron: a sign-in window starts each service’s window, one window to a
     await signIn(page, { token });
     await connected(page);
     await expect.poll(() => title(work)).toBe(`CC Desk Tunnel · ${shown(serverUrl)}`);
-    await expect(page.locator('.brand-connection')).toHaveCount(0);
+    await expect(page.locator('.connection-name')).toHaveCount(0);
 
     // Another sign-in window offers the service, which is that window's: it is shown, and this one stays.
     const second = await desk.start();
@@ -195,8 +195,8 @@ test('Electron: a sign-in window starts each service’s window, one window to a
     const device = (target: Page) => target.evaluate(() => window.desktop!.device());
     expect(await device(second2)).toEqual(await device(page));
     // Two services: each window names its own.
-    await expect(second2.locator('.brand-connection')).toHaveText(shown(elsewhere));
-    await expect(page.locator('.brand-connection')).toHaveText(shown(serverUrl));
+    await expect(second2.locator('.connection-name')).toHaveText(shown(elsewhere));
+    await expect(page.locator('.connection-name')).toHaveText(shown(serverUrl));
 
     // What runs here is told with its folder. Another connection's session in that folder, or above it, is
     // warned of over the conversation.

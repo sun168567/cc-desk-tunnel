@@ -62,7 +62,7 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   zoom: (direction) =>
     webFrame.setZoomLevel(direction ? webFrame.getZoomLevel() + Math.sign(direction) * 0.5 : 0),
-  quit: (all) => ipcRenderer.invoke('app:quit', all),
+  quit: () => ipcRenderer.invoke('app:quit'),
   version: () => ipcRenderer.invoke('app:version'),
   releaseNotes: (version) => ipcRenderer.invoke('release:notes', version),
   device: () => ipcRenderer.invoke('device:get'),

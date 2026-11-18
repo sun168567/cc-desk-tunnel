@@ -837,10 +837,7 @@ handle('accounts:forget', (_event, id) => {
   return listed();
 });
 handle('login:window', () => launch(null));
-handle('app:quit', (_event, all) => {
-  if (all === true) dismissOthers();
-  app.quit();
-});
+handle('app:quit', () => app.quit());
 let refreshTray = () => {};
 handle('window:settings', () => ({ closeToTray: readComputer().closeToTray !== false }));
 handle('window:settings:set', (_event, values) => {
@@ -1075,14 +1072,8 @@ app.whenReady().then(async () => {
   const buildMenu = () =>
     tray.setContextMenu(
       Menu.buildFromTemplate([
+        // Each connection's icon is its own window's: it neither opens nor quits the others.
         { label: '显示窗口', click: showWindow },
-        ...connections
-          .accounts(base)
-          .filter((entry) => entry.id !== connectionId)
-          .map((entry) => ({
-            label: `打开“${entry.label || '未保存地址的连接'}”`,
-            click: () => launch(entry.id),
-          })),
         { label: '新的登录窗口', click: () => launch(null) },
         {
           label: '关闭窗口时留在后台',
@@ -1095,17 +1086,6 @@ app.whenReady().then(async () => {
         },
         { type: 'separator' },
         { label: '退出', click: () => app.quit() },
-        ...(others().length
-          ? [
-              {
-                label: '退出全部连接',
-                click: () => {
-                  dismissOthers();
-                  app.quit();
-                },
-              },
-            ]
-          : []),
       ]),
     );
   tray.on('click', showWindow);
