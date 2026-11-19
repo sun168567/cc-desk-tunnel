@@ -76,7 +76,9 @@ export default function PlanCard({
   const [whole, setWhole] = useState(false);
   const [long, setLong] = useState(false);
   const [reading, setReading] = useState(false);
-  const [mode, setMode] = useState<PlanMode>(decide?.mode ?? 'auto');
+  // The mode chosen here; until then the one offered, which the session may report only after the card is shown.
+  const [chosen, setMode] = useState<PlanMode | null>(null);
+  const mode = chosen ?? decide?.mode ?? 'auto';
   const [editing, setEditing] = useState<string | null>(null);
   const [returning, setReturning] = useState<string | null>(null);
   const body = useRef<HTMLDivElement>(null);

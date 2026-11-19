@@ -127,3 +127,24 @@ test('the shortcut goes through the modes; a session put in plan mode offers the
   await card.getByRole('button', { name: '开始执行', exact: true }).click();
   await settled(page);
 });
+
+test('in a window of the default size a long plan shows its heading and its decision together', async ({
+  page,
+}) => {
+  // The content of the program's default window, 1240 × 850.
+  await page.setViewportSize({ width: 1224, height: 811 });
+  await page.goto('/');
+  await login(page);
+  await createSession(page, '默认窗口');
+  await send(page, '来个长计划', 'plan');
+  const card = page.getByRole('region', { name: 'Claude 的计划' }).last();
+  const start = card.getByRole('button', { name: '开始执行', exact: true });
+  await expect(start).toBeEnabled();
+  await page.waitForTimeout(500);
+  await expect(card.getByText('计划', { exact: true })).toBeInViewport();
+  await expect(start).toBeInViewport();
+  await expect(page.getByRole('textbox', { name: '消息' })).toBeInViewport();
+  await shot(page, '6-默认窗口');
+  await start.click();
+  await settled(page);
+});

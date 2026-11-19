@@ -150,6 +150,9 @@ export async function simulate(
         input: JSON.stringify(planned, null, 2),
         target: 'Windows (simulation)',
       });
+      // Claude Code asks for the approval a while after the model has asked for the tool: the plan is on screen
+      // before it can be decided.
+      await delay(300, undefined, { signal: run.controller.signal });
       emit({ type: 'approval.requested', approvalId: run.approvalId, toolId: run.toolId });
       emit({ type: 'run.status', status: 'awaiting_approval', connectionId: run.connectionId });
       const { allowed, decision } = await reply;

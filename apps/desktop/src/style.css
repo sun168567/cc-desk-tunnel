@@ -4177,8 +4177,9 @@ dialog {
 .plan-tools .copy-button span {
   display: none;
 }
+/* Folded, the plan leaves room in the window for its heading and its decision at once. */
 .plan-body {
-  max-height: 480px;
+  max-height: clamp(160px, 100vh - 510px, 480px);
   overflow: hidden;
   padding: 4px 16px 6px;
 }
@@ -4255,9 +4256,15 @@ dialog {
   flex-wrap: wrap;
   border-top: 0;
 }
+/* A plan is read like a document: its window is as wide as one, not as a question's. */
+dialog:has(.plan-reader) {
+  width: min(880px, calc(100vw - 48px));
+}
+dialog:has(.plan-reader) .dialog-heading h2 {
+  overflow-wrap: anywhere;
+}
 .plan-reader {
-  max-width: 820px;
-  max-height: 72vh;
+  max-height: calc(100vh - 170px);
   overflow: auto;
   padding: 0 4px;
 }
