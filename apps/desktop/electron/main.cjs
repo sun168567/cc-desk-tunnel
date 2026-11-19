@@ -80,6 +80,13 @@ const asked = (() => {
 delete process.env.CC_DESK_TUNNEL_START;
 const requested = connections.role(base, process.argv);
 if (exporting !== undefined) app.setPath('userData', connections.directory(base, exporting));
+// Chromium keeps the GPU's shader caches at the top of the profile, where one process at a time can open them: a
+// process started while another runs would find them held, fail to set them aside and go on without them, saying
+// so in its log. It goes without them from the start instead, which is all the difference. The first process is
+// the one holding the instance lock, which serves for nothing else, as every start is a process of its own. A
+// helper draws nothing.
+if (helper || !app.requestSingleInstanceLock())
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 if (leaving)
   void (
     requested.id === null ? Promise.resolve() : connections.tell(base, requested.id, 'quit')
