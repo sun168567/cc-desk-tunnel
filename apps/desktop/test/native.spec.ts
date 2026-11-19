@@ -2,7 +2,7 @@ import { test, expect, _electron } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { connectionArgs } from './helpers.ts';
+import { connectionArgs, connectionWindow, endStrays } from './helpers.ts';
 
 test.use({ trace: 'off' });
 const project = resolve('.local/gui-subscription/中文 项目');
@@ -85,27 +85,30 @@ test('official subscription: account metrics, Windows execution, running input, 
         entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE',
     ),
   );
-  const app = await _electron.launch({
-    args: [
-      resolve('apps/desktop'),
-      '--smoke-test',
-      ...connectionArgs(resolve('.local/ui-test/profile-native'), true),
-    ],
-    env,
-  });
+  const profile = resolve('.local/ui-test/profile-native');
+  const start = (fresh = false) =>
+    _electron.launch({
+      args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile, fresh)],
+      env,
+    });
+  let app = await start(true);
   const errors: string[] = [];
+  // The connection's window, once signed in from the sign-in window.
+  let page!: Page;
   try {
     await app.evaluate(({ dialog }, path) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
     }, project);
-    const page = await app.firstWindow();
-    page.on('pageerror', (error) => errors.push(error.message));
-    await page.getByRole('button', { name: '远程代理', exact: true }).click();
     async function connect() {
-      await page.getByLabel('服务地址', { exact: true }).fill(connection.url);
-      await page.getByLabel('服务证书指纹', { exact: true }).fill(connection.fingerprint ?? '');
-      await page.getByLabel('服务凭据', { exact: true }).fill(connection.token);
-      await page.getByRole('button', { name: '连接', exact: true }).click();
+      const launcher = await app.firstWindow();
+      launcher.on('pageerror', (error) => errors.push(error.message));
+      await launcher.getByRole('button', { name: '远程代理', exact: true }).click();
+      await launcher.getByLabel('服务地址', { exact: true }).fill(connection.url);
+      await launcher.getByLabel('服务证书指纹', { exact: true }).fill(connection.fingerprint ?? '');
+      await launcher.getByLabel('服务凭据', { exact: true }).fill(connection.token);
+      await launcher.getByRole('button', { name: '连接', exact: true }).click();
+      page = await connectionWindow(app);
+      page.on('pageerror', (error) => errors.push(error.message));
       await expect(page.locator('.connection-status')).toContainText('已连接', { timeout: 45000 });
     }
     await connect();
@@ -192,7 +195,14 @@ test('official subscription: account metrics, Windows execution, running input, 
     await page.screenshot({ path: resolve('.local/screenshots/subscription-mobile.png') });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+    // Signing out ends the process, which gives way to a sign-in window of a process of its own.
+    const ended = app.process();
     await page.getByRole('menuitem', { name: '断开连接', exact: true }).click();
+    if (ended.exitCode === null) await new Promise((done) => ended.once('exit', done));
+    // The process it started holds Playwright's pipe to this one, whose close does not come until it goes.
+    endStrays(profile);
+    await app.close();
+    app = await start();
     await connect();
     await page.locator('.session-select').filter({ hasText: marker }).click();
     await settled(page);
@@ -202,6 +212,7 @@ test('official subscription: account metrics, Windows execution, running input, 
     await expect(page.locator('.tool-heading').filter({ hasText: '等待审批' })).toHaveCount(0);
     expect(errors).toEqual([]);
   } finally {
+    endStrays(profile);
     await app.close();
   }
 });

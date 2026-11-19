@@ -37,12 +37,19 @@ contextBridge.exposeInMainWorld('desktop', {
   chooseWorkspace: (reset) => ipcRenderer.invoke('workspace:choose', reset),
   createWorkspace: () => ipcRenderer.invoke('workspace:create'),
   removeWorkspace: (directory) => ipcRenderer.invoke('workspace:remove', directory),
-  loadLogin: (id) => ipcRenderer.invoke('login:load', id),
+  loadLogin: () => ipcRenderer.invoke('login:load'),
+  loadLauncher: () => ipcRenderer.invoke('launcher:load'),
   saveLogin: (login) => ipcRenderer.invoke('login:save', login),
-  loginOwner: (url) => ipcRenderer.invoke('login:owner', url),
-  signInElsewhere: () => ipcRenderer.invoke('login:elsewhere'),
-  startService: (login) => ipcRenderer.invoke('launcher:start', login),
-  openLegacy: (id) => ipcRenderer.invoke('launcher:open', id),
+  signOut: (error) => ipcRenderer.invoke('login:leave', error),
+  startSignIn: (login) => ipcRenderer.invoke('launcher:start', login),
+  cancelSignIn: () => ipcRenderer.invoke('launcher:cancel'),
+  widenLauncher: (wide) => ipcRenderer.invoke('launcher:wide', wide),
+  reportSignIn: (report) => ipcRenderer.invoke('signin:report', report),
+  onSignIn: (callback) => {
+    const listener = (_event, report) => callback(report);
+    ipcRenderer.on('signin:report', listener);
+    return () => ipcRenderer.removeListener('signin:report', listener);
+  },
   loadDrafts: () => ipcRenderer.invoke('drafts:load'),
   saveDrafts: (drafts) => ipcRenderer.invoke('drafts:save', drafts),
   loadSchedules: (initial) => ipcRenderer.invoke('schedules:load', initial),

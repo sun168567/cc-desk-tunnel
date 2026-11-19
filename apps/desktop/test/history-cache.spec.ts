@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createProxyServer } from '../../server/src/server.ts';
 import type { Session } from '@cc-desk-tunnel/protocol';
-import { connectionArgs, screenshots, sessionAction } from './helpers.ts';
+import { connectionArgs, connectionWindow, screenshots, sessionAction } from './helpers.ts';
 
 // About 320 KB of reply: a page of history holds one or two such turns.
 const long = 'history '.repeat(40000);
@@ -59,7 +59,9 @@ test('history read before shows from disk, the service sends only what came sinc
     else await page.getByLabel('服务地址').fill(url);
     await page.getByLabel('服务凭据').fill(token);
     await page.getByRole('button', { name: '连接', exact: true }).click();
-    await expect(page.locator('.connection-status')).toContainText('已连接');
+    const signedIn = await connectionWindow(application);
+    await expect(signedIn.locator('.connection-status')).toContainText('已连接');
+    return signedIn;
   };
   const turn = (session: Session, index: number) => {
     const run = randomUUID();
@@ -86,15 +88,16 @@ test('history read before shows from disk, the service sends only what came sinc
 
   let application = await launch(true);
   try {
+    // The sign-in window, then the connection's window it signs in to, which the frames are watched on.
+    application.on('window', watch);
     let page = await application.firstWindow();
-    watch(page);
     const device = await page.evaluate(() => window.desktop!.device());
     const session = server.store.create(randomUUID(), '缓存会话', folder, device);
     const other = server.store.create(randomUUID(), '别处删除的会话', folder, device);
     for (let i = 0; i < 3; i++) turn(session, i);
     turn(other, 9);
     await page.evaluate((folder) => window.desktop!.saveShared('projects', [folder]), folder);
-    await signIn(page);
+    page = await signIn(page);
     await page.locator('.session-select').filter({ hasText: '别处删除的会话' }).click();
     await expect(page.getByText('缓存问题9', { exact: true })).toBeVisible();
     await page.locator('.session-select').filter({ hasText: '缓存会话' }).click();
@@ -108,9 +111,8 @@ test('history read before shows from disk, the service sends only what came sinc
     server.store.delete(other.id);
     sent = [];
     application = await launch();
-    page = await application.firstWindow();
-    watch(page);
-    await signIn(page, true);
+    application.on('window', watch);
+    page = await signIn(await application.firstWindow(), true);
     await page.locator('.session-select').filter({ hasText: '缓存会话' }).click();
     await expect(page.getByText('缓存问题3', { exact: true })).toBeVisible();
     const [subscribe] = asked('session.subscribe');

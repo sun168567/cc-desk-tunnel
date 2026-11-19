@@ -6,6 +6,7 @@ const {
   readdirSync,
   renameSync,
   rmSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } = require('node:fs');
@@ -20,7 +21,9 @@ const { tmpdir } = require('node:os');
 //                      the page's preferences
 //   connections/<id>/  a connection, signed in to one service: its process's profile, with the sign-in, drafts,
 //                      scheduled tasks, pasted pictures and log
-//   launchers/<id>/    the profile of a sign-in window while it is open (see `role`), removed after it
+//   Partitions/<id>/   the storage of a connection's window (see `migrate`)
+// Every process of the program uses the program's directory as its profile, as many as the user opens: a process
+// starts with a sign-in window and becomes a connection's when it signs in there (see main.cjs).
 // A connection is told by the address of its service, path and all, as one host may route several services by
 // path. The user may give it a name of their own; without one it goes by the address. Versions before 0.3.16
 // kept the first connection in the program's directory itself; `adopt` moves it to a directory of its own.
@@ -261,35 +264,132 @@ function remove(base, id) {
     entries.filter((entry) => entry.id !== id),
   );
   rmSync(directory(base, id), { recursive: true, force: true });
+  try {
+    rmSync(partition(base, id), { recursive: true, force: true });
+  } catch {}
 }
 
-// What a start of the program is. One that names a connection is that connection's window, as the program starts
-// them; `--sign-in` has it sign in at once. Any other start, the user's own, is a sign-in window.
+// What a start of the program asks for: a connection named to sign in to, at once with `--sign-in`.
 function role(base, argv) {
   const asked = argv.find((item) => item.startsWith('--connection='))?.slice(13);
   return asked && list(base).some((entry) => entry.id === asked)
     ? { id: asked, signIn: argv.includes('--sign-in') }
     : { id: null, signIn: false };
 }
-// A sign-in window's profile, made for it and removed after it: nothing of it is kept.
-function launcherDirectory(base) {
-  const folder = path.join(base, 'launchers', randomBytes(4).toString('hex'));
-  mkdirSync(folder, { recursive: true });
-  writeFileSync(instanceFile(folder), JSON.stringify({ pid: process.pid }));
-  return folder;
+// The connection whose service is at this address, signed in there or not yet.
+function find(base, url) {
+  const key = serviceKey(url);
+  return (
+    list(base).find((entry) => {
+      const login = loginOf(base, entry.id);
+      return login && serviceKey(login.url) === key;
+    }) ?? null
+  );
 }
-// What is left of sign-in windows gone, and of connections that never signed in and whose window has gone too.
-// A connection made a moment ago may not have started yet.
+// What is left of connections that never signed in and whose window has gone, and of the storage of connections
+// gone. A connection made a moment ago may not have started yet. The sign-in windows of 0.3.16 had profiles of
+// their own under `launchers/`.
 function tidy(base, now = Date.now()) {
   const launchers = path.join(base, 'launchers');
   for (const name of existsSync(launchers) ? readdirSync(launchers) : []) {
     const folder = path.join(launchers, name);
     if (!alive(folder)) rmSync(folder, { recursive: true, force: true });
   }
+  // Once those of 0.3.16 still running have gone, no more are made.
+  try {
+    if (existsSync(launchers) && !readdirSync(launchers).length) rmdirSync(launchers);
+  } catch {}
   for (const entry of list(base)) {
     const since = Number(readSettings(base, entry.id).pending);
     if (since && now - since > 120_000 && !running(base, entry.id)) remove(base, entry.id);
   }
+  const partitions = path.join(base, 'Partitions');
+  const known = new Set(list(base).map((entry) => entry.id));
+  for (const name of existsSync(partitions) ? readdirSync(partitions) : [])
+    if (idPattern.test(name) && !known.has(name))
+      try {
+        rmSync(path.join(partitions, name), { recursive: true, force: true });
+      } catch {}
+}
+
+// The storage of a connection's window, in the profile all processes share.
+const partition = (base, id) => path.join(base, 'Partitions', id);
+const storage = ['Local Storage', 'IndexedDB'];
+// Takes the profiles of earlier versions to the one shared: 0.3.15's first connection out of the program's
+// directory (see `adopt`), once; and each connection's page storage into its partition, while its window is
+// closed. A remembered token stays encrypted with the key of the connection's old profile until it is read
+// again (see `savedToken` in main.cjs), which is why that profile stays until then (see `shed`).
+function migrate(base) {
+  if (readShared(base, 'layout')?.version !== 2) {
+    adopt(base);
+    writeShared(base, 'layout', { version: 2 });
+  }
+  for (const entry of list(base)) {
+    if (running(base, entry.id)) continue;
+    for (const name of storage) {
+      const from = path.join(directory(base, entry.id), name);
+      const to = path.join(partition(base, entry.id), name);
+      if (!existsSync(from) || existsSync(to)) continue;
+      mkdirSync(path.dirname(to), { recursive: true });
+      renameSync(from, to);
+    }
+    if (!loginOf(base, entry.id)?.token) shed(base, entry.id);
+  }
+}
+// What Chromium keeps in a profile, as Electron's of 0.3.16 had: with their `-journal`, `-wal` and `-shm` files.
+// `Local State` is the last to go, as it tells there is something left to remove.
+const profileFiles = [
+  'AutofillStrikeDatabase',
+  'blob_storage',
+  'BudgetDatabase',
+  'Cache',
+  'Code Cache',
+  'Cookies',
+  'Crashpad',
+  'databases',
+  'DawnCache',
+  'DawnGraphiteCache',
+  'DawnWebGPUCache',
+  'declarative_performance_observer.db',
+  'DevToolsActivePort',
+  'Dictionaries',
+  'DIPS',
+  'Extension State',
+  'File System',
+  'first_party_sets.db',
+  'GPUCache',
+  'GPUPersistentCache',
+  'GrShaderCache',
+  'heavy_ad_intervention_opt_out.db',
+  'History',
+  'MediaDeviceSalts',
+  'Network',
+  'Network Persistent State',
+  'Platform Notifications',
+  'Preferences',
+  'QuotaManager',
+  'Service Worker',
+  'Session Storage',
+  'shared_proto_db',
+  'Shared Dictionary',
+  'SharedStorage',
+  'ShaderCache',
+  'TransportSecurity',
+  'Trust Tokens',
+  'VideoDecodeStats',
+  'Visited Links',
+  'Web Data',
+  'WebStorage',
+];
+const profileFile = (name) => profileFiles.includes(name.replace(/-(journal|wal|shm)$/, ''));
+// Removes what is left of a connection's old profile, once nothing in it is needed. Only what Chromium made goes:
+// a file some other program put there stays.
+function shed(base, id) {
+  const folder = directory(base, id);
+  if (!existsSync(path.join(folder, 'Local State'))) return;
+  for (const name of readdirSync(folder))
+    if (profileFile(name)) rmSync(path.join(folder, name), { recursive: true, force: true });
+  rmSync(path.join(folder, 'Local State'), { force: true });
 }
 
 // What in the program's directory is this computer's; everything else there was the first connection's.
@@ -347,12 +447,13 @@ module.exports = {
   busy,
   create,
   directory,
+  find,
   labelOf,
-  launcherDirectory,
   list,
   listen,
   loginOf,
   mark,
+  migrate,
   owner,
   pending,
   readShared,
@@ -362,6 +463,7 @@ module.exports = {
   running,
   serviceKey,
   setAutoLogin,
+  shed,
   tell,
   tidy,
   writeSettings,
