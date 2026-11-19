@@ -2717,6 +2717,123 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   width: 330px;
   max-width: calc(100vw - 80px);
 }
+/* A double tap subscribes for good, so it must not zoom the page. */
+.push-control > .chip {
+  position: relative;
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+.chip > .push-bell {
+  display: flex;
+  overflow: visible;
+}
+/* Swings from where a bell hangs. */
+.push-bell.shake {
+  transform-origin: 50% 15%;
+  animation: push-bell-shake 600ms ease-in-out;
+}
+@keyframes push-bell-shake {
+  15% {
+    transform: rotate(16deg);
+  }
+  35% {
+    transform: rotate(-13deg);
+  }
+  55% {
+    transform: rotate(9deg);
+  }
+  75% {
+    transform: rotate(-5deg);
+  }
+}
+/* Fills around the bell while it is held; once full the subscription is lasting. */
+.chip > .push-ring {
+  position: absolute;
+  inset: -3px;
+  width: 36px;
+  height: 36px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.chip > .push-ring > circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: push-ring-fill var(--press) linear forwards;
+}
+/* A fingertip covers the bell and a ring just round it, so on a touch screen the ring is drawn wide of the finger. */
+@media (pointer: coarse) {
+  .chip > .push-ring {
+    inset: -15px;
+    width: 60px;
+    height: 60px;
+  }
+  .chip > .push-ring > circle {
+    stroke-width: 1.8;
+  }
+}
+@keyframes push-ring-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* A tap leaves a touch screen's button hovered until something else is tapped; the bell would look held. */
+@media (hover: none) {
+  .push-control > button.chip:hover:not(:disabled) {
+    background: transparent;
+    color: var(--muted);
+  }
+  .push-control > button.chip.subscribed:hover:not(:disabled) {
+    color: var(--accent);
+  }
+}
+/* Placed by its top and centre, just above the input box. */
+.push-tip {
+  position: fixed;
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translate(-50%, calc(-100% - 10px));
+  animation: push-tip-in var(--fade) ease-out;
+  pointer-events: none;
+}
+.push-tip.leaving {
+  animation: push-tip-out var(--fade) ease-in forwards;
+}
+@keyframes push-tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+}
+@keyframes push-tip-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 14px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .push-bell.shake,
+  .push-tip,
+  .push-tip.leaving {
+    animation: none;
+  }
+}
 .context-tooltip {
   bottom: calc(100% + 9px);
   right: 0;

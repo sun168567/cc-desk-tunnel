@@ -47,9 +47,10 @@ test('a session is subscribed to pushes from beside the input box once a channel
 
   await page.getByRole('button', { name: '会话', exact: true }).click();
   await expect(page.locator('.session-row.selected strong')).toHaveText(title);
+  const tip = page.locator('.push-tip');
   await bell.click();
-  await page.getByRole('menuitemradio', { name: '本轮', exact: true }).click();
-  await expect(bell).toHaveAttribute('title', '外部推送：本轮');
+  await expect(bell).toHaveAttribute('title', /^外部推送：本轮/);
+  await expect(tip).toContainText('已订阅本轮');
   await expect(page.locator('.session-row.selected').getByLabel('本轮推送')).toBeVisible();
   await page.screenshot({ path: resolve(shots, 'subscribed.png') });
   // A toolbar too narrow for the native controls, as on a phone, folds the approval mode to its icon; the bell keeps
@@ -61,8 +62,15 @@ test('a session is subscribed to pushes from beside the input box once a channel
     return getComputedStyle(icon).display;
   });
   expect(folded).not.toBe('none');
+  // Past the window in which a second click makes the subscription lasting, a click cancels it.
+  await page.waitForTimeout(500);
   await bell.click();
-  await page.getByRole('menuitemradio', { name: '不订阅', exact: true }).click();
+  await expect(tip).toHaveText('已取消订阅');
+  await expect(page.locator('.session-row.selected .push-mark')).toHaveCount(0);
+  await bell.dblclick();
+  await expect(page.locator('.session-row.selected').getByLabel('持续推送')).toBeVisible();
+  await page.waitForTimeout(500);
+  await bell.click();
   await expect(page.locator('.session-row.selected .push-mark')).toHaveCount(0);
 
   // The simulated service keeps its settings between runs.
