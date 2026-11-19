@@ -10,29 +10,35 @@ import {
 } from 'lucide-react';
 import type { PermissionMode } from '@cc-desk-tunnel/protocol';
 import { usePrefs } from './prefs.ts';
+import { modeNames } from './modes.ts';
 
 // The modes are Claude Code's own; the lines under them say what each asks the user for.
 type Mode = { value: PermissionMode; name: string; detail: string; icon: typeof Hand };
 const modes: Mode[] = [
   {
     value: 'auto',
-    name: '自动审批',
+    name: modeNames.auto,
     detail: '由 Claude Code 判断风险，只在必要时询问',
     icon: ShieldCheck,
   },
-  { value: 'default', name: '手动审批', detail: '编辑文件和执行命令前都先询问', icon: Hand },
+  { value: 'default', name: modeNames.default, detail: '编辑文件和执行命令前都先询问', icon: Hand },
   {
     value: 'acceptEdits',
-    name: '接受编辑',
+    name: modeNames.acceptEdits,
     detail: '文件编辑直接通过，执行命令仍先询问',
     icon: FilePen,
   },
-  { value: 'plan', name: '计划模式', detail: '只调研并给出计划，不做改动', icon: ListChecks },
+  {
+    value: 'plan',
+    name: modeNames.plan,
+    detail: '只调研并写出计划，经你批准后才动手',
+    icon: ListChecks,
+  },
 ];
 // Offered once the user allowed it in the settings, and chosen only after being told what it means.
 const bypass: Mode = {
   value: 'bypassPermissions',
-  name: '绕过权限',
+  name: modeNames.bypassPermissions,
   detail: '任何操作都不再询问，风险自负',
   icon: ShieldOff,
 };
@@ -71,7 +77,9 @@ export default function PermissionMenu({
     <div className="permission-control" ref={container}>
       <button
         type="button"
-        className={mode === bypass.value ? 'chip danger' : 'chip'}
+        className={
+          mode === bypass.value ? 'chip danger' : mode === 'plan' ? 'chip planning' : 'chip'
+        }
         aria-label="审批模式"
         title={current.name}
         aria-haspopup="menu"

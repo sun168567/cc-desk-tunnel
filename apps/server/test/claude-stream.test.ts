@@ -307,3 +307,38 @@ test('the gateway notice of auto mode is shown once a day, other notices every t
   assert.equal(shownToday('Native notice', 11 * day), false);
   assert.equal(shownToday('Native notice', 11 * day), false);
 });
+
+test('a change of mode the CLI reports during a run is passed on once; what the run started in is not', () => {
+  const events: EventPayload[] = [];
+  const stream = new ClaudeStream((event) => events.push(event), 'plan');
+  const status = (permissionMode: string) =>
+    stream.accept({ type: 'system', subtype: 'status', status: null, permissionMode });
+  stream.accept({
+    type: 'system',
+    subtype: 'init',
+    session_id: randomUUID(),
+    model: 'test',
+    claude_code_version: '2.1.321',
+    permissionMode: 'plan',
+  });
+  status('plan');
+  status('acceptEdits');
+  status('acceptEdits');
+  // A mode this service does not know is not one the session can keep.
+  status('someNewMode');
+  stream.accept({
+    type: 'system',
+    subtype: 'init',
+    session_id: randomUUID(),
+    model: 'test',
+    claude_code_version: '2.1.321',
+    permissionMode: 'default',
+  });
+  assert.deepEqual(
+    events.filter((event) => event.type === 'native.mode'),
+    [
+      { type: 'native.mode', permissionMode: 'acceptEdits' },
+      { type: 'native.mode', permissionMode: 'default' },
+    ],
+  );
+});

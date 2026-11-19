@@ -62,7 +62,7 @@ import {
   quotas,
   readNativeStatus,
 } from './claude.ts';
-import type { ClaudeOptions, Unanswered } from './claude.ts';
+import type { ClaudeOptions, PlanDecision, Unanswered } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import { HistoryDelivery } from './history-delivery.ts';
@@ -147,13 +147,22 @@ export type Run = {
   toolId?: string;
   toolFinished: boolean;
   approvalId?: string;
-  decide?: (allowed: boolean, answers?: Record<string, string>) => void;
+  // The simulated approval when it is a plan.
+  planApproval?: string;
+  decide?: (allowed: boolean, answers?: Record<string, string>, plan?: PlanDecision) => void;
   approvals: Map<
     string,
-    (allowed: boolean, answers?: Record<string, string>, unanswered?: Unanswered) => void
+    (
+      allowed: boolean,
+      answers?: Record<string, string>,
+      unanswered?: Unanswered,
+      plan?: PlanDecision,
+    ) => void
   >;
   // The approvals that are Claude's questions, answered or left unanswered rather than allowed or denied.
   questions: Set<string>;
+  // The approvals that are Claude's plans, which alone may be answered with a mode to carry them out in.
+  plans: Set<string>;
   // Approvals and questions answered already: a second answer, from another window or computer, came late.
   answered: Set<string>;
   cancelReason?: string;
@@ -596,6 +605,11 @@ export function createProxyServer(options: ServerOptions) {
         session: store.renameNative(run.sessionId, payload.title),
       });
     if (payload.type === 'native.compact') store.compacted(run.sessionId);
+    if (payload.type === 'native.mode')
+      broadcast({
+        type: 'session.updated',
+        session: store.adoptMode(run.sessionId, payload.permissionMode),
+      });
     if (payload.type === 'run.status') updated(run.sessionId);
   }
   // The CLI reports its model requests a moment after the turn ends. Wait for as many as the turn made, then
@@ -709,18 +723,25 @@ export function createProxyServer(options: ServerOptions) {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
           const approvalId = randomUUID();
           if (waiting === 'question') run.questions.add(approvalId);
+          if (waiting === 'plan') run.plans.add(approvalId);
           return new Promise((resolve) => {
-            run.approvals.set(approvalId, (allowed, answers, unanswered) => {
+            run.approvals.set(approvalId, (allowed, answers, unanswered, plan) => {
               run.questions.delete(approvalId);
-              emit(run, { type: 'approval.resolved', approvalId, allowed });
-              resolve({ allowed, answers, unanswered });
+              run.plans.delete(approvalId);
+              emit(run, {
+                type: 'approval.resolved',
+                approvalId,
+                allowed,
+                ...planned(allowed, plan),
+              });
+              resolve({ allowed, answers, unanswered, plan });
             });
             emit(run, { type: 'approval.requested', approvalId, toolId });
             emit(run, {
               type: 'run.status',
               status: 'awaiting_approval',
               connectionId: run.connectionId,
-              waiting,
+              waiting: waiting === 'plan' ? 'approval' : waiting,
             });
           });
         },
@@ -1423,6 +1444,7 @@ export function createProxyServer(options: ServerOptions) {
       toolFinished: false,
       approvals: new Map(),
       questions: new Set(),
+      plans: new Set(),
       answered: new Set(),
       controls: {},
       stats: inOrder(),
@@ -1449,6 +1471,7 @@ export function createProxyServer(options: ServerOptions) {
             {
               stepMs: options.stepMs ?? 110,
               projectPath: () => store.get(run.sessionId).session.projectPath,
+              permissionMode: () => store.get(run.sessionId).session.permissionMode,
               emit: (payload) => emit(run, payload),
               finish: (status, reason) => finish(run, status, reason),
             },
@@ -1468,6 +1491,16 @@ export function createProxyServer(options: ServerOptions) {
     }
     if (command.type === 'approval.reply' && run.answered.has(command.approvalId))
       throw new DomainError('approval_answered', '这一项已经处理过了，可能是在另一台设备上。');
+    // A mode, a changed plan or feedback is an answer to Claude's plan only: an approval of anything else does not
+    // change the mode by it.
+    if (
+      command.type === 'approval.reply' &&
+      command.plan &&
+      !(options.claude
+        ? run.plans.has(command.approvalId)
+        : run.planApproval === command.approvalId)
+    )
+      throw new DomainError('approval_invalid', '只有 Claude 的计划可以选择执行方式。');
     if (command.type === 'run.task.stop') {
       if (!run.controls.stopTask) return;
       // The CLI reports the task gone through its task list; a task already over is not an error.
@@ -1506,6 +1539,7 @@ export function createProxyServer(options: ServerOptions) {
           command.answers,
           skipped ? 'skipped' : undefined,
           peer.id,
+          command.plan,
         )
       )
         throw new DomainError('approval_inactive', '审批已失效。');
@@ -1516,9 +1550,14 @@ export function createProxyServer(options: ServerOptions) {
     const decide = run.decide;
     run.decide = undefined;
     run.answered.add(command.approvalId);
-    decide(command.allowed, command.answers);
+    decide(command.allowed, command.answers, command.plan);
   }
 
+  // What the record keeps of a plan approved: the mode it was carried out in, and whether the user changed it.
+  function planned(allowed: boolean, plan?: PlanDecision) {
+    if (!allowed || !plan) return {};
+    return { ...(plan.mode ? { mode: plan.mode } : {}), ...(plan.edited ? { edited: true } : {}) };
+  }
   function answerApproval(
     run: Run,
     approvalId: string,
@@ -1526,12 +1565,13 @@ export function createProxyServer(options: ServerOptions) {
     answers: Record<string, string> | undefined,
     unanswered: Unanswered | undefined,
     connectionId = run.connectionId,
+    plan?: PlanDecision,
   ) {
     const decide = run.approvals.get(approvalId);
     if (!decide) return false;
     run.approvals.delete(approvalId);
     run.answered.add(approvalId);
-    decide(allowed, answers, unanswered);
+    decide(allowed, answers, unanswered, plan);
     if (!run.approvals.size) emit(run, { type: 'run.status', status: 'running', connectionId });
     return true;
   }

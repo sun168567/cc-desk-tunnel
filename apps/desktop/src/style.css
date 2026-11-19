@@ -4108,6 +4108,165 @@ dialog {
 .question-card .approval-actions {
   border-top: 0;
 }
+
+/* Claude's plan: a document in the turn, with the decision on it below. */
+.plan-card {
+  max-width: 760px;
+  margin: 6px 0 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.plan-card.returned {
+  border-left-color: var(--line-strong);
+}
+.plan-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.plan-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.plan-title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex: none;
+}
+.plan-title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--faint);
+}
+.plan-outcome {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.plan-outcome.approved {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.plan-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.plan-tools .copy-button span {
+  display: none;
+}
+.plan-body {
+  max-height: 480px;
+  overflow: hidden;
+  padding: 4px 16px 6px;
+}
+.plan-body.clipped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+}
+.plan-body.whole {
+  max-height: none;
+}
+.plan-more {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto 8px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+.plan-more:hover {
+  background: var(--hover);
+}
+.plan-more svg {
+  width: 14px;
+  height: 14px;
+}
+.plan-editor,
+.plan-return textarea {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  margin: 10px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.65;
+  resize: vertical;
+}
+.plan-editor {
+  min-height: 280px;
+}
+.plan-return textarea {
+  min-height: 90px;
+}
+.plan-feedback {
+  margin: 0 16px 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.plan-decide {
+  border-top: 1px solid var(--line-soft);
+}
+.plan-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+}
+.plan-modes-label {
+  color: var(--faint);
+  font-size: 12px;
+}
+.plan-decide .approval-actions,
+.plan-return .approval-actions {
+  flex-wrap: wrap;
+  border-top: 0;
+}
+.plan-reader {
+  max-width: 820px;
+  max-height: 72vh;
+  overflow: auto;
+  padding: 0 4px;
+}
+/* The composer's mode chip while the session plans before it acts. */
+.chip.planning,
+button.chip.planning:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
 .menu-heading {
   max-width: 300px;
 }

@@ -1,4 +1,5 @@
-import type { SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
+import type { PlanMode, SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
+import { modeNames } from './modes.ts';
 
 export type ToolState =
   | 'requested'
@@ -57,6 +58,9 @@ export type TranscriptItem =
       // The task the call waits on in the foreground, which may be ended or sent to the background until it returns.
       taskId?: string;
       exitCode?: number | null;
+      // Claude's plan approved: the mode it was carried out in, and whether the user changed it first.
+      mode?: PlanMode;
+      edited?: boolean;
     };
 
 export function transcript(events: SessionEvent[]): TranscriptItem[] {
@@ -143,8 +147,22 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
         tool.resolved = true;
         tool.status = payload.allowed ? '运行中' : '已拒绝';
         tool.state = payload.allowed ? 'running' : 'denied';
+        if (payload.mode) tool.mode = payload.mode;
+        if (payload.edited) tool.edited = true;
       }
     }
+    // Claude Code changed its mode during the run: Claude went into plan mode, or a plan approved took a mode.
+    if (payload.type === 'native.mode')
+      add({
+        kind: 'note',
+        id: `mode-${sequence}`,
+        runId,
+        text:
+          payload.permissionMode === 'plan'
+            ? 'Claude 进入了计划模式：先调研并写出计划，经你批准后才动手'
+            : `审批模式改为「${modeNames[payload.permissionMode]}」`,
+        at,
+      });
     if (payload.type === 'tool.result') {
       const tool = byId.get(payload.toolId);
       if (tool?.kind === 'tool') {
@@ -229,12 +247,29 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
 
 type Tool = Extract<TranscriptItem, { kind: 'tool' }>;
 type Text = Extract<TranscriptItem, { kind: 'user' | 'assistant' | 'thinking' }>;
+// Claude's plan, asked to be carried out: a step of its own, in view, rather than one of the tool calls folded away.
+export const isPlan = (item: { kind: string; name?: string }) =>
+  item.kind === 'tool' && item.name === 'ExitPlanMode';
+// The plan Claude Code put in the input of its ExitPlanMode tool, and the file it keeps it in; null when there is
+// none, as while the input is still coming.
+export function planOf(input: string): { plan: string; file?: string } | null {
+  try {
+    const value = JSON.parse(input);
+    if (typeof value?.plan !== 'string' || !value.plan.trim()) return null;
+    return {
+      plan: value.plan,
+      ...(typeof value.planFilePath === 'string' ? { file: value.planFilePath } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
 export type Compact = Extract<TranscriptItem, { kind: 'compact' }>;
 export type Notice = Extract<TranscriptItem, { kind: 'notice' | 'note' }>;
 // What happened between two pieces of text the reader was shown: tools and thinking, folded into one line.
 export type Work = { kind: 'work'; id: string; items: (Tool | Text)[] };
 // A compaction is part of the work on a question, between the steps before and after it.
-export type Step = Text | Work | Compact | Notice;
+export type Step = Text | Work | Compact | Notice | Tool;
 // One question and everything up to the next one. Once finished, only the question, the time taken and the
 // answer stay in view; `steps` holds the rest.
 export type Turn = {
@@ -343,7 +378,10 @@ export function conversation(events: SessionEvent[]): Turn[] {
     else if (item.kind === 'notice') turn.notices.push(item);
     else if (item.kind === 'assistant' || item.kind === 'note' || item.kind === 'compact')
       turn.steps.push(item);
-    else {
+    else if (item.kind === 'tool' && isPlan(item)) {
+      turn.steps.push(item);
+      turn.tools++;
+    } else {
       const last = turn.steps.at(-1);
       if (last?.kind === 'work') last.items.push(item);
       else turn.steps.push({ kind: 'work', id: item.id, items: [item] });

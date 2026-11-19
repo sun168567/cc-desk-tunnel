@@ -4,7 +4,7 @@ import { webCertificateStateSchema } from './web-certificate.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 27;
+export const PROTOCOL_VERSION = 28;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -26,10 +26,13 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.14': 25,
   '0.3.15': 26,
   '0.3.16': 27,
+  '0.3.17': 28,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
 export const INSTRUCTIONS_LIMIT = 64_000;
+// The longest plan the user may hand back edited, or feedback on one, in characters; within MAX_FRAME_BYTES too.
+export const PLAN_LIMIT = 60_000;
 const id = z.uuid();
 // A path tells its own system: a Windows one begins with a drive letter or two backslashes, anything else is
 // a POSIX one. Sessions of both kinds can be in one list, each from the computer it is on.
@@ -57,6 +60,10 @@ export const permissionModeSchema = z.enum([
   'bypassPermissions',
 ]);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
+// The modes a plan may be carried out in once approved, as Claude Code's own plan approval offers them; the mode
+// that asks about nothing is not among them, as a run must start in it to have it.
+export const planModeSchema = z.enum(['auto', 'acceptEdits', 'default']);
+export type PlanMode = z.infer<typeof planModeSchema>;
 export const effortSchema = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export type Effort = z.infer<typeof effortSchema>;
 export const modelInfoSchema = z.object({
@@ -264,7 +271,7 @@ export type TerminalActivity = z.infer<typeof terminalActivitySchema>;
 export const terminalStatuses = new Set<RunStatus>(['completed', 'cancelled', 'failed']);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
-const scenarioSchema = z.enum(['chat', 'tool', 'question', 'error']);
+const scenarioSchema = z.enum(['chat', 'tool', 'question', 'plan', 'error']);
 const toolSchema = z.object({
   toolId: z.string().min(1),
   name: z.string().min(1),
@@ -313,6 +320,9 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     updatedAt: timestamp.optional(),
   }),
   z.object({ type: z.literal('native.notice'), text: z.string() }),
+  // The mode the CLI works in changed during the run: Claude entered plan mode by itself, or a plan was approved
+  // and the mode chosen for it took over. The session keeps it for the turns that follow.
+  z.object({ type: z.literal('native.mode'), permissionMode: permissionModeSchema }),
   // The background tasks alive in the run's CLI; each list replaces the one before.
   z.object({
     type: z.literal('native.tasks'),
@@ -395,7 +405,14 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     summary: z.string().max(300).optional(),
   }),
   z.object({ type: z.literal('approval.requested'), approvalId: id, toolId: z.string().min(1) }),
-  z.object({ type: z.literal('approval.resolved'), approvalId: id, allowed: z.boolean() }),
+  z.object({
+    type: z.literal('approval.resolved'),
+    approvalId: id,
+    allowed: z.boolean(),
+    // For a plan approved: the mode it is carried out in, and whether the user changed it first.
+    mode: planModeSchema.optional(),
+    edited: z.boolean().optional(),
+  }),
   z.object({
     type: z.literal('tool.result'),
     toolId: z.string().min(1),
@@ -472,6 +489,8 @@ export const sessionSchema = z.object({
   // the user's computers sends its messages. A session from before 0.2.11 has none until a computer sends it one.
   device: deviceSchema.optional(),
   permissionMode: permissionModeSchema.default('auto'),
+  // The mode the session was in before it went into plan mode, which a plan approved goes back to by default.
+  modeBeforePlan: planModeSchema.optional(),
   model: z.string().trim().min(1).max(200).nullable().default(null),
   effort: effortSchema.nullable().default(null),
   // The directory on the service that Claude Code works in, under its native/ folder: the one of the session's
@@ -801,6 +820,15 @@ export const commandSchema = z.discriminatedUnion('type', [
       allowed: z.boolean(),
       // The answers to a question Claude asked, keyed by the question's text.
       answers: z.record(z.string().max(2000), z.string().max(4000)).optional(),
+      // Only for Claude's plan: allowed, the mode to carry it out in and the plan as the user changed it; not
+      // allowed, what the user says to plan further by.
+      plan: z
+        .object({
+          mode: planModeSchema.optional(),
+          edited: z.string().trim().min(1).max(PLAN_LIMIT).optional(),
+          feedback: z.string().trim().max(PLAN_LIMIT).optional(),
+        })
+        .optional(),
     })
     .strict(),
 ]);

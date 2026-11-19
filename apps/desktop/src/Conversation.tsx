@@ -31,7 +31,7 @@ import {
   X,
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
-import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
+import type { PlanMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { fileName, pieces } from './attachments.ts';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
@@ -39,7 +39,9 @@ import type { HistoryState, TaskProgress } from './client.ts';
 import { RunStatus, TaskLine, terminalState } from './RunStatus.tsx';
 import type { Clock } from './RunStatus.tsx';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
-import { conversation } from './transcript.ts';
+import PlanCard, { feedbackOf } from './PlanCard.tsx';
+import type { PlanOutcome } from './PlanCard.tsx';
+import { conversation, isPlan, planOf } from './transcript.ts';
 import { usePrefs } from './prefs.ts';
 import { firstLine } from './transcriptView.ts';
 import type { Compact, Notice, TranscriptItem, Turn, Work } from './transcript.ts';
@@ -65,6 +67,8 @@ const Rich = ({ text }: { text: string }) => (
 
 type Tool = Extract<TranscriptItem, { kind: 'tool' }>;
 type Text = Extract<TranscriptItem, { kind: 'user' | 'assistant' | 'thinking' }>;
+// How the user decided on Claude's plan, beyond yes or no.
+export type PlanReply = { mode?: PlanMode; edited?: string; feedback?: string };
 // What the rows need from the session: the clock for running timers and how to answer an approval.
 type Live = {
   now: number;
@@ -73,7 +77,11 @@ type Live = {
   // This window has answered the approval and waits for the service to take it: a second press would be
   // a second answer.
   answered: (tool: Tool) => boolean;
-  reply: (tool: Tool, allowed: boolean, answers?: Record<string, string>) => void;
+  reply: (tool: Tool, allowed: boolean, answers?: Record<string, string>, plan?: PlanReply) => void;
+  // The call belongs to the run going on now.
+  current: (tool: Tool) => boolean;
+  // The mode a plan approved is carried out in unless the user picks another.
+  planMode: PlanMode;
   // The foreground task a running call waits on, while this window may act on it: 'sent' once it has, until
   // the call returns.
   taskControl: (tool: Tool) => 'ready' | 'sent' | undefined;
@@ -601,6 +609,48 @@ function heldOpen(turns: Turn[], index: number) {
   return last > index && !turns[last].endedAt;
 }
 
+// Claude's plan in its place in the turn. One whose input carries no plan is shown as any other call.
+function PlanStep({ tool, live, folded }: { tool: Tool; live: Live; folded?: boolean }) {
+  const found = planOf(tool.input);
+  if (!found)
+    return (
+      <div className="work-flat">
+        <ToolRow tool={tool} active={live.current(tool)} live={live} />
+      </div>
+    );
+  const approvable = live.canApprove(tool);
+  const outcome: PlanOutcome | undefined = approvable
+    ? undefined
+    : tool.state === 'denied'
+      ? { kind: 'returned', feedback: feedbackOf(tool.output) }
+      : tool.state === 'running' || tool.state === 'completed'
+        ? { kind: 'approved', mode: tool.mode, edited: tool.edited }
+        : live.current(tool) && !tool.endedAt
+          ? { kind: 'waiting' }
+          : { kind: 'open' };
+  return (
+    <PlanCard
+      key={tool.input}
+      plan={found.plan}
+      file={found.file}
+      outcome={outcome}
+      folded={folded}
+      decide={
+        approvable
+          ? {
+              busy: live.busy || live.answered(tool),
+              mode: live.planMode,
+              approve: (mode, edited) =>
+                live.reply(tool, true, undefined, { mode, ...(edited ? { edited } : {}) }),
+              keepPlanning: (feedback) =>
+                live.reply(tool, false, undefined, feedback ? { feedback } : undefined),
+            }
+          : undefined
+      }
+    />
+  );
+}
+
 function TurnView({
   turn,
   native,
@@ -619,9 +669,13 @@ function TurnView({
   const notes = turn.steps.filter((step) => step.kind === 'assistant').length;
   // A turn of nothing but a compaction, as /compact makes, has nothing to fold away.
   const folds = turn.steps.some((step) => step.kind === 'work' || step.kind === 'assistant');
-  const steps = () =>
+  // A turn that is over keeps its plans in view, folded to their heading, outside the steps folded away.
+  const plans = turn.steps.filter((step): step is Tool => isPlan(step));
+  const steps = (withPlans = true) =>
     turn.steps.map((step, index) =>
-      step.kind === 'compact' ? (
+      step.kind === 'tool' ? (
+        withPlans && <PlanStep key={step.id} tool={step} live={live} />
+      ) : step.kind === 'compact' ? (
         <CompactMark key={step.id} item={step} active={active} now={live.now} />
       ) : step.kind === 'notice' || step.kind === 'note' ? (
         <NoticeLine key={step.id} item={step} />
@@ -657,20 +711,25 @@ function TurnView({
       {active || held || expanded || !folds
         ? steps()
         : turn.steps.length > 0 && (
-            <Fold
-              className="turn-process"
-              summary={
-                <span className={turn.outcome}>
-                  {turn.outcome === 'cancelled' && '已停止 · '}
-                  {turn.outcome === 'failed' && '处理失败 · '}
-                  用时 {spent(turn)}
-                  {turn.tools > 0 && ` · ${turn.tools} 步`}
-                  {notes > 0 && ` · ${notes} 条说明`}
-                </span>
-              }
-            >
-              {steps}
-            </Fold>
+            <>
+              <Fold
+                className="turn-process"
+                summary={
+                  <span className={turn.outcome}>
+                    {turn.outcome === 'cancelled' && '已停止 · '}
+                    {turn.outcome === 'failed' && '处理失败 · '}
+                    用时 {spent(turn)}
+                    {turn.tools > 0 && ` · ${turn.tools} 步`}
+                    {notes > 0 && ` · ${notes} 条说明`}
+                  </span>
+                }
+              >
+                {() => steps(false)}
+              </Fold>
+              {plans.map((plan) => (
+                <PlanStep key={plan.id} tool={plan} live={live} folded />
+              ))}
+            </>
           )}
       {turn.answer ? (
         <Message
@@ -739,6 +798,7 @@ export default function Conversation({
     approvalId: string,
     allowed: boolean,
     answers?: Record<string, string>,
+    plan?: PlanReply,
     // Whether the answer reached the service.
   ) => Promise<boolean>;
   edit?: (messageId: string, text: string) => void;
@@ -876,12 +936,14 @@ export default function Conversation({
       session?.activeRun?.id === tool.runId &&
       !tool.resolved &&
       !!tool.approvalId,
-    reply: (tool, allowed, answers) => {
+    current: (tool) => session?.activeRun?.id === tool.runId,
+    planMode: session?.modeBeforePlan ?? 'auto',
+    reply: (tool, allowed, answers, plan) => {
       const id = tool.approvalId!;
       if (answering.current.has(id)) return;
       answering.current.add(id);
       setAnswered((value) => new Set(value).add(id));
-      void replyApproval(tool.runId, id, allowed, answers).then((sent) => {
+      void replyApproval(tool.runId, id, allowed, answers, plan).then((sent) => {
         if (sent) return;
         answering.current.delete(id);
         setAnswered((value) => {

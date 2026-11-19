@@ -256,3 +256,36 @@ test('a run is at work while a turn goes or waits on the user, or the CLI of a t
   assert.equal(commandSchema.safeParse({ ...install, force: true }).success, true);
   assert.equal(commandSchema.safeParse({ ...install, force: 'yes' }).success, false);
 });
+
+test("an answer to Claude's plan carries a mode it may be carried out in, the plan changed or feedback", () => {
+  const reply = {
+    type: 'approval.reply',
+    requestId: randomUUID(),
+    sessionId: randomUUID(),
+    runId: randomUUID(),
+    approvalId: randomUUID(),
+    allowed: true,
+  };
+  const parsed = commandSchema.parse({
+    ...reply,
+    plan: { mode: 'acceptEdits', edited: '# 计划\n\n1. 改\n' },
+  });
+  assert.ok(parsed.type === 'approval.reply' && parsed.plan?.mode === 'acceptEdits');
+  assert.ok(
+    commandSchema.safeParse({ ...reply, allowed: false, plan: { feedback: '再想想' } }).success,
+  );
+  // The mode that asks about nothing needs a run started in it; plan mode is what is being left.
+  for (const mode of ['bypassPermissions', 'plan'])
+    assert.equal(commandSchema.safeParse({ ...reply, plan: { mode } }).success, false, mode);
+  assert.equal(commandSchema.safeParse({ ...reply, plan: { edited: '  ' } }).success, false);
+  // What the CLI says of its mode is one of the modes the session may be in.
+  assert.ok(
+    eventSchema.safeParse({
+      sessionId: randomUUID(),
+      runId: randomUUID(),
+      sequence: 1,
+      createdAt: new Date().toISOString(),
+      payload: { type: 'native.mode', permissionMode: 'plan' },
+    }).success,
+  );
+});

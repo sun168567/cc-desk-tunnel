@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Command, EventPayload } from '@cc-desk-tunnel/protocol';
+import type { Command, EventPayload, PermissionMode } from '@cc-desk-tunnel/protocol';
+import { keepPlanning, type PlanDecision } from './claude.ts';
 import type { Run } from './server.ts';
 
 type Host = {
   stepMs: number;
   projectPath: () => string;
+  permissionMode: () => PermissionMode;
   emit: (payload: EventPayload) => void;
   finish: (status: 'completed' | 'failed', reason?: string) => void;
 };
@@ -35,12 +37,18 @@ const question = {
   ],
 };
 
+// What the simulated model plans in the `plan` scenario, with the input Claude Code gives its ExitPlanMode tool.
+const plan = {
+  plan: '# 计划：整理设置页\n\n1. 读一遍现有设置页的结构\n2. 把“常规”拆成“窗口”和“会话”两组\n3. 补上说明文字和界面测试\n',
+  planFilePath: '/data/home/.claude/plans/simulated-plan.md',
+};
+
 // The offline adapter: scripted replies and one fake tool, so the GUI and protocol can be exercised without a model,
 // a tunnel or any real command.
 export async function simulate(
   run: Run,
   command: Extract<Command, { type: 'message.send' }>,
-  { stepMs, projectPath, emit, finish }: Host,
+  { stepMs, projectPath, permissionMode, emit, finish }: Host,
 ) {
   const pause = () => delay(stepMs, undefined, { signal: run.controller.signal });
   const stream = async (text: string) => {
@@ -97,6 +105,85 @@ export async function simulate(
         exitCode: null,
       });
       await stream(answers ? `收到回答：${chosen}` : '没有得到回答，本轮到此为止。');
+    } else if (command.scenario === 'plan') {
+      // Claude enters plan mode by itself where the session is not in it, as Claude Code lets it without asking.
+      if (permissionMode() !== 'plan') {
+        const entered = randomUUID();
+        emit({
+          type: 'tool.requested',
+          toolId: entered,
+          name: 'EnterPlanMode',
+          input: '{}',
+          target: 'Windows (simulation)',
+        });
+        emit({ type: 'native.mode', permissionMode: 'plan' });
+        emit({
+          type: 'tool.result',
+          toolId: entered,
+          status: 'completed',
+          output: 'Entered plan mode.',
+          exitCode: null,
+        });
+      }
+      await stream('先看了一下现有结构，计划如下。');
+      // A message that asks for a long plan gets one, to be read in part and opened whole.
+      const planned = command.text.includes('长计划')
+        ? {
+            ...plan,
+            plan:
+              plan.plan +
+              Array.from(
+                { length: 30 },
+                (_, index) => `\n## 细节 ${index + 1}\n\n第 ${index + 1} 处要改的地方和理由。\n`,
+              ).join(''),
+          }
+        : plan;
+      run.toolId = randomUUID();
+      run.approvalId = run.planApproval = randomUUID();
+      const reply = new Promise<{ allowed: boolean; decision?: PlanDecision }>((resolve) => {
+        run.decide = (allowed, _answers, decision) => resolve({ allowed, decision });
+      });
+      emit({
+        type: 'tool.requested',
+        toolId: run.toolId,
+        name: 'ExitPlanMode',
+        input: JSON.stringify(planned, null, 2),
+        target: 'Windows (simulation)',
+      });
+      emit({ type: 'approval.requested', approvalId: run.approvalId, toolId: run.toolId });
+      emit({ type: 'run.status', status: 'awaiting_approval', connectionId: run.connectionId });
+      const { allowed, decision } = await reply;
+      if (run.controller.signal.aborted) return;
+      run.decide = run.planApproval = undefined;
+      emit({
+        type: 'approval.resolved',
+        approvalId: run.approvalId,
+        allowed,
+        ...(allowed && decision?.mode ? { mode: decision.mode } : {}),
+        ...(allowed && decision?.edited ? { edited: true } : {}),
+      });
+      if (allowed && decision?.edited)
+        emit({
+          type: 'tool.input',
+          toolId: run.toolId,
+          input: JSON.stringify({ ...planned, plan: decision.edited }, null, 2),
+        });
+      emit({ type: 'run.status', status: 'running', connectionId: run.connectionId });
+      // As Claude Code does: approved, it works in the mode chosen, or asks about edits where none was.
+      if (allowed) emit({ type: 'native.mode', permissionMode: decision?.mode ?? 'default' });
+      run.toolFinished = true;
+      emit({
+        type: 'tool.result',
+        toolId: run.toolId,
+        status: allowed ? 'completed' : 'denied',
+        output: allowed
+          ? `User has approved your plan. You can now start coding.\n\n## Approved Plan:\n${decision?.edited ?? planned.plan}`
+          : keepPlanning(decision?.feedback),
+        exitCode: null,
+      });
+      await stream(
+        allowed ? '按批准的计划开始执行（模拟，未改动文件）。' : '好的，按你的意见继续规划。',
+      );
     } else if (command.scenario === 'tool') {
       run.toolId = randomUUID();
       run.approvalId = randomUUID();
