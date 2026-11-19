@@ -188,3 +188,19 @@ test('a click puts a command in the box, to be given its arguments', async ({ pa
   await expect(box(page)).toBeFocused();
   expect(sent).toEqual([]);
 });
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test('Enter starts a new line, and still picks a command from the menu', async ({ page }) => {
+    const sent = await open(page);
+    await box(page).fill('第一行');
+    await box(page).press('Enter');
+    await box(page).pressSequentially('第二行');
+    await expect(box(page)).toHaveValue('第一行\n第二行');
+    expect(sent).toEqual([]);
+    await box(page).fill('/con');
+    await box(page).press('Enter');
+    await expect.poll(() => sent).toEqual(['/context']);
+  });
+});
