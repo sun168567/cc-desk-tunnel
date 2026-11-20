@@ -358,6 +358,8 @@ export default function Composer({
               return;
             }
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              // A touch keyboard has no Shift+Enter: there Enter starts a new line and the send button sends.
+              if (!menuShown && matchMedia('(pointer: coarse)').matches) return;
               event.preventDefault();
               if (!menuShown) {
                 if (!tooLong) send();
