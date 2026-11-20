@@ -29,6 +29,7 @@ import {
   SquareTerminal,
   Wrench,
   X,
+  ShieldAlert,
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
 import type { PlanMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
@@ -82,6 +83,8 @@ type Live = {
   current: (tool: Tool) => boolean;
   // The mode a plan approved is carried out in unless the user picks another.
   planMode: PlanMode;
+  // The session asks about nothing, but for Claude Code's own safety checks.
+  bypassing: boolean;
   // The foreground task a running call waits on, while this window may act on it: 'sent' once it has, until
   // the call returns.
   taskControl: (tool: Tool) => 'ready' | 'sent' | undefined;
@@ -324,6 +327,26 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
                 </pre>
               </>
             )
+          )}
+          {approval && (tool.safetyCheck || tool.approvalReason) && (
+            <div
+              className="approval-reason"
+              role="note"
+              title={
+                tool.safetyCheck ? 'Claude Code 自身的安全检查，任何审批模式都会询问' : undefined
+              }
+            >
+              <ShieldAlert />
+              <span>
+                {tool.safetyCheck && (
+                  <b>
+                    Claude Code 安全拦截
+                    {live.bypassing && <i className="approval-tag">绕过时也提醒</i>}
+                  </b>
+                )}
+                {tool.approvalReason && <small>{tool.approvalReason}</small>}
+              </span>
+            </div>
           )}
           {approval && (
             <div className="approval-actions">
@@ -938,6 +961,7 @@ export default function Conversation({
       !!tool.approvalId,
     current: (tool) => session?.activeRun?.id === tool.runId,
     planMode: session?.modeBeforePlan ?? 'auto',
+    bypassing: session?.permissionMode === 'bypassPermissions',
     reply: (tool, allowed, answers, plan) => {
       const id = tool.approvalId!;
       if (answering.current.has(id)) return;
