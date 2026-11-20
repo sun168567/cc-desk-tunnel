@@ -18,6 +18,7 @@ import type {
   NativeMetrics,
   NativeSession,
   PermissionMode,
+  PushMode,
   Session,
 } from '@cc-desk-tunnel/protocol';
 import { slashCommands } from './commands.ts';
@@ -25,6 +26,7 @@ import ComposerControls from './ComposerControls.tsx';
 import MessageInput, { messageLimit } from './MessageInput.tsx';
 import type { MessageInputHandle } from './MessageInput.tsx';
 import PermissionMenu from './PermissionMenu.tsx';
+import PushMenu from './PushMenu.tsx';
 import { IconButton } from './ui.tsx';
 import type { MenuPosition } from './ui.tsx';
 
@@ -82,6 +84,7 @@ export default function Composer({
   compact,
   refresh,
   configure,
+  subscribe,
   stop,
 }: {
   session: Session;
@@ -119,6 +122,8 @@ export default function Composer({
     effort?: Effort | null;
     permissionMode?: PermissionMode;
   }) => Promise<void>;
+  // Absent while the service has nowhere to push to.
+  subscribe?: (mode: PushMode) => void;
   stop: () => void;
 }) {
   const input = useRef<MessageInputHandle>(null);
@@ -401,6 +406,7 @@ export default function Composer({
               change={(permissionMode) => void configure({ permissionMode })}
             />
           )}
+          {subscribe && <PushMenu mode={session.push ?? 'off'} change={subscribe} />}
           <span className="toolbar-space" />
           {native && (
             <ComposerControls

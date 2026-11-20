@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
@@ -699,11 +701,14 @@ test('restart recovery closes interrupted tools and does not replay side effects
     status: 'awaiting_approval',
     connectionId,
   });
+  store.setPush(session.id, 'once');
   store.close();
   const restarted = new SessionStore(directory);
   const recovered = restarted.snapshot(session.id);
   restarted.close();
   assert.equal(recovered.session.activeRun, null);
+  // The turn a subscription for one turn was for is over.
+  assert.equal(recovered.session.push, undefined);
   assert.ok(
     recovered.events.some(
       (event) => event.payload.type === 'tool.result' && event.payload.status === 'cancelled',
@@ -1202,6 +1207,72 @@ test('the idle compaction setting is read, changed for every window and kept wit
   );
   // Kept with the sessions, for the service as it starts again.
   assert.equal(readIdleCompaction(f.directory).minTokens, 150_000);
+});
+
+test('a session subscribed for one turn pushes its approval and its end, then no more; no secret is read back', async (t) => {
+  const pushed: { t: string; x: string }[] = [];
+  const hook = createServer((request, response) => {
+    let body = '';
+    request.on('data', (chunk) => (body += chunk));
+    request.on('end', () => {
+      pushed.push(JSON.parse(body));
+      response.end('{}');
+    });
+  });
+  await new Promise<void>((resolve) => hook.listen(0, '127.0.0.1', resolve));
+  t.after(() => hook.close());
+  const hookUrl = `http://127.0.0.1:${(hook.address() as AddressInfo).port}/hook`;
+  const f = await fixture(t);
+  const client = await f.connect();
+  const sessionId = await f.create(client);
+  await client.request({ type: 'push.update', values: { enabled: true } });
+  await client.request({
+    type: 'push.channel.add',
+    name: '测试',
+    config: {
+      kind: 'webhook',
+      url: hookUrl,
+      body: '{"t":"「{event}」{session}","x":"设备：{device}"}',
+    },
+  });
+  const state = await client.wait(
+    (message) => message.type === 'push.state' && message.values.channels.length > 0,
+  );
+  assert.ok(state.type === 'push.state' && state.values.channels[0].kind === 'webhook');
+  assert.equal(JSON.stringify(state).includes(hookUrl), false);
+
+  await client.request({ type: 'session.push', sessionId, mode: 'once' });
+  await client.request({ type: 'message.send', sessionId, text: '推送', scenario: 'tool' });
+  const approval = await client.event('approval.requested');
+  assert.ok(
+    approval.type === 'session.event' && approval.event.payload.type === 'approval.requested',
+  );
+  await client.request({
+    type: 'approval.reply',
+    sessionId,
+    runId: approval.event.runId,
+    approvalId: approval.event.payload.approvalId,
+    allowed: true,
+  });
+  const completed = (message: ServerMessage) =>
+    message.type === 'session.event' &&
+    message.event.payload.type === 'run.status' &&
+    message.event.payload.status === 'completed';
+  await client.wait(completed);
+  assert.equal(f.server.store.get(sessionId).session.push, undefined);
+  for (const deadline = Date.now() + 3000; pushed.length < 2 && Date.now() < deadline;)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(
+    pushed.map((message) => message.t),
+    ['「等待审批」中文会话', '「任务完成」中文会话'],
+  );
+  assert.equal(pushed[1].x, `设备：${device.name}`);
+
+  // The subscription went with that turn.
+  await client.request({ type: 'message.send', sessionId, text: '不推送', scenario: 'chat' });
+  await client.wait(completed);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(pushed.length, 2);
 });
 
 test('an upgrade is held back only by what is at work, and says what that is', () => {

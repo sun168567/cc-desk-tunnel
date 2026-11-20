@@ -277,6 +277,10 @@ button.chip:hover:not(:disabled) {
 .chip.quiet {
   background: var(--surface-2);
 }
+.chip.subscribed,
+button.chip.subscribed:hover:not(:disabled) {
+  color: var(--accent);
+}
 /* The approval mode that asks about nothing must not look like the others. */
 .chip.danger,
 button.chip.danger:hover:not(:disabled) {
@@ -890,6 +894,12 @@ dialog:has(.release-notes) {
   flex: none;
   color: var(--faint);
   font-size: 12px;
+}
+.session-select > .push-mark {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--accent);
 }
 .project-group > h2 > .pin-mark {
   width: 12px;
@@ -2673,12 +2683,14 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
 }
 .context-control,
 .model-control,
-.permission-control {
+.permission-control,
+.push-control {
   position: relative;
   min-width: 0;
 }
 .context-control,
-.permission-control {
+.permission-control,
+.push-control {
   flex-shrink: 0;
 }
 .context-button {
@@ -2729,6 +2741,123 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   left: 0;
   width: 330px;
   max-width: calc(100vw - 80px);
+}
+/* A double tap subscribes for good, so it must not zoom the page. */
+.push-control > .chip {
+  position: relative;
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+.chip > .push-bell {
+  display: flex;
+  overflow: visible;
+}
+/* Swings from where a bell hangs. */
+.push-bell.shake {
+  transform-origin: 50% 15%;
+  animation: push-bell-shake 600ms ease-in-out;
+}
+@keyframes push-bell-shake {
+  15% {
+    transform: rotate(16deg);
+  }
+  35% {
+    transform: rotate(-13deg);
+  }
+  55% {
+    transform: rotate(9deg);
+  }
+  75% {
+    transform: rotate(-5deg);
+  }
+}
+/* Fills around the bell while it is held; once full the subscription is lasting. */
+.chip > .push-ring {
+  position: absolute;
+  inset: -3px;
+  width: 36px;
+  height: 36px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.chip > .push-ring > circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: push-ring-fill var(--press) linear forwards;
+}
+/* A fingertip covers the bell and a ring just round it, so on a touch screen the ring is drawn wide of the finger. */
+@media (pointer: coarse) {
+  .chip > .push-ring {
+    inset: -15px;
+    width: 60px;
+    height: 60px;
+  }
+  .chip > .push-ring > circle {
+    stroke-width: 1.8;
+  }
+}
+@keyframes push-ring-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* A tap leaves a touch screen's button hovered until something else is tapped; the bell would look held. */
+@media (hover: none) {
+  .push-control > button.chip:hover:not(:disabled) {
+    background: transparent;
+    color: var(--muted);
+  }
+  .push-control > button.chip.subscribed:hover:not(:disabled) {
+    color: var(--accent);
+  }
+}
+/* Placed by its top and centre, just above the input box. */
+.push-tip {
+  position: fixed;
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translate(-50%, calc(-100% - 10px));
+  animation: push-tip-in var(--fade) ease-out;
+  pointer-events: none;
+}
+.push-tip.leaving {
+  animation: push-tip-out var(--fade) ease-in forwards;
+}
+@keyframes push-tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+}
+@keyframes push-tip-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 14px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .push-bell.shake,
+  .push-tip,
+  .push-tip.leaving {
+    animation: none;
+  }
 }
 .context-tooltip {
   bottom: calc(100% + 9px);
@@ -4377,6 +4506,44 @@ button.chip.planning:hover:not(:disabled) {
 .web-settings-form textarea {
   width: 100%;
   min-width: 0;
+}
+.web-settings-form select,
+.web-settings-form textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: inherit;
+}
+.push-empty {
+  margin: 0;
+  padding: 14px 20px;
+}
+.push-variables ul {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+/* Only to look at: its button and links go nowhere from here. */
+.push-preview-page {
+  pointer-events: none;
+  width: 100%;
+  height: 560px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: #fff;
+}
+.push-preview {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  font-weight: 400;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .web-trust-warning {
   display: flex;

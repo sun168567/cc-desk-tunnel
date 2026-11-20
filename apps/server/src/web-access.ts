@@ -330,7 +330,7 @@ export class WebAccess {
     const age = Math.max(0, Math.floor((expiry - this.now()) / 1000));
     return `${this.cookieName}=${secret}; Path=${this.prefix}/; HttpOnly; SameSite=Strict; Max-Age=${age}${this.https ? '; Secure' : ''}`;
   }
-  private url(origin?: string) {
+  url(origin?: string) {
     if (!origin) return undefined;
     try {
       const url = new URL(origin);

@@ -140,6 +140,56 @@ export function Modal({
   );
 }
 
+// A dialog of fields with its own cancel and confirm, which stay put while it is busy.
+export function DialogForm({
+  title,
+  busy,
+  error,
+  submit,
+  submitLabel,
+  close,
+  children,
+}: {
+  title: string;
+  busy: boolean;
+  error: string;
+  submit: () => void;
+  submitLabel?: string;
+  close: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Modal
+      title={title}
+      onClose={() => {
+        if (!busy) close();
+      }}
+    >
+      <form
+        className="web-settings-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy) submit();
+        }}
+      >
+        <fieldset disabled={busy}>{children}</fieldset>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="dialog-actions">
+          <button type="button" className="button" disabled={busy} onClick={close}>
+            取消
+          </button>
+          <button className="button primary" disabled={busy}>
+            {submitLabel ?? (busy ? '正在保存…' : '确认')}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 export type MenuItem = {
   label: string;
   icon?: ReactNode;

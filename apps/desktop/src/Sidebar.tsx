@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  BellDot,
+  BellRing,
   ChevronDown,
   ChevronRight,
   Ellipsis,
@@ -271,6 +273,8 @@ export default function Sidebar({
       >
         <button type="button" className="session-select" onClick={() => select(session.id)}>
           <strong>{session.title}</strong>
+          {session.push === 'once' && <BellDot className="push-mark" aria-label="本轮推送" />}
+          {session.push === 'always' && <BellRing className="push-mark" aria-label="持续推送" />}
           {session.activeRun && (
             <span className={`running-dot${breathing(session.activeRun) ? ' breathing' : ''}`} />
           )}
