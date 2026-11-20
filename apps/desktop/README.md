@@ -78,7 +78,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `src/WebAccessSettings.tsx`、`WebGate.tsx`、`browser-api.ts`、`host-capabilities.ts` | Web 设置与证书管理；浏览器登录和会话；桌面与浏览器的宿主能力区分 |
 | `src/ReverseProxyHelp.tsx`、`reverse-proxy.ts` | 根据当前访问设置生成可复制的 nginx / Caddy 示例，只生成文本，不改变部署 |
 | `src/shortcuts.ts`、`ShortcutSettings.tsx` | 快捷键的动作、默认组合键与按键的识别；修改它们的设置页 |
-| `src/QuestionCard.tsx`、`ComposerControls.tsx`、`PermissionMenu.tsx`、`AccountPanel.tsx`、`UsagePanel.tsx`、`CcdtDialog.tsx` | Claude 提问的作答卡片、模型 / effort / 上下文、审批模式菜单、账号页、调用日志、在 ccdt 中打开时的安装提示 |
+| `src/QuestionCard.tsx`、`PlanCard.tsx`、`ComposerControls.tsx`、`PermissionMenu.tsx`、`modes.ts`、`AccountPanel.tsx`、`UsagePanel.tsx`、`CcdtDialog.tsx` | Claude 提问的作答卡片、Claude 计划的阅读与批准卡片、模型 / effort / 上下文、审批模式菜单与模式名称、账号页、调用日志、在 ccdt 中打开时的安装提示 |
 | `src/drafts.ts`、`prefs.ts`、`schedules.ts`、`SchedulePanel.tsx` | 只属于这台电脑的数据：未发送的草稿；置顶、项目显示名称、通知开关与快捷键；定时任务的格式、到点判断与面板 |
 | `src/notifications.ts`、`NoticeBell.tsx`、`exportSession.ts` | 从会话运行状态的变化得出通知，及其列表；把会话导出为 Markdown |
 | `src/ui.tsx`、`paths.ts` | 图标按钮 / 对话框 / 菜单；Windows 路径比较 |

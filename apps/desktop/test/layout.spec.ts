@@ -556,7 +556,7 @@ test('approval modes are described where they are chosen, and models sit behind 
   const menu = page.getByRole('menu', { name: '审批模式' });
   await expect(menu.getByRole('menuitemradio')).toHaveCount(4);
   await expect(menu.getByRole('menuitemradio', { name: '自动审批', exact: true })).toBeChecked();
-  await expect(menu).toContainText('只调研并给出计划，不做改动');
+  await expect(menu).toContainText('只调研并写出计划，经你批准后才动手');
   await shot(page, '12-审批模式');
   await menu.getByRole('menuitemradio', { name: '手动审批', exact: true }).click();
   await expect(trigger).toContainText('手动审批');

@@ -738,6 +738,95 @@ test('native permission preference defaults to auto and persists; changing a run
   assert.ok(busy.type === 'response' && !busy.ok && busy.code === 'run_active');
 });
 
+test("Claude's plan approved in a mode moves the session into it; only a plan's answer may carry one", async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const sessionId = await f.create(client);
+  const other = await f.create(client);
+  // Claude goes into plan mode by itself: the session follows, remembering the mode it was in.
+  await client.request({ type: 'message.send', sessionId, text: '做个计划', scenario: 'plan' });
+  const asked = await client.event('approval.requested');
+  assert.ok(asked.type === 'session.event' && asked.event.payload.type === 'approval.requested');
+  assert.equal(f.server.store.get(sessionId).session.permissionMode, 'plan');
+  assert.equal(f.server.store.get(sessionId).session.modeBeforePlan, 'auto');
+  // An approval of anything else cannot change the mode by its answer.
+  await client.request({ type: 'message.send', sessionId: other, text: '工具', scenario: 'tool' });
+  const tool = await client.wait(
+    (message) =>
+      message.type === 'session.event' &&
+      message.event.sessionId === other &&
+      message.event.payload.type === 'approval.requested',
+  );
+  assert.ok(tool.type === 'session.event' && tool.event.payload.type === 'approval.requested');
+  const refused = await client.request({
+    type: 'approval.reply',
+    sessionId: other,
+    runId: tool.event.runId,
+    approvalId: tool.event.payload.approvalId,
+    allowed: true,
+    plan: { mode: 'acceptEdits' },
+  });
+  assert.ok(refused.type === 'response' && !refused.ok && refused.code === 'approval_invalid');
+  const approved = await client.request({
+    type: 'approval.reply',
+    sessionId,
+    runId: asked.event.runId,
+    approvalId: asked.event.payload.approvalId,
+    allowed: true,
+    plan: { mode: 'acceptEdits', edited: '# 改过的计划' },
+  });
+  assert.ok(approved.type === 'response' && approved.ok);
+  const resolved = await client.event('approval.resolved');
+  assert.ok(resolved.type === 'session.event');
+  assert.deepEqual(resolved.event.payload, {
+    type: 'approval.resolved',
+    approvalId: asked.event.payload.approvalId,
+    allowed: true,
+    mode: 'acceptEdits',
+    edited: true,
+  });
+  await client.wait(
+    (message) =>
+      message.type === 'session.updated' &&
+      message.session.id === sessionId &&
+      message.session.permissionMode === 'acceptEdits',
+  );
+  // Sent back, the plan leaves the session planning, and Claude reads why.
+  await client.wait(
+    (message) =>
+      message.type === 'session.event' &&
+      message.event.runId === asked.event.runId &&
+      message.event.payload.type === 'run.status' &&
+      message.event.payload.status === 'completed',
+  );
+  await client.request({ type: 'message.send', sessionId, text: '再计划', scenario: 'plan' });
+  const again = await client.event('approval.requested');
+  assert.ok(again.type === 'session.event' && again.event.payload.type === 'approval.requested');
+  assert.equal(f.server.store.get(sessionId).session.modeBeforePlan, 'acceptEdits');
+  const planTool = again.event.payload.toolId;
+  await client.request({
+    type: 'approval.reply',
+    sessionId,
+    runId: again.event.runId,
+    approvalId: again.event.payload.approvalId,
+    allowed: false,
+    plan: { feedback: '先别动第二步' },
+  });
+  const result = await client.wait(
+    (message) =>
+      message.type === 'session.event' &&
+      message.event.payload.type === 'tool.result' &&
+      message.event.payload.toolId === planTool,
+  );
+  assert.ok(result.type === 'session.event' && result.event.payload.type === 'tool.result');
+  assert.equal(result.event.payload.status, 'denied');
+  assert.match(result.event.payload.output, /Their feedback:\n先别动第二步/);
+  assert.equal(f.server.store.get(sessionId).session.permissionMode, 'plan');
+  const restored = new SessionStore(f.directory);
+  assert.equal(restored.get(sessionId).session.modeBeforePlan, 'acceptEdits');
+  restored.close();
+});
+
 test('session directory does not push history; switching subscribes to only the current session', async (t) => {
   const f = await fixture(t);
   const owner = await f.connect();

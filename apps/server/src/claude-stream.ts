@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { permissionModeSchema } from '@cc-desk-tunnel/protocol';
 import type { Effort, EventPayload, PermissionMode } from '@cc-desk-tunnel/protocol';
 
 const jsonObject = z.record(z.string(), z.unknown());
@@ -46,6 +47,9 @@ export class ClaudeStream {
   blocks = new Map<number, string>();
   requestedPermissionMode?: PermissionMode;
   requestedEffort?: Effort | null;
+  // The mode the CLI last said it works in. It says so again in a status message whenever it changes during the run:
+  // Claude entered plan mode, or a plan was approved in a mode chosen for it.
+  mode?: string;
   constructor(
     emit: (event: EventPayload) => void,
     permissionMode?: PermissionMode,
@@ -76,6 +80,17 @@ export class ClaudeStream {
   accept(value: unknown) {
     const message = jsonObject.parse(value);
     if (message.type === 'system') {
+      if (
+        (message.subtype === 'init' || message.subtype === 'status') &&
+        typeof message.permissionMode === 'string' &&
+        message.permissionMode !== this.mode
+      ) {
+        const known = permissionModeSchema.safeParse(message.permissionMode);
+        // The first word of it is what the run was started in, which the session has already.
+        if (this.mode !== undefined && known.success)
+          this.emit({ type: 'native.mode', permissionMode: known.data });
+        this.mode = message.permissionMode;
+      }
       if (message.subtype === 'init') {
         this.emit({
           type: 'native.session',

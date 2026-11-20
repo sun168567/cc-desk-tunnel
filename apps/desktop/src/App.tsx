@@ -69,6 +69,7 @@ import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
 import { UPDATE_TICK_MS, lookDue } from './update-check.ts';
 import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
+import { nextMode } from './modes.ts';
 import Rail from './Rail.tsx';
 import type { Page } from './Rail.tsx';
 import {
@@ -1456,6 +1457,14 @@ export function App({
       newSession: canCreate && (() => void newSession()),
       settings: () => open('settings'),
       find: !!selected && place.page === 'chat' && (() => setFindRequest((value) => value + 1)),
+      // As the mode menu, which a run going on keeps closed.
+      cycleMode:
+        !!selected &&
+        place.page === 'chat' &&
+        connected &&
+        !busy &&
+        !selected.activeRun &&
+        (() => void configure({ permissionMode: nextMode(selected.permissionMode) })),
       zoomIn: window.desktop && (() => window.desktop!.zoom(1)),
       zoomOut: window.desktop && (() => window.desktop!.zoom(-1)),
       zoomReset: window.desktop && (() => window.desktop!.zoom(0)),
@@ -1737,7 +1746,7 @@ export function App({
                 });
               }}
               stop={stopRun}
-              replyApproval={async (runId, approvalId, allowed, answers) => {
+              replyApproval={async (runId, approvalId, allowed, answers, plan) => {
                 let sent = false;
                 await act(async () => {
                   await client.request({
@@ -1747,6 +1756,7 @@ export function App({
                     approvalId,
                     allowed,
                     ...(answers ? { answers } : {}),
+                    ...(plan ? { plan } : {}),
                   });
                   sent = true;
                 });
