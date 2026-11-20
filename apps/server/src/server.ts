@@ -728,7 +728,7 @@ export function createProxyServer(options: ServerOptions) {
         signal: run.controller.signal,
         ssh,
         emit: (event) => emit(run, event),
-        approve: (toolId, waiting) => {
+        approve: (toolId, waiting, why) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
           const approvalId = randomUUID();
           if (waiting === 'question') run.questions.add(approvalId);
@@ -745,7 +745,7 @@ export function createProxyServer(options: ServerOptions) {
               });
               resolve({ allowed, answers, unanswered, plan });
             });
-            emit(run, { type: 'approval.requested', approvalId, toolId });
+            emit(run, { type: 'approval.requested', approvalId, toolId, ...why });
             emit(run, {
               type: 'run.status',
               status: 'awaiting_approval',
