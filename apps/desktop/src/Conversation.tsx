@@ -339,7 +339,10 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
               <ShieldAlert />
               <span>
                 {tool.safetyCheck && (
-                  <b>{live.bypassing ? '安全检查 · 绕过权限也会询问' : '安全检查'}</b>
+                  <b>
+                    Claude Code 安全拦截
+                    {live.bypassing && <i className="approval-tag">绕过时也提醒</i>}
+                  </b>
                 )}
                 {tool.approvalReason && <small>{tool.approvalReason}</small>}
               </span>

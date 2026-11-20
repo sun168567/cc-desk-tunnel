@@ -97,8 +97,8 @@ test('an approval asked by a safety check says so, and why, even when permission
     .filter({ hasText: session.title })
     .locator('.session-select')
     .click();
-  const note = page.getByRole('note').filter({ hasText: '安全检查' });
-  await expect(note).toContainText('绕过权限也会询问');
+  const note = page.getByRole('note').filter({ hasText: 'Claude Code 安全拦截' });
+  await expect(note).toContainText('绕过时也提醒');
   await expect(note).toContainText(reason);
   await expect(page.getByRole('button', { name: '允许', exact: true })).toBeVisible();
   if (process.env.APPROVAL_SHOTS)

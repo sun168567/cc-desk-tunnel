@@ -2389,6 +2389,15 @@ details[open] > summary > .fold-chevron {
   gap: 2px;
   min-width: 0;
 }
+.approval-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--warn-line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
 .approval-reason small {
   color: var(--muted);
   font-size: 12px;
