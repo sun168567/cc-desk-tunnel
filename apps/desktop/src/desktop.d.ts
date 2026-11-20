@@ -41,6 +41,44 @@ declare global {
       saveImage: (type: string, bytes: Uint8Array) => Promise<string>;
       // The branch a project's working tree is on, or null outside a repository.
       gitBranch: (path: string) => Promise<string | null>;
+      // The file panel's files (see electron/files.mjs): `local` is this computer, `server` the service, any
+      // other target one of the user's computers by its ID. Paths are as the target names them.
+      files: {
+        list: (target: string, directory: string) => Promise<import('./files.ts').FileEntry[]>;
+        // The home directory a target starts in.
+        home: (target: string) => Promise<string>;
+        chooseFolder: () => Promise<string | null>;
+        stat: (
+          target: string,
+          file: string,
+        ) => Promise<{ kind: 'file' | 'directory'; size: number; mtime: number }>;
+        read: (
+          target: string,
+          file: string,
+          limit?: number,
+        ) => Promise<{ bytes: Uint8Array; size: number; truncated: boolean }>;
+        mkdir: (target: string, directory: string) => Promise<void>;
+        rename: (target: string, from: string, to: string) => Promise<void>;
+        remove: (target: string, files: string[]) => Promise<void>;
+        exists: (target: string, directory: string, names: string[]) => Promise<boolean[]>;
+        // Copies into a directory of another target; `onProgress` hears of it under `id`.
+        transfer: (
+          id: string,
+          request: {
+            from: { target: string; paths: string[] };
+            to: { target: string; dir: string };
+            conflict?: 'replace' | 'skip' | 'resume';
+          },
+        ) => Promise<{ files: number; bytes: number }>;
+        cancel: (id: string) => Promise<void>;
+        // What git sees changed in a project of this computer; null outside a repository or without git.
+        changes: (directory: string) => Promise<{ path: string; status: string }[] | null>;
+        // Starts dragging a file of this computer out of the window.
+        drag: (file: string) => void;
+        onProgress: (
+          callback: (id: string, report: { done: number; total: number; name: string }) => void,
+        ) => () => void;
+      };
       copyText: (text: string) => Promise<void>;
       openExternal: (url: string) => Promise<void>;
       openWeb: (url: string) => Promise<void>;

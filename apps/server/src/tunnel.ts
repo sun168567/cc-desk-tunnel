@@ -68,7 +68,7 @@ export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnectio
   return { configPath, bin };
 }
 // The program on this service's PATH, which a session's own come before.
-function program(name: string) {
+export function program(name: string) {
   for (const directory of (process.env.PATH ?? '').split(delimiter))
     if (directory && existsSync(join(directory, name))) return join(directory, name);
   return join('/usr/bin', name);

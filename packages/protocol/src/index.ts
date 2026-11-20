@@ -926,6 +926,17 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     // Without it a client keeps nothing.
     historyId: id.optional(),
     browser: z.object({ sessionId: id, serverDeviceId: id, selfSigned: z.boolean() }).optional(),
+    // The service's files, where the file panel can reach them (see `files.attach`): the data directory, whose
+    // `native/<root>` are the sessions' working directories, the home directory, and whether its secrets are kept
+    // out of reach (Landlock), which a service without it says so the panel can tell the user.
+    files: z
+      .object({
+        server: z.boolean(),
+        dataDir: z.string(),
+        home: z.string(),
+        protected: z.boolean(),
+      })
+      .optional(),
   }),
   z.object({
     type: z.literal('response'),
@@ -1057,6 +1068,16 @@ export const tunnelAttachSchema = z
 export type TunnelAttach = z.infer<typeof tunnelAttachSchema>;
 // How a channel connection is closed when it could not be attached.
 export const TUNNEL_CLOSE = { refused: 4001, unknown: 4004 } as const;
+
+// A connection for the file panel: signed in with the secret of the execution channel of the connection it
+// belongs to, it carries one SSH connection whose SFTP sessions reach the service's files and those of the
+// user's online computers. Each SFTP session names its computer in this environment variable: `server` for
+// the service, or a computer's ID.
+export const filesAttachSchema = z
+  .object({ type: z.literal('files.attach'), connectionId: id, secret: tunnelSecret })
+  .strict();
+export type FilesAttach = z.infer<typeof filesAttachSchema>;
+export const FILES_TARGET_ENV = 'CC_DESK_TUNNEL_FILES';
 
 export const tunnelCredentialsSchema = z
   .object({

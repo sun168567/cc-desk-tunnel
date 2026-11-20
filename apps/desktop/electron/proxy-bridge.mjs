@@ -5,7 +5,7 @@ import { isIP } from 'node:net';
 import { connect } from 'node:tls';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import { serverMessageSchema, MAX_FRAME_BYTES } from '@cc-desk-tunnel/protocol';
 import { startWindowsSsh } from './windows-ssh.mjs';
 import { startPosixSsh } from './posix-ssh.mjs';
@@ -14,6 +14,7 @@ import { httpProxy, openSocket } from './system-proxy.mjs';
 import { channelFailure, controlFailure, passing } from './connect-errors.mjs';
 // Loaded by the main process from here, so that the package's bundle of this module holds it.
 export { upgradeService } from './service-upgrade.mjs';
+export { createFiles, gitChanges } from './files.mjs';
 
 // The SSH service of a connection. The two are started and closed alike and give the same credentials; what
 // is behind them differs with the system: see each module.
@@ -157,6 +158,10 @@ export async function openProxyBridge(
       ssh: null,
       channels: null,
       preparing: null,
+      // The execution channel's name and secret, which the file panel's connections sign in with.
+      offer: null,
+      dial: null,
+      files: new Set(),
     };
     const current = pair;
     const queue = [];
@@ -305,6 +310,8 @@ export async function openProxyBridge(
           return;
         }
         offerReceived = true;
+        current.offer = { connectionId: message.connectionId, secret: message.secret };
+        current.dial = dialChannel;
         current.preparing = startLocalSsh(
           message.connectionId,
           binaries,
@@ -382,6 +389,7 @@ export async function openProxyBridge(
       remote?.terminate();
       await pair?.preparing;
       pair?.channels?.close();
+      for (const channel of pair?.files ?? []) channel.terminate();
       await pair?.ssh?.close();
       for (const socket of wss.clients) socket.terminate();
       await new Promise((resolve) => wss.close(resolve));
@@ -420,10 +428,41 @@ export async function openProxyBridge(
     if (hash.digest('hex') !== expected.sha256) throw new Error('安装包校验失败，已放弃升级。');
     return target;
   }
+  // One more connection to the service for the file panel, signed in with the execution channel's secret: it
+  // carries one SSH connection to the service's SFTP (see files.mjs and the service's files.ts). Resolves to the
+  // stream of its bytes. Like a channel it is asked for a sign of life and given up after two missed answers.
+  async function openFiles(heartbeatMs = 15000) {
+    const current = pair;
+    if (closed || !current?.offer || !current.dial)
+      throw new Error('还没有连上服务，或执行通道尚未就绪。');
+    const channel = await current.dial();
+    if (closed) {
+      channel.terminate();
+      throw new Error('连接已经断开。');
+    }
+    channel.send(JSON.stringify({ type: 'files.attach', ...current.offer }));
+    // The stream takes over the connection's frames from here, in the same tick, so no bytes are missed.
+    const stream = createWebSocketStream(channel);
+    current.files.add(channel);
+    let unanswered = 0;
+    channel.on('pong', () => (unanswered = 0));
+    const heartbeat = setInterval(() => {
+      if (unanswered >= 2) return channel.terminate();
+      unanswered++;
+      channel.ping();
+    }, heartbeatMs);
+    channel.once('close', () => {
+      clearInterval(heartbeat);
+      current.files.delete(channel);
+    });
+    stream.on('error', () => channel.terminate());
+    return stream;
+  }
   return {
     url: `ws://127.0.0.1:${server.address().port}/bridge/${nonce}`,
     close,
     downloadInstaller,
+    openFiles,
     webUrl: () => (closed ? null : webUrl),
     // The installer the service last announced, if any.
     release: () => release,

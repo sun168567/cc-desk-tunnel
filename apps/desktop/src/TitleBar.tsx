@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, PanelLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight, PanelLeft, PanelRight } from 'lucide-react';
 import { useConnectionName } from './shared.ts';
 import { IconButton } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
@@ -17,6 +17,7 @@ export default function TitleBar({
   openMenu,
   connected,
   adapterName,
+  files,
 }: {
   title: string;
   // Absent while there is nowhere to go.
@@ -28,6 +29,8 @@ export default function TitleBar({
   openMenu: (menu: BarMenu, position: MenuPosition) => void;
   connected: boolean;
   adapterName: string;
+  // The file panel's switch, where the window has one.
+  files?: { open: boolean; toggle: () => void; hint?: string };
 }) {
   const connectionName = useConnectionName();
   return (
@@ -61,6 +64,16 @@ export default function TitleBar({
         ))}
       </nav>
       <h1>{title}</h1>
+      {files && (
+        <IconButton
+          className={`files-toggle ${files.open ? 'active' : ''}`}
+          title={`${files.open ? '关闭' : '打开'}文件面板${files.hint ? `（${files.hint}）` : ''}`}
+          aria-pressed={files.open}
+          onClick={files.toggle}
+        >
+          <PanelRight />
+        </IconButton>
+      )}
       <span
         className="connection-status"
         title={connectionName ? `${connectionName} · ${adapterName}` : adapterName}
