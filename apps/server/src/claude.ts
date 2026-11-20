@@ -195,14 +195,15 @@ export function prepareNativeDirectory(options: ClaudeOptions, dataDir: string, 
   return cwd;
 }
 
-// Why the CLI asks about a call: its reason, and whether one of its safety checks asks (the SDK passes the kind of
-// reason without typing it).
-function asked(context: { decisionReason?: string }) {
+// Why the CLI asks about a call: its reason, and whether one of its own safety checks asks. Bypassing permissions
+// it asks about nothing else, so every ask then is one; otherwise the kind of reason says so, though a compound
+// command's ask comes as its subcommands' results (the SDK passes the kind without typing it).
+function asked(context: { decisionReason?: string }, mode: string | undefined) {
   const kind = (context as { decisionReasonType?: unknown }).decisionReasonType;
   const reason = context.decisionReason?.trim().slice(0, 4000);
   return {
     ...(reason ? { reason } : {}),
-    ...(kind === 'safetyCheck' ? { safetyCheck: true } : {}),
+    ...(kind === 'safetyCheck' || mode === 'bypassPermissions' ? { safetyCheck: true } : {}),
   };
 }
 
@@ -298,7 +299,9 @@ export async function runClaude(
               : await run.approve(
                   tool.id,
                   question ? 'question' : planned ? 'plan' : 'approval',
-                  asked(context),
+                  question || planned
+                    ? undefined
+                    : asked(context, mapper.mode ?? run.permissionMode),
                 );
           if (question && unanswered) {
             // A CLI that knows of it is told how the question went: the tool's result says so, and Claude reads
