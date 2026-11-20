@@ -2831,6 +2831,7 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
 }
 /* The effort slider: a pill filled up to a large round handle. */
 .model-menu input[type='range'] {
+  --fill-position: calc(15px + (100% - 30px) * var(--fill, 0));
   -webkit-appearance: none;
   appearance: none;
   display: block;
@@ -2842,8 +2843,8 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   border-radius: 15px;
   background: linear-gradient(
     to right,
-    var(--accent) 0 max(15px, var(--fill, 50%)),
-    var(--hover) max(15px, var(--fill, 50%)) 100%
+    var(--accent) 0 var(--fill-position),
+    var(--hover) var(--fill-position) 100%
   );
   cursor: pointer;
 }
