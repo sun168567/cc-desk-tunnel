@@ -123,11 +123,21 @@ async function fixture(t: TestContext, landlock = false, sftp: string[] | null =
       env: Record<string, string>,
       done: (error: Error | undefined, sftp: SFTPWrapper) => void,
     ) => void;
-    return await new Promise<SFTPWrapper>((resolve, reject) =>
-      sftp.call(client, { [FILES_TARGET_ENV]: target }, (error, opened) =>
-        error ? reject(error) : resolve(opened),
+    // An answer that never comes fails the test, saying where, instead of holding up the whole run.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return await Promise.race([
+      new Promise<SFTPWrapper>((resolve, reject) =>
+        sftp.call(client, { [FILES_TARGET_ENV]: target }, (error, opened) =>
+          error ? reject(error) : resolve(opened),
+        ),
       ),
-    );
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('No answer to the SFTP subsystem request')),
+          15_000,
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
   }
   return { directory, configDir, desktop, files, socket, channels };
 }
@@ -138,7 +148,7 @@ const call = <T>(run: (done: (error: Error | null | undefined, value?: T) => voi
 
 test(
   'the file panel reaches the service files over SFTP, signed in with its execution channel',
-  { skip },
+  { skip, timeout: 60_000 },
   async (t) => {
     const f = await fixture(t);
     const signed = await f.desktop();
@@ -174,20 +184,24 @@ test(
   },
 );
 
-test('without an SFTP server of its own the service offers only other computers files', async (t) => {
-  const f = await fixture(t, false, null);
-  const signed = await f.desktop();
-  assert.equal((signed.ready.files as { server: boolean }).server, false);
-  assert.equal((signed.ready.files as { protected: boolean }).protected, false);
-  // The file connection is taken, for the computers it can reach; the service's own files are not offered.
-  const refused = await f.files(signed).catch((error: Error) => error);
-  assert.ok(refused instanceof Error);
-  assert.match(String(refused.message), /subsystem|Unable to start/i);
-});
+test(
+  'without an SFTP server of its own the service offers only other computers files',
+  { timeout: 60_000 },
+  async (t) => {
+    const f = await fixture(t, false, null);
+    const signed = await f.desktop();
+    assert.equal((signed.ready.files as { server: boolean }).server, false);
+    assert.equal((signed.ready.files as { protected: boolean }).protected, false);
+    // The file connection is taken, for the computers it can reach; the service's own files are not offered.
+    const refused = await f.files(signed).catch((error: Error) => error);
+    assert.ok(refused instanceof Error);
+    assert.match(String(refused.message), /subsystem|Unable to start/i);
+  },
+);
 
 test(
   'a file connection needs the secret of a live execution channel, and ends with its control connection',
-  { skip },
+  { skip, timeout: 60_000 },
   async (t) => {
     const f = await fixture(t);
     const signed = await f.desktop();
@@ -205,6 +219,7 @@ test(
   'Landlock keeps the service SFTP server from its secrets and nothing else',
   {
     skip: skip || (process.platform !== 'linux' && 'Landlock is Linux only'),
+    timeout: 60_000,
   },
   async (t) => {
     const f = await fixture(t, true);
