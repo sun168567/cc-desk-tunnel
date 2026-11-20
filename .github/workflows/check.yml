@@ -14,7 +14,7 @@ concurrency:
 jobs:
   linux:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -38,7 +38,7 @@ jobs:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - run: docker build -f deploy/docker/Dockerfile -t cc-desk-tunnel:local .
@@ -55,7 +55,7 @@ jobs:
   # the build runs as. The image is built that way too, so that it goes on working where BuildKit is missing.
   deploy-legacy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - run: docker build -f deploy/docker/Dockerfile -t cc-desk-tunnel:local .
@@ -67,7 +67,7 @@ jobs:
   # hold a change back yet.
   windows:
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 15
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
@@ -81,7 +81,7 @@ jobs:
   # The SSH service of the macOS client, with the system's own ssh, scp and sftp-server.
   macos:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
