@@ -86,7 +86,10 @@ test('setup-token uses the official command, extracts its successful output and 
   data('Sign in at: https://claude.ai/oauth/authorize?fixture=true\r\n');
   assert.equal(await login.url, 'https://claude.ai/oauth/authorize?fixture=true');
   login.submit('code#state');
-  assert.deepEqual(written, ['code#state\r']);
+  // Enter goes on its own, as a key pressed after the code is pasted.
+  assert.deepEqual(written, ['code#state']);
+  await delay(150);
+  assert.deepEqual(written, ['code#state', '\r']);
   data('Your OAuth token (valid for 1 year):\r\n\x1b[33msk-ant-oat01-XX');
   data('\x1b[2Dte'); // Ink overwrites earlier cells instead of printing a fresh line.
   data('st\x1b[0m\r\nStore this token securely.\r\n');
@@ -136,6 +139,26 @@ test('setup-token uses the official command, extracts its successful output and 
     'OAuth error: Invalid code. Please make sure the full code was copied',
   );
   assert.equal(notices.length, 0);
+
+  // A code that gets neither a token nor an error ends the command, telling what it last showed.
+  let waited: { succeeded: boolean } | undefined;
+  const waiting = new NativeLogin(
+    'claude',
+    (succeeded) => {
+      waited = { succeeded };
+    },
+    () => {},
+    { method: 'setup-token', spawn, answerMs: 200 },
+  );
+  data('https://claude.ai/oauth/authorize?fixture=true\r\n');
+  await waiting.url;
+  waiting.submit('code#state');
+  data('Paste code here if prompted > code#state\r\nCreating token…\r\n');
+  await delay(400);
+  assert.deepEqual(waited, { succeeded: false });
+  assert.match(waiting.error!, /0 秒未拿到令牌/);
+  assert.match(waiting.error!, /Creating token…/);
+  assert.equal(waiting.error!.includes('code#state'), false);
 
   const startup = new NativeLogin(
     'claude',
