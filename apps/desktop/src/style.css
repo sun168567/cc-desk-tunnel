@@ -2368,6 +2368,32 @@ details[open] > summary > .fold-chevron {
   border-top: 1px solid var(--line-soft);
   color: var(--tool-text);
 }
+.approval-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--warn-text);
+  font-size: 12.5px;
+}
+.approval-reason > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+.approval-reason span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.approval-reason small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .approval-actions {
   display: flex;
   justify-content: flex-end;

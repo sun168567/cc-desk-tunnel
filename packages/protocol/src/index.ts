@@ -404,7 +404,15 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     toolUses: z.number().int().nonnegative().optional(),
     summary: z.string().max(300).optional(),
   }),
-  z.object({ type: z.literal('approval.requested'), approvalId: id, toolId: z.string().min(1) }),
+  z.object({
+    type: z.literal('approval.requested'),
+    approvalId: id,
+    toolId: z.string().min(1),
+    // Why Claude Code asks, in its words; `safetyCheck` when one of its own safety checks asks, which it does in
+    // every mode, bypassing permissions too, and which no rule allows.
+    reason: z.string().max(4000).optional(),
+    safetyCheck: z.boolean().optional(),
+  }),
   z.object({
     type: z.literal('approval.resolved'),
     approvalId: id,

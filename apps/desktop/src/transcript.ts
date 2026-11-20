@@ -46,6 +46,9 @@ export type TranscriptItem =
       input: string;
       target: string;
       approvalId?: string;
+      // Why Claude Code asks about the call, and whether one of its own safety checks does.
+      approvalReason?: string;
+      safetyCheck?: boolean;
       resolved: boolean;
       status: string;
       state: ToolState;
@@ -128,6 +131,8 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
       const tool = byId.get(payload.toolId);
       if (tool?.kind === 'tool') {
         tool.approvalId = payload.approvalId;
+        tool.approvalReason = payload.reason;
+        tool.safetyCheck = payload.safetyCheck;
         tool.status = '等待审批';
         tool.state = 'approval';
         byApproval.set(payload.approvalId, tool);

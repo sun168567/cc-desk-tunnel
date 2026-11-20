@@ -69,6 +69,7 @@ export type ClaudeRun = {
   approve: (
     toolId: string,
     waiting: 'approval' | 'question' | 'plan',
+    why?: { reason?: string; safetyCheck?: boolean },
   ) => Promise<{
     allowed: boolean;
     answers?: Record<string, string>;
@@ -194,6 +195,17 @@ export function prepareNativeDirectory(options: ClaudeOptions, dataDir: string, 
   return cwd;
 }
 
+// Why the CLI asks about a call: its reason, and whether one of its safety checks asks (the SDK passes the kind of
+// reason without typing it).
+function asked(context: { decisionReason?: string }) {
+  const kind = (context as { decisionReasonType?: unknown }).decisionReasonType;
+  const reason = context.decisionReason?.trim().slice(0, 4000);
+  return {
+    ...(reason ? { reason } : {}),
+    ...(kind === 'safetyCheck' ? { safetyCheck: true } : {}),
+  };
+}
+
 export async function runClaude(
   options: ClaudeOptions,
   run: ClaudeRun,
@@ -283,7 +295,11 @@ export async function runClaude(
           const { allowed, answers, unanswered, plan } =
             context.signal.aborted || run.signal.aborted
               ? { allowed: false }
-              : await run.approve(tool.id, question ? 'question' : planned ? 'plan' : 'approval');
+              : await run.approve(
+                  tool.id,
+                  question ? 'question' : planned ? 'plan' : 'approval',
+                  asked(context),
+                );
           if (question && unanswered) {
             // A CLI that knows of it is told how the question went: the tool's result says so, and Claude reads
             // the answer given for each question. An older one refuses an answer that says it.
