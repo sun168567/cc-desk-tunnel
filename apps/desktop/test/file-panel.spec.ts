@@ -96,7 +96,7 @@ test('Electron: the file panel shows the project, previews files and copies, ren
       .poll(() => preview.locator('img').evaluate((image: HTMLImageElement) => image.naturalWidth))
       .toBeGreaterThan(0);
     await row('data.bin').click();
-    await expect(preview).toContainText('不是文本');
+    await expect(preview).toContainText('无法预览');
 
     // Uploaded from elsewhere on this computer; once more, the name taken, it is left as it is.
     await panel.getByRole('button', { name: '上传文件…', exact: true }).click();

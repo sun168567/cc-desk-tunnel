@@ -805,8 +805,7 @@ export default function FilePanel({
   ) : layout !== 'narrow' ? (
     <section className="file-preview empty" aria-label="文件预览">
       <FolderOpen />
-      <b>选择文件预览</b>
-      <span>文本、Markdown 和图片可以直接查看</span>
+      <span>选择文件预览</span>
     </section>
   ) : null;
 
@@ -816,13 +815,7 @@ export default function FilePanel({
     const content = shown.shown;
     if (content.kind === 'image')
       return <img className="file-image" src={content.url} alt={baseName(style, shown.path)} />;
-    if (content.kind === 'binary')
-      return (
-        <p className="file-empty-note">
-          这个文件不是文本，不能在这里预览。
-          {place.kind === 'local' ? '可以用其他程序打开它。' : '可以下载到本机后打开。'}
-        </p>
-      );
+    if (content.kind === 'binary') return <p className="file-empty-note">无法预览</p>;
     if (content.kind === 'markdown' && !shown.source)
       return (
         <div className="file-markdown message-content">
@@ -942,9 +935,8 @@ export default function FilePanel({
       {unprotected && (
         <div className="file-notice" role="note">
           <ShieldAlert />
-          <span>
-            这台服务端不支持内核级文件保护：Claude 的登录凭据、setup
-            token、服务数据等敏感文件在这里可以被读取和修改，操作时请留意。
+          <span title="内核不支持 Landlock：登录凭据、setup token 等可被读取和修改">
+            敏感文件未受保护
           </span>
           <IconButton
             title="不再提示"
@@ -969,12 +961,10 @@ export default function FilePanel({
         {outdated ? (
           <div className="file-preview empty file-outdated" role="note">
             <ServerOff />
-            <b>暂时看不到服务端的文件</b>
-            <span>
-              服务端的容器镜像早于 0.3.17，缺少浏览文件用的组件（sftp-server）。在服务器上用
-              deploy/manage.sh 升级一次，换成新镜像后即可使用。
+            <b>服务端镜像较旧</b>
+            <span title="缺少 sftp-server；在服务器上用 deploy/manage.sh 升级">
+              升级镜像后可浏览
             </span>
-            <span>本机和其他设备的文件不受影响，可在上方切换。</span>
           </div>
         ) : previewing ? (
           previewPane
@@ -1079,7 +1069,7 @@ export default function FilePanel({
             {ask.names.length === 1
               ? `“${ask.names[0]}”`
               : `${ask.names.slice(0, 3).join('、')} 等 ${ask.names.length} 项`}
-            已经存在。续传会把较短的同名文件当作上次没有传完的部分，从断处接着传。
+            已存在
           </p>
           <div className="dialog-actions">
             <button type="button" className="button secondary" onClick={() => ask.resolve(null)}>
