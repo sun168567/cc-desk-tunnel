@@ -295,16 +295,6 @@ button.chip.danger:hover:not(:disabled) {
   font-size: 20px;
   white-space: nowrap;
 }
-.brand-connection {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 500;
-  vertical-align: middle;
-}
 .setting-name {
   width: 150px;
 }
@@ -2388,6 +2378,41 @@ details[open] > summary > .fold-chevron {
   border-top: 1px solid var(--line-soft);
   color: var(--tool-text);
 }
+.approval-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--warn-text);
+  font-size: 12.5px;
+}
+.approval-reason > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+.approval-reason span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.approval-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--warn-line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
+.approval-reason small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .approval-actions {
   display: flex;
   justify-content: flex-end;
@@ -2935,6 +2960,7 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
 }
 /* The effort slider: a pill filled up to a large round handle. */
 .model-menu input[type='range'] {
+  --fill-position: calc(15px + (100% - 30px) * var(--fill, 0));
   -webkit-appearance: none;
   appearance: none;
   display: block;
@@ -2946,8 +2972,8 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   border-radius: 15px;
   background: linear-gradient(
     to right,
-    var(--accent) 0 max(15px, var(--fill, 50%)),
-    var(--hover) max(15px, var(--fill, 50%)) 100%
+    var(--accent) 0 var(--fill-position),
+    var(--hover) var(--fill-position) 100%
   );
   cursor: pointer;
 }
@@ -4246,6 +4272,172 @@ dialog {
 }
 .question-card .approval-actions {
   border-top: 0;
+}
+
+/* Claude's plan: a document in the turn, with the decision on it below. */
+.plan-card {
+  max-width: 760px;
+  margin: 6px 0 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.plan-card.returned {
+  border-left-color: var(--line-strong);
+}
+.plan-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.plan-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.plan-title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex: none;
+}
+.plan-title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--faint);
+}
+.plan-outcome {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.plan-outcome.approved {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.plan-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.plan-tools .copy-button span {
+  display: none;
+}
+/* Folded, the plan leaves room in the window for its heading and its decision at once. */
+.plan-body {
+  max-height: clamp(160px, 100vh - 510px, 480px);
+  overflow: hidden;
+  padding: 4px 16px 6px;
+}
+.plan-body.clipped {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+}
+.plan-body.whole {
+  max-height: none;
+}
+.plan-more {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto 8px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+.plan-more:hover {
+  background: var(--hover);
+}
+.plan-more svg {
+  width: 14px;
+  height: 14px;
+}
+.plan-editor,
+.plan-return textarea {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  margin: 10px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.65;
+  resize: vertical;
+}
+.plan-editor {
+  min-height: 280px;
+}
+.plan-return textarea {
+  min-height: 90px;
+}
+.plan-feedback {
+  margin: 0 16px 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.plan-decide {
+  border-top: 1px solid var(--line-soft);
+}
+.plan-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+}
+.plan-modes-label {
+  color: var(--faint);
+  font-size: 12px;
+}
+.plan-decide .approval-actions,
+.plan-return .approval-actions {
+  flex-wrap: wrap;
+  border-top: 0;
+}
+/* A plan is read like a document: its window is as wide as one, not as a question's. */
+dialog:has(.plan-reader) {
+  width: min(880px, calc(100vw - 48px));
+}
+dialog:has(.plan-reader) .dialog-heading h2 {
+  overflow-wrap: anywhere;
+}
+.plan-reader {
+  max-height: calc(100vh - 170px);
+  overflow: auto;
+  padding: 0 4px;
+}
+/* The composer's mode chip while the session plans before it acts. */
+.chip.planning,
+button.chip.planning:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 .menu-heading {
   max-width: 300px;

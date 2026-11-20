@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, RequestListener } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import {
   deleteSession,
   forkSession,
@@ -37,6 +37,7 @@ import {
   runWorking,
   TUNNEL_CLOSE,
   tunnelAttachSchema,
+  filesAttachSchema,
   tunnelCredentialsSchema,
   terminalControlSchema,
   webActivitySchema,
@@ -62,7 +63,7 @@ import {
   quotas,
   readNativeStatus,
 } from './claude.ts';
-import type { ClaudeOptions, Unanswered } from './claude.ts';
+import type { ClaudeOptions, PlanDecision, Unanswered } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
 import { DomainError } from './errors.ts';
 import { HistoryDelivery } from './history-delivery.ts';
@@ -87,7 +88,9 @@ import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
-import { Door, Tunnel, sessionSsh, sessionSshPath } from './tunnel.ts';
+import { Door, Tunnel, program, sessionSsh, sessionSshPath } from './tunnel.ts';
+import { FileService } from './files.ts';
+import type { FilesOptions } from './files.ts';
 import type { TunnelOptions } from './tunnel.ts';
 import { ServiceUpdates, serviceVersion } from './updates.ts';
 import type { UpdateOptions } from './updates.ts';
@@ -149,13 +152,22 @@ export type Run = {
   toolId?: string;
   toolFinished: boolean;
   approvalId?: string;
-  decide?: (allowed: boolean, answers?: Record<string, string>) => void;
+  // The simulated approval when it is a plan.
+  planApproval?: string;
+  decide?: (allowed: boolean, answers?: Record<string, string>, plan?: PlanDecision) => void;
   approvals: Map<
     string,
-    (allowed: boolean, answers?: Record<string, string>, unanswered?: Unanswered) => void
+    (
+      allowed: boolean,
+      answers?: Record<string, string>,
+      unanswered?: Unanswered,
+      plan?: PlanDecision,
+    ) => void
   >;
   // The approvals that are Claude's questions, answered or left unanswered rather than allowed or denied.
   questions: Set<string>;
+  // The approvals that are Claude's plans, which alone may be answered with a mode to carry them out in.
+  plans: Set<string>;
   // Approvals and questions answered already: a second answer, from another window or computer, came late.
   answered: Set<string>;
   cancelReason?: string;
@@ -239,6 +251,8 @@ export type ServerOptions = {
   graceMs?: number;
   // Defaults to the frontend shipped beside the server. Tests can provide a small fixture directory.
   webDirectory?: string;
+  // How the file panel reaches the service's files; `false` offers none.
+  files?: FilesOptions | false;
 };
 
 // How many answered requests a connection remembers, to answer a resend of one the same way.
@@ -269,6 +283,10 @@ export function createProxyServer(options: ServerOptions) {
   const mutations = new Map<string, 'status' | 'session'>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
+  const files =
+    options.files === false ? undefined : new FileService(options.dataDir, options.files);
+  // The file panel's connections of each control connection, which end with it.
+  const fileConnections = new Map<string, Set<WebSocket>>();
   const compactions = new IdleCompactions(store.directory, compactIdle);
   armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
@@ -622,6 +640,11 @@ export function createProxyServer(options: ServerOptions) {
         session: store.renameNative(run.sessionId, payload.title),
       });
     if (payload.type === 'native.compact') store.compacted(run.sessionId);
+    if (payload.type === 'native.mode')
+      broadcast({
+        type: 'session.updated',
+        session: store.adoptMode(run.sessionId, payload.permissionMode),
+      });
     // The service's own compactions of idle sessions are nobody's turn. A `once` subscription the turn ends goes
     // with the session's update below.
     if (run.connectionId !== serverDevice.id) pushes.observe(run.sessionId, payload);
@@ -734,22 +757,29 @@ export function createProxyServer(options: ServerOptions) {
         signal: run.controller.signal,
         ssh,
         emit: (event) => emit(run, event),
-        approve: (toolId, waiting) => {
+        approve: (toolId, waiting, why) => {
           if (run.controller.signal.aborted) return Promise.resolve({ allowed: false });
           const approvalId = randomUUID();
           if (waiting === 'question') run.questions.add(approvalId);
+          if (waiting === 'plan') run.plans.add(approvalId);
           return new Promise((resolve) => {
-            run.approvals.set(approvalId, (allowed, answers, unanswered) => {
+            run.approvals.set(approvalId, (allowed, answers, unanswered, plan) => {
               run.questions.delete(approvalId);
-              emit(run, { type: 'approval.resolved', approvalId, allowed });
-              resolve({ allowed, answers, unanswered });
+              run.plans.delete(approvalId);
+              emit(run, {
+                type: 'approval.resolved',
+                approvalId,
+                allowed,
+                ...planned(allowed, plan),
+              });
+              resolve({ allowed, answers, unanswered, plan });
             });
-            emit(run, { type: 'approval.requested', approvalId, toolId });
+            emit(run, { type: 'approval.requested', approvalId, toolId, ...why });
             emit(run, {
               type: 'run.status',
               status: 'awaiting_approval',
               connectionId: run.connectionId,
-              waiting,
+              waiting: waiting === 'plan' ? 'approval' : waiting,
             });
           });
         },
@@ -1447,6 +1477,7 @@ export function createProxyServer(options: ServerOptions) {
       toolFinished: false,
       approvals: new Map(),
       questions: new Set(),
+      plans: new Set(),
       answered: new Set(),
       controls: {},
       stats: inOrder(),
@@ -1473,6 +1504,7 @@ export function createProxyServer(options: ServerOptions) {
             {
               stepMs: options.stepMs ?? 110,
               projectPath: () => store.get(run.sessionId).session.projectPath,
+              permissionMode: () => store.get(run.sessionId).session.permissionMode,
               emit: (payload) => emit(run, payload),
               finish: (status, reason) => finish(run, status, reason),
             },
@@ -1492,6 +1524,16 @@ export function createProxyServer(options: ServerOptions) {
     }
     if (command.type === 'approval.reply' && run.answered.has(command.approvalId))
       throw new DomainError('approval_answered', '这一项已经处理过了，可能是在另一台设备上。');
+    // A mode, a changed plan or feedback is an answer to Claude's plan only: an approval of anything else does not
+    // change the mode by it.
+    if (
+      command.type === 'approval.reply' &&
+      command.plan &&
+      !(options.claude
+        ? run.plans.has(command.approvalId)
+        : run.planApproval === command.approvalId)
+    )
+      throw new DomainError('approval_invalid', '只有 Claude 的计划可以选择执行方式。');
     if (command.type === 'run.task.stop') {
       if (!run.controls.stopTask) return;
       // The CLI reports the task gone through its task list; a task already over is not an error.
@@ -1530,6 +1572,7 @@ export function createProxyServer(options: ServerOptions) {
           command.answers,
           skipped ? 'skipped' : undefined,
           peer.id,
+          command.plan,
         )
       )
         throw new DomainError('approval_inactive', '审批已失效。');
@@ -1540,9 +1583,14 @@ export function createProxyServer(options: ServerOptions) {
     const decide = run.decide;
     run.decide = undefined;
     run.answered.add(command.approvalId);
-    decide(command.allowed, command.answers);
+    decide(command.allowed, command.answers, command.plan);
   }
 
+  // What the record keeps of a plan approved: the mode it was carried out in, and whether the user changed it.
+  function planned(allowed: boolean, plan?: PlanDecision) {
+    if (!allowed || !plan) return {};
+    return { ...(plan.mode ? { mode: plan.mode } : {}), ...(plan.edited ? { edited: true } : {}) };
+  }
   function answerApproval(
     run: Run,
     approvalId: string,
@@ -1550,12 +1598,13 @@ export function createProxyServer(options: ServerOptions) {
     answers: Record<string, string> | undefined,
     unanswered: Unanswered | undefined,
     connectionId = run.connectionId,
+    plan?: PlanDecision,
   ) {
     const decide = run.approvals.get(approvalId);
     if (!decide) return false;
     run.approvals.delete(approvalId);
     run.answered.add(approvalId);
-    decide(allowed, answers, unanswered);
+    decide(allowed, answers, unanswered, plan);
     if (!run.approvals.size) emit(run, { type: 'run.status', status: 'running', connectionId });
     return true;
   }
@@ -1937,6 +1986,7 @@ export function createProxyServer(options: ServerOptions) {
       client: installer(),
       sessions: store.list(),
       historyId: store.historyId,
+      ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
     send(peer, devices());
     // Every connection that asks has an execution channel of its own, to the computer it comes from.
@@ -1994,6 +2044,43 @@ export function createProxyServer(options: ServerOptions) {
       peer.socket.close(TUNNEL_CLOSE.unknown, 'Unknown channel');
       return false;
     }
+    return true;
+  }
+  // A connection for the file panel, signed in with the secret of its control connection's execution channel.
+  // Like a channel it is no peer: it carries one SSH connection, served by `files`, and ends with its owner.
+  function attachFiles(peer: Peer, value: unknown) {
+    const attach = filesAttachSchema.safeParse(value);
+    const owner = attach.success
+      ? [...peers].find((other) => other.authenticated && other.id === attach.data.connectionId)
+      : undefined;
+    if (!attach.success || !owner?.tunnel || !files?.state) {
+      peer.socket.close(TUNNEL_CLOSE.unknown, 'Unknown tunnel');
+      return false;
+    }
+    if (!owner.tunnel.matches(attach.data.secret)) {
+      refuse(peer.address, 'tunnel secret');
+      peer.socket.close(TUNNEL_CLOSE.refused, 'Unauthorized');
+      return false;
+    }
+    const open = fileConnections.get(owner.id) ?? new Set<WebSocket>();
+    if (open.size >= 4) {
+      peer.socket.close(TUNNEL_CLOSE.unknown, 'Too many file connections');
+      return false;
+    }
+    fileConnections.set(owner.id, open);
+    open.add(peer.socket);
+    peer.socket.once('close', () => open.delete(peer.socket));
+    peers.delete(peer);
+    peer.socket.removeAllListeners('message');
+    const stream = createWebSocketStream(peer.socket);
+    stream.on('error', () => peer.socket.terminate());
+    files.serve(stream, (target) => {
+      if (target === 'server') return files.ownServer();
+      const ssh = seats.get(target)?.door;
+      return ssh?.ready && ssh.ssh
+        ? [program('ssh'), '-F', ssh.ssh.configPath, '-s', 'device', 'sftp']
+        : undefined;
+    });
     return true;
   }
   function registerTunnel(peer: Peer, credentials: TunnelCredentials) {
@@ -2170,6 +2257,8 @@ export function createProxyServer(options: ServerOptions) {
       }
     }
     if (peer.tunnel) track(peer.tunnel.close(), tunnelTasks);
+    for (const socket of fileConnections.get(peer.id) ?? []) socket.terminate();
+    fileConnections.delete(peer.id);
     announce();
   }
 
@@ -2244,9 +2333,14 @@ export function createProxyServer(options: ServerOptions) {
           // Only the first frame signs in. What a refused client sent after it is not another attempt.
           if (greeted) return;
           greeted = true;
-          const channel =
-            !peer.browser && (value as { type?: unknown } | null)?.type === 'tunnel.attach';
-          if (channel ? attachChannel(peer, value) : authenticate(peer, value)) {
+          const kind = !peer.browser && (value as { type?: unknown } | null)?.type;
+          if (
+            kind === 'tunnel.attach'
+              ? attachChannel(peer, value)
+              : kind === 'files.attach'
+                ? attachFiles(peer, value)
+                : authenticate(peer, value)
+          ) {
             clearTimeout(authTimer);
             signedIn = true;
             gate.leave(address);
@@ -2364,6 +2458,7 @@ export function createProxyServer(options: ServerOptions) {
     store,
     async listen(port = 8787): Promise<string> {
       await releases.refresh();
+      await files?.start();
       updates?.start();
       if (usageReceiver)
         options.claude!.environment = telemetryEnvironment(await usageReceiver.listen());
@@ -2395,6 +2490,8 @@ export function createProxyServer(options: ServerOptions) {
         ...[...seats.values()].map((seat) => seat.door?.close()),
       ];
       for (const peer of peers) peer.socket.terminate();
+      for (const open of fileConnections.values()) for (const socket of open) socket.terminate();
+      files?.close();
       await Promise.all([...tasks]);
       await terminalCleanup;
       await Promise.all([...tunnelTasks]);

@@ -13,9 +13,11 @@
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",
     "node-pty": "1.1.0",
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "ssh2": "1.17.0"
   },
   "devDependencies": {
-    "@types/ws": "8.18.2"
+    "@types/ws": "8.18.2",
+    "@types/ssh2": "1.15.6"
   }
 }

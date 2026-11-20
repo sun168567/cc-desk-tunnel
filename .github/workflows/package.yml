@@ -42,7 +42,7 @@ jobs:
       tag: ${{ inputs.release }}
   windows:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -107,7 +107,7 @@ jobs:
           - { runner: macos-15, arch: arm64 }
           - { runner: macos-15-intel, arch: x64 }
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -161,7 +161,7 @@ jobs:
   # that is where its sandbox and what it depends on are in place. A virtual screen stands in for a desktop.
   linux:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -220,7 +220,7 @@ jobs:
   # ccdt for Linux on arm64, such as an ARM server or a Raspberry Pi: there is no desktop package for it.
   cli-linux-arm64:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -266,7 +266,7 @@ jobs:
     if: inputs.release != ''
     needs: [windows, macos, linux, cli-linux-arm64, server, images]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:

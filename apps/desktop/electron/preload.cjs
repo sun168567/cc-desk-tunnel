@@ -27,6 +27,27 @@ contextBridge.exposeInMainWorld('desktop', {
   openLogs: () => ipcRenderer.invoke('log:open'),
   openDevTools: () => ipcRenderer.invoke('devtools:open'),
   gitBranch: (directory) => ipcRenderer.invoke('git:branch', directory),
+  files: {
+    list: (target, directory) => ipcRenderer.invoke('panel:list', target, directory),
+    home: (target) => ipcRenderer.invoke('panel:home', target),
+    chooseFolder: () => ipcRenderer.invoke('panel:choose-folder'),
+    stat: (target, file) => ipcRenderer.invoke('panel:stat', target, file),
+    read: (target, file, limit) => ipcRenderer.invoke('panel:read', target, file, limit),
+    mkdir: (target, directory) => ipcRenderer.invoke('panel:mkdir', target, directory),
+    rename: (target, from, to) => ipcRenderer.invoke('panel:rename', target, from, to),
+    remove: (target, files) => ipcRenderer.invoke('panel:remove', target, files),
+    exists: (target, directory, names) =>
+      ipcRenderer.invoke('panel:exists', target, directory, names),
+    transfer: (id, request) => ipcRenderer.invoke('panel:transfer', id, request),
+    cancel: (id) => ipcRenderer.invoke('panel:cancel', id),
+    changes: (directory) => ipcRenderer.invoke('panel:changes', directory),
+    drag: (file) => ipcRenderer.send('panel:drag', file),
+    onProgress: (callback) => {
+      const listener = (_event, id, report) => callback(id, report);
+      ipcRenderer.on('panel:progress', listener);
+      return () => ipcRenderer.removeListener('panel:progress', listener);
+    },
+  },
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   openExternal: (url) => ipcRenderer.invoke('external:open', url),
   openWeb: (url) => ipcRenderer.invoke('web:open', url),
@@ -37,12 +58,19 @@ contextBridge.exposeInMainWorld('desktop', {
   chooseWorkspace: (reset) => ipcRenderer.invoke('workspace:choose', reset),
   createWorkspace: () => ipcRenderer.invoke('workspace:create'),
   removeWorkspace: (directory) => ipcRenderer.invoke('workspace:remove', directory),
-  loadLogin: (id) => ipcRenderer.invoke('login:load', id),
+  loadLogin: () => ipcRenderer.invoke('login:load'),
+  loadLauncher: () => ipcRenderer.invoke('launcher:load'),
   saveLogin: (login) => ipcRenderer.invoke('login:save', login),
-  loginOwner: (url) => ipcRenderer.invoke('login:owner', url),
-  signInElsewhere: () => ipcRenderer.invoke('login:elsewhere'),
-  startService: (login) => ipcRenderer.invoke('launcher:start', login),
-  openLegacy: (id) => ipcRenderer.invoke('launcher:open', id),
+  signOut: (error) => ipcRenderer.invoke('login:leave', error),
+  startSignIn: (login) => ipcRenderer.invoke('launcher:start', login),
+  cancelSignIn: () => ipcRenderer.invoke('launcher:cancel'),
+  widenLauncher: (wide) => ipcRenderer.invoke('launcher:wide', wide),
+  reportSignIn: (report) => ipcRenderer.invoke('signin:report', report),
+  onSignIn: (callback) => {
+    const listener = (_event, report) => callback(report);
+    ipcRenderer.on('signin:report', listener);
+    return () => ipcRenderer.removeListener('signin:report', listener);
+  },
   loadDrafts: () => ipcRenderer.invoke('drafts:load'),
   saveDrafts: (drafts) => ipcRenderer.invoke('drafts:save', drafts),
   loadSchedules: (initial) => ipcRenderer.invoke('schedules:load', initial),

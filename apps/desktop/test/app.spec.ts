@@ -4,17 +4,28 @@ import {
   connection,
   connectionArgs,
   connectionDirectory,
+  connectionWindow,
   createSession,
+  endStrays,
   expandActivity,
   login,
   screenshots,
   search,
+  signInWindow,
   send,
   sessionAction,
   settled,
 } from './helpers.ts';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -189,24 +200,31 @@ test('Electron loads the built UI with sandbox and closes its execution connecti
   });
   let sessionTitle = '';
   try {
-    const page = await application.firstWindow();
-    await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
-    const security = await application.evaluate(({ BrowserWindow }) => {
-      const contents = BrowserWindow.getAllWindows()[0].webContents as unknown as {
-        getLastWebPreferences: () => {
-          nodeIntegration: boolean;
-          contextIsolation: boolean;
-          sandbox: boolean;
-        };
-      };
-      const preferences = contents.getLastWebPreferences();
-      return {
-        nodeIntegration: preferences.nodeIntegration,
-        contextIsolation: preferences.contextIsolation,
-        sandbox: preferences.sandbox,
-      };
-    });
-    expect(security).toEqual({ nodeIntegration: false, contextIsolation: true, sandbox: true });
+    const launcher = await application.firstWindow();
+    await expect(
+      launcher.getByRole('heading', { name: '连接代理服务', exact: true }),
+    ).toBeVisible();
+    // The sign-in window and the connection's window alike.
+    const security = () =>
+      application.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().map((window) => {
+          const contents = window.webContents as unknown as {
+            getLastWebPreferences: () => {
+              nodeIntegration: boolean;
+              contextIsolation: boolean;
+              sandbox: boolean;
+            };
+          };
+          const preferences = contents.getLastWebPreferences();
+          return {
+            nodeIntegration: preferences.nodeIntegration,
+            contextIsolation: preferences.contextIsolation,
+            sandbox: preferences.sandbox,
+          };
+        }),
+      );
+    const safe = { nodeIntegration: false, contextIsolation: true, sandbox: true };
+    expect(await security()).toEqual([safe]);
     const documents = resolve('.local/ui-test/documents');
     rmSync(documents, { recursive: true, force: true });
     mkdirSync(documents, { recursive: true });
@@ -214,7 +232,9 @@ test('Electron loads the built UI with sandbox and closes its execution connecti
       ({ app }, directory) => app.setPath('documents', directory),
       documents,
     );
-    await login(page);
+    const page = await signInWindow(application);
+    // Its window is shown, and the sign-in window gone.
+    await expect.poll(security).toEqual([safe]);
     await page.locator('.new-session').click();
     const plain = page.locator('.session-list > .session-row.selected');
     await expect(plain.locator('strong')).toHaveText('新会话');
@@ -650,6 +670,8 @@ test('usage log: period-independent totals, chart hover, model filter and table'
 
 test('Electron remembers the sign-in, connects on the next launch and stays in the tray when closed', async () => {
   test.skip(process.platform !== 'win32', 'Windows desktop smoke test');
+  // Starts of the program one after another, each some seconds.
+  test.slow();
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env))
     if (value !== undefined && name !== 'ELECTRON_RUN_AS_NODE') env[name] = value;
@@ -663,10 +685,13 @@ test('Electron remembers the sign-in, connects on the next launch and stays in t
     });
   let application = await launch();
   try {
-    const page = await application.firstWindow();
-    await page.getByLabel('自动登录', { exact: true }).check();
-    await expect(page.getByLabel('记住凭据', { exact: true })).toBeChecked();
-    await login(page);
+    const launcher = await application.firstWindow();
+    await launcher.getByLabel('自动登录', { exact: true }).check();
+    await expect(launcher.getByLabel('记住凭据', { exact: true })).toBeChecked();
+    await login(launcher, false);
+    await expect((await connectionWindow(application)).locator('.connection-status')).toContainText(
+      '已连接',
+    );
   } finally {
     await application.close();
   }
@@ -674,8 +699,12 @@ test('Electron remembers the sign-in, connects on the next launch and stays in t
   expect(saved).not.toContain(connection().token);
   application = await launch();
   try {
-    const page = await application.firstWindow();
+    // The sign-in window signs in by itself, and gives way to the connection's window.
+    const page = await connectionWindow(application);
     await expect(page.locator('.connection-status')).toContainText('已连接');
+    await expect
+      .poll(() => application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
+      .toBe(1);
     // Closing the window keeps the application and its connection alive.
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
     expect(
@@ -686,28 +715,38 @@ test('Electron remembers the sign-in, connects on the next launch and stays in t
     ).toBe(true);
     await expect(page.locator('.connection-status')).toContainText('已连接');
     await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+    // Signing out ends the process, which gives way to a sign-in window of a process of its own.
+    const ended = application.process();
     await page.getByRole('menuitem', { name: '断开连接', exact: true }).click();
-    await expect(page.getByLabel('服务凭据')).toHaveValue(connection().token);
+    if (ended.exitCode === null) await new Promise((done) => ended.once('exit', done));
   } finally {
+    // The process it started holds Playwright's pipe to this one, whose close does not come until it goes.
+    endStrays(profile);
     await application.close();
   }
   // Drafts are on disk as soon as they are saved: killing the process does not lose them.
+  const drafts = resolve(connectionDirectory(profile), 'drafts.json');
+  const since = Date.now();
   application = await launch();
-  const page = await application.firstWindow();
+  const page = await connectionWindow(application);
+  // Once the page has read the drafts kept and written them back, as it does when it starts.
+  await expect(page.locator('.connection-status')).toContainText('已连接');
+  await expect
+    .poll(() => (existsSync(drafts) ? statSync(drafts).mtimeMs : 0), { timeout: 15000 })
+    .toBeGreaterThanOrEqual(since);
   await page.evaluate(() => window.desktop!.saveDrafts({ 会话: '写了很久的草稿' }));
   execFileSync('taskkill', ['/pid', String(application.process().pid), '/t', '/f']);
   application = await launch();
   try {
-    const page = await application.firstWindow();
+    const page = await connectionWindow(application);
     expect(await page.evaluate(() => window.desktop!.loadDrafts())).toEqual({
       会话: '写了很久的草稿',
     });
     // The schedule file exists from the first launch, and an edit made outside the window reaches it,
     // byte-order mark or not.
     const file = resolve(connectionDirectory(profile), 'schedules.json');
-    // The window reads the file itself as it starts; the edit below has to come after that. It signs in by
-    // itself here, so whichever of the two pages is up tells that it has started.
-    await expect(page.locator('.login-page, .shell')).toBeVisible();
+    // The window reads the file itself once it has connected; the edit below has to come after that.
+    await expect(page.locator('.shell')).toBeVisible();
     const loaded = await page.evaluate(() => window.desktop!.loadSchedules(''));
     expect(loaded.path).toBe(file);
     expect(JSON.parse(loaded.text).tasks).toEqual([]);

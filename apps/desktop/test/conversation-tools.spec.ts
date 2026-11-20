@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   connectionArgs,
+  signInWindow,
   connectionDirectory,
   createSession,
   login,
@@ -204,15 +205,6 @@ test('Electron copies text and supplies the native editing context menu', async 
       BrowserWindow.getAllWindows()[0].webContents.paste(),
     );
     await expect(input).toHaveValue('复制粘贴测试');
-    // A picture that is only on the clipboard is saved in the profile, and only a picture is.
-    const saved = await page.evaluate(() =>
-      window.desktop!.saveImage('image/png', new Uint8Array([137, 80, 78, 71])),
-    );
-    expect(saved.startsWith(resolve(connectionDirectory(profile), 'pasted'))).toBe(true);
-    expect(readFileSync(saved)).toEqual(Buffer.from([137, 80, 78, 71]));
-    await expect(
-      page.evaluate(() => window.desktop!.saveImage('text/plain', new Uint8Array([1]))),
-    ).rejects.toThrow(/图片/);
     const roles = await application.evaluate(({ BrowserWindow, Menu }) => {
       const build = Menu.buildFromTemplate;
       let items: unknown[] = [];
@@ -246,6 +238,20 @@ test('Electron copies text and supplies the native editing context menu', async 
         expect.objectContaining({ role: 'paste', enabled: true }),
       ]),
     );
+    // A picture that is only on the clipboard is saved with the connection, and only a picture is; the sign-in
+    // window, no connection's yet, keeps none.
+    await expect(
+      page.evaluate(() => window.desktop!.saveImage('image/png', new Uint8Array([137]))),
+    ).rejects.toThrow(/登录/);
+    const signedIn = await signInWindow(application);
+    const saved = await signedIn.evaluate(() =>
+      window.desktop!.saveImage('image/png', new Uint8Array([137, 80, 78, 71])),
+    );
+    expect(saved.startsWith(resolve(connectionDirectory(profile), 'pasted'))).toBe(true);
+    expect(readFileSync(saved)).toEqual(Buffer.from([137, 80, 78, 71]));
+    await expect(
+      signedIn.evaluate(() => window.desktop!.saveImage('text/plain', new Uint8Array([1]))),
+    ).rejects.toThrow(/图片/);
   } finally {
     await application.evaluate(({ clipboard }, text) => clipboard.writeText(text), previous);
     await application.close();

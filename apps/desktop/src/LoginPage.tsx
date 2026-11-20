@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import { thisDevice } from './device.ts';
 import { GithubMark, openProject, project } from './project.tsx';
-import { serviceKey, useConnectionName } from './shared.ts';
+import { serviceKey } from './shared.ts';
 import type { Account } from './shared.ts';
 
 // What the token field shows for a token its connection keeps, which this window never reads.
@@ -18,12 +18,16 @@ export type ConnectionForm = {
   // with no window open, which only one service does.
   remember: boolean;
   autoLogin: boolean;
+  // An earlier version's connection that kept no address, to take the one given now.
+  id?: string;
 };
 
+// The sign-in window's form (see Launcher.tsx).
 export default function LoginPage({
   form,
   change,
   connecting,
+  cancel,
   error,
   upgrade,
   direct,
@@ -34,13 +38,12 @@ export default function LoginPage({
   showNotes,
   submit,
   openSettings,
-  launcher = false,
-  locked = false,
-  elsewhere,
 }: {
   form: ConnectionForm;
   change: (values: Partial<ConnectionForm>) => void;
   connecting: boolean;
+  // Gives up the sign-in under way.
+  cancel?: () => void;
   error: string | null;
   // The version of the installer a service of another version offers this client.
   upgrade: string | null;
@@ -59,24 +62,17 @@ export default function LoginPage({
   submit: () => void;
   // This computer's own settings, which need no connection.
   openSettings?: () => void;
-  // A sign-in window (see Launcher.tsx), which offers the services signed in to before.
-  launcher?: boolean;
-  // A connection's window keeps to its service; `elsewhere` goes back to a sign-in window for another.
-  locked?: boolean;
-  elsewhere?: () => void;
 }) {
-  const connectionName = useConnectionName();
   // The services this computer has signed in to, each a window of its own (see electron/connections.cjs): one
-  // fills the form, and its record can be forgotten. A remembered token stays with its service's connection,
-  // whose window signs in with it.
+  // fills the form, and its record can be forgotten. A remembered token is not read here: the sign-in takes it.
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [listOpen, setListOpen] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const picker = useRef<HTMLDivElement>(null);
   const readAccounts = () => {
-    if (launcher) void window.desktop?.accounts().then(setAccounts);
+    void window.desktop?.accounts().then(setAccounts);
   };
-  useEffect(readAccounts, [launcher]);
+  useEffect(readAccounts, []);
   useEffect(() => {
     if (!listOpen) return;
     const away = (event: PointerEvent) => {
@@ -87,10 +83,7 @@ export default function LoginPage({
   }, [listOpen]);
   const failed = (failure: unknown) =>
     setListError(
-      String((failure as Error)?.message ?? failure).replace(
-        /^.*?'(accounts|launcher):\w+': (Error: )?/,
-        '',
-      ),
+      String((failure as Error)?.message ?? failure).replace(/^.*?'accounts:\w+': (Error: )?/, ''),
     );
   // A service whose token its connection keeps shows the field filled. Typing there replaces it; emptied, the
   // field asks for one again.
@@ -103,16 +96,10 @@ export default function LoginPage({
   function choose(account: Account) {
     setListOpen(false);
     setListError(null);
-    // An earlier version's connection that kept no address signs in from its own window.
-    if (!account.url) {
-      void window.desktop!.openLegacy(account.id).then((result) => {
-        if (result.shown) setListError('这个连接的窗口已经开着，已切换到那个窗口。');
-        else if (result.error) setListError(result.error);
-      }, failed);
-      return;
-    }
     setReplaced(null);
     change({
+      // An earlier version's connection that kept no address takes the one typed in.
+      ...(account.url ? { id: undefined } : { id: account.id }),
       url: account.url,
       fingerprint: account.fingerprint,
       mode: account.mode,
@@ -191,7 +178,6 @@ export default function LoginPage({
         <div className="brand">
           <SquareTerminal />
           <span>CC Desk Tunnel</span>
-          {connectionName && <span className="brand-connection">{connectionName}</span>}
         </div>
         <div className="login-title">
           <h1>连接代理服务</h1>
@@ -236,16 +222,15 @@ export default function LoginPage({
             <label>
               服务地址
               <input
-                autoFocus={!locked}
+                autoFocus
                 type="url"
                 value={form.url}
                 onChange={(event) => change({ url: event.target.value })}
-                readOnly={locked}
                 required
                 spellCheck={false}
               />
             </label>
-            {launcher && accounts.length > 0 && (
+            {accounts.length > 0 && (
               <button
                 type="button"
                 className="icon-button login-account-toggle"
@@ -259,7 +244,7 @@ export default function LoginPage({
                 <ChevronDown />
               </button>
             )}
-            {launcher && listOpen && accounts.length > 0 && (
+            {listOpen && accounts.length > 0 && (
               <ul className="login-accounts" aria-label="登录过的服务">
                 {accounts.map((account) => (
                   <li key={account.id}>
@@ -407,14 +392,13 @@ export default function LoginPage({
             <Unplug />
             {connecting ? '连接中…' : '连接'}
           </button>
-        </form>
-        <div className="login-links">
-          {elsewhere && !launcher && (
-            <button className="project-link" type="button" onClick={elsewhere}>
-              <Unplug />
-              换个服务登录
+          {connecting && cancel && (
+            <button className="button login-submit" type="button" onClick={cancel}>
+              取消
             </button>
           )}
+        </form>
+        <div className="login-links">
           {openSettings && (
             <button className="project-link" type="button" onClick={openSettings}>
               <Settings />

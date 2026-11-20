@@ -6,6 +6,7 @@ import {
   continues,
   isFragment,
   pathKey,
+  planModeSchema,
   platformOf,
   snapshotSchema,
   sessionSchema,
@@ -29,6 +30,16 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 
 type StoredSession = SessionSnapshot & { createRequestId: string };
+// A session going into plan mode remembers the mode it was in, which a plan approved goes back to by default, as
+// Claude Code's own plan approval offers.
+function setMode(session: Session, permissionMode: PermissionMode) {
+  if (permissionMode === 'plan' && session.permissionMode !== 'plan') {
+    const before = planModeSchema.safeParse(session.permissionMode);
+    if (before.success) session.modeBeforePlan = before.data;
+    else delete session.modeBeforePlan;
+  }
+  session.permissionMode = permissionMode;
+}
 const pageEvents = 1000;
 const pageBytes = 512 * 1024;
 
@@ -698,9 +709,18 @@ export class SessionStore {
   ) {
     const { session } = this.get(sessionId);
     if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再修改审批模式。');
-    session.permissionMode = permissionMode;
+    setMode(session, permissionMode);
     if (model !== undefined) session.model = model;
     if (effort !== undefined) session.effort = effort;
+    session.updatedAt = new Date().toISOString();
+    this.save(session);
+    return session;
+  }
+  // The mode Claude Code went into by itself during a run (see `native.mode`), kept for the turns that follow.
+  adoptMode(sessionId: string, permissionMode: PermissionMode) {
+    const { session } = this.get(sessionId);
+    if (session.permissionMode === permissionMode) return session;
+    setMode(session, permissionMode);
     session.updatedAt = new Date().toISOString();
     this.save(session);
     return session;

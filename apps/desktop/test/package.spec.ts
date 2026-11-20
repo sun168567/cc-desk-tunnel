@@ -2,7 +2,7 @@ import { test, expect, _electron } from '@playwright/test';
 import { readFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
-import { connectionArgs } from './helpers.ts';
+import { connectionArgs, connectionWindow } from './helpers.ts';
 
 test.use({ trace: 'off' });
 
@@ -63,12 +63,14 @@ test('packaged exe runs without development dependencies and reclaims bundled re
   const applicationProcess = application.process();
   const errors: string[] = [];
   try {
-    const page = await application.firstWindow();
-    page.on('pageerror', (error) => errors.push(error.message));
-    await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
-    await expect(page.getByLabel('服务证书指纹', { exact: true })).toBeVisible();
+    const launcher = await application.firstWindow();
+    launcher.on('pageerror', (error) => errors.push(error.message));
+    await expect(
+      launcher.getByRole('heading', { name: '连接代理服务', exact: true }),
+    ).toBeVisible();
+    await expect(launcher.getByLabel('服务证书指纹', { exact: true })).toBeVisible();
     expect(await application.evaluate(({ app }) => app.isPackaged)).toBe(true);
-    expect(await page.evaluate((path) => window.desktop!.gitBranch(path), project)).toBe(
+    expect(await launcher.evaluate((path) => window.desktop!.gitBranch(path), project)).toBe(
       'package-smoke',
     );
     // Loaded only when an upgrade is fetched from the release page, so its absence would not show otherwise.
@@ -79,26 +81,28 @@ test('packaged exe runs without development dependencies and reclaims bundled re
         return typeof load(file).downloadRelease;
       }),
     ).toBe('function');
-    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
-    // The connection started once more shows its window and goes: one window to a connection.
-    await new Promise<void>((accept, reject) => {
-      execFile(
-        executablePath,
-        ['--smoke-test', ...connectionArgs(join(directory, 'profile'))],
-        { env, windowsHide: true, timeout: 10000 },
-        (error) => (error ? reject(error) : accept()),
-      );
-    });
-    expect(
-      await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
-    ).toBe(1);
     if (process.env.NATIVE_TEST_CONFIG) {
       const connection = JSON.parse(readFileSync(resolve(process.env.NATIVE_TEST_CONFIG), 'utf8'));
-      await page.getByLabel('服务地址', { exact: true }).fill(connection.url);
-      await page.getByLabel('服务证书指纹', { exact: true }).fill(connection.fingerprint ?? '');
-      await page.getByLabel('服务凭据', { exact: true }).fill(connection.token);
-      await page.getByRole('button', { name: '连接', exact: true }).click();
+      await launcher.getByLabel('服务地址', { exact: true }).fill(connection.url);
+      await launcher.getByLabel('服务证书指纹', { exact: true }).fill(connection.fingerprint ?? '');
+      await launcher.getByLabel('服务凭据', { exact: true }).fill(connection.token);
+      await launcher.getByRole('button', { name: '连接', exact: true }).click();
+      const page = await connectionWindow(application);
+      page.on('pageerror', (error) => errors.push(error.message));
       await expect(page.locator('.connection-status')).toContainText('已连接', { timeout: 45000 });
+      await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].show());
+      // The connection started once more shows its window and goes: one window to a connection.
+      await new Promise<void>((accept, reject) => {
+        execFile(
+          executablePath,
+          ['--smoke-test', ...connectionArgs(join(directory, 'profile'))],
+          { env, windowsHide: true, timeout: 10000 },
+          (error) => (error ? reject(error) : accept()),
+        );
+      });
+      expect(
+        await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length),
+      ).toBe(1);
       const components = await componentProcesses(resources);
 
       expect(components.some((row) => row.Name === 'sshd.exe')).toBe(true);
@@ -126,7 +130,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
         .toBe(0);
       expect(existsSync(runtime!)).toBe(false);
     } else {
-      await page.screenshot({ path: join(directory, 'packaged-login.png') });
+      await launcher.screenshot({ path: join(directory, 'packaged-login.png') });
     }
     expect(errors).toEqual([]);
   } finally {

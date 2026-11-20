@@ -92,4 +92,4 @@ OAuth 错误保留官方的具体说明，包括多行网络错误；设置保�
 
 新会话默认请求原生 `auto`，CLI 自己判断风险；没有本项目第二套 AI 审批器，也不把 auto 换成 bypassPermissions。GUI 可改为原生 `default` / `plan` / `acceptEdits`，偏好保存在 Linux；`bypassPermissions`（绕过权限，什么都不再询问）只在使用者于“设置 → 常规 → 审批”里允许后才出现在选项里，选中前再确认一次，从不作为默认。实际模式读取 `system.init.permissionMode`；版本 / 模型 / 提供方不支持时显示实际值及原生提示。
 
-`canUseTool` 仍接出原生升级到用户的请求，仅作为必要时人工允许 / 拒绝入口；Claude 的提问（`AskUserQuestion`）走同一入口，界面展示问题与选项，用户的选择按官方结构放进 `updatedInput.answers` 返回，不回答则按拒绝返回；不能因默认 auto 就移除或自动允许所有请求。`auto` 下多数操作不需要人工，但这不是所有命令、模型或提供方都不需要人工的保证。
+`canUseTool` 仍接出原生升级到用户的请求，仅作为必要时人工允许 / 拒绝入口；Claude 的提问（`AskUserQuestion`）走同一入口，界面展示问题与选项，用户的选择按官方结构放进 `updatedInput.answers` 返回，不回答则按拒绝返回；不能因默认 auto 就移除或自动允许所有请求。计划模式同样只接线：Claude 在计划模式下把计划写进 CLI 的计划文件后请求执行（`ExitPlanMode`），CLI 把计划正文和文件路径放进这次请求；界面以文档卡片展示，批准时按官方计划审批的做法以 `updatedPermissions` 的 `setMode` 指定执行模式（自动审批 / 接受编辑 / 手动审批，默认进入计划前的模式），修改过的计划放进 `updatedInput.plan`（CLI 写回计划文件并告诉 Claude 计划被用户改过），退回则把意见作为拒绝理由交给 Claude。Claude 自己进入计划模式（`EnterPlanMode`）不经审批。运行中模式的变化以 CLI 的 `system.status.permissionMode` 为准，服务据此更新会话，下一轮按它启动。官方终端的“清空上下文后执行”和云端 Ultraplan 不在 SDK 审批接口里，不提供。任务清单工具由 CLI 按模型决定是否提供（新模型默认不提供），本项目不另行开启。`auto` 下多数操作不需要人工，但这不是所有命令、模型或提供方都不需要人工的保证。

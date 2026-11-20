@@ -52,8 +52,11 @@ export const posixService = {
 // Lays out what goes into the application archive, the same way for every system: the page, the connection
 // bridge with what it imports bundled into one file, and the main process's own modules as written.
 // `files` are the further files of apps/desktop/electron that this system's package needs; `dependencies`
-// are packages a separately started process of the program loads, which no bundle holds.
-export async function stageDesktop(root, app, { description, files = [], dependencies = [] }) {
+// are packages a separately started process of the program loads, which no bundle holds. The SSH library is
+// always one of them: the file panel's SFTP uses it in the main process (files.mjs), and it is not bundled for
+// its optional native parts.
+export async function stageDesktop(root, app, { description, files = [], dependencies: own = [] }) {
+  const dependencies = [...new Set(['ssh2', ...own])];
   mkdirSync(app, { recursive: true });
   rmSync(join(app, 'node_modules'), { recursive: true, force: true });
   await viteBuild({

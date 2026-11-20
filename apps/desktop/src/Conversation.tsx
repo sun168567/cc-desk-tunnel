@@ -29,9 +29,10 @@ import {
   SquareTerminal,
   Wrench,
   X,
+  ShieldAlert,
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
-import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
+import type { PlanMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { fileName, pieces } from './attachments.ts';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
@@ -39,7 +40,9 @@ import type { HistoryState, TaskProgress } from './client.ts';
 import { RunStatus, TaskLine, terminalState } from './RunStatus.tsx';
 import type { Clock } from './RunStatus.tsx';
 import QuestionCard, { questionsOf } from './QuestionCard.tsx';
-import { conversation } from './transcript.ts';
+import PlanCard, { feedbackOf } from './PlanCard.tsx';
+import type { PlanOutcome } from './PlanCard.tsx';
+import { conversation, isPlan, planOf } from './transcript.ts';
 import { usePrefs } from './prefs.ts';
 import { firstLine } from './transcriptView.ts';
 import type { Compact, Notice, TranscriptItem, Turn, Work } from './transcript.ts';
@@ -65,6 +68,8 @@ const Rich = ({ text }: { text: string }) => (
 
 type Tool = Extract<TranscriptItem, { kind: 'tool' }>;
 type Text = Extract<TranscriptItem, { kind: 'user' | 'assistant' | 'thinking' }>;
+// How the user decided on Claude's plan, beyond yes or no.
+export type PlanReply = { mode?: PlanMode; edited?: string; feedback?: string };
 // What the rows need from the session: the clock for running timers and how to answer an approval.
 type Live = {
   now: number;
@@ -73,7 +78,13 @@ type Live = {
   // This window has answered the approval and waits for the service to take it: a second press would be
   // a second answer.
   answered: (tool: Tool) => boolean;
-  reply: (tool: Tool, allowed: boolean, answers?: Record<string, string>) => void;
+  reply: (tool: Tool, allowed: boolean, answers?: Record<string, string>, plan?: PlanReply) => void;
+  // The call belongs to the run going on now.
+  current: (tool: Tool) => boolean;
+  // The mode a plan approved is carried out in unless the user picks another.
+  planMode: PlanMode;
+  // The session asks about nothing, but for Claude Code's own safety checks.
+  bypassing: boolean;
   // The foreground task a running call waits on, while this window may act on it: 'sent' once it has, until
   // the call returns.
   taskControl: (tool: Tool) => 'ready' | 'sent' | undefined;
@@ -317,6 +328,26 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
               </>
             )
           )}
+          {approval && (tool.safetyCheck || tool.approvalReason) && (
+            <div
+              className="approval-reason"
+              role="note"
+              title={
+                tool.safetyCheck ? 'Claude Code 自身的安全检查，任何审批模式都会询问' : undefined
+              }
+            >
+              <ShieldAlert />
+              <span>
+                {tool.safetyCheck && (
+                  <b>
+                    Claude Code 安全拦截
+                    {live.bypassing && <i className="approval-tag">绕过时也提醒</i>}
+                  </b>
+                )}
+                {tool.approvalReason && <small>{tool.approvalReason}</small>}
+              </span>
+            </div>
+          )}
           {approval && (
             <div className="approval-actions">
               <button
@@ -523,10 +554,16 @@ function Message({
             </span>
           )}
           {item.delivery && (
-            <span
-              className={`message-delivery${item.delivery === '原生已接收' ? '' : ' unsettled'}`}
-            >
-              {item.delivery}
+            <span className={`message-delivery${item.delivery === 'received' ? '' : ' unsettled'}`}>
+              {
+                {
+                  submitted: '已提交',
+                  queued: '等待原生处理',
+                  received: '原生已接收',
+                  not_sent: '未送达原生',
+                  unconfirmed: '接收未确认',
+                }[item.delivery]
+              }
             </span>
           )}
           {stamp}
@@ -535,7 +572,11 @@ function Message({
               type="button"
               className="message-action"
               aria-label="编辑重发"
-              title="编辑重发：从这条消息之前分叉出新会话，原会话保留"
+              title={
+                item.delivery === 'not_sent'
+                  ? '编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉'
+                  : '编辑重发：从这条消息之前分叉出新会话，原会话保留'
+              }
               onClick={() => edit(item)}
             >
               <Pencil />
@@ -601,6 +642,48 @@ function heldOpen(turns: Turn[], index: number) {
   return last > index && !turns[last].endedAt;
 }
 
+// Claude's plan in its place in the turn. One whose input carries no plan is shown as any other call.
+function PlanStep({ tool, live, folded }: { tool: Tool; live: Live; folded?: boolean }) {
+  const found = planOf(tool.input);
+  if (!found)
+    return (
+      <div className="work-flat">
+        <ToolRow tool={tool} active={live.current(tool)} live={live} />
+      </div>
+    );
+  const approvable = live.canApprove(tool);
+  const outcome: PlanOutcome | undefined = approvable
+    ? undefined
+    : tool.state === 'denied'
+      ? { kind: 'returned', feedback: feedbackOf(tool.output) }
+      : tool.state === 'running' || tool.state === 'completed'
+        ? { kind: 'approved', mode: tool.mode, edited: tool.edited }
+        : live.current(tool) && !tool.endedAt
+          ? { kind: 'waiting' }
+          : { kind: 'open' };
+  return (
+    <PlanCard
+      key={tool.input}
+      plan={found.plan}
+      file={found.file}
+      outcome={outcome}
+      folded={folded}
+      decide={
+        approvable
+          ? {
+              busy: live.busy || live.answered(tool),
+              mode: live.planMode,
+              approve: (mode, edited) =>
+                live.reply(tool, true, undefined, { mode, ...(edited ? { edited } : {}) }),
+              keepPlanning: (feedback) =>
+                live.reply(tool, false, undefined, feedback ? { feedback } : undefined),
+            }
+          : undefined
+      }
+    />
+  );
+}
+
 function TurnView({
   turn,
   native,
@@ -619,9 +702,13 @@ function TurnView({
   const notes = turn.steps.filter((step) => step.kind === 'assistant').length;
   // A turn of nothing but a compaction, as /compact makes, has nothing to fold away.
   const folds = turn.steps.some((step) => step.kind === 'work' || step.kind === 'assistant');
-  const steps = () =>
+  // A turn that is over keeps its plans in view, folded to their heading, outside the steps folded away.
+  const plans = turn.steps.filter((step): step is Tool => isPlan(step));
+  const steps = (withPlans = true) =>
     turn.steps.map((step, index) =>
-      step.kind === 'compact' ? (
+      step.kind === 'tool' ? (
+        withPlans && <PlanStep key={step.id} tool={step} live={live} />
+      ) : step.kind === 'compact' ? (
         <CompactMark key={step.id} item={step} active={active} now={live.now} />
       ) : step.kind === 'notice' || step.kind === 'note' ? (
         <NoticeLine key={step.id} item={step} />
@@ -657,20 +744,25 @@ function TurnView({
       {active || held || expanded || !folds
         ? steps()
         : turn.steps.length > 0 && (
-            <Fold
-              className="turn-process"
-              summary={
-                <span className={turn.outcome}>
-                  {turn.outcome === 'cancelled' && '已停止 · '}
-                  {turn.outcome === 'failed' && '处理失败 · '}
-                  用时 {spent(turn)}
-                  {turn.tools > 0 && ` · ${turn.tools} 步`}
-                  {notes > 0 && ` · ${notes} 条说明`}
-                </span>
-              }
-            >
-              {steps}
-            </Fold>
+            <>
+              <Fold
+                className="turn-process"
+                summary={
+                  <span className={turn.outcome}>
+                    {turn.outcome === 'cancelled' && '已停止 · '}
+                    {turn.outcome === 'failed' && '处理失败 · '}
+                    用时 {spent(turn)}
+                    {turn.tools > 0 && ` · ${turn.tools} 步`}
+                    {notes > 0 && ` · ${notes} 条说明`}
+                  </span>
+                }
+              >
+                {() => steps(false)}
+              </Fold>
+              {plans.map((plan) => (
+                <PlanStep key={plan.id} tool={plan} live={live} folded />
+              ))}
+            </>
           )}
       {turn.answer ? (
         <Message
@@ -716,6 +808,7 @@ export default function Conversation({
   edit,
   findRequest,
   here,
+  openInFiles,
 }: {
   session: Session | undefined;
   // This window can open the files of the session's project: a desktop on the computer they are on.
@@ -739,12 +832,15 @@ export default function Conversation({
     approvalId: string,
     allowed: boolean,
     answers?: Record<string, string>,
+    plan?: PlanReply,
     // Whether the answer reached the service.
   ) => Promise<boolean>;
-  edit?: (messageId: string, text: string) => void;
+  edit?: (messageId: string, text: string, deliveryStatus?: Text['delivery']) => void;
   clock: Clock;
   // What the session's background tasks last said of themselves, by task.
   progress: Record<string, TaskProgress> | undefined;
+  // Shows a path in the file panel: one on this computer (`here`), or on the computer the session is on.
+  openInFiles?: (path: string, here: boolean) => void;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
   const shownSession = useRef(session?.id);
@@ -876,12 +972,15 @@ export default function Conversation({
       session?.activeRun?.id === tool.runId &&
       !tool.resolved &&
       !!tool.approvalId,
-    reply: (tool, allowed, answers) => {
+    current: (tool) => session?.activeRun?.id === tool.runId,
+    planMode: session?.modeBeforePlan ?? 'auto',
+    bypassing: session?.permissionMode === 'bypassPermissions',
+    reply: (tool, allowed, answers, plan) => {
       const id = tool.approvalId!;
       if (answering.current.has(id)) return;
       answering.current.add(id);
       setAnswered((value) => new Set(value).add(id));
-      void replyApproval(tool.runId, id, allowed, answers).then((sent) => {
+      void replyApproval(tool.runId, id, allowed, answers, plan).then((sent) => {
         if (sent) return;
         answering.current.delete(id);
         setAnswered((value) => {
@@ -891,7 +990,7 @@ export default function Conversation({
         });
       });
     },
-    edit: edit && !running ? (item) => edit(item.id, item.text) : undefined,
+    edit: edit && !running ? (item) => edit(item.id, item.text, item.delivery) : undefined,
     taskControl: (tool) =>
       connected &&
       ownsRun &&
@@ -1061,7 +1160,19 @@ export default function Conversation({
                 x,
                 y,
                 heading: menu.heading,
-                items: [...menu.items, { ...items[0], separated: true }, ...items.slice(1)],
+                items: [
+                  ...menu.items,
+                  ...(openInFiles && link.kind !== 'web'
+                    ? [
+                        {
+                          label: '在文件面板中显示',
+                          run: () => openInFiles(link.path, link.kind === 'path'),
+                        },
+                      ]
+                    : []),
+                  { ...items[0], separated: true },
+                  ...items.slice(1),
+                ],
               }),
             () => setContextMenu({ x, y, items }),
           );

@@ -51,6 +51,8 @@ export type Prefs = {
   // The strip under the input box with the whole session's figures; chosen the same way.
   sessionBar: { enabled: boolean; summary: Record<string, boolean> };
   theme: Theme;
+  // The file panel beside the conversation: whether it is open, and how wide the user made it.
+  filePanel: { open: boolean; width: number };
 };
 
 const storageKey = 'proxy-prefs';
@@ -80,6 +82,7 @@ const defaults: Prefs = {
   view: defaultView,
   sessionBar: { enabled: false, summary: {} },
   theme: 'system',
+  filePanel: { open: false, width: 420 },
 };
 
 function stored(): unknown {
@@ -145,6 +148,13 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
         ),
       },
       theme: themes.find((entry) => entry.theme === saved.theme)?.theme ?? defaults.theme,
+      filePanel: {
+        open: saved.filePanel?.open === true,
+        width:
+          Number.isFinite(saved.filePanel?.width) && saved.filePanel.width >= 280
+            ? Math.min(saved.filePanel.width, 3000)
+            : defaults.filePanel.width,
+      },
     };
   } catch {
     return defaults;

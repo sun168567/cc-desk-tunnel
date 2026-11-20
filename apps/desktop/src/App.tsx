@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { flushSync } from 'react-dom';
 import {
   CircleHelp,
@@ -41,7 +42,7 @@ import type {
   Session,
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
-import { FORCED_UPGRADE_SINCE, runWorking } from '@cc-desk-tunnel/protocol';
+import { FORCED_UPGRADE_SINCE, platformOf, runWorking } from '@cc-desk-tunnel/protocol';
 import { browserSession, browserSocket, watchActivity } from './browser-api.ts';
 import { CertificateWarning } from './WebGate.tsx';
 import { hostCapabilities } from './host-capabilities.ts';
@@ -60,8 +61,11 @@ import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
-import LoginPage from './LoginPage.tsx';
+import FilePanel from './FilePanel.tsx';
+import { filePlaces, sessionFolder, sftpPath } from './files.ts';
+import type { FilePlace } from './files.ts';
 import type { ConnectionForm } from './LoginPage.tsx';
+import type { SignInReport } from './Launcher.tsx';
 import { exportSession } from './exportSession.ts';
 import { onSharedChange, saveShared, shared, useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
@@ -70,6 +74,7 @@ import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
 import { UPDATE_TICK_MS, lookDue } from './update-check.ts';
 import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
+import { nextMode } from './modes.ts';
 import Rail from './Rail.tsx';
 import type { Page } from './Rail.tsx';
 import {
@@ -123,9 +128,21 @@ function savedProjects(value: unknown = shared('projects')): string[] {
 }
 
 // Owns the connection, the selection and every request; the components below render and report user intent.
+// On the desktop the window is a connection's: it signs in with what its sign-in window handed over, tells that
+// window how it goes until it has connected, and gives way to a sign-in window when the connection ends for good
+// (see Launcher.tsx). Run in a browser from the source tree, the page that signs in passes the same as `signIn`,
+// `report` and `leave` (see main.tsx). `browser`: the service's own page, signed in already.
 export function App({
   browser,
-}: { browser?: { selfSigned: boolean; expired: () => void; logout: () => Promise<void> } } = {}) {
+  signIn,
+  report,
+  leave,
+}: {
+  browser?: { selfSigned: boolean; expired: () => void; logout: () => Promise<void> };
+  signIn?: ConnectionForm;
+  report?: (report: SignInReport) => void;
+  leave?: (error: string | null) => void;
+} = {}) {
   const host = hostCapabilities(!!browser);
   const [client] = useState(() => new ProxyClient());
   useEffect(() => {
@@ -163,9 +180,6 @@ export function App({
     (values: Partial<ConnectionForm>) => setForm((current) => ({ ...current, ...values })),
     [],
   );
-  const [proxyConnecting, setProxyConnecting] = useState(false);
-  // The window's connection has its service already: see `login:load` in electron/main.cjs.
-  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | RequestInterruptedError | null>(null);
   // One request at a time from this window; `refreshing` is the slower native status read.
   const [busy, setBusy] = useState(false);
@@ -174,11 +188,6 @@ export function App({
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const quotaPrimed = useRef<string | null>(null);
   const [findRequest, setFindRequest] = useState(0);
-  // Which of this computer's settings is open on the login page.
-  const [localSettings, setLocalSettings] = useState<Section | null>(null);
-  useEffect(() => {
-    if (state.status !== 'disconnected' && state.status !== 'connecting') setLocalSettings(null);
-  }, [state.status]);
   const refreshed = useRef(new Set<string>());
   const [projects, setProjects] = useState(savedProjects);
   // The folders that hold sessions without a project; new ones are made in the first.
@@ -313,6 +322,94 @@ export function App({
   const reachable = (session: Session) =>
     state.devices.some((device) => device.id === session.device?.id && device.ready);
   const remote = away && reachable(selected);
+  // The file panel, beside the conversation on the desktop, or as a page in its place.
+  const filesAvailable = !browser && !!window.desktop?.files && place.page === 'chat';
+  const filesOpen = filesAvailable && prefs.filePanel.open;
+  const [filesPage, setFilesPage] = useState(false);
+  const [filesWidth, setFilesWidth] = useState<number | null>(null);
+  const [windowWidth, setWindowWidth] = useState(() => innerWidth);
+  useEffect(() => {
+    const resized = () => setWindowWidth(innerWidth);
+    addEventListener('resize', resized);
+    return () => removeEventListener('resize', resized);
+  }, []);
+  // The conversation keeps room enough beside it; on a narrow window the panel lies over it instead.
+  const filesOver = windowWidth <= 1000;
+  const filesMax = Math.max(
+    280,
+    windowWidth - 52 - (sideOpen && !filesOver ? 284 : 0) - (filesOver ? 0 : 380),
+  );
+  const filesShownWidth = Math.min(filesWidth ?? prefs.filePanel.width, filesMax);
+  const toggleFiles = () => {
+    setFilesPage(false);
+    setPrefs((current) => ({
+      ...current,
+      filePanel: { ...current.filePanel, open: !current.filePanel.open },
+    }));
+  };
+  const serverDevice = state.devices.find((device) => device.server)?.id;
+  const filesPlaces = useMemo(
+    () => filePlaces(state.device, state.devices, state.files),
+    [state.device, state.devices, state.files],
+  );
+  const selectedForFiles = selected;
+  const filesStart = useCallback(
+    (where: FilePlace) =>
+      sessionFolder(
+        selectedForFiles ?? undefined,
+        where,
+        state.device,
+        !!selectedForFiles && onThis(selectedForFiles),
+        state.files,
+        serverDevice,
+      ),
+    // A session's folders change with its project or computer, which the session record carries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedForFiles, state.device, state.files, serverDevice],
+  );
+  // A path shown in the file panel from a link in the conversation: a path on this computer, or one on the
+  // computer the session is on, which the panel reaches as that computer's (or the service's) files.
+  const [filesRequest, setFilesRequest] = useState<{
+    place: string;
+    path: string;
+    at: number;
+  } | null>(null);
+  const openInFiles = (path: string, here: boolean) => {
+    const device = selected?.device;
+    const placeId = here ? 'local' : device?.id === serverDevice ? 'server' : device?.id;
+    if (!placeId || !filesPlaces.some((entry) => entry.id === placeId)) {
+      setError('这个路径所在的电脑现在不在线，文件面板打不开它。');
+      return;
+    }
+    setFilesPage(false);
+    setPrefs((current) => ({ ...current, filePanel: { ...current.filePanel, open: true } }));
+    setFilesRequest({
+      place: placeId,
+      path: placeId === 'local' || placeId === 'server' ? path : sftpPath(path, platformOf(device)),
+      at: Date.now(),
+    });
+  };
+  function resizeFiles(event: ReactPointerEvent<HTMLDivElement>) {
+    const startX = event.clientX;
+    const startWidth = filesShownWidth;
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    let width = startWidth;
+    const move = (moved: PointerEvent) => {
+      width = Math.round(Math.max(280, Math.min(filesMax, startWidth + startX - moved.clientX)));
+      setFilesWidth(width);
+    };
+    const done = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', done);
+      handle.removeEventListener('pointercancel', done);
+      setFilesWidth(null);
+      setPrefs((current) => ({ ...current, filePanel: { ...current.filePanel, width } }));
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', done);
+    handle.addEventListener('pointercancel', done);
+  }
   // Two connections may have Claude working in one folder at once, each unaware of the other. A window tells
   // the others what it has running, and says so when another's session works where the shown one does. A
   // session this window lists too is the same service's and no other.
@@ -405,41 +502,12 @@ export function App({
     selfUpdating && version && state.release && isNewer(state.release, version)
       ? state.release
       : null;
-  // The service refused this client as the older one: its version can also be fetched from the release page,
-  // whether or not the service holds the installer.
-  const direct =
-    selfUpdating &&
-    state.mismatch &&
-    window.desktop &&
-    version &&
-    state.service &&
-    isNewer(state.service, version)
-      ? state.service
-      : null;
   // A service of a newer version: what that version changed can be read here, whether or not this system's
   // client upgrades itself.
   const ahead =
     state.mismatch && version && state.service && isNewer(state.service, version)
       ? state.service
       : null;
-  // How far an installer being fetched from the release page is, from 0 to 1.
-  const [downloaded, setDownloaded] = useState<number | null>(null);
-  useEffect(
-    () =>
-      window.desktop?.onUpdateProgress(({ received, size }) =>
-        setDownloaded(size ? received / size : 0),
-      ),
-    [],
-  );
-  const install = (version?: string) => {
-    void act(async () => {
-      try {
-        await window.desktop!.installUpdate(version);
-      } finally {
-        setDownloaded(null);
-      }
-    });
-  };
 
   // A check or an upgrade of the service that failed says why to whoever asked for it. The checks a window makes by
   // itself while it is in use fail quietly, to be made again within the hour.
@@ -550,27 +618,55 @@ export function App({
               },
             };
 
-  // A saved sign-in fills the form once per launch and connects without a click when the program was started
-  // to sign in: see `choose` in electron/connections.cjs.
-  const loaded = useRef(false);
+  // The sign-in handed over connects once the page is up. Until it has connected, the sign-in window hears how
+  // it goes; once it has, the window is the connection's.
+  const attempted = useRef(false);
+  const entered = useRef(false);
+  const tell = (next: SignInReport) => void (report ?? window.desktop?.reportSignIn)?.(next);
+  const signOut = (why: string | null) => void (leave ?? window.desktop?.signOut)?.(why);
+  // Taken after the page is up, once: a page mounted twice in development leaves its first client disconnected.
   useEffect(() => {
-    if (loaded.current) return;
-    loaded.current = true;
-    void window.desktop?.loadLogin().then((saved) => {
-      if (!saved) return;
-      const { signIn, locked, ...values } = saved;
-      setLocked(!!locked);
-      // The installed client has no simulation mode, whatever an earlier version saved.
-      const restored = window.desktop!.dev ? values : { ...values, mode: 'remote' as const };
-      setForm(restored);
-      if (signIn) void login(restored);
-    });
+    if (browser) return;
+    let current = true;
+    void (signIn ? Promise.resolve(signIn) : (window.desktop?.loadLogin() ?? null))?.then(
+      (saved) => {
+        if (!current || !saved) return;
+        // The installed client has no simulation mode, whatever an earlier version saved.
+        const restored =
+          !window.desktop || window.desktop.dev ? saved : { ...saved, mode: 'remote' as const };
+        setForm(restored);
+        void login(restored);
+      },
+    );
+    return () => {
+      current = false;
+    };
   }, []);
+  useEffect(() => {
+    if (browser || entered.current || !attempted.current || state.status === 'reconnecting') return;
+    if (state.status === 'connected') entered.current = true;
+    tell({
+      status:
+        state.status === 'connected' || state.status === 'disconnected'
+          ? state.status
+          : 'connecting',
+      error: state.error,
+      mismatch: state.mismatch,
+      service: state.service,
+      release: state.release,
+      preparing: state.preparing,
+    });
+  }, [state.status, state.error, state.mismatch, state.service, state.release, state.preparing]);
   useEffect(() => {
     if (connected) void window.desktop?.saveLogin(form);
   }, [connected, form.remember, form.autoLogin]);
+  // A page that goes with its window, as the program quits, has not signed out.
+  const unloading = useRef(false);
   useEffect(() => {
-    const close = () => client.disconnect();
+    const close = () => {
+      unloading.current = true;
+      client.disconnect();
+    };
     // The system says the network is back: the attempt that was waiting for its turn is made now.
     const retry = () => client.retryNow();
     window.addEventListener('beforeunload', close);
@@ -581,8 +677,9 @@ export function App({
       client.disconnect();
     };
   }, [client, changeForm]);
-  // A connection that breaks is made again by the client, and the window stays where it is. It comes back to
-  // the sign-in page only when the connection is over for good: ended here, or refused by the service.
+  // A connection that breaks is made again by the client, and the window stays where it is. Over for good, ended
+  // here or refused by the service, it gives way to a sign-in window that says why; the service's own page signs in
+  // again by itself.
   const signedIn = useRef(false);
   useEffect(() => {
     if (state.status === 'connected' || state.status === 'reconnecting') {
@@ -592,7 +689,7 @@ export function App({
     if (state.status !== 'disconnected' || !signedIn.current) return;
     signedIn.current = false;
     void window.desktop?.disconnectProxy();
-    setForm((current) => (current.remember ? current : { ...current, token: '' }));
+    if (!browser) return unloading.current ? undefined : signOut(client.state.error);
     if (client.state.error)
       notifications.push({
         kind: 'connection',
@@ -724,9 +821,9 @@ export function App({
   // Remote mode connects through the main process, which opens the tunnel and returns a loopback address.
   async function login(form: ConnectionForm) {
     setError(null);
+    attempted.current = true;
     try {
       if (form.mode === 'remote') {
-        setProxyConnecting(true);
         // The address here only has to be a loopback one; each attempt gets its own from the bridge it opens.
         client.connect(
           'ws://127.0.0.1/ws',
@@ -748,22 +845,15 @@ export function App({
       localStorage.setItem('proxy-url', form.url);
     } catch (error) {
       if (form.mode === 'remote') await window.desktop?.disconnectProxy();
-      setError(error instanceof Error ? error.message : '连接失败。');
-    } finally {
-      setProxyConnecting(false);
+      tell({
+        status: 'disconnected',
+        error: error instanceof Error ? error.message : '连接失败。',
+        mismatch: false,
+        service: null,
+        release: null,
+        preparing: null,
+      });
     }
-  }
-  // A connection is one service's: a window an earlier version made without keeping its address may not sign in
-  // to a service another connection has.
-  async function signIn(form: ConnectionForm) {
-    if (window.desktop && !locked) {
-      const owner = await window.desktop.loginOwner(form.url).catch(() => null);
-      if (owner) {
-        setError(`“${owner}”已有自己的连接，请从登录窗口登录它。`);
-        return;
-      }
-    }
-    await login(form);
   }
   function stopRun() {
     if (!selected?.activeRun) return;
@@ -777,9 +867,10 @@ export function App({
       void act(browser.logout);
       return;
     }
+    signedIn.current = false;
     client.disconnect();
-    setForm((current) => (current.remember ? current : { ...current, token: '' }));
     void window.desktop?.disconnectProxy();
+    signOut(null);
   }
   // Moves the window to a place and remembers it; going back or forward revisits without adding to the trail.
   function visit(next: Place, record = true) {
@@ -1477,6 +1568,15 @@ export function App({
       newSession: canCreate && (() => void newSession()),
       settings: () => open('settings'),
       find: !!selected && place.page === 'chat' && (() => setFindRequest((value) => value + 1)),
+      // As the mode menu, which a run going on keeps closed.
+      cycleMode:
+        !!selected &&
+        place.page === 'chat' &&
+        connected &&
+        !busy &&
+        !selected.activeRun &&
+        (() => void configure({ permissionMode: nextMode(selected.permissionMode) })),
+      toggleFiles: filesAvailable && toggleFiles,
       zoomIn: window.desktop && (() => window.desktop!.zoom(1)),
       zoomOut: window.desktop && (() => window.desktop!.zoom(-1)),
       zoomReset: window.desktop && (() => window.desktop!.zoom(0)),
@@ -1520,76 +1620,9 @@ export function App({
       </main>
     );
 
+  // Not connected yet, the window is not shown: its sign-in window tells how the sign-in goes.
   if (state.status === 'disconnected' || state.status === 'connecting')
-    return localSettings ? (
-      <div className="settings-only">
-        <div className="window-drag" />
-        <SettingsPage
-          client={client}
-          section={localSettings}
-          go={setLocalSettings}
-          back={() => setLocalSettings(null)}
-          native={false}
-          account={null}
-          form={form}
-          changeForm={changeForm}
-          workspaceRoot={workspaceRoots[0] ?? ''}
-          chooseWorkspace={(reset) => {
-            void act(async () => {
-              setWorkspaceRoots(await window.desktop!.chooseWorkspace(reset));
-            });
-          }}
-          version={version}
-          service={null}
-          adapterName=""
-          updates={[]}
-          showNotes={setNotes}
-        />
-        {notesDialog}
-      </div>
-    ) : (
-      <>
-        {notesDialog}
-        <LoginPage
-          showNotes={setNotes}
-          newer={upgrade ?? ahead}
-          openSettings={() => setLocalSettings('general')}
-          form={form}
-          change={changeForm}
-          error={
-            currentError && state.mismatch && !upgrade && state.service && version
-              ? `${currentError}${
-                  isNewer(version, state.service)
-                    ? '此客户端较新，请先升级服务端。'
-                    : !selfUpdating
-                      ? '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。'
-                      : state.preparing !== null
-                        ? `服务端正在下载这一版的安装包（${Math.floor(state.preparing * 100)}%），稍后重新连接就能从服务端升级；也可以现在直接从 GitHub 发布页下载。`
-                        : '服务端还没有这一版的安装包，它会继续尝试下载；可以直接从 GitHub 发布页下载，或稍后重试。'
-                }`
-              : currentError
-          }
-          upgrade={state.mismatch && window.desktop ? upgrade : null}
-          older={
-            form.mode === 'remote' &&
-            state.mismatch &&
-            state.service &&
-            isNewer(version, state.service)
-              ? state.service
-              : null
-          }
-          direct={direct}
-          downloaded={downloaded}
-          install={install}
-          connecting={state.status === 'connecting' || proxyConnecting || busy}
-          submit={() => {
-            void signIn(form);
-          }}
-          locked={locked}
-          elsewhere={window.desktop ? () => void window.desktop!.signInElsewhere() : undefined}
-        />
-      </>
-    );
+    return <main className="app-waiting" aria-busy="true" />;
   const menuSession =
     menu?.kind === 'session' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
   const moved =
@@ -1629,7 +1662,8 @@ export function App({
     ) : undefined;
   return (
     <div
-      className={`shell page-${place.page} ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''}`}
+      className={`shell page-${place.page} ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''} ${filesOpen ? (filesPage ? 'files-page' : filesOver ? 'files-over' : 'files-open') : ''}`}
+      style={filesOpen ? ({ '--file-width': `${filesShownWidth}px` } as CSSProperties) : undefined}
       data-settings-index={place.settingsIndex || undefined}
       {...drawerSwipe}
     >
@@ -1660,6 +1694,11 @@ export function App({
         openMenu={(item, position) => setMenu({ kind: 'bar', label: item.label, ...position })}
         connected={connected}
         adapterName={adapterName}
+        files={
+          filesAvailable
+            ? { open: filesOpen, toggle: toggleFiles, hint: hint('toggleFiles') }
+            : undefined
+        }
       />
       <Rail
         page={place.page}
@@ -1782,6 +1821,7 @@ export function App({
               </div>
             )}
             <Conversation
+              openInFiles={filesAvailable ? openInFiles : undefined}
               findRequest={findRequest}
               session={selected}
               here={!!selected && onThis(selected)}
@@ -1800,7 +1840,17 @@ export function App({
               edit={
                 controlsDisabled || away
                   ? undefined
-                  : (id, text) => {
+                  : (id, text, deliveryStatus) => {
+                      // Only a confirmed non-delivery can be resent in place. A missing receipt is not proof.
+                      if (deliveryStatus === 'not_sent') {
+                        if (draft && draft !== text) {
+                          setError('输入框里还有草稿，请先发送或清空，再编辑这条未送达的消息。');
+                          return;
+                        }
+                        setError(null);
+                        setDraft(selected!.id, text);
+                        return;
+                      }
                       void fork(selected!, { id, text });
                     }
               }
@@ -1825,7 +1875,7 @@ export function App({
                 });
               }}
               stop={stopRun}
-              replyApproval={async (runId, approvalId, allowed, answers) => {
+              replyApproval={async (runId, approvalId, allowed, answers, plan) => {
                 let sent = false;
                 await act(async () => {
                   await client.request({
@@ -1835,6 +1885,7 @@ export function App({
                     approvalId,
                     allowed,
                     ...(answers ? { answers } : {}),
+                    ...(plan ? { plan } : {}),
                   });
                   sent = true;
                 });
@@ -1993,6 +2044,31 @@ export function App({
               />
             )}
           </main>
+          {filesOpen && (
+            <aside className="file-column" aria-label="文件">
+              {!filesPage && (
+                <div
+                  className="file-resizer"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="调整文件面板宽度"
+                  onPointerDown={resizeFiles}
+                />
+              )}
+              <FilePanel
+                places={filesPlaces}
+                start={filesStart}
+                sessionKey={selected?.id ?? ''}
+                info={state.files}
+                layout={filesPage ? 'page' : filesShownWidth < 620 ? 'narrow' : 'wide'}
+                setPage={setFilesPage}
+                close={toggleFiles}
+                noticeKey={window.desktop?.boot.connection ?? ''}
+                project={selected && onThis(selected) ? selected.projectPath : null}
+                request={filesRequest}
+              />
+            </aside>
+          )}
         </>
       )}
       {menu && openMenu && (

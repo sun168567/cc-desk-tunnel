@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -119,16 +127,21 @@ test('a connection is removed with its profile, unless its window is open', (con
   connections.mark(base, id, false);
   assert.equal(connections.running(base, id), false);
   connections.setAutoLogin(base, id, true);
+  mkdirSync(join(base, 'Partitions', id, 'IndexedDB'), { recursive: true });
   connections.remove(base, id);
   assert.equal(existsSync(connections.directory(base, id)), false);
+  assert.equal(existsSync(join(base, 'Partitions', id)), false);
   assert.deepEqual(connections.list(base), []);
   assert.equal(connections.autoLogin(base), null);
   assert.throws(() => connections.remove(base, id), /不存在/);
 });
 
-test('what sign-in windows and unfinished connections leave goes, once their windows have', (context) => {
+test('what sign-in windows, unfinished connections and connections gone leave goes, once their windows have', (context) => {
   const base = profile(context);
-  const open = connections.launcherDirectory(base);
+  // The sign-in windows of 0.3.16 had profiles of their own.
+  const open = join(base, 'launchers', 'open0000');
+  mkdirSync(open, { recursive: true });
+  writeFileSync(join(open, 'instance.json'), JSON.stringify({ pid: process.pid }));
   const gone = join(base, 'launchers', 'gone0000');
   mkdirSync(gone, { recursive: true });
   writeFileSync(join(gone, 'instance.json'), JSON.stringify({ pid: 2 ** 30 }));
@@ -137,7 +150,13 @@ test('what sign-in windows and unfinished connections leave goes, once their win
   const trying = connections.create(base, { url: 'wss://slow/ws' });
   const now = Date.now();
   connections.writeSettings(base, tried, { pending: now - 200_000 });
+  // The storage of a connection's window goes with the connection.
+  for (const id of [kept, tried, 'away0000'])
+    mkdirSync(join(base, 'Partitions', id, 'Local Storage'), { recursive: true });
   connections.tidy(base, now);
+  assert.ok(existsSync(join(base, 'Partitions', kept)));
+  assert.ok(!existsSync(join(base, 'Partitions', tried)));
+  assert.ok(!existsSync(join(base, 'Partitions', 'away0000')));
   assert.ok(existsSync(open));
   assert.ok(!existsSync(gone));
   // One made a moment ago may not have started yet.
@@ -146,6 +165,10 @@ test('what sign-in windows and unfinished connections leave goes, once their win
     [kept, trying],
   );
   assert.ok(!existsSync(connections.directory(base, tried)));
+  // Once the last one has gone, so does the directory that held them.
+  writeFileSync(join(open, 'instance.json'), JSON.stringify({ pid: 2 ** 30 }));
+  connections.tidy(base, now);
+  assert.ok(!existsSync(join(base, 'launchers')));
 });
 
 test('an earlier version’s first connection moves to a directory of its own, with what is the computer’s left', (context) => {
@@ -213,7 +236,7 @@ test('a move interrupted goes on at the next start, and the old name is no name 
   assert.equal(connections.adopt(base), id);
   assert.ok(existsSync(join(connections.directory(base, id), 'drafts.json')));
   assert.deepEqual(connections.list(base), [{ id, name: '' }]);
-  // It kept no address: it is listed, to be opened to sign in from its own window.
+  // It kept no address: it is listed, to take the one given on the sign-in window.
   assert.deepEqual(
     connections.accounts(base).map(({ id, url, label }) => ({ id, url, label })),
     [{ id, url: '', label: '' }],
@@ -223,6 +246,80 @@ test('a move interrupted goes on at the next start, and the old name is no name 
   writeFileSync(join(fresh, 'settings.json'), JSON.stringify({ deviceId: 'd' }));
   assert.equal(connections.adopt(fresh), null);
   assert.deepEqual(connections.list(fresh), []);
+});
+
+test('a service is found by its address, signed in to or still a try', (context) => {
+  const base = profile(context);
+  const kept = signedIn(base, 'wss://Work.example/ws');
+  const trying = connections.create(base, { url: 'wss://new.example/ws' });
+  assert.equal(connections.find(base, 'wss://work.example:443/ws')?.id, kept);
+  assert.equal(connections.find(base, ' wss://new.example/ws ')?.id, trying);
+  assert.equal(connections.find(base, 'wss://work.example/other'), null);
+  // A try is no record to offer.
+  assert.deepEqual(
+    connections.accounts(base).map((entry) => entry.id),
+    [kept],
+  );
+});
+
+test('the profiles of 0.3.16 give their page storage to partitions of the profile all processes share', (context) => {
+  const base = profile(context);
+  const remembered = signedIn(base, 'wss://kept/ws', { token: 'secret' });
+  const plain = signedIn(base, 'wss://plain/ws');
+  const open = signedIn(base, 'wss://open/ws');
+  for (const id of [remembered, plain, open]) {
+    const own = connections.directory(base, id);
+    mkdirSync(join(own, 'Local Storage', 'leveldb'), { recursive: true });
+    writeFileSync(join(own, 'Local Storage', 'leveldb', 'CURRENT'), id);
+    mkdirSync(join(own, 'IndexedDB'), { recursive: true });
+    mkdirSync(join(own, 'GPUCache'), { recursive: true });
+    for (const name of [
+      'Local State',
+      'Preferences',
+      'DIPS-wal',
+      'drafts.json',
+      'other-program.json',
+    ])
+      writeFileSync(join(own, name), name);
+  }
+  connections.mark(base, open, true);
+  connections.migrate(base);
+  assert.deepEqual(connections.readShared(base, 'layout'), { version: 2 });
+  for (const id of [remembered, plain]) {
+    const own = connections.directory(base, id);
+    assert.equal(
+      readFileSync(join(base, 'Partitions', id, 'Local Storage', 'leveldb', 'CURRENT'), 'utf8'),
+      id,
+    );
+    assert.ok(existsSync(join(base, 'Partitions', id, 'IndexedDB')));
+    assert.ok(!existsSync(join(own, 'Local Storage')));
+    assert.ok(existsSync(join(own, 'drafts.json')));
+  }
+  // The old profile stays while the token it encrypted has not been read again, and goes then.
+  assert.ok(existsSync(join(connections.directory(base, remembered), 'Local State')));
+  // Only what Chromium made goes: a file another program put there stays.
+  assert.deepEqual(readdirSync(connections.directory(base, plain)).sort(), [
+    'drafts.json',
+    'other-program.json',
+    'settings.json',
+  ]);
+  connections.shed(base, remembered);
+  assert.deepEqual(readdirSync(connections.directory(base, remembered)).sort(), [
+    'drafts.json',
+    'other-program.json',
+    'settings.json',
+  ]);
+  // One whose window is open is left alone, until a later start.
+  assert.ok(existsSync(join(connections.directory(base, open), 'Local Storage')));
+  connections.mark(base, open, false);
+  connections.migrate(base);
+  assert.ok(existsSync(join(base, 'Partitions', open, 'Local Storage')));
+  // Once laid out so, the program's own profile is not taken for a first connection of 0.3.15.
+  writeFileSync(join(base, 'drafts.json'), '{}');
+  mkdirSync(join(base, 'Local Storage'), { recursive: true });
+  connections.migrate(base);
+  assert.equal(connections.list(base).length, 3);
+  assert.ok(existsSync(join(base, 'Local Storage')));
 });
 
 test('a damaged list and a shared value that is not there are passed over', (context) => {

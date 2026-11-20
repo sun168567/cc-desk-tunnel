@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
-import { connectionArgs, screenshots } from './helpers.ts';
+import { connectionArgs, connectionWindow, screenshots } from './helpers.ts';
 
 const folder = resolve(screenshots, 'ccdt-open');
 mkdirSync(folder, { recursive: true });
@@ -86,12 +86,13 @@ test('a session opens in ccdt signed in as the window is, or the window says how
     env,
   });
   try {
-    const page = await application.firstWindow();
+    const launcher = await application.firstWindow();
     const version = await application.evaluate(({ app }) => app.getVersion());
-    await page.getByRole('button', { name: '本地模拟', exact: true }).click();
-    await page.getByLabel('服务地址', { exact: true }).fill(url);
-    await page.getByLabel('服务凭据', { exact: true }).fill(token);
-    await page.getByRole('button', { name: '连接', exact: true }).click();
+    await launcher.getByRole('button', { name: '本地模拟', exact: true }).click();
+    await launcher.getByLabel('服务地址', { exact: true }).fill(url);
+    await launcher.getByLabel('服务凭据', { exact: true }).fill(token);
+    await launcher.getByRole('button', { name: '连接', exact: true }).click();
+    const page = await connectionWindow(application);
     const row = page.locator('.session-row').filter({ hasText: session.title });
     const open = async () => {
       await row.click({ button: 'right' });
@@ -135,7 +136,7 @@ test('a session opens in ccdt signed in as the window is, or the window says how
       .filter(Boolean)
       .map((line) => JSON.parse(line));
     expect(login).toEqual({
-      args: ['login', url, '--token-stdin'],
+      args: ['login', url, '--token-stdin', '--no-verify'],
       cwd: expect.any(String),
       input: token,
     });

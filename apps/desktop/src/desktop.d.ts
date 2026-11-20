@@ -18,7 +18,7 @@ declare global {
       // Each connection is a window of its own, signed in to one service; the ones that have signed in somewhere,
       // the latest first.
       accounts: () => Promise<import('./shared.ts').Account[]>;
-      // Shows the connection's window, or starts it on its sign-in page.
+      // Shows the connection's window, or signs in to it in a process of its own, with its remembered token.
       openAccount: (id: string) => Promise<void>;
       // An empty name has the connection go by its service's address.
       renameAccount: (id: string, name: string) => Promise<import('./shared.ts').Account[]>;
@@ -41,6 +41,44 @@ declare global {
       saveImage: (type: string, bytes: Uint8Array) => Promise<string>;
       // The branch a project's working tree is on, or null outside a repository.
       gitBranch: (path: string) => Promise<string | null>;
+      // The file panel's files (see electron/files.mjs): `local` is this computer, `server` the service, any
+      // other target one of the user's computers by its ID. Paths are as the target names them.
+      files: {
+        list: (target: string, directory: string) => Promise<import('./files.ts').FileEntry[]>;
+        // The home directory a target starts in.
+        home: (target: string) => Promise<string>;
+        chooseFolder: () => Promise<string | null>;
+        stat: (
+          target: string,
+          file: string,
+        ) => Promise<{ kind: 'file' | 'directory'; size: number; mtime: number }>;
+        read: (
+          target: string,
+          file: string,
+          limit?: number,
+        ) => Promise<{ bytes: Uint8Array; size: number; truncated: boolean }>;
+        mkdir: (target: string, directory: string) => Promise<void>;
+        rename: (target: string, from: string, to: string) => Promise<void>;
+        remove: (target: string, files: string[]) => Promise<void>;
+        exists: (target: string, directory: string, names: string[]) => Promise<boolean[]>;
+        // Copies into a directory of another target; `onProgress` hears of it under `id`.
+        transfer: (
+          id: string,
+          request: {
+            from: { target: string; paths: string[] };
+            to: { target: string; dir: string };
+            conflict?: 'replace' | 'skip' | 'resume';
+          },
+        ) => Promise<{ files: number; bytes: number }>;
+        cancel: (id: string) => Promise<void>;
+        // What git sees changed in a project of this computer; null outside a repository or without git.
+        changes: (directory: string) => Promise<{ path: string; status: string }[] | null>;
+        // Starts dragging a file of this computer out of the window.
+        drag: (file: string) => void;
+        onProgress: (
+          callback: (id: string, report: { done: number; total: number; name: string }) => void,
+        ) => () => void;
+      };
       copyText: (text: string) => Promise<void>;
       openExternal: (url: string) => Promise<void>;
       openWeb: (url: string) => Promise<void>;
@@ -66,24 +104,31 @@ declare global {
       chooseWorkspace: (reset: boolean) => Promise<string[]>;
       createWorkspace: () => Promise<string>;
       removeWorkspace: (directory: string) => Promise<void>;
-      // A sign-in window's form: the latest service whose window is not open, its token left out. A connection's
-      // window's own sign-in: `signIn` to connect at once, as the window was started to; `locked` once the
-      // connection has its service.
-      loadLogin: () => Promise<
-        (import('./LoginPage.tsx').ConnectionForm & { signIn?: boolean; locked?: boolean }) | null
-      >;
+      // The connection's window: the sign-in its sign-in window handed over, to connect with at once.
+      loadLogin: () => Promise<import('./LoginPage.tsx').ConnectionForm | null>;
+      // Kept once signed in, and as the choices to remember the token and sign in by itself change.
       saveLogin: (login: import('./LoginPage.tsx').ConnectionForm) => Promise<void>;
-      // The name of another connection that has signed in to the service, if one has.
-      loginOwner: (url: string) => Promise<string | null>;
-      // A sign-in window for another service, as this window closes.
-      signInElsewhere: () => Promise<void>;
-      // A sign-in window's: starts the service's window, which signs in, and closes once it runs. `shown`: the
-      // service's window was open already and is shown.
-      startService: (
+      // The connection's window: its connection ended for good, by the user or with `error`. A sign-in window
+      // for its service takes its place.
+      signOut: (error?: string | null) => Promise<void>;
+      // How the connection's window is getting on until it has connected (see Launcher.tsx).
+      reportSignIn: (report: import('./Launcher.tsx').SignInReport) => Promise<void>;
+      // A sign-in window: what to offer (see `launcher:load` in electron/main.cjs). `error` ended the sign-in it
+      // takes over from; `signIn` signs in at once.
+      loadLauncher: () => Promise<{
+        form?: import('./LoginPage.tsx').ConnectionForm;
+        error?: string;
+        signIn?: boolean;
+      }>;
+      // Signs in to the service: its connection's window connects in the background, reported through
+      // `onSignIn`, and is shown once connected. `shown`: the service's window was open already and is shown.
+      startSignIn: (
         login: import('./LoginPage.tsx').ConnectionForm,
       ) => Promise<{ shown?: string; error?: string }>;
-      // Opens an earlier version's connection that kept no address, to sign in from its own window.
-      openLegacy: (id: string) => Promise<{ shown?: boolean; error?: string }>;
+      cancelSignIn: () => Promise<void>;
+      // The sign-in window made wide enough for the settings, or back to the size of its form.
+      widenLauncher: (wide: boolean) => Promise<void>;
+      onSignIn: (callback: (report: import('./Launcher.tsx').SignInReport) => void) => () => void;
       loadDrafts: () => Promise<Record<string, string>>;
       saveDrafts: (drafts: Record<string, string>) => Promise<void>;
       loadSchedules: (initial: string) => Promise<{ path: string; text: string }>;
@@ -104,7 +149,6 @@ declare global {
       onNotifyClicked: (callback: (sessionId: string | null) => void) => () => void;
       // 1 and -1 step the interface size, 0 restores it.
       zoom: (direction: number) => void;
-      // `all` also closes the windows of the other connections.
       quit: () => Promise<void>;
       version: () => Promise<string>;
       // The notes of a released version, read from its page on GitHub.

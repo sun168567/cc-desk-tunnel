@@ -8,6 +8,7 @@ import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import {
   connectionArgs,
+  signInWindow,
   createSession,
   expandActivity,
   login,
@@ -561,7 +562,7 @@ test('approval modes are described where they are chosen, and models sit behind 
   const menu = page.getByRole('menu', { name: '审批模式' });
   await expect(menu.getByRole('menuitemradio')).toHaveCount(4);
   await expect(menu.getByRole('menuitemradio', { name: '自动审批', exact: true })).toBeChecked();
-  await expect(menu).toContainText('只调研并给出计划，不做改动');
+  await expect(menu).toContainText('只调研并写出计划，经你批准后才动手');
   await shot(page, '12-审批模式');
   await menu.getByRole('menuitemradio', { name: '手动审批', exact: true }).click();
   await expect(trigger).toContainText('手动审批');
@@ -630,9 +631,11 @@ test('Electron: frameless window, the project branch, files by path and window s
     env,
   });
   try {
-    const page = await application.firstWindow();
-    await expect(page.getByRole('heading', { name: '连接代理服务', exact: true })).toBeVisible();
-    await login(page);
+    const launcher = await application.firstWindow();
+    await expect(
+      launcher.getByRole('heading', { name: '连接代理服务', exact: true }),
+    ).toBeVisible();
+    const page = await signInWindow(application);
     // This repository stands in for the user's project.
     const repository = resolve('.');
     const picked = resolve('package.json');
