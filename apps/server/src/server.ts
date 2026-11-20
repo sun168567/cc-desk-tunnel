@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, RequestListener } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer, createWebSocketStream } from 'ws';
 import {
   deleteSession,
   forkSession,
@@ -37,6 +37,7 @@ import {
   runWorking,
   TUNNEL_CLOSE,
   tunnelAttachSchema,
+  filesAttachSchema,
   tunnelCredentialsSchema,
   terminalControlSchema,
   webActivitySchema,
@@ -86,7 +87,9 @@ import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
-import { Door, Tunnel, sessionSsh, sessionSshPath } from './tunnel.ts';
+import { Door, Tunnel, program, sessionSsh, sessionSshPath } from './tunnel.ts';
+import { FileService } from './files.ts';
+import type { FilesOptions } from './files.ts';
 import type { TunnelOptions } from './tunnel.ts';
 import { ServiceUpdates, serviceVersion } from './updates.ts';
 import type { UpdateOptions } from './updates.ts';
@@ -246,6 +249,8 @@ export type ServerOptions = {
   graceMs?: number;
   // Defaults to the frontend shipped beside the server. Tests can provide a small fixture directory.
   webDirectory?: string;
+  // How the file panel reaches the service's files; `false` offers none.
+  files?: FilesOptions | false;
 };
 
 // How many answered requests a connection remembers, to answer a resend of one the same way.
@@ -276,6 +281,10 @@ export function createProxyServer(options: ServerOptions) {
   const mutations = new Map<string, 'status' | 'session'>();
   const terminals = new Map<string, Terminal>();
   const seats = new Map<string, Seat>();
+  const files =
+    options.files === false ? undefined : new FileService(options.dataDir, options.files);
+  // The file panel's connections of each control connection, which end with it.
+  const fileConnections = new Map<string, Set<WebSocket>>();
   const compactions = new IdleCompactions(store.directory, compactIdle);
   armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
@@ -1919,6 +1928,7 @@ export function createProxyServer(options: ServerOptions) {
       client: installer(),
       sessions: store.list(),
       historyId: store.historyId,
+      ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
     send(peer, devices());
     // Every connection that asks has an execution channel of its own, to the computer it comes from.
@@ -1976,6 +1986,43 @@ export function createProxyServer(options: ServerOptions) {
       peer.socket.close(TUNNEL_CLOSE.unknown, 'Unknown channel');
       return false;
     }
+    return true;
+  }
+  // A connection for the file panel, signed in with the secret of its control connection's execution channel.
+  // Like a channel it is no peer: it carries one SSH connection, served by `files`, and ends with its owner.
+  function attachFiles(peer: Peer, value: unknown) {
+    const attach = filesAttachSchema.safeParse(value);
+    const owner = attach.success
+      ? [...peers].find((other) => other.authenticated && other.id === attach.data.connectionId)
+      : undefined;
+    if (!attach.success || !owner?.tunnel || !files?.state) {
+      peer.socket.close(TUNNEL_CLOSE.unknown, 'Unknown tunnel');
+      return false;
+    }
+    if (!owner.tunnel.matches(attach.data.secret)) {
+      refuse(peer.address, 'tunnel secret');
+      peer.socket.close(TUNNEL_CLOSE.refused, 'Unauthorized');
+      return false;
+    }
+    const open = fileConnections.get(owner.id) ?? new Set<WebSocket>();
+    if (open.size >= 4) {
+      peer.socket.close(TUNNEL_CLOSE.unknown, 'Too many file connections');
+      return false;
+    }
+    fileConnections.set(owner.id, open);
+    open.add(peer.socket);
+    peer.socket.once('close', () => open.delete(peer.socket));
+    peers.delete(peer);
+    peer.socket.removeAllListeners('message');
+    const stream = createWebSocketStream(peer.socket);
+    stream.on('error', () => peer.socket.terminate());
+    files.serve(stream, (target) => {
+      if (target === 'server') return files.ownServer();
+      const ssh = seats.get(target)?.door;
+      return ssh?.ready && ssh.ssh
+        ? [program('ssh'), '-F', ssh.ssh.configPath, '-s', 'device', 'sftp']
+        : undefined;
+    });
     return true;
   }
   function registerTunnel(peer: Peer, credentials: TunnelCredentials) {
@@ -2152,6 +2199,8 @@ export function createProxyServer(options: ServerOptions) {
       }
     }
     if (peer.tunnel) track(peer.tunnel.close(), tunnelTasks);
+    for (const socket of fileConnections.get(peer.id) ?? []) socket.terminate();
+    fileConnections.delete(peer.id);
     announce();
   }
 
@@ -2226,9 +2275,14 @@ export function createProxyServer(options: ServerOptions) {
           // Only the first frame signs in. What a refused client sent after it is not another attempt.
           if (greeted) return;
           greeted = true;
-          const channel =
-            !peer.browser && (value as { type?: unknown } | null)?.type === 'tunnel.attach';
-          if (channel ? attachChannel(peer, value) : authenticate(peer, value)) {
+          const kind = !peer.browser && (value as { type?: unknown } | null)?.type;
+          if (
+            kind === 'tunnel.attach'
+              ? attachChannel(peer, value)
+              : kind === 'files.attach'
+                ? attachFiles(peer, value)
+                : authenticate(peer, value)
+          ) {
             clearTimeout(authTimer);
             signedIn = true;
             gate.leave(address);
@@ -2346,6 +2400,7 @@ export function createProxyServer(options: ServerOptions) {
     store,
     async listen(port = 8787): Promise<string> {
       await releases.refresh();
+      await files?.start();
       updates?.start();
       if (usageReceiver)
         options.claude!.environment = telemetryEnvironment(await usageReceiver.listen());
@@ -2376,6 +2431,8 @@ export function createProxyServer(options: ServerOptions) {
         ...[...seats.values()].map((seat) => seat.door?.close()),
       ];
       for (const peer of peers) peer.socket.terminate();
+      for (const open of fileConnections.values()) for (const socket of open) socket.terminate();
+      files?.close();
       await Promise.all([...tasks]);
       await terminalCleanup;
       await Promise.all([...tunnelTasks]);

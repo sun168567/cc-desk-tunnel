@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { flushSync } from 'react-dom';
 import {
   CircleHelp,
@@ -40,7 +41,7 @@ import type {
   Session,
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
-import { FORCED_UPGRADE_SINCE, runWorking } from '@cc-desk-tunnel/protocol';
+import { FORCED_UPGRADE_SINCE, platformOf, runWorking } from '@cc-desk-tunnel/protocol';
 import { browserSession, browserSocket, watchActivity } from './browser-api.ts';
 import { CertificateWarning } from './WebGate.tsx';
 import { hostCapabilities } from './host-capabilities.ts';
@@ -59,6 +60,9 @@ import SchedulePanel from './SchedulePanel.tsx';
 import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
+import FilePanel from './FilePanel.tsx';
+import { filePlaces, sessionFolder, sftpPath } from './files.ts';
+import type { FilePlace } from './files.ts';
 import type { ConnectionForm } from './LoginPage.tsx';
 import type { SignInReport } from './Launcher.tsx';
 import { exportSession } from './exportSession.ts';
@@ -317,6 +321,94 @@ export function App({
   const reachable = (session: Session) =>
     state.devices.some((device) => device.id === session.device?.id && device.ready);
   const remote = away && reachable(selected);
+  // The file panel, beside the conversation on the desktop, or as a page in its place.
+  const filesAvailable = !browser && !!window.desktop?.files && place.page === 'chat';
+  const filesOpen = filesAvailable && prefs.filePanel.open;
+  const [filesPage, setFilesPage] = useState(false);
+  const [filesWidth, setFilesWidth] = useState<number | null>(null);
+  const [windowWidth, setWindowWidth] = useState(() => innerWidth);
+  useEffect(() => {
+    const resized = () => setWindowWidth(innerWidth);
+    addEventListener('resize', resized);
+    return () => removeEventListener('resize', resized);
+  }, []);
+  // The conversation keeps room enough beside it; on a narrow window the panel lies over it instead.
+  const filesOver = windowWidth <= 1000;
+  const filesMax = Math.max(
+    280,
+    windowWidth - 52 - (sideOpen && !filesOver ? 284 : 0) - (filesOver ? 0 : 380),
+  );
+  const filesShownWidth = Math.min(filesWidth ?? prefs.filePanel.width, filesMax);
+  const toggleFiles = () => {
+    setFilesPage(false);
+    setPrefs((current) => ({
+      ...current,
+      filePanel: { ...current.filePanel, open: !current.filePanel.open },
+    }));
+  };
+  const serverDevice = state.devices.find((device) => device.server)?.id;
+  const filesPlaces = useMemo(
+    () => filePlaces(state.device, state.devices, state.files),
+    [state.device, state.devices, state.files],
+  );
+  const selectedForFiles = selected;
+  const filesStart = useCallback(
+    (where: FilePlace) =>
+      sessionFolder(
+        selectedForFiles ?? undefined,
+        where,
+        state.device,
+        !!selectedForFiles && onThis(selectedForFiles),
+        state.files,
+        serverDevice,
+      ),
+    // A session's folders change with its project or computer, which the session record carries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedForFiles, state.device, state.files, serverDevice],
+  );
+  // A path shown in the file panel from a link in the conversation: a path on this computer, or one on the
+  // computer the session is on, which the panel reaches as that computer's (or the service's) files.
+  const [filesRequest, setFilesRequest] = useState<{
+    place: string;
+    path: string;
+    at: number;
+  } | null>(null);
+  const openInFiles = (path: string, here: boolean) => {
+    const device = selected?.device;
+    const placeId = here ? 'local' : device?.id === serverDevice ? 'server' : device?.id;
+    if (!placeId || !filesPlaces.some((entry) => entry.id === placeId)) {
+      setError('这个路径所在的电脑现在不在线，文件面板打不开它。');
+      return;
+    }
+    setFilesPage(false);
+    setPrefs((current) => ({ ...current, filePanel: { ...current.filePanel, open: true } }));
+    setFilesRequest({
+      place: placeId,
+      path: placeId === 'local' || placeId === 'server' ? path : sftpPath(path, platformOf(device)),
+      at: Date.now(),
+    });
+  };
+  function resizeFiles(event: ReactPointerEvent<HTMLDivElement>) {
+    const startX = event.clientX;
+    const startWidth = filesShownWidth;
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    let width = startWidth;
+    const move = (moved: PointerEvent) => {
+      width = Math.round(Math.max(280, Math.min(filesMax, startWidth + startX - moved.clientX)));
+      setFilesWidth(width);
+    };
+    const done = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', done);
+      handle.removeEventListener('pointercancel', done);
+      setFilesWidth(null);
+      setPrefs((current) => ({ ...current, filePanel: { ...current.filePanel, width } }));
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', done);
+    handle.addEventListener('pointercancel', done);
+  }
   // Two connections may have Claude working in one folder at once, each unaware of the other. A window tells
   // the others what it has running, and says so when another's session works where the shown one does. A
   // session this window lists too is the same service's and no other.
@@ -1465,6 +1557,7 @@ export function App({
         !busy &&
         !selected.activeRun &&
         (() => void configure({ permissionMode: nextMode(selected.permissionMode) })),
+      toggleFiles: filesAvailable && toggleFiles,
       zoomIn: window.desktop && (() => window.desktop!.zoom(1)),
       zoomOut: window.desktop && (() => window.desktop!.zoom(-1)),
       zoomReset: window.desktop && (() => window.desktop!.zoom(0)),
@@ -1550,7 +1643,8 @@ export function App({
     ) : undefined;
   return (
     <div
-      className={`shell page-${place.page} ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''}`}
+      className={`shell page-${place.page} ${sideOpen ? '' : 'side-closed'} ${selfSigned ? 'web-self-signed' : ''} ${filesOpen ? (filesPage ? 'files-page' : filesOver ? 'files-over' : 'files-open') : ''}`}
+      style={filesOpen ? ({ '--file-width': `${filesShownWidth}px` } as CSSProperties) : undefined}
       data-settings-index={place.settingsIndex || undefined}
       {...drawerSwipe}
     >
@@ -1581,6 +1675,11 @@ export function App({
         openMenu={(item, position) => setMenu({ kind: 'bar', label: item.label, ...position })}
         connected={connected}
         adapterName={adapterName}
+        files={
+          filesAvailable
+            ? { open: filesOpen, toggle: toggleFiles, hint: hint('toggleFiles') }
+            : undefined
+        }
       />
       <Rail
         page={place.page}
@@ -1703,6 +1802,7 @@ export function App({
               </div>
             )}
             <Conversation
+              openInFiles={filesAvailable ? openInFiles : undefined}
               findRequest={findRequest}
               session={selected}
               here={!!selected && onThis(selected)}
@@ -1910,6 +2010,31 @@ export function App({
               />
             )}
           </main>
+          {filesOpen && (
+            <aside className="file-column" aria-label="文件">
+              {!filesPage && (
+                <div
+                  className="file-resizer"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="调整文件面板宽度"
+                  onPointerDown={resizeFiles}
+                />
+              )}
+              <FilePanel
+                places={filesPlaces}
+                start={filesStart}
+                sessionKey={selected?.id ?? ''}
+                info={state.files}
+                layout={filesPage ? 'page' : filesShownWidth < 620 ? 'narrow' : 'wide'}
+                setPage={setFilesPage}
+                close={toggleFiles}
+                noticeKey={window.desktop?.boot.connection ?? ''}
+                project={selected && onThis(selected) ? selected.projectPath : null}
+                request={filesRequest}
+              />
+            </aside>
+          )}
         </>
       )}
       {menu && openMenu && (

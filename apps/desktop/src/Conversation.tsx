@@ -798,6 +798,7 @@ export default function Conversation({
   edit,
   findRequest,
   here,
+  openInFiles,
 }: {
   session: Session | undefined;
   // This window can open the files of the session's project: a desktop on the computer they are on.
@@ -828,6 +829,8 @@ export default function Conversation({
   clock: Clock;
   // What the session's background tasks last said of themselves, by task.
   progress: Record<string, TaskProgress> | undefined;
+  // Shows a path in the file panel: one on this computer (`here`), or on the computer the session is on.
+  openInFiles?: (path: string, here: boolean) => void;
 }) {
   const turns = useMemo(() => conversation(events), [events]);
   const shownSession = useRef(session?.id);
@@ -1147,7 +1150,19 @@ export default function Conversation({
                 x,
                 y,
                 heading: menu.heading,
-                items: [...menu.items, { ...items[0], separated: true }, ...items.slice(1)],
+                items: [
+                  ...menu.items,
+                  ...(openInFiles && link.kind !== 'web'
+                    ? [
+                        {
+                          label: '在文件面板中显示',
+                          run: () => openInFiles(link.path, link.kind === 'path'),
+                        },
+                      ]
+                    : []),
+                  { ...items[0], separated: true },
+                  ...items.slice(1),
+                ],
               }),
             () => setContextMenu({ x, y, items }),
           );

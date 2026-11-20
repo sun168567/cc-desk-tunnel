@@ -245,6 +245,102 @@ handle('devtools:open', (event) => {
   event.sender.openDevTools({ mode: 'detach' });
 });
 handle('git:branch', (_event, directory) => gitBranch(directory));
+// The file panel: this computer's files, and over SFTP those of the service and of the user's other computers
+// (see files.mjs), through the connection this window has. A new connection is a new set of SFTP sessions.
+let panelFiles = null;
+async function panel() {
+  const { createFiles } = await import(
+    pathToFileURL(path.join(__dirname, 'proxy-bridge.mjs')).href
+  );
+  if (!panelFiles || panelFiles.bridge !== bridge) {
+    panelFiles?.files.close();
+    const current = bridge;
+    panelFiles = {
+      bridge: current,
+      files: createFiles({
+        open: () => {
+          if (!current || bridge !== current) throw new Error('还没有连上服务。');
+          return current.openFiles();
+        },
+      }),
+    };
+  }
+  return panelFiles.files;
+}
+const text = (value) => {
+  if (typeof value !== 'string' || !value) throw new Error('Expected a path');
+  return value;
+};
+const texts = (values) => {
+  if (!Array.isArray(values) || !values.length) throw new Error('Expected paths');
+  return values.map(text);
+};
+handle('panel:list', async (_event, target, directory) =>
+  (await panel()).list(text(target), text(directory)),
+);
+handle('panel:home', async (_event, target) => (await panel()).home(text(target)));
+// Where to save what is downloaded from the panel.
+handle('panel:choose-folder', async (event) => {
+  const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+    title: '选择保存位置',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return result.canceled ? null : (result.filePaths[0] ?? null);
+});
+handle('panel:stat', async (_event, target, file) =>
+  (await panel()).stat(text(target), text(file)),
+);
+handle('panel:read', async (_event, target, file, limit) =>
+  (await panel()).read(text(target), text(file), Number(limit) || undefined),
+);
+handle('panel:mkdir', async (_event, target, directory) =>
+  (await panel()).mkdir(text(target), text(directory)),
+);
+handle('panel:rename', async (_event, target, from, to) =>
+  (await panel()).rename(text(target), text(from), text(to)),
+);
+handle('panel:remove', async (_event, target, files) =>
+  (await panel()).remove(text(target), texts(files)),
+);
+handle('panel:exists', async (_event, target, directory, names) =>
+  (await panel()).exists(text(target), text(directory), texts(names)),
+);
+const transfers = new Map();
+handle('panel:transfer', async (event, id, request) => {
+  const controller = new AbortController();
+  transfers.set(text(id), controller);
+  try {
+    return await (
+      await panel()
+    ).transfer({
+      from: { target: text(request?.from?.target), paths: texts(request?.from?.paths) },
+      to: { target: text(request?.to?.target), dir: text(request?.to?.dir) },
+      conflict: ['replace', 'skip', 'resume'].includes(request?.conflict)
+        ? request.conflict
+        : 'replace',
+      signal: controller.signal,
+      progress: (report) => {
+        if (!event.sender.isDestroyed()) event.sender.send('panel:progress', id, report);
+      },
+    });
+  } finally {
+    transfers.delete(id);
+  }
+});
+handle('panel:cancel', (_event, id) => transfers.get(id)?.abort());
+handle('panel:changes', async (_event, directory) => {
+  const { gitChanges } = await import(pathToFileURL(path.join(__dirname, 'proxy-bridge.mjs')).href);
+  return gitChanges(text(directory));
+});
+// Dragging a file of this computer out of the panel, to the desktop or a folder window. It has to start while
+// the drag does, so it is a message, not a request.
+ipcMain.on('panel:drag', (event, file) => {
+  if (!event.senderFrame.url.startsWith('file://') || typeof file !== 'string') return;
+  event.sender.startDrag({
+    file,
+    icon: nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 32 }),
+  });
+});
 handle('clipboard:write', (_event, text) => {
   if (typeof text !== 'string') throw new Error('Expected clipboard text');
   clipboard.writeText(text);

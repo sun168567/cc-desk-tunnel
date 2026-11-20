@@ -105,6 +105,8 @@ await viteBuild({
         ...builtinModules.map((name) => `node:${name}`),
         'bufferutil',
         'utf-8-validate',
+        // The file panel's SFTP client, which the bridge loads only when the panel is used; ccdt has no panel.
+        'ssh2',
         ...(windows ? [] : posixService.dependencies),
       ],
       output: { format: 'es', entryFileNames: 'ccdt.mjs', codeSplitting: false },

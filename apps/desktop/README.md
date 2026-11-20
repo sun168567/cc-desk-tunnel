@@ -81,6 +81,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `src/QuestionCard.tsx`、`PlanCard.tsx`、`ComposerControls.tsx`、`PermissionMenu.tsx`、`modes.ts`、`AccountPanel.tsx`、`UsagePanel.tsx`、`CcdtDialog.tsx` | Claude 提问的作答卡片、Claude 计划的阅读与批准卡片、模型 / effort / 上下文、审批模式菜单与模式名称、账号页、调用日志、在 ccdt 中打开时的安装提示 |
 | `src/drafts.ts`、`prefs.ts`、`schedules.ts`、`SchedulePanel.tsx` | 只属于这台电脑的数据：未发送的草稿；置顶、项目显示名称、通知开关与快捷键；定时任务的格式、到点判断与面板 |
 | `src/notifications.ts`、`NoticeBell.tsx`、`exportSession.ts` | 从会话运行状态的变化得出通知，及其列表；把会话导出为 Markdown |
+| `src/FilePanel.tsx`、`files.ts`、`file-panel.css` | 右侧文件面板：本机、服务端与在线设备的目录树（react-arborist）、预览、整页时的列表，菜单与拖放，传输列表；窄栏时预览代替目录树，宽时并排 |
 | `src/ui.tsx`、`paths.ts` | 图标按钮 / 对话框 / 菜单；Windows 路径比较 |
 | `electron/connections.cjs` | 程序目录的布局：各连接的目录、页面存储分区和登录记录、共用的值、旧版布局的迁移 |
 | `electron/main.cjs`、`preload.cjs` | 窗口、托盘、系统通知、IPC（选目录与文件、保存导出、普通会话目录、打开授权页、连接）和暴露给页面的 `window.desktop` |
@@ -90,6 +91,7 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `electron/git-branch.cjs` | 从仓库文件读出项目当前所在的分支，不依赖本机安装 git |
 | `electron/client-log.cjs` | 连接日志：每次连接的建立、断开与原因，写在用户配置目录的 `logs/` 下，不含凭据和内容 |
 | `electron/proxy-bridge.mjs`、`windows-ssh.mjs`、`tunnel-channels.mjs` | 主进程连接桥：校验服务证书后转发 WSS；启动本机 sshd；按服务端的要求另开到同一地址的连接作为执行通道，接到本机 sshd 上 |
+| `electron/files.mjs` | 文件面板的主进程部分：本机文件与 SFTP 同一套操作（列目录、读、建、改名、删除），ssh2 客户端经 `files.attach` 连接取得服务端与其他设备的 SFTP；传输（并行分块、同名时替换 / 跳过 / 续传、取消保留已写部分、两台远端之间经临时文件）；项目的 git 改动 |
 | `electron/system-proxy.mjs` | 读出系统代理中的 HTTP 代理，并经它建立到服务端的 TCP 连接 |
 | `electron/prepare-ssh.ps1`、`component-host.ps1` | 生成临时 SSH 配置；用 Job Object 托管 sshd |
 
