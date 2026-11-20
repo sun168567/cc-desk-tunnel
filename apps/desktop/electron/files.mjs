@@ -4,7 +4,6 @@ import { copyFile, lstat, mkdir, mkdtemp, readdir, rename, rm, stat } from 'node
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import ssh2 from 'ssh2';
 import { FILES_TARGET_ENV } from '@cc-desk-tunnel/protocol';
 
 // The file panel's files, wherever they are: `local` is this computer's, read here; `server` is the service's,
@@ -168,6 +167,8 @@ export function createFiles({ open }) {
   function connection() {
     if (client) return Promise.resolve(client);
     connecting ??= (async () => {
+      // Loaded when the panel first reaches the service, not with every connection's main process.
+      const { default: ssh2 } = await import('ssh2');
       const stream = await open();
       const created = new ssh2.Client();
       await new Promise((resolve, reject) => {
