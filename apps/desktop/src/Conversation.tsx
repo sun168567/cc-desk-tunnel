@@ -1014,6 +1014,9 @@ export default function Conversation({
   };
   const scroll = useRef<HTMLDivElement>(null);
   const pullStart = useRef<{ x: number; y: number } | null>(null);
+  // A long press by finger keeps the system's own selection and copy: with our menu open its handles could not
+  // widen the one word it picks.
+  const touched = useRef(false);
   // The view follows new output until the reader moves up from the end, and again once they come back down to it.
   const follow = useRef(true);
   // Shown while not following, as the way back to the end.
@@ -1114,7 +1117,8 @@ export default function Conversation({
         ref={scroll}
         onContextMenu={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest('input, textarea, [contenteditable="true"]')) return;
+          if (touched.current || target.closest('input, textarea, [contenteditable="true"]'))
+            return;
           event.preventDefault();
           const selection = window.getSelection()?.toString() ?? '';
           const message = target.closest<HTMLElement>('[data-copy-text]');
@@ -1238,6 +1242,7 @@ export default function Conversation({
           }
         }}
         onPointerDown={(event) => {
+          touched.current = event.pointerType === 'touch';
           // Steps opened or closed are being read where they are.
           if ((event.target as HTMLElement).closest('summary')) leave();
         }}
