@@ -53,11 +53,20 @@ const MAX_SUBSYSTEMS = 16;
 // The entries of the data directory the file panel reaches; every other one is the service's own.
 const OPEN_IN_DATA = new Set(['native', 'home', 'workspace']);
 
+// ssh2 1.17 drops the leading zero bytes of an Ed25519 public key it makes, and so cannot read about one in 256 of its
+// own keys (the desktop's ssh-keys.mjs has the system's ssh-keygen make them instead). One it reads is kept.
+export function hostKey() {
+  for (;;) {
+    const key = ssh2.utils.generateKeyPairSync('ed25519').private;
+    if (!(ssh2.utils.parseKey(key) instanceof Error)) return key;
+  }
+}
+
 export class FileService {
   state?: FilesState;
   private dataDir: string;
   private options: FilesOptions;
-  private hostKey = ssh2.utils.generateKeyPairSync('ed25519').private;
+  private hostKey = hostKey();
   private serverConfig = { hostKeys: [this.hostKey], algorithms: serverAlgorithms };
   private sftpServer?: string[];
   private landlock = false;

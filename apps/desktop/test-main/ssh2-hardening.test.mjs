@@ -13,7 +13,14 @@ const require = createRequire(${JSON.stringify(pathToFileURL(resolve('package.js
 const { serverAlgorithms } = ${harden} ? await import(${JSON.stringify(pathToFileURL(resolve(module)).href)}) : {};
 const { Server, Client, utils } = require('ssh2');
 const { sendPacket } = require('ssh2/lib/protocol/utils.js');
-const server = new Server({ hostKeys: [utils.generateKeyPairSync('ed25519').private], algorithms: serverAlgorithms });
+// ssh2 1.17 cannot read about one in 256 of the Ed25519 keys it makes; one it reads is used.
+const key = () => {
+  for (;;) {
+    const made = utils.generateKeyPairSync('ed25519').private;
+    if (!(utils.parseKey(made) instanceof Error)) return made;
+  }
+};
+const server = new Server({ hostKeys: [key()], algorithms: serverAlgorithms });
 let signIn;
 const answered = new Promise((done) => (signIn = done));
 server.on('connection', (client) => {
@@ -49,7 +56,7 @@ server.listen(0, '127.0.0.1', () => {
   });
   client.connect({
     host: '127.0.0.1', port: server.address().port, username: 'x',
-    privateKey: utils.generateKeyPairSync('ed25519').private,
+    privateKey: key(),
     algorithms: { compress: ['zlib', 'none'] },
   });
 });`;

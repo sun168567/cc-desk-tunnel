@@ -12,7 +12,7 @@ import ssh2 from 'ssh2';
 import type { SFTPWrapper } from 'ssh2';
 import { FILES_TARGET_ENV, PROTOCOL_VERSION, TUNNEL_CLOSE } from '@cc-desk-tunnel/protocol';
 import { createProxyServer } from '../src/server.ts';
-import { sftpPath } from '../src/files.ts';
+import { hostKey, sftpPath } from '../src/files.ts';
 
 // OpenSSH's SFTP server, as the service finds it; on Windows Git's, as the service run from source there does.
 // (Windows' own OpenSSH build only runs under its sshd.)
@@ -258,3 +258,10 @@ test(
     assert.equal(await read(join(work, 'made.txt')), 'made');
   },
 );
+
+// ssh2 1.17 cannot read about one in 256 of the Ed25519 keys it makes, and a file service started with one such
+// would refuse every panel until a restart.
+test('the file service starts with a host key ssh2 can read, every time', () => {
+  for (let made = 0; made < 2000; made++)
+    assert.ok(!(ssh2.utils.parseKey(hostKey()) instanceof Error));
+});
