@@ -107,17 +107,40 @@ export function shellsOf(device: DevicePlatform, said: DeviceShell[]) {
   return shells.length ? shells.slice(0, 1) : [systemShell(device)];
 }
 
-// Runs a script the way the system prompt tells Claude to, in the shell of `host`.
+// What the device or `ssh` said when a probe failed, in a few hundred characters: the shell's own error, a
+// refused sign-in or a connection that broke. A Windows device writes in the code page of its system, which on a
+// Chinese one is GBK; text that is not UTF-8 is read as that.
+export function probeOutput(output: Buffer) {
+  let text = output.toString('utf8');
+  if (text.includes('\uFFFD')) text = new TextDecoder('gb18030').decode(output);
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(' ')
+    .slice(0, 300);
+}
+// A probe that got no ready answer; the message is what the device or `ssh` said instead.
+export class ProbeFailure extends Error {}
+// Runs a script the way the system prompt tells Claude to, in the shell of `host`. A failure says what went wrong.
 export function sshProbe(configPath: string, host: string) {
   return new Promise<void>((resolve, reject) => {
     const child = execFile(
       'ssh',
       ['-F', configPath, host],
-      { timeout: 20000, maxBuffer: 65536 },
-      (error, stdout) => {
-        if (error || !stdout.includes('CC_DESK_TUNNEL_SSH_READY'))
-          reject(new Error('Device SSH probe failed.'));
-        else resolve();
+      { timeout: 20000, maxBuffer: 65536, encoding: 'buffer' },
+      (error, stdout, stderr) => {
+        if (!error && stdout.toString('utf8').includes('CC_DESK_TUNNEL_SSH_READY'))
+          return resolve();
+        const said = probeOutput(Buffer.concat([stderr, stdout]));
+        reject(
+          new ProbeFailure(
+            error?.killed
+              ? '20 秒内没有应答。'
+              : said || `没有输出${error ? `（退出代码 ${error.code}）` : ''}。`,
+          ),
+        );
       },
     );
     child.stdin?.on('error', () => {});
@@ -312,6 +335,7 @@ export class Tunnel {
     writeFileSync(join(this.directory, 'identity'), credentials.privateKey, { mode: 0o600 });
     writeFileSync(join(this.directory, 'known_hosts'), files.knownHosts, { mode: 0o600 });
     writeFileSync(configPath, files.config, { mode: 0o600 });
+    let failure: unknown;
     for (let attempt = 0; attempt < 20; attempt++) {
       if (this.controller.signal.aborted) throw new Error('Tunnel closed');
       try {
@@ -320,11 +344,13 @@ export class Tunnel {
         this.ssh = { configPath };
         this.credentials = credentials;
         return;
-      } catch {
+      } catch (error) {
+        failure = error;
         await delay(300, undefined, { signal: this.controller.signal });
       }
     }
-    throw new Error('Device SSH readiness timed out');
+    // The last answer, which the device would give again.
+    throw failure instanceof Error ? failure : new Error('Device SSH readiness timed out');
   }
   // Every SSH connection ends with the tunnel: those still waiting and those in use.
   close() {

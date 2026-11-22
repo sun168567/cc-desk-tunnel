@@ -87,7 +87,7 @@ import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
-import { Door, Tunnel, program, sessionSsh, sessionSshPath } from './tunnel.ts';
+import { Door, ProbeFailure, Tunnel, program, sessionSsh, sessionSshPath } from './tunnel.ts';
 import { FileService } from './files.ts';
 import type { FilesOptions } from './files.ts';
 import type { TunnelOptions } from './tunnel.ts';
@@ -2041,14 +2041,13 @@ export function createProxyServer(options: ServerOptions) {
         .then(() => {
           send(peer, { type: 'tunnel.ready', connectionId: peer.id });
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          // What the device or ssh answered, which tells why: the user is shown it rather than a guess.
+          const said = error instanceof ProbeFailure ? error.message : '';
           send(peer, {
             type: 'connection.error',
             code: 'ssh_failed',
-            message:
-              platformOf(peer.device) === 'win32'
-                ? '服务端经隧道连不上本机的 SSH 服务。\n隧道已经建立，但探测命令没有得到应答：常见于安全软件拦截了内置的 sshd.exe 或 PowerShell，请检查保护记录后重新连接。'
-                : '服务端经隧道连不上本机的 SSH 服务。\n隧道已经建立，但探测命令没有得到应答：请重新连接；反复出现时在“设置 → 关于与更新”里打开连接日志查看原因。',
+            message: `隧道已建立，但本机 SSH 服务没有执行探测命令。${said ? `\n本机答复：${said}` : ''}`,
           });
           peer.socket.close(4003, 'SSH probe failed');
         }),
