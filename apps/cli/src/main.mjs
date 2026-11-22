@@ -1,6 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { basename, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
@@ -12,6 +12,7 @@ import { choices, entries, parse, readRemote, save, shown } from './settings.mjs
 import { discard, protect, reveal } from './secret.mjs';
 import { bundled, releasePage, version } from './runtime.mjs';
 import { relay } from './terminal.mjs';
+import { markOnline, onlineAt, stayOnline } from './online.mjs';
 import { FIRST_UPGRADABLE, download, install } from './upgrade.mjs';
 import { UPDATE_TICK_MS, lookDue } from '../../desktop/src/update-check.ts';
 
@@ -22,6 +23,8 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
   ccdt -r                从当前项目的会话里选一个打开（加 --all 从全部会话里选）
   ccdt new [标题]        在当前目录新建会话
   ccdt sessions [--all]  列出当前项目的会话；--all 列出全部
+  ccdt online            不开终端，让这台电脑保持在线，Claude 可以在这里执行命令；
+                         断线自动重连，Ctrl+C 结束。无图形界面的服务器上可放到后台运行
   ccdt usage             订阅额度与调用统计
   ccdt config            查看和修改设置：在终端里用方向键逐项选择
   ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认
@@ -188,8 +191,11 @@ function credentials(server) {
   return token;
 }
 
-// A service connected to becomes the one used when none is named.
-async function signIn(config, values, quiet = false) {
+// Where `ccdt online` of this computer says it is online, and for which service.
+const onlinePath = (config) => join(config.paths.cli, 'online.json');
+// A service connected to becomes the one used when none is named. The connection opens an execution channel for
+// Claude's commands as `tunnel` says; by default it does unless `ccdt online` carries this computer's already.
+async function signIn(config, values, quiet = false, tunnel = undefined) {
   const server = await target(config, values);
   const token = credentials(server);
   if (!quiet) say(dim(`正在连接 ${called(server, config.names())} ……`));
@@ -198,6 +204,7 @@ async function signIn(config, values, quiet = false) {
     token,
     deviceId: config.device(),
     waits: config.waits,
+    tunnel: tunnel ?? !onlineAt(onlinePath(config), server.url),
     log,
   });
   config.use(server.url);
@@ -286,8 +293,11 @@ async function login(config, values, url) {
       token,
       deviceId: config.device(),
       waits: config.waits,
+      // Checking the token runs no command on this computer.
+      tunnel: false,
     });
     say(`已登录 ${server.url}（服务端版本 ${service.version}）。`);
+    say(dim('不开终端、让这台电脑一直在线：ccdt online'));
     await service.close();
   }
   const previous = config.server(server.url);
@@ -392,7 +402,7 @@ async function upgrade(config, values) {
 
 // Asks the service to look for a newer release now and says what it found, for both sides.
 async function check(config, values) {
-  const service = await signIn(config, values, true);
+  const service = await signIn(config, values, true, false);
   try {
     await service.request({ type: 'service.update.check' });
   } finally {
@@ -419,7 +429,7 @@ async function configure(config, values, [name, ...words]) {
     try {
       // Settings are no reason to log in: without a service only this computer's are shown.
       if (!config.servers.length) throw new Error('还没有登录服务端');
-      service = await signIn(config, values, true);
+      service = await signIn(config, values, true, false);
       remote = await readRemote(service);
     } catch (error) {
       if (name) throw error;
@@ -606,14 +616,27 @@ async function show(config, values, service, session, fresh) {
   async function showing() {
     for (;;) {
       let result;
+      let unwatch;
       try {
-        await service.channel();
+        if (service.tunnel) await service.channel();
+        else
+          try {
+            // `ccdt online` carries this computer's commands; where it no longer does, this window opens a channel.
+            await service.channel(5000);
+          } catch (error) {
+            if (service.ended) throw error;
+            await service.close().catch(() => {});
+            service = await signIn(config, values, true, true);
+            await service.channel();
+          }
+        unwatch = service.tunnel ? undefined : shared(service);
         result = await relay(service, session.id, shown);
       } catch (error) {
         // Nothing to show, such as a terminal the service would not open: the connection is let go, for ccdt to end.
         await service.close().catch(() => {});
         throw error;
       }
+      unwatch?.();
       log(`Terminal shown no longer: ${result.how}.`);
       if (result.how === 'exited') {
         await service.close();
@@ -627,9 +650,13 @@ async function show(config, values, service, session, fresh) {
         return 0;
       }
       if (result.how === 'stalled') continue;
-      process.stdout.write('\x1b]0;ccdt：连接断开，正在重连\x07');
-      say(dim('\r\n连接断开，正在重连……Claude Code 在服务端继续运行。'));
-      for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
+      // Let go for `ccdt online` gone: signed in again at once, with a channel of its own.
+      const handover = service.handover;
+      if (!handover) {
+        process.stdout.write('\x1b]0;ccdt：连接断开，正在重连\x07');
+        say(dim('\r\n连接断开，正在重连……Claude Code 在服务端继续运行。'));
+      }
+      for (let wait = handover ? 0 : 1000; ; wait = Math.min(Math.max(wait * 2, 1000), 15000)) {
         await new Promise((resolve) => setTimeout(resolve, wait));
         try {
           service = await signIn(config, values, true);
@@ -640,6 +667,28 @@ async function show(config, values, service, session, fresh) {
       }
     }
   }
+}
+
+// Commands reach this computer by `ccdt online` while it is there. Where they have not for a few seconds, the
+// connection is let go (`handover`), for the window to sign in again with a channel of its own.
+function shared(service) {
+  let timer;
+  const check = (message) => {
+    if (message.type !== 'devices') return;
+    if (message.devices.some((device) => device.id === service.deviceId && device.ready)) {
+      clearTimeout(timer);
+      timer = undefined;
+    } else
+      timer ??= setTimeout(() => {
+        service.handover = true;
+        service.end(true);
+      }, 5000);
+  };
+  service.on('message', check);
+  return () => {
+    clearTimeout(timer);
+    service.off('message', check);
+  };
 }
 
 export async function main(argv) {
@@ -680,9 +729,28 @@ export async function main(argv) {
     if (command === 'config') return await configure(config, values, rest);
     if (command === 'logout') return await logout(config, values);
     if (command === 'server') return await chooseServer(config, values);
+    if (command === 'online') {
+      let ended;
+      const stop = new Promise((resolve) => (ended = resolve));
+      // A terminal closed ends ccdt as it would any program; started with nohup it is not told.
+      for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => ended());
+      const code = await stayOnline({
+        connect: (again) => signIn(config, values, again, true),
+        say,
+        stop,
+        mark: (on) => markOnline(onlinePath(config), config.current)(on),
+      });
+      process.exit(code);
+    }
     if (command && !['new', 'open', 'sessions', 'usage'].includes(command))
       return (say(`没有这个命令：${command}\n\n${HELP}`), 2);
-    service = await signIn(config, values);
+    // Listing sessions and usage runs no command on this computer.
+    service = await signIn(
+      config,
+      values,
+      false,
+      ['sessions', 'usage'].includes(command) ? false : undefined,
+    );
     const here = process.cwd();
     const all = [...service.sessions.values()];
     const mine = all.filter((session) => sameDirectory(session.projectPath, here));

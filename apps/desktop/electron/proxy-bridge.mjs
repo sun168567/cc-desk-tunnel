@@ -274,8 +274,9 @@ export async function openProxyBridge(
           leaving = true;
           return;
         }
+        // A connection whose computer has its execution channel by another, `ccdt online`, asks for none.
         if (message.type === 'auth') {
-          message.tunnel = true;
+          message.tunnel = config.tunnel !== false;
           token = String(message.token);
         }
         // The system this computer runs is said here, not by the page. Windows is what none means.
@@ -330,7 +331,11 @@ export async function openProxyBridge(
         // Only ever follows the credentials, which are sent once the channels can be opened.
         if (message.connectionId === nativeReady?.connectionId)
           current.channels?.open(message.channelId);
-      } else if (message.type === 'ready' && message.adapter === 'claude-code') {
+      } else if (
+        message.type === 'ready' &&
+        message.adapter === 'claude-code' &&
+        config.tunnel !== false
+      ) {
         nativeReady = message;
         release = message.client;
       } else if (message.type === 'tunnel.ready') {

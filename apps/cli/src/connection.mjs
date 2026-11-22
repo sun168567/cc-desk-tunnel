@@ -36,10 +36,21 @@ export function proxyFor(url, env = process.env) {
 // One signed-in connection to the service, as this computer. `closed` resolves when it ends, whichever side ended
 // it; `lost` tells a fault on the way from an end asked for.
 export class Service extends EventEmitter {
-  static async connect({ url, fingerprint, token, deviceId, waits, log = () => {} }) {
+  // Without `tunnel` the connection opens no execution channel: commands reach this computer by another of its
+  // connections, `ccdt online`'s, or this one is for no session at all.
+  static async connect({
+    url,
+    fingerprint,
+    token,
+    deviceId,
+    waits,
+    tunnel = true,
+    log = () => {},
+  }) {
     const service = new Service();
+    service.tunnel = tunnel;
     service.bridge = await openProxyBridge(
-      { url, fingerprint, waits },
+      { url, fingerprint, waits, tunnel },
       {
         ...components(),
         environment: {},
