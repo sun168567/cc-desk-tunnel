@@ -90,8 +90,10 @@ ccdt login
 | `ccdt` | 接着这个项目最近的会话，没有就新建（像 `claude -c`） |
 | `ccdt -r` | 从这个项目的会话里选一个，方向键选择（像 `claude -r`）；加 `--all` 从全部会话里选 |
 | `ccdt new [标题]` | 新建会话 |
-| `ccdt sessions [--all]` | 列出这个项目的会话，或全部会话 |
+| `ccdt sessions [--all] [--json]` | 列出这个项目的会话，或全部会话 |
 | `ccdt online` | 不开终端，让这台电脑保持在线（见[保持在线](#保持在线)） |
+| `ccdt -p "任务"` 等 | 供程序和其他 agent 派发任务、跟进、审批（见[供程序和其他 agent 使用](#供程序和其他-agent-使用)） |
+| `ccdt acp` | 作为 ACP agent 运行，供 Zed、JetBrains、acpx 等接入（见 [ACP](#acp)） |
 | `ccdt usage` | 订阅额度的已用比例、重置时间与调用统计 |
 | `ccdt config` | 查看和修改设置，方向键选择（见[设置](#设置)） |
 | `ccdt config 名称 [值]` | 查看或修改一项，供脚本使用 |
@@ -145,6 +147,56 @@ WantedBy=default.target
 Start-Process ccdt -ArgumentList online -WindowStyle Hidden
 ```
 
+## 供程序和其他 agent 使用
+
+其他 agent（Codex、Gemini CLI、DeepSeek Harness 等）和脚本可以把任务交给服务端上的 Claude：派发、查看进度、中途追加指示、处理审批、等结果。它们只需要会运行命令，经的是这台电脑上已登录的 `ccdt`，不用另配凭据，也不用了解服务端和多台电脑的关系。任务就是普通会话，图形客户端里能看到它在做什么，也能插话和审批。
+
+派发的写法与 `claude -p` 相同：
+
+```bash
+ccdt -p "修复登录页的报错"                      # 当前目录的项目里新建会话，这一轮结束后输出 Claude 的回复
+ccdt -p -c "再补上测试"                          # 接这个项目最近的会话；-r <会话 ID> 接指定会话
+ccdt -p "整理文档" --bg                          # 发出后立即返回会话 ID
+ccdt -p "…" --output-format json                # 一个 JSON：{"session_id","state","result","is_error","approval"?}
+ccdt -p "…" --permission-mode acceptEdits --model sonnet --effort high
+```
+
+之后用会话 ID（可只写开头几位）跟进：
+
+| 命令 | 作用 |
+| --- | --- |
+| `ccdt status <会话>` | 在做什么、在等什么 |
+| `ccdt wait <会话> [--timeout 秒]` | 等到这一轮结束，或 Claude 等人批准、回答 |
+| `ccdt tell <会话> "补充"` | 追加指示：Claude 正在做时加进这一轮，用来中途纠偏 |
+| `ccdt approve <会话>` · `ccdt deny <会话> ["意见"]` | 批准或拒绝 Claude 等待的请求；计划被拒时，意见是让它怎么改 |
+| `ccdt answer <会话> "答案1" ["答案2" …]` | 按顺序回答 Claude 的提问，多选用逗号隔开 |
+| `ccdt logs <会话> [--last N]` | 最近的对话和工具调用 |
+| `ccdt stop <会话>` | 停止这一轮 |
+
+这些命令都可以加 `--json`（`-p` 和 `wait` 用 `--output-format`，还有逐条输出事件的 `stream-json`）。结果写在标准输出，说明和下一步该怎么做写在标准错误。退出码：0 完成，2 在等批准或回答，3 失败，4 已停止，5 连不上或未登录，6 到 `--timeout` 时仍在运行。`ccdt help agents` 给出写给 agent 看的完整说明。
+
+- **审批交给调用方**：Claude 请求批准或提问时，`ccdt -p` 和 `ccdt wait` 停下来（退出码 2），把要批准什么、为什么一并输出，由调用方用 `approve`、`deny`、`answer` 处理，之后 `ccdt wait` 接着等。图形客户端里同时也能处理，谁先回答算谁的。不想被问，派发时带 `--permission-mode`。
+- **长任务**：调用方把 `ccdt -p` 放进自己的后台任务里运行，结束时它的工具就会通知它；或者用 `--bg` 发出，之后 `ccdt wait`。Claude 这一轮结束、只剩它启动的后台任务时，状态是 `background`：后台任务结束后 Claude 会自动接着做，`ccdt wait` 可以等到那时。
+- **执行通道**：任务在会话所在的电脑上执行，新建的会话就是运行 `ccdt` 的这台。`ccdt -p`、`wait`、`tell` 等待期间自己提供这台电脑的执行通道；用 `--bg` 发出后就退出的，要有图形客户端或 `ccdt online` 开着，否则服务端只等 5 分钟。
+
+### ACP
+
+`ccdt acp` 让 `ccdt` 作为 [Agent Client Protocol](https://agentclientprotocol.com) 的 agent 运行，经标准输入输出通信。会说 ACP 的编辑器和 agent 工具（Zed、JetBrains、[acpx](https://github.com/openclaw/acpx) 等）把它配成 agent 命令，就能像使用本地 agent 一样使用服务端上的 Claude：会话在启动目录对应的项目里新建，也可以加载已有会话（回放最近一页记录）；回复和工具调用逐条显示；审批作为权限请求交给客户端；审批模式作为会话模式切换。
+
+```json
+// acpx：项目目录里的 .acpxrc.json，之后 acpx ccdt "任务"、acpx ccdt exec "任务"
+{ "agents": { "ccdt": { "argv": ["ccdt", "acp"] } } }
+```
+
+Windows 上 acpx 只接受可执行文件，写 `ccdt` 自带的 node 和脚本：`["%LOCALAPPDATA%\\Programs\\ccdt\\node.exe", "%LOCALAPPDATA%\\Programs\\ccdt\\ccdt.mjs", "acp"]`（把 `%LOCALAPPDATA%` 换成实际路径）。
+
+```json
+// Zed：settings.json
+{ "agent_servers": { "CC Desk Tunnel": { "type": "custom", "command": "ccdt", "args": ["acp"] } } }
+```
+
+与 ACP 的差别：ACP 没有“提问”，Claude 提问时问题作为回复文字显示、这一轮结束，下一条消息就是回答；ACP 不能往进行中的一轮追加内容，要纠偏就取消后重发（图形客户端照常可以插话）；客户端传来的 MCP 服务暂不连接。
+
 ## 设置
 
 `ccdt config` 列出全部设置和当前值，用方向键选中一项后回车修改：开关和选项从列表里选，时间和文字直接输入，写 `default` 恢复默认。在脚本里用 `ccdt config 名称 值`，例如 `ccdt config connection.ssh 30`；`ccdt config 名称` 显示这一项的说明和可选值，不在终端里运行 `ccdt config` 时列出全部名称。
@@ -196,6 +248,8 @@ Start-Process ccdt -ArgumentList online -WindowStyle Hidden
 - Windows：在一套真实部署上验证过登录、新建与选择会话、与图形客户端交替接续、断网 55 秒后接回、关窗口即结束、请求身份与调用统计；打包、安装脚本与安装后的启动在 GitHub 的 Windows 机器上检查。
 - Linux（x64）：在一台没有图形界面、经 SSH 登录的 Ubuntu 上，用 GitHub 打出的包验证过安装、登录（系统密钥服务用不了时凭据存进设置文件）、新建与选择会话、Claude 的命令经执行通道在这台电脑上运行、终端状态与每一轮的导入、服务端断开 50 秒后接回、关窗口即结束。arm64 的包在 GitHub 的 arm64 机器上打包、安装并启动过。
 - macOS：打包、安装脚本与安装后的启动，钥匙串的保存与读取，以及在真实终端里按键原样传过去（Ctrl+C 交给 Claude Code，不结束 `ccdt`）、窗口尺寸传过去，都在 GitHub 的 Mac 上检查；手头没有 Mac，需要有人操作的部分（连接真实服务端、在“终端”或 iTerm2 里使用、关窗口）没有实际用过。执行通道是与 macOS 图形客户端同一套代码。
+
+- 供程序和其他 agent 使用（`ccdt -p` 与跟进命令、`ccdt acp`）：在离线模拟服务上有自动测试，覆盖派发、续接、事件流输出、工具审批、按顺序回答提问、退回计划、停止、超时，以及 ACP 的新建与加载会话、逐条回复、权限请求、切换模式。在 Windows 上连接真实部署验证过：`ccdt -p` 得到回复；“每次询问”模式下停在审批，`approve` 后 `wait` 拿到结果；`--bg` 发出后 `tell` 中途改了指令，Claude 照新指令完成；用 acpx 0.22 经 `ccdt acp` 一次性和持久会话各跑通，权限请求的拒绝和批准都生效。Zed 和 JetBrains 没有实际接入过。
 
 ## 致谢
 
