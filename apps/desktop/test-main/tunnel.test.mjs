@@ -148,7 +148,10 @@ async function service() {
 }
 const schedules = 'C:\\任务 目录\\schedules.json';
 // A device connected to the service through a forwarder, and what `ssh` on the service's machine can do with it.
-async function device(svc, { route = () => svc.port, binaries = {}, config = {} } = {}) {
+async function device(
+  svc,
+  { route = () => svc.port, binaries = {}, config = {}, id = randomUUID() } = {},
+) {
   const forward = await forwarder(route);
   let closedByBridge = false;
   const bridge = await openProxyBridge(
@@ -173,7 +176,7 @@ async function device(svc, { route = () => svc.port, binaries = {}, config = {} 
       deviceName: '测试设备',
     }),
   );
-  local.send(JSON.stringify({ type: 'device', id: randomUUID() }));
+  local.send(JSON.stringify({ type: 'device', id }));
   async function next(type, seconds = 40) {
     for (const deadline = Date.now() + seconds * 1000; Date.now() < deadline;) {
       const index = messages.findIndex((message) => message.type === type);
@@ -582,5 +585,60 @@ test(
       10,
       'the page connection to close',
     );
+  },
+);
+
+// `ccdt online` carries the computer's commands; a window of ccdt then signs in without a channel of its own.
+test(
+  'a connection without an execution channel runs its computer’s sessions by another connection’s',
+  windows(),
+  async (t) => {
+    const svc = await service();
+    t.after(() => svc.close());
+    const id = randomUUID();
+    const online = await device(svc, { id });
+    t.after(() => online.close());
+    await online.next('ready');
+    const window = await device(svc, { id, config: { tunnel: false } });
+    t.after(() => window.close());
+    await window.next('ready', 10);
+    assert.equal(
+      window.messages.some((message) => message.type.startsWith('tunnel.')),
+      false,
+    );
+    const ask = async (command) => {
+      const requestId = randomUUID();
+      window.local.send(JSON.stringify({ ...command, requestId }));
+      for (const deadline = Date.now() + 20000; Date.now() < deadline;) {
+        const reply = window.messages.find(
+          (message) => message.requestId === requestId && message.type === 'response',
+        );
+        if (reply) return reply;
+        await delay(20);
+      }
+      throw new Error(`No answer to ${command.type}`);
+    };
+    const created = await ask({
+      type: 'session.create',
+      title: '共用通道',
+      projectPath: 'C:\\work',
+    });
+    assert.equal(created.ok, true);
+    const sent = await ask({ type: 'message.send', sessionId: created.sessionId, text: '你好' });
+    assert.notEqual(sent.code, 'execution_offline');
+    // Without the other connection, nothing carries the computer's commands.
+    await online.close();
+    await until(
+      () =>
+        window.messages.some(
+          (message) =>
+            message.type === 'devices' &&
+            message.devices.some((device) => device.id === id && !device.ready),
+        ),
+      10,
+      'the computer to be told unready',
+    );
+    const late = await ask({ type: 'message.send', sessionId: created.sessionId, text: '还在吗' });
+    assert.equal(late.code, 'execution_offline');
   },
 );

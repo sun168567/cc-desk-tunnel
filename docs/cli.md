@@ -91,6 +91,7 @@ ccdt login
 | `ccdt -r` | 从这个项目的会话里选一个，方向键选择（像 `claude -r`）；加 `--all` 从全部会话里选 |
 | `ccdt new [标题]` | 新建会话 |
 | `ccdt sessions [--all]` | 列出这个项目的会话，或全部会话 |
+| `ccdt online` | 不开终端，让这台电脑保持在线（见[保持在线](#保持在线)） |
 | `ccdt usage` | 订阅额度的已用比例、重置时间与调用统计 |
 | `ccdt config` | 查看和修改设置，方向键选择（见[设置](#设置)） |
 | `ccdt config 名称 [值]` | 查看或修改一项，供脚本使用 |
@@ -105,9 +106,44 @@ ccdt login
 
 和本地的 `claude` 一样：窗口开着它就一直运行，适合让它长时间无人值守地做事；退出 Claude Code（`/exit`）或关掉窗口，就结束这个终端，对话留在会话里，下次运行 `ccdt` 接着聊。
 
-`ccdt` 同时是 Claude 回到这台电脑执行命令的通道，所以关掉窗口后不能让它在后台继续。断网不会结束它：`ccdt` 自动重连，服务端在宽限期内（与图形客户端的运行相同，默认 5 分钟）保留终端，连回来后画出原来的屏幕接着用。`ccdt` 不占任何快捷键，所有按键都交给 Claude Code。
+`ccdt` 同时是 Claude 回到这台电脑执行命令的通道，所以关掉窗口后不能让它在后台继续；要让这台电脑一直在线，用 [`ccdt online`](#保持在线)。断网不会结束它：`ccdt` 自动重连，服务端在宽限期内（与图形客户端的运行相同，默认 5 分钟）保留终端，连回来后画出原来的屏幕接着用。`ccdt` 不占任何快捷键，所有按键都交给 Claude Code。
 
 同一个会话在第二个窗口里打开时，新窗口接过显示，原来的窗口提示后退出。同一个会话不能同时在图形客户端和终端里使用。终端开着时，图形客户端的会话列表和对话底部显示“终端运行中”“终端等你确认”或“终端打开中”，输入框变灰，关掉终端后可以在图形客户端里接着聊；`ccdt sessions` 和 `ccdt -r` 也标出正在别处使用的会话。会话正在图形客户端里运行时，`ccdt` 提示等这一轮结束后再打开。
+
+## 保持在线
+
+`ccdt online` 不开终端，只让这台电脑在线：登录服务端、启动本机的 SSH 服务和执行通道，然后一直等着，断线自动重连（间隔逐渐拉长，最长一分钟），按 Ctrl+C 结束。它在线期间，你的会话（图形客户端、浏览器或别处的 `ccdt` 里的）都能让 Claude 在这台电脑上执行命令，与图形客户端开着时相同；凭据被拒或版本不一致时它会退出。
+
+它在线时，在这台电脑上打开 `ccdt` 会话不再自己启动 SSH 服务，直接用它的执行通道，所以进入得更快；它中途退出了，打开着的终端在几秒内自动换成自己的通道，Claude Code 照常运行。
+
+适合没有图形界面的服务器：登录一次后让它在后台运行。
+
+```bash
+# Linux、macOS：放到后台，输出写进日志
+nohup ccdt online >> ~/ccdt-online.log 2>&1 &
+```
+
+```ini
+# Linux：开机即在线，用 systemd 的用户服务，写到 ~/.config/systemd/user/ccdt-online.service
+[Unit]
+Description=ccdt online
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/ccdt online
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+```
+
+然后运行 `systemctl --user enable --now ccdt-online`；要在没有登录时也运行，再执行一次 `loginctl enable-linger`。凭据存在系统钥匙串里的电脑，后台服务可能读不到它；没有图形界面的服务器上凭据本来就存在设置文件里，不受影响。
+
+```powershell
+# Windows：不留窗口地运行，注销前一直在线
+Start-Process ccdt -ArgumentList online -WindowStyle Hidden
+```
 
 ## 设置
 

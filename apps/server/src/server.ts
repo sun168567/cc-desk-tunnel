@@ -470,7 +470,8 @@ export function createProxyServer(options: ServerOptions) {
     const place = session.device ?? device!;
     const seat = seats.get(place.id);
     if (place.id === device?.id) {
-      if (options.claude && !(peer.tunnel?.ssh && seat?.door?.ssh))
+      // Any connection of this computer may carry its commands: `ccdt online` does for a terminal of ccdt.
+      if (options.claude && !(seat?.door?.ready && seat.door.ssh))
         throw new DomainError(
           'execution_offline',
           '本机的执行通道尚未就绪，请稍候；客户端正在建立或重新建立连接。',
