@@ -1,0 +1,61 @@
+# The SSH service of the Windows client with the bundled OpenSSH and PowerShell, which the check workflow does not
+# fetch. That OpenSSH runs every command through the shell the computer's own OpenSSH is set to use
+# (HKLM\SOFTWARE\OpenSSH\DefaultShell, #236), so each job sets one of those a user may have set and runs the tests
+# of the device's SSH service under it. It runs when asked for, and on a pull request that changes that service.
+name: windows-ssh
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-ssh.yml
+      - scripts/prepare-windows.ps1
+      - apps/desktop/electron/prepare-ssh.ps1
+      - apps/desktop/electron/component-host.ps1
+      - apps/desktop/electron/windows-ssh.mjs
+      - apps/desktop/electron/proxy-bridge.mjs
+      - apps/desktop/electron/tunnel-channels.mjs
+      - apps/server/src/tunnel.ts
+      - apps/desktop/test-main/component-host.test.mjs
+      - apps/desktop/test-main/tunnel.test.mjs
+permissions:
+  contents: read
+concurrency:
+  group: windows-ssh-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  device:
+    runs-on: windows-2022
+    # About 5 minutes, of which the tests take 2.
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [none, powershell, pwsh, git-bash]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/cache@v6
+        with:
+          path: .tools
+          key: windows-ssh-${{ hashFiles('scripts/prepare-windows.ps1') }}
+      - run: npm ci
+      - run: npm run prepare:windows:package
+      - name: Set the computer's OpenSSH default shell
+        if: matrix.shell != 'none'
+        shell: pwsh
+        run: |
+          $path = @{
+            'powershell' = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            'pwsh'       = (Get-Command pwsh.exe).Source
+            'git-bash'   = "$env:ProgramFiles\Git\bin\bash.exe"
+          }['${{ matrix.shell }}']
+          if (-not (Test-Path -LiteralPath $path)) { throw "No shell at $path" }
+          New-Item -Path HKLM:\SOFTWARE\OpenSSH -Force | Out-Null
+          New-ItemProperty -Path HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -Value $path -PropertyType String -Force
+      # The runner signs in as the built-in Administrator, whose folders the permission tests do not expect. A
+      # connection that never comes up leaves the shared one waiting; the run ends with the tests regardless.
+      - run: node --test --test-concurrency=1 --test-force-exit --test-skip-pattern="reachable by this user alone|may write but not change permissions" apps/desktop/test-main/component-host.test.mjs apps/desktop/test-main/tunnel.test.mjs
+        timeout-minutes: 6
