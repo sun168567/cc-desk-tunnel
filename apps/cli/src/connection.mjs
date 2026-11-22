@@ -130,9 +130,10 @@ export class Service extends EventEmitter {
       socket.on('error', () => {});
     });
   }
-  // What the service answers to a command: its `response`, or the message it answers with instead.
+  // What the service answers to a command: its `response`, or the message it answers with instead. A command may
+  // bring its own request ID, as a message does whose events are to be told from others before the answer comes.
   request(command) {
-    const requestId = randomUUID();
+    const requestId = command.requestId ?? randomUUID();
     return new Promise((resolve, reject) => {
       if (this.ended) return reject(new Error('连接已关闭。'));
       this.waiting.set(requestId, { resolve, reject });
