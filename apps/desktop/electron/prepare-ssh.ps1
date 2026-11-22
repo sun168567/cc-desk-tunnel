@@ -53,7 +53,9 @@ $runCmd = "`$i=[Diagnostics.ProcessStartInfo]::new([IO.Path]::Combine([Environme
 $forced = switch ($shell) {
   'powershell' { "ForceCommand $runCmd" }
   # Git Bash would quote the command for cmd.exe in a way cmd.exe does not read, so the bundled PowerShell starts it.
-  'bash' { "ForceCommand MSYS2_ARG_CONV_EXCL='*' exec `"`$CC_DESK_TUNNEL_PWSH`" -NoLogo -NoProfile -NonInteractive -EncodedCommand $([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($runCmd)))" }
+  # Its arguments are nothing Git Bash rewrites as a path; a setting that stopped it from doing so would reach the
+  # command's own Git Bash too, where `cmd //c` would then start an interactive cmd.exe.
+  'bash' { "ForceCommand exec `"`$CC_DESK_TUNNEL_PWSH`" -NoLogo -NoProfile -NonInteractive -EncodedCommand $([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($runCmd)))" }
   default { '' }
 }
 $path = $Runtime.Replace('\', '/')
