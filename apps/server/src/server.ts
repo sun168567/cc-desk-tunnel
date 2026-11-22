@@ -87,7 +87,15 @@ import { inOrder } from './question.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
-import { Door, ProbeFailure, Tunnel, program, sessionSsh, sessionSshPath } from './tunnel.ts';
+import {
+  Door,
+  ProbeFailure,
+  Tunnel,
+  program,
+  sessionSsh,
+  sessionSshPath,
+  writeDevices,
+} from './tunnel.ts';
 import { FileService } from './files.ts';
 import type { FilesOptions } from './files.ts';
 import type { TunnelOptions } from './tunnel.ts';
@@ -515,7 +523,28 @@ export function createProxyServer(options: ServerOptions) {
       ],
     };
   }
+  // What sessions reach the user's computers by, other than their own (see `writeDevices`).
+  function reachable() {
+    writeDevices(
+      store.directory,
+      [...seats.values()].flatMap((seat) => {
+        const device = [...seat.peers].findLast((peer) => peer.device)?.device;
+        return device && seat.door
+          ? [
+              {
+                id: device.id,
+                name: device.name,
+                platform: platformOf(device),
+                ready: seat.door.ready,
+                door: seat.door,
+              },
+            ]
+          : [];
+      }),
+    );
+  }
   function announce() {
+    if (options.tunnel && !closing) reachable();
     const message = devices();
     const text = JSON.stringify(message);
     if (closing || text === presence) return;
@@ -699,7 +728,7 @@ export function createProxyServer(options: ServerOptions) {
         run.device === serverDevice.id
           ? undefined
           : door
-            ? sessionSsh(store.directory, run.sessionId, door)
+            ? sessionSsh(store.directory, run.sessionId, door, run.device)
             : {
                 configPath: join(sessionSshPath(store.directory, run.sessionId), 'config'),
                 bin: join(sessionSshPath(store.directory, run.sessionId), 'bin'),
@@ -982,7 +1011,9 @@ export function createProxyServer(options: ServerOptions) {
       if (closing || peer.socket.readyState !== WebSocket.OPEN)
         throw new Error('Connection closed');
       completeOnboarding();
-      const reach = ssh ? sessionSsh(store.directory, session.id, ssh) : undefined;
+      const reach = ssh
+        ? sessionSsh(store.directory, session.id, ssh, session.device?.id)
+        : undefined;
       current.process = new NativeTerminal(
         options.claude.executable,
         terminalArguments(options.claude, session, reach, {
