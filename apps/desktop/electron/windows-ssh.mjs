@@ -5,22 +5,35 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { connect, createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
-import { componentFailure, missingComponent } from './connect-errors.mjs';
+import {
+  componentFailure,
+  lastLine,
+  missingComponent,
+  unsupportedShell,
+} from './connect-errors.mjs';
 import { findGitBash } from './git-bash.mjs';
 
 function execute(file, args, timeout) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { windowsHide: true, encoding: 'utf8', timeout }, (error, stdout) => {
-      if (error)
+    execFile(
+      file,
+      args,
+      { windowsHide: true, encoding: 'utf8', timeout },
+      (error, stdout, stderr) => {
+        if (!error) return resolve(stdout);
+        // What the script reported, such as ssh-keygen failing or a folder that may not be written, says why.
+        const said = lastLine(stderr);
         reject(
           new Error(
             error.code === 'ENOENT'
               ? missingComponent('PowerShell（pwsh.exe）')
-              : '本机 SSH 服务的准备步骤失败。\n内置的 PowerShell 或 OpenSSH 可能被安全软件拦截，或临时目录不可写；请检查安全软件的保护记录后重新连接，仍然失败时重新安装本应用。',
+              : error.killed
+                ? `本机 SSH 服务的准备步骤在 ${timeout / 1000} 秒内没有完成。\n电脑较忙或安全软件逐个扫描程序时会变慢，请重新连接。`
+                : `本机 SSH 服务的准备步骤失败。${said ? `\n${said}` : '\n请重新连接；仍然失败时重新安装本应用。'}`,
           ),
         );
-      else resolve(stdout);
-    });
+      },
+    );
   });
 }
 async function waitForHost(child) {
@@ -147,6 +160,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
         Math.max(30000, readyMs),
       ),
     );
+    if (metadata.unsupportedShell) throw new Error(unsupportedShell(metadata.unsupportedShell));
     check();
     launch(powershell, [
       '-NoLogo',
@@ -172,7 +186,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
     }
     if (!ready)
       throw new Error(
-        `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有就绪。\n请重新连接；反复出现时检查安全软件是否拦截了内置的 sshd.exe。这台电脑启动较慢时，可在“设置 → 连接”里调大等待时间。`,
+        `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有开始监听。\n电脑较忙或安全软件逐个扫描程序时会变慢，可在“设置 → 连接”里调大等待时间。`,
       );
     return {
       port,

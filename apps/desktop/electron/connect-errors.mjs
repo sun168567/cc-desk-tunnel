@@ -86,13 +86,10 @@ export function channelFailure(seconds, error, target, proxy) {
   const head = `执行通道在 ${seconds} 秒内没有就绪。`;
   if (error)
     return `${head}\n服务凭据已通过，但为执行通道再连接服务端时失败：${controlFailure(error, target, proxy).split('\n')[0]}\n执行通道与控制连接走同一个地址，每条 SSH 连接另占一条连接：请确认反向代理、系统代理或防火墙没有限制同一地址的并发连接数。`;
-  // What may keep the probe from an answer differs: on Windows the bundled programs that run it, elsewhere
-  // the user's own shell.
-  const check =
-    process.platform === 'win32'
-      ? '请检查安全软件是否拦截了内置的 sshd.exe 或 PowerShell，网络较慢时'
-      : '请重新连接；登录 shell 的启动脚本或网络较慢时';
-  return `${head}\n服务凭据已通过，本机的 SSH 服务也已启动，但服务端经执行通道发来的探测命令没有得到应答：${check}可在“设置 → 连接”里调大等待时间。`;
+  // Elsewhere the user's own shell runs the probe, whose startup scripts may take long.
+  const slow =
+    process.platform === 'win32' ? '电脑或网络较慢时' : '登录 shell 的启动脚本或网络较慢时';
+  return `${head}\n服务凭据已通过，本机的 SSH 服务也已启动，但服务端发来的探测命令没有得到应答。${slow}可在“设置 → 连接”里调大等待时间。`;
 }
 
 // The component host ended while the connection was wanted. `output` is what it and its components printed,
@@ -108,11 +105,27 @@ export function componentFailure(output, early) {
   const exited = /cc-desk-tunnel: (\S+) exited (\d+)/.exec(output);
   const name = exited?.[1] ?? '';
   const code = exited ? `（退出代码 ${exited[2]}）` : '';
+  // Otherwise the last line it printed is what is known of why.
+  const said = lastLine(output);
   if (/^sshd/i.test(name))
-    return `内置的 OpenSSH 服务（sshd.exe）已退出${code}。\n请重新连接；反复出现时检查安全软件是否拦截了它，或重新安装本应用。`;
+    return `内置的 OpenSSH 服务（sshd.exe）已退出${code}。${said ? `\n它的输出：${said}` : '\n请重新连接；反复出现时重新安装本应用。'}`;
+  if (said) return `本机的 SSH 服务${early ? '没能启动' : '已退出'}。\n它的输出：${said}`;
+  // Ended at once without a word: that is what a program stopped by security software looks like.
   return early
     ? `本机的 SSH 服务没能启动。\n常见原因是内置的 PowerShell 或 OpenSSH 被安全软件拦截。${securityHint}`
-    : '本机的 SSH 服务已退出。\n请重新连接；反复出现时检查安全软件的保护记录。';
+    : '本机的 SSH 服务已退出。\n请重新连接。';
+}
+export const lastLine = (output) =>
+  String(output ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('cc-desk-tunnel:'))
+    .at(-1)
+    ?.slice(0, 300) ?? '';
+
+// The computer's OpenSSH is set to run commands in a shell the bundled one cannot be made to bring back to cmd.exe.
+export function unsupportedShell(path) {
+  return `本机 OpenSSH 的默认 shell 是 ${path}，内置 SSH 服务无法在它下面执行命令。\n支持 cmd、PowerShell 和 Git Bash；可在注册表 HKLM\\SOFTWARE\\OpenSSH 里删除或改回 DefaultShell 与 DefaultShellCommandOption。`;
 }
 
 // A bundled program is not where it was installed, which is what a quarantine leaves behind.

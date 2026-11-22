@@ -8,7 +8,7 @@
 
 ## 根因
 
-- OpenSSH 对每条非 PTY 命令执行 `cmd.exe /c "<命令>"`（`w32-doexec.c`），远端命令再指定 PowerShell 也改变不了这层外壳。
+- OpenSSH 对每条非 PTY 命令执行 `<默认 shell> <选项> "<命令>"`（`w32-doexec.c`），远端命令再指定 PowerShell 也改变不了这层外壳。默认 shell 是 `cmd.exe /c`；系统 OpenSSH 在注册表 `HKLM\SOFTWARE\OpenSSH` 设了 `DefaultShell` 时换成它（`pwd.c` 读取，`sshd_config` 无法覆盖），随包的 sshd 同样如此。2026-11 的 [#236](https://github.com/sun168567/cc-desk-tunnel/issues/236) 起，设为 PowerShell / pwsh / Git Bash 时，`prepare-ssh.ps1` 在本连接的 `sshd_config` 里加一条 `ForceCommand`，用那种 shell 的写法把 `SSH_ORIGINAL_COMMAND`（含 sftp 子系统）交回 `cmd.exe /d /s /c`，标准流与退出码不变；其他 shell 在连接前说明。
 - `w32fd.c` 的 `spawn_child_internal` 给 `sshd-session.exe` / `sshd-auth.exe` 加 `DETACHED_PROCESS`，会话进程没有控制台；它再创建 `cmd.exe` 时既无控制台可继承、也没有无窗口标志，Windows 于是为 `cmd.exe` 新建一个控制台。
 - 官方部署形态是系统服务，进程在 session 0，新控制台不会出现在任何人的桌面上。上游维护者在 [#1898](https://github.com/PowerShell/Win32-OpenSSH/issues/1898) 明确说明“新进程创建在 session 0，看不到窗口”，并把非服务方式运行称为调试形态；2026-02 有用户在同一 issue 报告以普通用户直接运行 `sshd.exe` 时每次 SFTP 都弹空白 cmd，未获修复。
 - 本项目有意不装系统服务，sshd 运行在用户的交互会话里，新控制台因此可见；默认终端是 Windows Terminal 时表现为每条命令一个标题为 `c:\windows\system32\cmd.exe` 的新窗口。

@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Door, shellCommand, shellsOf, sshConfig, sessionSsh, Tunnel } from '../src/tunnel.ts';
+import {
+  Door,
+  probeOutput,
+  shellCommand,
+  shellsOf,
+  sshConfig,
+  sessionSsh,
+  Tunnel,
+} from '../src/tunnel.ts';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -540,4 +548,15 @@ test('a device with a POSIX shell gets a script command and a prompt of its own'
     onWindows.flatMap((line, index) => (line === withBash[index] ? [] : [index])),
     [3],
   );
+});
+
+test('a failed probe is told by what the device said, read as GBK where it is not UTF-8', () => {
+  // Windows PowerShell on a Chinese system, given a command written for cmd.exe.
+  const gbk = Buffer.from('cbf9d4dacebbd6c320d0d03a3120d7d6b7fb3a2032350d0a2b20', 'hex');
+  assert.equal(probeOutput(gbk), '所在位置 行:1 字符: 25 +');
+  assert.equal(
+    probeOutput(Buffer.from('\n  user@127.0.0.1: Permission denied (publickey).\r\n\n')),
+    'user@127.0.0.1: Permission denied (publickey).',
+  );
+  assert.equal(probeOutput(Buffer.from('x'.repeat(1000))).length, 300);
 });

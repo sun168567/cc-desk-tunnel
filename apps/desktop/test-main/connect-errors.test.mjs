@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   channelFailure,
   componentFailure,
+  unsupportedShell,
   controlFailure,
   missingComponent,
 } from '../electron/connect-errors.mjs';
@@ -55,6 +56,22 @@ test('a component that stopped is named, with the reason it gave', () => {
   // Nothing said: early on that is what a quarantine looks like, later it is not.
   assert.match(componentFailure('', true), /没能启动[\s\S]*保护历史记录/);
   assert.match(componentFailure('', false), /已退出/);
+  // What it printed before it stopped is shown instead of a guess.
+  assert.match(
+    componentFailure(
+      '/path/sshd_config line 20: Bad configuration option: X\ncc-desk-tunnel: sshd.exe exited 255\n',
+      true,
+    ),
+    /已退出（退出代码 255）。\n它的输出：\/path\/sshd_config line 20: Bad configuration option: X$/,
+  );
+  assert.match(
+    componentFailure('Exception calling "Run": access denied\n', true),
+    /没能启动。\n它的输出：Exception calling "Run": access denied$/,
+  );
+  assert.match(
+    unsupportedShell('C:\\Windows\\System32\\bash.exe'),
+    /^本机 OpenSSH 的默认 shell 是 C:\\Windows\\System32\\bash\.exe，[\s\S]*DefaultShell/,
+  );
   assert.match(missingComponent('sshd.exe'), /找不到随应用安装的 sshd\.exe/);
 });
 
@@ -72,6 +89,6 @@ test('an execution channel that never got ready says what stood in the way', () 
   // They were opened, or none was ever asked for: the probe command itself went unanswered.
   assert.match(
     channelFailure(60, undefined, target, null),
-    process.platform === 'win32' ? /60 秒[\s\S]*sshd\.exe 或 PowerShell/ : /60 秒[\s\S]*登录 shell/,
+    process.platform === 'win32' ? /60 秒[\s\S]*电脑或网络较慢/ : /60 秒[\s\S]*登录 shell/,
   );
 });
