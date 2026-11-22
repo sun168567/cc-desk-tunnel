@@ -830,6 +830,15 @@ dialog:has(.release-notes) {
 .elsewhere-project > .project-toggle {
   gap: 6px;
 }
+.elsewhere-project .row-action {
+  display: inline-flex;
+  margin-left: auto;
+  opacity: 0;
+}
+.elsewhere-project:hover .row-action,
+.elsewhere-project:focus-within .row-action {
+  opacity: 1;
+}
 .list-heading > .project-toggle > svg,
 .elsewhere-project > .project-toggle > svg {
   width: 14px;
@@ -3922,7 +3931,8 @@ dialog::backdrop {
   .session-more {
     display: inline-flex;
   }
-  .project-group > h2 .row-action {
+  .project-group > h2 .row-action,
+  .elsewhere-project .row-action {
     opacity: 1;
   }
   .session-select small {

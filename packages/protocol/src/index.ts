@@ -591,12 +591,15 @@ export const commandSchema = z.discriminatedUnion('type', [
       title: z.string().trim().min(1).max(120),
     })
     .strict(),
+  // On the computer of this connection, or on `deviceId`, another of the user's that is connected, in one of the
+  // projects it has (see `device.projects`).
   z
     .object({
       type: z.literal('session.create'),
       ...request,
       title: z.string().trim().min(1).max(120),
       projectPath: z.string().trim().min(1).max(2048),
+      deviceId: id.optional(),
     })
     .strict(),
   z.object({ type: z.literal('account.status'), ...request }).strict(),
@@ -650,6 +653,15 @@ export const commandSchema = z.discriminatedUnion('type', [
   // The shell the user prefers Claude to run scripts in on the computer of this connection; null leaves it to Claude.
   z
     .object({ type: z.literal('device.shell'), ...request, shell: deviceShellSchema.nullable() })
+    .strict(),
+  // The projects of the computer of this connection, as its client lists them, for the user's other computers to
+  // start or move sessions into while it is connected.
+  z
+    .object({
+      type: z.literal('device.projects'),
+      ...request,
+      projects: z.array(z.string().trim().min(1).max(2048)).max(500),
+    })
     .strict(),
   z.object({ type: z.literal('instructions.get'), ...request }).strict(),
   z
@@ -715,6 +727,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       ...request,
       sessionId: id,
       projectPath: z.string().trim().min(1).max(2048),
+      // As for `session.create`: to a project of another connected computer.
+      deviceId: id.optional(),
     })
     .strict(),
   // Points a project of the computer that asks at another directory there, with all its sessions; what Claude
@@ -1051,6 +1065,8 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
         // The shells the computer runs scripts in, and the one its user prefers, if any; none for the service.
         shells: z.array(deviceShellSchema).optional(),
         shell: deviceShellSchema.optional(),
+        // Its projects, once its client has said them (see `device.projects`).
+        projects: z.array(z.string()).optional(),
       }),
     ),
   }),

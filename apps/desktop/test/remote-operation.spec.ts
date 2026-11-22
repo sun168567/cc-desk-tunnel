@@ -67,3 +67,44 @@ test('another computer works on a session while its own is connected; both see t
   await expect(bar).toContainText('不在线');
   await context.close();
 });
+
+test('a session is started in, or moved to, a project of another connected computer', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  await page.goto('/');
+  await login(page);
+  const title = await createSession(page, '移到另一台');
+  // Sessions of earlier runs stay with their computers, which are gone; this project is new.
+  const name = `远程项目${Date.now()}`;
+  const path = `E:\\另一台\\${name}`;
+  // Another browser profile is another computer, with a project of its own.
+  const context = await browser.newContext({ baseURL });
+  const other = await context.newPage();
+  await other.goto('/');
+  await login(other);
+  await other.getByRole('button', { name: '添加项目', exact: true }).click();
+  await other.getByLabel('本机项目目录').fill(path);
+  await other.getByRole('button', { name: '添加', exact: true }).click();
+  // It is listed here with that project once it says it has it, sessions or not.
+  await page.getByRole('button', { name: '展开其他设备的会话', exact: true }).click();
+  const project = page.locator('.elsewhere-project').filter({ hasText: name });
+  await project.hover();
+  await project.getByRole('button', { name: /^新建会话 · / }).click();
+  // The new session is the other computer's, worked on from here.
+  await expect(page.locator('.elsewhere-bar')).toBeVisible();
+  const there = other.locator('.project-group').filter({ hasText: name }).locator('.session-row');
+  await expect(there).toHaveCount(1);
+  await page.screenshot({ path: resolve(screenshots, 'remote-new-session.png') });
+  // A session of this computer moves into that project.
+  const row = page.locator('.session-row').filter({ hasText: title });
+  await row.hover();
+  await row.getByRole('button', { name: '会话操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '移到项目…', exact: true }).click();
+  await page.screenshot({ path: resolve(screenshots, 'remote-move-menu.png') });
+  await page.getByRole('menuitemradio', { name, exact: true }).click();
+  await expect(there.filter({ hasText: title })).toBeVisible();
+  await expect(there).toHaveCount(2);
+  await context.close();
+});

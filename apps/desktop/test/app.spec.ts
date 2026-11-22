@@ -566,7 +566,12 @@ test('a session on another computer is listed apart, read, and taken over with a
   // This computer has projects, so the session comes back into one of them without a folder being asked for.
   await page.locator('.elsewhere-bar').getByRole('button', { name: '在本机继续…' }).click();
   const menu = page.getByRole('menu', { name: '会话所在的项目' });
-  await expect(menu).toContainText('这台电脑上的项目');
+  await expect(menu).toContainText('换了项目或电脑');
+  // The other computer's projects are there too, under its name, the session's own checked.
+  await expect(menu.getByRole('menuitemradio', { name: /接管目录/ })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
   const choice = menu.getByRole('menuitemradio', { name: /中文项目/ });
   await expect(choice).toHaveAttribute('aria-checked', 'false');
   await expect(menu.getByRole('menuitem', { name: '其他文件夹…' })).toBeVisible();

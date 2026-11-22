@@ -232,6 +232,8 @@ type Seat = {
   door?: Door;
   opening?: Promise<void>;
   away?: NodeJS.Timeout;
+  // The computer's projects, as its client last said them.
+  projects?: string[];
 };
 type Login = { process: NativeLogin; owner: Peer; url?: string };
 type CommandOf<T extends Command['type']> = Extract<Command, { type: T }>;
@@ -456,6 +458,23 @@ export function createProxyServer(options: ServerOptions) {
         send(peer, message);
     }
   }
+  // Where a session is made or moved to: the computer of the connection, or another of the user's that is
+  // connected, into one of the projects it said it has or holds sessions in.
+  function destination(peer: Peer, command: { deviceId?: string; projectPath: string }) {
+    if (!command.deviceId || command.deviceId === peer.device?.id) return deviceOf(peer);
+    const seat = seats.get(command.deviceId);
+    const device = seat && [...seat.peers].findLast((other) => other.device)?.device;
+    if (!device) throw new DomainError('device_offline', '那台电脑不在线。');
+    const key = pathKey(command.projectPath);
+    if (
+      !seat.projects?.some((path) => pathKey(path) === key) &&
+      !store
+        .list()
+        .some((other) => other.device?.id === device.id && pathKey(other.projectPath) === key)
+    )
+      throw new DomainError('unknown_project', '那台电脑上没有这个项目。');
+    return device;
+  }
   function deviceOf(peer: Peer) {
     if (!peer.device) throw new DomainError('device_unknown', '客户端没有报告设备标识。');
     return peer.device;
@@ -518,6 +537,7 @@ export function createProxyServer(options: ServerOptions) {
               ready: !options.tunnel || !!seat.door?.ready,
               shells,
               ...(shell ? { shell } : {}),
+              ...(seat.projects ? { projects: seat.projects } : {}),
             },
           ];
         }),
@@ -1683,6 +1703,12 @@ export function createProxyServer(options: ServerOptions) {
         store.prefer(deviceOf(peer).id, command.shell);
         announce();
         return undefined;
+      case 'device.projects': {
+        const seat = seats.get(deviceOf(peer).id);
+        if (seat) seat.projects = [...new Set(command.projects)];
+        announce();
+        return undefined;
+      }
       case 'instructions.get':
       case 'instructions.update': {
         if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有全局说明。');
@@ -1756,7 +1782,7 @@ export function createProxyServer(options: ServerOptions) {
           command.requestId,
           command.title,
           command.projectPath,
-          deviceOf(peer),
+          destination(peer, command),
         );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
@@ -1857,12 +1883,16 @@ export function createProxyServer(options: ServerOptions) {
           ),
         });
         break;
-      case 'session.move':
+      case 'session.move': {
+        const device = destination(peer, command);
+        if (session.activeRun && session.device?.id !== device.id)
+          throw new DomainError('run_active', '请先结束当前运行再把会话移到另一台电脑。');
         broadcast({
           type: 'session.updated',
-          session: store.move(command.sessionId, command.projectPath, deviceOf(peer)),
+          session: store.move(command.sessionId, command.projectPath, device),
         });
         break;
+      }
       case 'session.delete':
       case 'session.rename':
         await manageSession(command, session);
