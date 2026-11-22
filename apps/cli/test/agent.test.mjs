@@ -10,6 +10,7 @@ import { createProxyServer } from '../../server/src/server.ts';
 import { promptText, serveAcp } from '../src/acp.mjs';
 import { EXIT, Follow, findSession } from '../src/agent.mjs';
 import { Service } from '../src/connection.mjs';
+import { printing } from '../src/main.mjs';
 import {
   answer,
   approve,
@@ -395,4 +396,16 @@ test('a prompt is the text of its blocks: files referred to by address, embedded
     ]),
     '看看\n@file:///a.ts\n@file:///b.ts\n```\nx = 1\n```',
   );
+});
+
+test('with -p, -r takes the session it continues, as claude -p’s does; alone it still opens the list', () => {
+  assert.deepEqual(printing(['-p', '-r', 'abc', '继续']), ['-p', '--session', 'abc', '继续']);
+  assert.deepEqual(printing(['--resume', 'abc', '--print', 'x']), [
+    '--session',
+    'abc',
+    '--print',
+    'x',
+  ]);
+  assert.deepEqual(printing(['-r']), ['-r']);
+  assert.deepEqual(printing(['-r', '--all']), ['-r', '--all']);
 });

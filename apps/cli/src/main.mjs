@@ -759,7 +759,7 @@ function shared(service) {
 }
 
 // With -p, -r takes a session as claude -p's does, where alone it opens the list to choose from.
-function printing(argv) {
+export function printing(argv) {
   if (!argv.some((arg) => arg === '-p' || arg === '--print')) return argv;
   const args = [];
   for (let index = 0; index < argv.length; index++) {
@@ -880,9 +880,11 @@ export async function main(argv) {
   const config = new Config();
   let service;
   try {
-    if (command === 'help' && rest[0] === 'agents') return (say(AGENT_HELP), 0);
-    if (values.help || command === 'help') return (say(HELP), 0);
+    if (values.help) return (say(values.print ? AGENT_HELP : HELP), 0);
     if (values.version) return (process.stdout.write(`ccdt ${version}\n`), 0);
+    // With -p every word is the task, whatever command it happens to name.
+    if (values.print) return await agentCommand(config, values, command, rest);
+    if (command === 'help') return (say(rest[0] === 'agents' ? AGENT_HELP : HELP), 0);
     if (command === 'login') return (await login(config, values, rest[0]), 0);
     if (command === 'upgrade') return await (values.check ? check : upgrade)(config, values);
     if (command === 'config') return await configure(config, values, rest);
@@ -902,8 +904,7 @@ export async function main(argv) {
       process.exit(code);
     }
     if (command === 'acp') return await serveAcp(agentContext(config, values));
-    if (values.print || AGENT_COMMANDS[command])
-      return await agentCommand(config, values, command, rest);
+    if (AGENT_COMMANDS[command]) return await agentCommand(config, values, command, rest);
     if (command && !['new', 'open', 'sessions', 'usage'].includes(command))
       return (say(`没有这个命令：${command}\n\n${HELP}`), 2);
     // Listing sessions and usage runs no command on this computer.
