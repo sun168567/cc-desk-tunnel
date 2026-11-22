@@ -1243,3 +1243,70 @@ test('an upgrade is held back only by what is at work, and says what that is', (
   );
   assert.match(upgradeHeld([], true, true) ?? '', /有会话正在移动或修改，Claude 账号正在登录/);
 });
+
+test('a session is started on or moved to a project of another connected computer, and nowhere else', async (t) => {
+  const f = await fixture(t);
+  const laptop = { id: randomUUID(), name: '笔记本' };
+  const desk = await f.connect();
+  const away = await f.connect(laptop);
+  // The laptop says its projects, and every window is told them with the computer.
+  const said = await away.request({
+    type: 'device.projects',
+    projects: ['E:\\笔记本\\项目', 'E:\\笔记本\\项目'],
+  });
+  assert.ok(said.type === 'response' && said.ok);
+  const told = await desk.wait(
+    (message) =>
+      message.type === 'devices' &&
+      message.devices.some((item) => item.id === laptop.id && item.projects?.length),
+  );
+  assert.ok(told.type === 'devices');
+  assert.deepEqual(told.devices.find((item) => item.id === laptop.id)!.projects, [
+    'E:\\笔记本\\项目',
+  ]);
+  // Started from the desk, the session is the laptop's.
+  const made = await desk.request({
+    type: 'session.create',
+    title: '在笔记本上',
+    projectPath: 'e:\\笔记本\\项目',
+    deviceId: laptop.id,
+  });
+  assert.ok(made.type === 'response' && made.ok && made.sessionId);
+  const there = f.server.store.get(made.sessionId).session;
+  assert.deepEqual([there.device, there.projectPath], [laptop, 'e:\\笔记本\\项目']);
+  // Not in a folder it did not say.
+  const unknown = await desk.request({
+    type: 'session.create',
+    title: '别处',
+    projectPath: 'E:\\别处',
+    deviceId: laptop.id,
+  });
+  assert.ok(unknown.type === 'response' && !unknown.ok && unknown.code === 'unknown_project');
+  // A session of the desk moves there too.
+  const own = await desk.request({
+    type: 'session.create',
+    title: '本机',
+    projectPath: 'D:\\工作\\测试',
+  });
+  assert.ok(own.type === 'response' && own.sessionId);
+  const moved = await desk.request({
+    type: 'session.move',
+    sessionId: own.sessionId,
+    projectPath: 'E:\\笔记本\\项目',
+    deviceId: laptop.id,
+  });
+  assert.ok(moved.type === 'response' && moved.ok);
+  assert.deepEqual(f.server.store.get(own.sessionId).session.device, laptop);
+  // Not to a computer that is gone.
+  desk.forgetDevices();
+  away.send({ type: 'leave' });
+  away.socket.terminate();
+  await desk.wait((message) => message.type === 'devices' && message.devices.length === 1);
+  const gone = await desk.request({
+    type: 'session.create',
+    title: '不在了',
+    projectPath: 'E:\\笔记本\\项目',
+    deviceId: laptop.id,
+  });
+  assert.ok(gone.type === 'response' && !gone.ok && gone.code === 'device_offline');
+});

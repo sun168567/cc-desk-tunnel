@@ -62,6 +62,8 @@ export default function Sidebar({
   newSession,
   addProject,
   createInProject,
+  hereId,
+  createElsewhere,
   sessionMenu,
   projectMenu,
   footer,
@@ -76,6 +78,10 @@ export default function Sidebar({
   projects: string[];
   // Sessions whose directory lies under one of these belong to no project and are listed on their own.
   workspaceRoots: string[];
+  // This computer, which the other computers listed are not.
+  hereId?: string;
+  // Starts a session in a project of another computer that is connected; none where that cannot be done.
+  createElsewhere?: (deviceId: string, path: string) => void;
   connected: boolean;
   busy: boolean;
   refreshing: boolean;
@@ -139,6 +145,15 @@ export default function Sidebar({
   const others = useMemo(() => {
     const term = search.trim().toLowerCase();
     const groups = new Map<string, Elsewhere>();
+    // The projects another connected computer said it has, sessions or not.
+    for (const item of devices)
+      if (item.id !== hereId && !item.server && item.ready && item.projects?.length) {
+        const entry: Elsewhere = { name: item.name, online: true, projects: new Map(), plain: [] };
+        for (const path of item.projects)
+          if (!term || path.toLowerCase().includes(term))
+            entry.projects.set(pathKey(path), { path, sessions: [] });
+        if (entry.projects.size) groups.set(item.id, entry);
+      }
     for (const session of elsewhere) {
       if (!`${session.title} ${session.projectPath}`.toLowerCase().includes(term)) continue;
       // A session from before computers were told apart, whose folder is not on this one.
@@ -166,7 +181,7 @@ export default function Sidebar({
       entry.projects.set(key, project);
     }
     return [...groups.entries()];
-  }, [elsewhere, devices, search]);
+  }, [elsewhere, devices, search, hereId]);
   const othersCount = others.reduce(
     (count, [, device]) =>
       count +
@@ -410,7 +425,7 @@ export default function Sidebar({
         )}
         {plain.length > 0 && <div className="list-heading">最近</div>}
         {plain.map(renderSession)}
-        {othersCount > 0 && (
+        {others.length > 0 && (
           <section className="project-group">
             <h2 title="这些会话的项目目录在你的其他电脑上；那台电脑在线时可以直接在这里操作，也可以接到这台电脑上继续">
               {foldToggle({
@@ -463,6 +478,16 @@ export default function Sidebar({
                                 members: project.sessions,
                                 toggle: foldElsewhere(key),
                               })}
+                              {createElsewhere && device.online && (
+                                <IconButton
+                                  title={`新建会话 · ${device.name} · ${project.path}`}
+                                  className="row-action"
+                                  disabled={!connected || busy || refreshing}
+                                  onClick={() => createElsewhere(id, project.path)}
+                                >
+                                  <Plus />
+                                </IconButton>
+                              )}
                             </div>
                             {open(key) && renderSessions(key, project.sessions)}
                           </Fragment>

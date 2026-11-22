@@ -706,6 +706,11 @@ export function App({
     localStorage.setItem('proxy-projects', JSON.stringify(projects));
     saveShared('projects', projects);
   }, [projects]);
+  // This computer's projects, for the user's other computers to start or move sessions into.
+  useEffect(() => {
+    if (!connected || browser || !state.device) return;
+    void client.request({ type: 'device.projects', projects }).catch(() => {});
+  }, [projects, connected, state.connectionId]);
   useEffect(
     () =>
       onSharedChange('projects', (value) => {
@@ -976,6 +981,18 @@ export function App({
   async function createInProject(path: string) {
     await act(() => createSession(path));
   }
+  // A session in a project of another of the user's computers that is connected.
+  async function createElsewhere(deviceId: string, projectPath: string) {
+    await act(async () => {
+      const response = await client.request({
+        type: 'session.create',
+        title: '新会话',
+        projectPath,
+        deviceId,
+      });
+      if (response.sessionId) show(response.sessionId);
+    });
+  }
   async function addProject() {
     if (!window.desktop?.chooseProject) {
       setCreateOpen(true);
@@ -1198,8 +1215,8 @@ export function App({
         disabled: !connected,
         run: () => client.resync(session.id),
       },
-      // A session on another computer is taken over first, with a directory here.
-      ...(onThis(session)
+      // To a project here or of another connected computer; the browser keeps no projects.
+      ...(!browser
         ? [
             {
               label: '移到项目…',
@@ -1327,6 +1344,35 @@ export function App({
             });
         },
       })),
+      // The projects of the user's other computers that are connected, under each computer's name.
+      ...state.devices
+        .filter(
+          (device) =>
+            device.id !== state.device?.id && !device.server && device.ready && device.projects,
+        )
+        .flatMap((device) =>
+          device.projects!.map((path, index) => ({
+            label: folderName(path),
+            detail: `${device.name} · ${path}`,
+            separated: index === 0,
+            checked:
+              session.device?.id === device.id && pathKey(path) === pathKey(session.projectPath),
+            run: () => {
+              if (
+                session.device?.id !== device.id ||
+                pathKey(path) !== pathKey(session.projectPath)
+              )
+                void act(async () => {
+                  await client.request({
+                    type: 'session.move',
+                    sessionId: session.id,
+                    projectPath: path,
+                    deviceId: device.id,
+                  });
+                });
+            },
+          })),
+        ),
       // A folder that is no project yet becomes one with the move.
       {
         label: '其他文件夹…',
@@ -1608,7 +1654,6 @@ export function App({
     menu?.kind === 'session' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
   const moved =
     menu?.kind === 'move' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
-  const menuAway = !!moved && !onThis(moved);
   const openMenu =
     !menu || (menu.kind === 'session' && !menuSession)
       ? null
@@ -1619,9 +1664,7 @@ export function App({
           : menu.kind === 'move'
             ? {
                 label: '会话所在的项目',
-                heading: menuAway
-                  ? '选这个会话在这台电脑上的项目；下一条消息会告诉 Claude 换了电脑'
-                  : '把会话移到另一个项目；下一条消息会告诉 Claude，聊过的会话仍沿用原项目的记忆',
+                heading: '下一条消息会告诉 Claude 换了项目或电脑；聊过的会话仍沿用原项目的记忆',
                 items: moved ? moveMenu(moved) : [],
               }
             : menu.kind === 'settings'
@@ -1774,6 +1817,14 @@ export function App({
             createInProject={(path) => {
               void createInProject(path);
             }}
+            hereId={state.device?.id}
+            createElsewhere={
+              browser
+                ? undefined
+                : (deviceId, path) => {
+                    void createElsewhere(deviceId, path);
+                  }
+            }
             sessionMenu={(session, position) =>
               setMenu({ kind: 'session', sessionId: session.id, ...position })
             }
