@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   Door,
+  deviceHosts,
   probeOutput,
   shellCommand,
   shellsOf,
   sshConfig,
   sessionSsh,
   Tunnel,
+  writeDevices,
 } from '../src/tunnel.ts';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -127,6 +129,11 @@ test('context names the hosts of the device as plain SSH aliases without inventi
   assert.doesNotMatch(prompt, /EncodedCommand|CC_DESK_TUNNEL_PWSH|ReadToEnd|ssh -F|ssh_config/);
   assert.doesNotMatch(prompt, /device-bash|Git Bash|device-script/);
   assert.match(prompt, /The host device runs a command line as it is/);
+  // The user's other computers are found by a command when they are asked about; none is named here.
+  assert.match(
+    prompt,
+    /device always means this session's own computer\. Only when the user refers to another of their computers, run devices:/,
+  );
   // The path given for scp is the project's own: an example on another drive was taken for the drive to use.
   assert.match(
     prompt,
@@ -217,7 +224,7 @@ test('a session reaches its device by ssh, scp and sftp of its own, and every ot
   assert.equal(ssh.configPath, join(directory, 'session-ssh', session, 'config'));
   assert.equal(
     readFileSync(ssh.configPath, 'utf8'),
-    `Include ${JSON.stringify(door)}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
+    `Include ${JSON.stringify(door)}\nInclude ${JSON.stringify(join(directory, 'devices', 'hosts'))}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
   );
   for (const name of ['ssh', 'scp', 'sftp'])
     assert.match(
@@ -246,6 +253,103 @@ test('a session reaches its device by ssh, scp and sftp of its own, and every ot
   assert.match(resolved('device'), /^port 32123$/m);
   assert.match(resolved('example.com'), /^hostname example\.com$/m);
   assert.doesNotMatch(resolved('example.com'), /^port 32123$/m);
+  // With none of the user's computers listed yet the session still reaches its own, and `devices` says so.
+  const devices = () => execFileSync(join(ssh.bin!, 'devices'), { encoding: 'utf8' });
+  assert.equal(devices(), "None of the user's computers is online.\n");
+});
+test("the user's computers online are hosts of every session, each by a name of its own", (t) => {
+  // A name gives the host name; a name with nothing to give, one taken already, or one a shell would end, the
+  // start of the computer's ID.
+  const hosts = deviceHosts([
+    { id: 'b2000000-0000-4000-8000-000000000000', name: 'MacBook Pro' },
+    { id: 'a1000000-0000-4000-8000-000000000000', name: '工作站' },
+    { id: 'c3000000-0000-4000-8000-000000000000', name: 'macbook pro!' },
+    { id: 'd4000000-0000-4000-8000-000000000000', name: 'pwsh' },
+    { id: 'e5000000-0000-4000-8000-000000000000', name: 'build-zsh' },
+  ]);
+  assert.deepEqual(Object.fromEntries(hosts), {
+    'b2000000-0000-4000-8000-000000000000': 'device-macbook-pro',
+    'a1000000-0000-4000-8000-000000000000': 'device-a10000',
+    'c3000000-0000-4000-8000-000000000000': 'device-macbook-pro-c30000',
+    'd4000000-0000-4000-8000-000000000000': 'device-pwsh-d40000',
+    'e5000000-0000-4000-8000-000000000000': 'device-build-zsh-e50000',
+  });
+
+  const directory = mkdtempSync(join(tmpdir(), 'claude-devices-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const door = (port: number, platform: 'win32' | 'darwin', shells: ('pwsh' | 'bash' | 'zsh')[]) =>
+    ({
+      hosts: (name: string) => ({
+        config: sshConfig(
+          join(directory, 'devices', String(port)),
+          port,
+          'me',
+          'ssh-ed25519 AAAA',
+          process.platform,
+          75,
+          platform,
+          shells,
+          name,
+        ).config,
+        shells,
+      }),
+    }) as unknown as Door;
+  const mine = 'a1000000-0000-4000-8000-000000000000';
+  writeDevices(directory, [
+    {
+      id: mine,
+      name: '工作站',
+      platform: 'win32',
+      ready: true,
+      door: door(32001, 'win32', ['pwsh', 'bash']),
+    },
+    {
+      id: 'b2000000-0000-4000-8000-000000000000',
+      name: 'MacBook\t"Pro"',
+      platform: 'darwin',
+      ready: false,
+      door: door(32002, 'darwin', ['zsh']),
+    },
+    // Not ready before: no configuration yet, so not listed.
+    {
+      id: 'c3000000-0000-4000-8000-000000000000',
+      name: 'new',
+      platform: 'win32',
+      ready: false,
+      door: { hosts: () => undefined } as unknown as Door,
+    },
+  ]);
+  assert.equal(
+    readFileSync(join(directory, 'devices', 'list'), 'utf8'),
+    `${mine}\tWindows\t工作站\tready\tdevice-a10000 device-a10000-pwsh device-a10000-bash\n` +
+      'b2000000-0000-4000-8000-000000000000\tmacOS\tMacBook Pro \taway\tdevice-macbook-pro device-macbook-pro-zsh\n',
+  );
+  const config = readFileSync(join(directory, 'devices', 'hosts'), 'utf8');
+  assert.match(config, /^Host device-a10000 device-a10000-pwsh device-a10000-bash$/m);
+  assert.match(config, /^Host device-macbook-pro device-macbook-pro-zsh$/m);
+  if (process.platform === 'win32') return;
+  // A session reaches them by those names alongside its own device, and `devices` tells which is which.
+  const ssh = sessionSsh(
+    directory,
+    randomUUID(),
+    { configPath: join(directory, 'devices', '32001', 'ssh_config') },
+    mine,
+  );
+  const resolved = (host: string) =>
+    execFileSync(join(ssh.bin!, 'ssh'), ['-G', host], { encoding: 'utf8' });
+  assert.match(resolved('device-macbook-pro-zsh'), /^port 32002$/m);
+  assert.match(resolved('device-a10000-bash'), /^port 32001$/m);
+  assert.match(
+    resolved('device-macbook-pro-zsh'),
+    /^remotecommand exec "\$CC_DESK_TUNNEL_SHELL" -s$/m,
+  );
+  assert.equal(
+    execFileSync(join(ssh.bin!, 'devices'), { encoding: 'utf8' }),
+    'Windows "工作站", this session\'s own computer, also reached as device\n' +
+      '  hosts: device-a10000 device-a10000-pwsh device-a10000-bash\n' +
+      'macOS "MacBook Pro ", reconnecting: a command waits up to a minute for it\n' +
+      '  hosts: device-macbook-pro device-macbook-pro-zsh\n',
+  );
 });
 test('the tunnel offers a secret of its own and compares it without leaking its length', async (t) => {
   const first = await harness(t);

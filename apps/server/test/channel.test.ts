@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { connect } from 'node:net';
 import type { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -302,8 +302,30 @@ test('two devices are online at once, each with an execution channel of its own'
     await f.closeCode(await first.attach(open.channelId, first.secret, second.connectionId)),
     TUNNEL_CLOSE.refused,
   );
-  // One leaving takes nothing from the other.
+  // Sessions reach either by a host name of its own, the start of its ID where its name has none to give.
+  const list = join(f.directory, 'devices', 'list');
+  const lines = async (count: number) => {
+    for (let attempt = 0; attempt < 600; attempt++) {
+      const text = existsSync(list) ? readFileSync(list, 'utf8') : '';
+      if (text.split('\n').filter(Boolean).length === count) return text;
+      await delay(5);
+    }
+    throw new Error(`devices/list: ${readFileSync(list, 'utf8')}`);
+  };
+  const both = await lines(2);
+  assert.match(
+    both,
+    /^[0-9a-f-]{36}\tWindows\t测试\tready\tdevice-[0-9a-f]{6} device-[0-9a-f]{6}-pwsh device-[0-9a-f]{6}-bash$/m,
+  );
+  // Each by its door, which keeps its port through reconnects.
+  const doors = () =>
+    readFileSync(join(f.directory, 'devices', 'hosts'), 'utf8').match(/^Host device-[0-9a-f]{6} /gm)
+      ?.length ?? 0;
+  assert.equal(doors(), 2);
+  // One leaving takes nothing from the other, and is no longer reached.
   second.control.close();
+  await lines(1);
+  assert.equal(doors(), 1);
   first.ssh();
   assert.equal((await first.next('tunnel.open')).connectionId, first.connectionId);
 });

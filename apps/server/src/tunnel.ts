@@ -41,7 +41,15 @@ const CLOSING_MS = 10_000;
 export function sessionSshPath(dataDir: string, sessionId: string) {
   return join(dataDir, 'session-ssh', sessionId);
 }
-export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnection): SshConnection {
+//
+// The user's other computers online are there too, by the host names `devices` lists (see `writeDevices`): the
+// script names the session's own computer among them.
+export function sessionSsh(
+  dataDir: string,
+  sessionId: string,
+  ssh: SshConnection,
+  device?: string,
+): SshConnection {
   const directory = sessionSshPath(dataDir, sessionId);
   const bin = join(directory, 'bin');
   const configPath = join(directory, 'config');
@@ -55,9 +63,10 @@ export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnectio
   };
   write(
     configPath,
-    `Include ${JSON.stringify(ssh.configPath)}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
+    `Include ${JSON.stringify(ssh.configPath)}\nInclude ${JSON.stringify(join(dataDir, 'devices', 'hosts'))}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
     0o600,
   );
+  write(join(bin, 'devices'), devicesScript(join(dataDir, 'devices', 'list'), device), 0o700);
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   for (const name of ['ssh', 'scp', 'sftp'])
     write(
@@ -67,6 +76,87 @@ export function sessionSsh(dataDir: string, sessionId: string, ssh: SshConnectio
     );
   return { configPath, bin };
 }
+// Lists the user's computers online for the session's CLI, from the list `writeDevices` keeps.
+function devicesScript(list: string, device = '') {
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const program = [
+    'BEGIN { FS = "\\t" }',
+    '{ n++; mark = $1 == me ? ", this session\'s own computer, also reached as device" : ""',
+    '  state = $4 == "ready" ? "" : ", reconnecting: a command waits up to a minute for it"',
+    '  print $2 " \\"" $3 "\\"" mark state "\\n  hosts: " $5 }',
+    'END { if (!n) print "None of the user\'s computers is online." }',
+  ].join('\n');
+  return `#!/bin/sh\n# The user's computers online now and the host names that reach each, used as device's are.\ncat ${quote(list)} 2>/dev/null | awk -v me=${quote(device)} ${quote(program)}\n`;
+}
+
+// The host names of the user's computers online: `device-<its name>`, and that with each of its shells after it, as
+// `device` has. Where its name gives nothing to make one of, or it would be taken already, by `device` and its
+// shells' or by another computer's, the start of the computer's ID tells it apart.
+const SHELL_NAMES = ['pwsh', 'bash', 'zsh'];
+export function deviceHosts(devices: { id: string; name: string }[]) {
+  const taken = new Set(['device', ...SHELL_NAMES.map((shell) => `device-${shell}`)]);
+  const all = (name: string) => [name, ...SHELL_NAMES.map((shell) => `${name}-${shell}`)];
+  const hosts = new Map<string, string>();
+  for (const device of [...devices].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    const slug = device.name
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 24)
+      .replace(/^-+|-+$/g, '');
+    const tail = device.id.replaceAll('-', '').slice(0, 6);
+    let name = `device-${slug || tail}`;
+    if (
+      all(name).some((host) => taken.has(host)) ||
+      SHELL_NAMES.some((shell) => name.endsWith(`-${shell}`))
+    )
+      name = `device-${slug ? `${slug}-` : ''}${tail}`;
+    for (const host of all(name)) taken.add(host);
+    hosts.set(device.id, name);
+  }
+  return hosts;
+}
+export type OnlineDevice = {
+  id: string;
+  name: string;
+  platform: DevicePlatform;
+  ready: boolean;
+  door: Door;
+};
+// What every session's `ssh` and `devices` read of the user's computers online: `hosts`, the configuration that
+// reaches each by its door under the names of `deviceHosts`, and `list`, a line for each. Rewritten whenever one
+// comes, goes or changes, so that neither a session's configuration nor its prompt changes with them.
+export function writeDevices(dataDir: string, devices: OnlineDevice[]) {
+  const directory = join(dataDir, 'devices');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const names = deviceHosts(devices);
+  const config: string[] = [];
+  const list: string[] = [];
+  const system = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' };
+  for (const device of devices) {
+    const name = names.get(device.id)!;
+    const hosts = device.door.hosts(name);
+    if (!hosts) continue;
+    config.push(hosts.config);
+    list.push(
+      [
+        device.id,
+        system[device.platform],
+        device.name.replace(/[\t\r\n"]+/g, ' '),
+        device.ready ? 'ready' : 'away',
+        [name, ...hosts.shells.map((shell) => `${name}-${shell}`)].join(' '),
+      ].join('\t'),
+    );
+  }
+  const write = (file: string, text: string) => {
+    const next = join(directory, `${file}.${randomBytes(6).toString('hex')}`);
+    writeFileSync(next, text, { mode: 0o600 });
+    renameSync(next, join(directory, file));
+  };
+  write('hosts', config.join(''));
+  write('list', list.map((line) => `${line}\n`).join(''));
+}
+
 // The program on this service's PATH, which a session's own come before.
 export function program(name: string) {
   for (const directory of (process.env.PATH ?? '').split(delimiter))
@@ -166,6 +256,8 @@ export function sshConfig(
   // The system of the device and its shells, which decide what its scripts are run by.
   device: DevicePlatform = 'win32',
   shells: DeviceShell[] = [systemShell(device)],
+  // The host name of the device, its shells' being this with theirs after it.
+  name = 'device',
 ) {
   if (directory.includes('\n') || directory.includes('"'))
     throw new Error('Unsupported data directory');
@@ -176,11 +268,11 @@ export function sshConfig(
       // The same computer under a name for each of its shells, which takes a script in that shell instead of a
       // command. `ssh` reads % in this option as its own, so the device's variables are written with two.
       ...shells.flatMap((shell) => [
-        `Host device-${shell}`,
+        `Host ${name}-${shell}`,
         `  RemoteCommand ${shellCommand(device, shell).replaceAll('%', '%%')}`,
         '  RequestTTY no',
       ]),
-      `Host device ${shells.map((shell) => `device-${shell}`).join(' ')}`,
+      `Host ${name} ${shells.map((shell) => `${name}-${shell}`).join(' ')}`,
       '  HostName 127.0.0.1',
       `  Port ${port}`,
       `  User ${JSON.stringify(username)}`,
@@ -390,6 +482,13 @@ export class Door {
   private holdMs: number;
   private listener?: Server;
   private tunnel?: Tunnel;
+  // What the configuration was last written with, for `hosts`.
+  private reach?: {
+    username: string;
+    hostPublicKey: string;
+    platform: DevicePlatform;
+    shells: DeviceShell[];
+  };
   private held = new Map<Socket, NodeJS.Timeout>();
   private closed = false;
   constructor(options: TunnelOptions, dataDir: string, device: string) {
@@ -433,6 +532,7 @@ export class Door {
     this.tunnel = tunnel;
     if (!tunnel?.credentials) return;
     const { username, hostPublicKey, privateKey } = tunnel.credentials;
+    this.reach = { username, hostPublicKey, platform: tunnel.platform, shells: tunnel.shells };
     const files = sshConfig(
       this.directory,
       this.port,
@@ -457,6 +557,24 @@ export class Door {
       this.held.delete(socket);
       tunnel.carry(socket);
     }
+  }
+  // The configuration that reaches the device by this door under another host name, for the sessions of the
+  // user's other computers; none before it was first ready.
+  hosts(name: string) {
+    if (!this.reach || this.closed) return undefined;
+    const { username, hostPublicKey, platform, shells } = this.reach;
+    const files = sshConfig(
+      this.directory,
+      this.port,
+      username,
+      hostPublicKey,
+      process.platform,
+      Math.ceil(this.holdMs / 1000) + 15,
+      platform,
+      shells,
+      name,
+    );
+    return { config: files.config, shells };
   }
   uses(tunnel: Tunnel | undefined) {
     return this.tunnel === tunnel;
