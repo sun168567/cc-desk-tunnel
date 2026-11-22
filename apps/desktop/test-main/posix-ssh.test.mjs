@@ -436,9 +436,10 @@ test(
       for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL');
     });
     // Each leaves a program in a session of its own that keeps the command's output open: the command has exited,
-    // its channel stays open as with OpenSSH. A connection may run 32 commands at a time.
+    // its channel stays open as with OpenSSH. A connection may run 32 commands at a time. The command waits until
+    // the program has left its process group, which is stopped as soon as the command exits.
     const leave =
-      'python3 -c "import os, time; os.setsid(); print(os.getpid(), flush=True); time.sleep(60)" & exit 0';
+      'm=$(mktemp -u); python3 -c "import os, sys, time; os.setsid(); open(sys.argv[1], \'w\').close(); print(os.getpid(), flush=True); time.sleep(60)" "$m" & while [ ! -e "$m" ]; do sleep 0.05; done; rm -f "$m"; exit 0';
     await Promise.all(
       Array.from(
         { length: 32 },
