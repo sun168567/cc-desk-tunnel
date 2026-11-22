@@ -68,7 +68,7 @@ test('message dates, selection menu, code copy and conversation find work togeth
     return { x: box.x + 5, y: box.y + box.height / 2 };
   });
   await page.mouse.click(selectionPoint.x, selectionPoint.y, { button: 'right' });
-  await page.getByRole('menuitem', { name: '复制选中文字', exact: true }).click();
+  await page.getByRole('menuitem', { name: '复制', exact: true }).click();
   expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toBe(
     '阅读唯一词',
   );

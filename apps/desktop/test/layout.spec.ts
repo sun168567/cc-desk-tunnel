@@ -38,7 +38,7 @@ test('a menu longer than the window scrolls inside it', async ({ page }) => {
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(420);
   expect(await menu.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
-  const last = page.getByRole('menuitem', { name: '选择其他文件夹…', exact: true });
+  const last = page.getByRole('menuitem', { name: '其他文件夹…', exact: true });
   await last.scrollIntoViewIfNeeded();
   await expect(last).toBeInViewport();
 });
@@ -77,7 +77,7 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
   await row.getByRole('button', { name: '会话操作', exact: true }).click();
   await shot(page, '03-会话菜单');
   const download = page.waitForEvent('download');
-  await page.getByRole('menuitem', { name: '导出为 Markdown', exact: true }).click();
+  await page.getByRole('menuitem', { name: '导出 Markdown', exact: true }).click();
   const file = await download;
   expect(file.suggestedFilename()).toBe(`${title}.md`);
   const text = readFileSync(await file.path(), 'utf8');
@@ -292,7 +292,7 @@ test('a question is answered with its choices, and a session or a whole project 
   const row = page.locator('.session-row.selected');
   await row.hover();
   await row.getByRole('button', { name: '会话操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '移到其他项目…', exact: true }).click();
+  await page.getByRole('menuitem', { name: '移到项目…', exact: true }).click();
   await expect(page.getByRole('menu', { name: '会话所在的项目', exact: true })).toBeVisible();
   await page.getByRole('menuitemradio', { name: '另一个项目', exact: true }).click();
   await expect(chip).toContainText('另一个项目');
@@ -302,7 +302,7 @@ test('a question is answered with its choices, and a session or a whole project 
   // A folder that is no project yet is chosen in the same menu, and becomes one.
   await chip.click();
   page.once('dialog', (dialog) => void dialog.accept('F:\\全新\\没加过的文件夹'));
-  await page.getByRole('menuitem', { name: '选择其他文件夹…', exact: true }).click();
+  await page.getByRole('menuitem', { name: '其他文件夹…', exact: true }).click();
   await expect(chip).toContainText('没加过的文件夹');
   await expect(page.locator('.project-group').filter({ hasText: '没加过的文件夹' })).toHaveCount(1);
   await chip.click();

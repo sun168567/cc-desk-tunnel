@@ -170,10 +170,10 @@ test('links are followed by the conversation and pictures from the web are not f
   await expect(menu).toContainText('在浏览器里打不开电脑上的文件');
   await expect(menu.getByRole('menuitem')).toHaveText([
     '复制路径',
-    '复制选中文字',
-    '复制整条消息',
-    '全选对话文字',
-    '查找对话内容',
+    '复制',
+    '复制消息',
+    '全选',
+    '查找',
   ]);
   await page.keyboard.press('Escape');
 });

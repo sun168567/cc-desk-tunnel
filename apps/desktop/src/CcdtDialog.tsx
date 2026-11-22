@@ -30,7 +30,7 @@ export function CcdtDialog({
         <p>
           {installed
             ? `这台电脑上的 ccdt 是 ${installed}，要与服务端同为 ${version} 才能连接。`
-            : '在 ccdt 中打开需要先安装终端客户端 ccdt：在自己的终端里使用原版 Claude Code，与这里共用会话。'}
+            : '用 ccdt 打开需要先安装终端客户端 ccdt：在自己的终端里使用原版 Claude Code，与这里共用会话。'}
         </p>
         <p className="muted">
           在{platform === 'win32' ? ' PowerShell ' : '终端'}里运行下面这行，装好后再选一次“在 ccdt

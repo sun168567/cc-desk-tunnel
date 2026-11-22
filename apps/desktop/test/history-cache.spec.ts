@@ -125,7 +125,7 @@ test('history read before shows from disk, the service sends only what came sinc
 
     // One session read again from the service.
     sent = [];
-    await sessionAction(page, '重新同步记录');
+    await sessionAction(page, '重新同步');
     await expect.poll(() => asked('session.subscribe').at(-1)?.afterSequence).toBe(0);
     await expect(page.getByText('缓存问题3', { exact: true })).toBeVisible();
     await readBack(page);

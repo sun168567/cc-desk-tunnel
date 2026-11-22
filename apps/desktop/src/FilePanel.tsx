@@ -475,7 +475,7 @@ export default function FilePanel({
                 run: () => void window.desktop!.actOnPath('reveal', path),
               },
             ]
-          : [{ label: '下载到本机…', icon: <Download />, run: () => void download([path]) }]),
+          : [{ label: '下载…', icon: <Download />, run: () => void download([path]) }]),
         {
           label: '复制',
           icon: <Copy />,
@@ -485,7 +485,7 @@ export default function FilePanel({
         ...(clipboard && directory
           ? [
               {
-                label: '粘贴到这里',
+                label: '粘贴',
                 icon: <ClipboardPaste />,
                 run: () => void copy(clipboard, { place, dir: into }),
               },
@@ -493,7 +493,7 @@ export default function FilePanel({
           : []),
         { label: '复制路径', icon: <Copy />, run: () => void copyText(path) },
         {
-          label: '上传文件到这里…',
+          label: '上传…',
           icon: <Upload />,
           separated: true,
           run: () => void upload(into),
@@ -513,13 +513,13 @@ export default function FilePanel({
         ...(clipboard
           ? [
               {
-                label: '粘贴到这里',
+                label: '粘贴',
                 icon: <ClipboardPaste />,
                 run: () => void copy(clipboard, { place, dir: directory }),
               },
             ]
           : []),
-        { label: '上传文件到这里…', icon: <Upload />, run: () => void upload(directory) },
+        { label: '上传…', icon: <Upload />, run: () => void upload(directory) },
         { label: '新建文件夹', icon: <FolderPlus />, run: () => void makeFolder(directory) },
         { label: '刷新', icon: <RefreshCw />, run: refresh },
       ],

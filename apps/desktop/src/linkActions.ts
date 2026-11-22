@@ -20,11 +20,6 @@ export async function followLink(link: Link, tell: Tell) {
   }
 }
 
-const fileManager = () =>
-  ({ win32: '资源管理器', darwin: '访达', linux: '文件管理器' })[
-    window.desktop?.platform ?? 'win32'
-  ];
-
 export async function linkMenu(
   link: Link,
   tell: Tell,
@@ -34,7 +29,7 @@ export async function linkMenu(
     return {
       items: [
         { label: '打开链接', run: () => void followLink(link, tell) },
-        { label: '复制链接地址', run: () => copy(link.url) },
+        { label: '复制链接', run: () => copy(link.url) },
       ],
     };
   const copyPath: MenuItem = { label: '复制路径', run: () => copy(link.path) };
@@ -48,7 +43,7 @@ export async function linkMenu(
         (said) => said && tell(said),
         () => tell('操作失败，请重试。'),
       );
-  const reveal: MenuItem = { label: `在${fileManager()}中显示`, run: act('reveal') };
+  const reveal: MenuItem = { label: '在文件夹中显示', run: act('reveal') };
   if (info.kind === 'missing') return { heading: '本机找不到这个路径', items: [copyPath] };
   if (info.kind === 'directory')
     return {
@@ -60,11 +55,11 @@ export async function linkMenu(
   const items: MenuItem[] = [
     ...(info.runs ? [] : [{ label: '打开', run: act('open') }]),
     ...info.editors.map((editor) => ({
-      label: `在 ${editor.name} 中打开${at}`,
+      label: `用 ${editor.name} 打开${at}`,
       run: act('editor', editor.scheme),
     })),
     ...(!info.runs && link.line && info.editors.length
-      ? [{ label: '在默认应用中打开', run: act('default') }]
+      ? [{ label: '用默认应用打开', run: act('default') }]
       : []),
     ...(!info.runs && info.openWith ? [{ label: '打开方式…', run: act('with') }] : []),
   ];
@@ -74,7 +69,7 @@ export async function linkMenu(
       ...items,
       { ...reveal, separated: items.length > 0 },
       copyPath,
-      { label: '复制文件内容', run: act('content') },
+      { label: '复制内容', run: act('content') },
       { label: '另存为…', run: act('save') },
     ],
   };

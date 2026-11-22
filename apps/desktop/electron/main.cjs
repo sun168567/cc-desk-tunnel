@@ -1197,9 +1197,15 @@ function createWindow(partition, { width, height, shown }) {
   window.on('page-title-updated', (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   // Electron does not provide an editing menu by default. Native roles keep text selection, undo and paste
-  // in the focused input, without exposing clipboard reads to the renderer.
+  // in the focused input, without exposing clipboard reads to the renderer. Elsewhere selected text gets the
+  // copy a browser offers, as where a long press by finger is left to the system; the page's own menus
+  // cancel the event, and then none is shown here.
   window.webContents.on('context-menu', (_event, params) => {
-    if (!params.isEditable) return;
+    if (!params.isEditable) {
+      if (params.selectionText)
+        Menu.buildFromTemplate([{ role: 'copy', label: '复制' }]).popup({ window });
+      return;
+    }
     Menu.buildFromTemplate([
       { role: 'undo', label: '撤销', enabled: params.editFlags.canUndo },
       { role: 'redo', label: '重做', enabled: params.editFlags.canRedo },
