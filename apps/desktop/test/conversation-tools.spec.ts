@@ -14,6 +14,29 @@ import {
   screenshots,
 } from './helpers.ts';
 
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test('a long press keeps the system selection and copy menu', async ({ page }) => {
+    await page.goto('/');
+    await login(page);
+    await createSession(page, '长按复制');
+    await send(page, '长按这一段文字');
+    await settled(page);
+    const text = page.locator('.message.user .message-content p');
+    await text.tap();
+    expect(
+      await text.evaluate(
+        (element) =>
+          !element.dispatchEvent(
+            new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+          ),
+      ),
+    ).toBe(false);
+    await expect(page.getByRole('menu', { name: '对话文字操作' })).toHaveCount(0);
+  });
+});
+
 test('message dates, selection menu, code copy and conversation find work together', async ({
   page,
 }) => {
@@ -45,7 +68,7 @@ test('message dates, selection menu, code copy and conversation find work togeth
     return { x: box.x + 5, y: box.y + box.height / 2 };
   });
   await page.mouse.click(selectionPoint.x, selectionPoint.y, { button: 'right' });
-  await page.getByRole('menuitem', { name: '复制选中文字', exact: true }).click();
+  await page.getByRole('menuitem', { name: '复制', exact: true }).click();
   expect(await page.evaluate(() => (window as unknown as { copied: string }).copied)).toBe(
     '阅读唯一词',
   );

@@ -96,7 +96,7 @@ test('a session opens in ccdt signed in as the window is, or the window says how
     const row = page.locator('.session-row').filter({ hasText: session.title });
     const open = async () => {
       await row.click({ button: 'right' });
-      await page.getByRole('menuitem', { name: '在 ccdt 中打开', exact: true }).click();
+      await page.getByRole('menuitem', { name: '用 ccdt 打开', exact: true }).click();
     };
     const dialog = page.getByRole('dialog');
 

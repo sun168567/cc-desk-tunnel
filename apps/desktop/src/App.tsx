@@ -51,7 +51,7 @@ import { ProxyClient, RequestInterruptedError } from './client.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { isHere, thisDevice } from './device.ts';
-import { isMac, selfUpdating } from './platform.ts';
+import { selfUpdating } from './platform.ts';
 import { useDrafts } from './drafts.ts';
 import { useDrawerSwipe } from './useDrawerSwipe.ts';
 import { useWebNavigation } from './useWebNavigation.ts';
@@ -1173,7 +1173,7 @@ export function App({
       ...(host.localProjects
         ? [
             {
-              label: '分叉会话',
+              label: '分叉',
               icon: <GitFork />,
               disabled: !idle || !!session.activeRun,
               run: () => {
@@ -1183,7 +1183,7 @@ export function App({
           ]
         : []),
       {
-        label: '导出为 Markdown',
+        label: '导出 Markdown',
         icon: <FileDown />,
         disabled: !connected,
         run: () => {
@@ -1193,7 +1193,7 @@ export function App({
         },
       },
       {
-        label: '重新同步记录',
+        label: '重新同步',
         icon: <RefreshCw />,
         disabled: !connected,
         run: () => client.resync(session.id),
@@ -1202,7 +1202,7 @@ export function App({
       ...(onThis(session)
         ? [
             {
-              label: '移到其他项目…',
+              label: '移到项目…',
               icon: <FolderSymlink />,
               disabled: !idle || !!session.activeRun,
               run: () => {
@@ -1214,7 +1214,7 @@ export function App({
       ...(nativeMode && host.terminalClient
         ? [
             {
-              label: '在 ccdt 中打开',
+              label: '用 ccdt 打开',
               icon: <SquareTerminal />,
               // ccdt takes over a terminal of its own left on the session; a chat run has to end first.
               disabled: !idle || (!!session.activeRun && session.activeRun.surface !== 'terminal'),
@@ -1284,7 +1284,7 @@ export function App({
       ...(window.desktop
         ? [
             {
-              label: isMac ? '在访达中打开' : '在资源管理器中打开',
+              label: '打开文件夹',
               icon: <FolderOpen />,
               separated: true,
               run: () => {
@@ -1329,7 +1329,7 @@ export function App({
       })),
       // A folder that is no project yet becomes one with the move.
       {
-        label: '选择其他文件夹…',
+        label: '其他文件夹…',
         icon: <FolderOpen />,
         separated: true,
         run: () => {
@@ -1462,7 +1462,7 @@ export function App({
             ]
           : []),
         {
-          label: '导出当前会话…',
+          label: '导出会话…',
           disabled: !selected || !connected,
           separated: true,
           run: () => {
@@ -1479,7 +1479,7 @@ export function App({
       label: '视图',
       items: [
         {
-          label: '查找对话内容',
+          label: '查找',
           hint: hint('find'),
           disabled: !selected || place.page !== 'chat',
           run: () => setFindRequest((value) => value + 1),
@@ -1524,7 +1524,7 @@ export function App({
           run: () => open('settings', 'shortcuts'),
         },
         ...(project.url ? [{ label: '项目主页', separated: true, run: openProject }] : []),
-        { label: '检查更新与版本信息', run: () => open('settings', 'about') },
+        { label: '检查更新', run: () => open('settings', 'about') },
       ],
     },
   ];

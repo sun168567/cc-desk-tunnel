@@ -356,7 +356,7 @@ test('a session forks whole, and an earlier message is edited in a fork that lea
   await page.getByRole('button', { name: '发送消息', exact: true }).click();
   await settled(page);
   await expect(questions).toHaveText(['第一问', '改过的第二问']);
-  await sessionAction(page, '分叉会话');
+  await sessionAction(page, '分叉');
   await expect(page.locator('.session-row.selected strong')).toHaveText(`${title}（分叉）（分叉）`);
   await expect(questions).toHaveText(['第一问', '改过的第二问']);
   await expect(box).toHaveValue('');
@@ -548,7 +548,7 @@ test('a session on another computer is listed apart, read, and taken over with a
   other.once('dialog', (dialog) => void dialog.accept('E:\\另一台\\接管目录'));
   await bar.getByRole('button', { name: '在本机继续…', exact: true }).click();
   // A computer that already has projects offers them first; the folder is then chosen from that list.
-  const elsewhere = other.getByRole('menuitem', { name: '选择其他文件夹…', exact: true });
+  const elsewhere = other.getByRole('menuitem', { name: '其他文件夹…', exact: true });
   if (await elsewhere.isVisible()) await elsewhere.click();
   await expect(bar).toHaveCount(0);
   await expect(
@@ -569,7 +569,7 @@ test('a session on another computer is listed apart, read, and taken over with a
   await expect(menu).toContainText('这台电脑上的项目');
   const choice = menu.getByRole('menuitemradio', { name: /中文项目/ });
   await expect(choice).toHaveAttribute('aria-checked', 'false');
-  await expect(menu.getByRole('menuitem', { name: '选择其他文件夹…' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: '其他文件夹…' })).toBeVisible();
   await choice.click();
   await expect(page.locator('.elsewhere-bar')).toHaveCount(0);
   await expect(
