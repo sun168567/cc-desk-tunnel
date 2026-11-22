@@ -86,12 +86,20 @@ const SCRIPT_FROM_STDIN =
   '$PSStyle.OutputRendering=[Management.Automation.OutputRendering]::PlainText;$s=[Console]::In.ReadToEnd();' +
   '$global:LASTEXITCODE=$null;& ([scriptblock]::Create($s));if($null -ne $LASTEXITCODE){exit $LASTEXITCODE};exit [int](-not $?)';
 const PWSH_COMMAND = `"%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -Command "${SCRIPT_FROM_STDIN}"`;
-// For `device-bash`: Git Bash reads its standard input as a script by itself and leaves with the status of its last
-// command. The console the commands of the SSH service share, one without a window, is first switched to UTF-8, as
-// setting [Console]::OutputEncoding does in PowerShell: Windows programs a script runs, cmd.exe and ping among them,
-// write in its code page, which is otherwise the system's, GBK on a Chinese Windows. The device names its Git Bash in
-// a variable as it does its PowerShell.
-const BASH_COMMAND = 'chcp.com 65001 >nul & "%CC_DESK_TUNNEL_BASH%" -s';
+// For `device-bash`: Win32-OpenSSH hands child processes an overlapped (`FILE_FLAG_OVERLAPPED`) stdin pipe,
+// which MSYS2 (Git Bash) reads as synchronous and corrupts with NUL bytes or duplicated chunks whenever
+// network latency splits stdin across packets. PowerShell 7 drains the raw stdin bytes first and feeds them
+// to Git Bash over a standard synchronous pipe, keeping UTF-8, exit status, and stdout/stderr streaming.
+// The console shared by SSH commands is first switched to UTF-8 so Windows binaries (cmd.exe, ping) do not
+// write GBK on a Chinese Windows. As with `PWSH_COMMAND`, the `-Command` body holds no quotes so `cmd.exe`
+// passes it intact.
+const BASH_FROM_STDIN =
+  '$b=[IO.MemoryStream]::new();[Console]::OpenStandardInput().CopyTo($b);$a=$b.ToArray();' +
+  '$psi=[Diagnostics.ProcessStartInfo]::new($env:CC_DESK_TUNNEL_BASH,[string][char]45+[char]115);' +
+  '$psi.UseShellExecute=$false;$psi.RedirectStandardInput=$true;' +
+  '$p=[Diagnostics.Process]::Start($psi);$s=$p.StandardInput.BaseStream;' +
+  'try{$s.Write($a,0,$a.Length)}catch{}finally{try{$s.Close()}catch{}};$p.WaitForExit();exit $p.ExitCode';
+const BASH_COMMAND = `chcp.com 65001 >nul & "%CC_DESK_TUNNEL_PWSH%" -NoLogo -NoProfile -NonInteractive -Command "${BASH_FROM_STDIN}"`;
 // The same on a device with a POSIX shell: the user's own, which the device's SSH service names in a variable
 // as well.
 const POSIX_COMMAND = 'exec "$CC_DESK_TUNNEL_SHELL" -s';
