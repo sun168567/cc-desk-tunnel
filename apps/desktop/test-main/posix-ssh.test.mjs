@@ -425,6 +425,50 @@ test(
 );
 
 test(
+  'commands whose escaped descendants keep their output open do not use up the places of a connection',
+  mac,
+  async (t) => {
+    const f = await fixture(t);
+    const client = await clientOf(f.executor);
+    t.after(() => client.destroy());
+    const pids = [];
+    t.after(() => {
+      for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL');
+    });
+    // Each leaves a program in a session of its own that keeps the command's output open: the command has exited,
+    // its channel stays open as with OpenSSH. A connection may run 32 commands at a time. The command waits until
+    // the program has left its process group, which is stopped as soon as the command exits.
+    const leave =
+      'm=$(mktemp -u); python3 -c "import os, sys, time; os.setsid(); open(sys.argv[1], \'w\').close(); print(os.getpid(), flush=True); time.sleep(60)" "$m" & while [ ! -e "$m" ]; do sleep 0.05; done; rm -f "$m"; exit 0';
+    await Promise.all(
+      Array.from(
+        { length: 32 },
+        () =>
+          new Promise((done, fail) =>
+            client.exec(leave, (error, stream) => {
+              if (error) return fail(error);
+              stream.once('data', (data) => {
+                pids.push(Number(data.toString().trim()));
+                done();
+              });
+            }),
+          ),
+      ),
+    );
+    await until(() => pids.every((pid) => pid > 0), 'the escaped programs did not start');
+    // The places are free once the commands have exited.
+    const output = await new Promise((done, fail) =>
+      client.exec('echo still', (error, stream) => {
+        if (error) return fail(error);
+        let text = '';
+        stream.on('data', (data) => (text += data)).once('close', () => done(text.trim()));
+      }),
+    );
+    assert.equal(output, 'still');
+  },
+);
+
+test(
   'a command spawn failure finishes its channel without stopping other commands',
   mac,
   async (t) => {

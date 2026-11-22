@@ -55,11 +55,13 @@ export class ProcessSupervisor {
       process.kill(-pid, signal);
       return true;
     } catch (error) {
-      if (error.code === 'ESRCH') return false;
       // Signal 0 only probes existence. EPERM also establishes that the group
       // exists; keep the owned group through its bounded termination/reap path.
       if (signal === 0 && error.code === 'EPERM') return true;
-      throw error;
+      // ESRCH: the group is gone. EPERM for TERM or KILL: what is left of it runs as another user, such as a
+      // command started with sudo, which this process may not stop. Either way there is nothing more to do here;
+      // throwing would end this process, and every connection's commands with it.
+      return false;
     }
   }
 

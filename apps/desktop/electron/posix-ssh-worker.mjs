@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import { constants } from 'node:fs';
 import ssh2 from 'ssh2';
 import { ProcessSupervisor } from './process-supervisor.mjs';
+import { serverAlgorithms } from './ssh2-hardening.mjs';
 import { captureShellEnvironment } from './shell-environment.mjs';
 import { connectionKeys } from './ssh-keys.mjs';
 import { repairChannelOutput } from './ssh-channel-output.mjs';
@@ -101,6 +102,7 @@ async function start({
   server = new Server({
     hostKeys: [keys.hostPrivate],
     ident: 'CCDeskTunnel',
+    algorithms: serverAlgorithms,
     keepaliveInterval: keepaliveInterval ?? 10000,
     keepaliveCountMax: 2,
   });
@@ -152,10 +154,14 @@ async function start({
     client.on('request', (_accept, reject) => reject?.());
     client.on('tcpip', (_accept, reject) => reject());
     client.on('openssh.streamlocal', (_accept, reject) => reject());
+    // At most 32 commands of one connection and 128 in all run at a time; one more is refused before it is
+    // accepted, which the client reports as a failed request instead of a command that ended without a status.
+    const full = () => closing || active >= 128 || children.size >= 32;
     client.on('session', (accept, reject) => {
-      if (closing || active >= 128 || children.size >= 32) return reject();
+      if (full()) return reject();
       const session = accept();
-      session.on('exec', (acceptCommand, _rejectCommand, { command }) => {
+      session.on('exec', (acceptCommand, rejectCommand, { command }) => {
+        if (full()) return rejectCommand?.();
         const args =
           basename(shell) === 'bash'
             ? ['--noprofile', '--norc', '-c', command]
@@ -165,13 +171,12 @@ async function start({
       // Intentionally omit ssh2's `sftp` event: `subsystem` then provides a raw SSH
       // channel, which can stream unchanged into the operating system's SFTP server.
       session.on('subsystem', (acceptSubsystem, rejectSubsystem, { name }) => {
-        if (name !== 'sftp') return rejectSubsystem?.();
+        if (name !== 'sftp' || full()) return rejectSubsystem?.();
         attach(acceptSubsystem(), sftpPath, []);
       });
       // ssh2 rejects shell, PTY, env, X11 and agent requests without listeners.
       function attach(channel, file, args) {
         if (!channel) return;
-        if (closing || active >= 128 || children.size >= 32) return channel.destroy();
         repairChannelOutput(channel);
         const child = supervisor.spawn(file, args, {
           cwd: directory,
@@ -180,6 +185,16 @@ async function start({
         });
         children.add(child);
         active++;
+        // The command counts until it exits. Its output may stay open longer, held by a program it started that
+        // left its process group, and the channel waits for that as OpenSSH does; the place is free meanwhile.
+        let counted = true;
+        const release = () => {
+          if (!counted) return;
+          counted = false;
+          children.delete(child);
+          active--;
+        };
+        child.once('exit', release);
         channel.on('error', () => void child.stopGroup());
         channel.stderr.on('error', () => void child.stopGroup());
         channel.once('close', () => void child.stopGroup());
@@ -188,12 +203,12 @@ async function start({
         child.stdout.pipe(channel, { end: false });
         child.stderr.pipe(channel.stderr, { end: false });
         child.once('error', () => {
+          release();
           channel.exit(127);
           channel.end();
         });
         child.once('close', (code, signal) => {
-          children.delete(child);
-          active--;
+          release();
           // stderr and stdout may be backpressured independently. Finish stderr
           // first, then send exit and finish stdout only after queued stderr drains.
           channel.stderr.end(() => {

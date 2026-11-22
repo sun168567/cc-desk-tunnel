@@ -32,7 +32,11 @@ export async function startPosixSsh(connectionId, options, signal, onFailure, re
       closePromise = (async () => {
         if (worker.connected) worker.send({ type: 'close' }, () => {});
         else if (worker.exitCode === null && worker.signalCode === null) worker.kill('SIGTERM');
+        // It stops its commands within a second or two; one that does not answer is ended, so that disconnecting
+        // or quitting never waits on it for good.
+        const stuck = setTimeout(() => worker.kill('SIGKILL'), 5000);
         await exited;
+        clearTimeout(stuck);
       })();
       return closePromise;
     };
@@ -46,9 +50,11 @@ export async function startPosixSsh(connectionId, options, signal, onFailure, re
       const stopped = close();
       if (!ready) void stopped.then(() => reject(new Error('Tunnel cancelled')));
     };
+    // The worker gives the login shell `readyMs` to report its environment and says so itself; this is for a
+    // worker that says nothing at all, with time left for the keys and the rest of its start.
     const timer = setTimeout(
       () => fail('本机执行服务初始化超时，请检查登录 shell 启动脚本。'),
-      readyMs,
+      readyMs + 5000,
     );
     signal.addEventListener('abort', cancel, { once: true });
     worker.once('error', () => fail('无法启动本机 SSH 执行服务。'));

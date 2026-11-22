@@ -57,7 +57,7 @@ async function fixture(t) {
 
 test(
   'lists, reads, makes, renames and removes files on the service and here alike',
-  { skip },
+  { skip, timeout: 30000 },
   async (t) => {
     const f = await fixture(t);
     writeFileSync(join(f.remote, 'notes.md'), '# 笔记\n');
@@ -102,7 +102,7 @@ test(
 
 test(
   'copies between this computer and the service, folders whole, resuming a copy that stopped',
-  { skip },
+  { skip, timeout: 30000 },
   async (t) => {
     const f = await fixture(t);
     const big = Buffer.alloc(3 * 1024 * 1024);
@@ -150,19 +150,24 @@ test(
   },
 );
 
-test('a copy stopped part way ends at once and keeps what it wrote', { skip }, async (t) => {
-  const f = await fixture(t);
-  writeFileSync(join(f.local, 'huge.bin'), Buffer.alloc(40 * 1024 * 1024, 1));
-  const controller = new AbortController();
-  const copy = f.files.transfer({
-    from: { target: 'local', paths: [join(f.local, 'huge.bin')] },
-    to: { target: 'server', dir: f.at(f.remote) },
-    progress: ({ done }) => done > 1024 * 1024 && controller.abort(),
-    signal: controller.signal,
-  });
-  await assert.rejects(copy, /已取消/);
-  const kept = statSync(join(f.remote, 'huge.bin')).size;
-  assert.ok(kept > 0 && kept < 40 * 1024 * 1024, `kept ${kept}`);
-  // The panel's own session is still there.
-  assert.equal((await f.files.list('server', f.at(f.remote))).length, 1);
-});
+// A copy that does not end when stopped would otherwise hold the run until the job's own limit.
+test(
+  'a copy stopped part way ends at once and keeps what it wrote',
+  { skip, timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t);
+    writeFileSync(join(f.local, 'huge.bin'), Buffer.alloc(40 * 1024 * 1024, 1));
+    const controller = new AbortController();
+    const copy = f.files.transfer({
+      from: { target: 'local', paths: [join(f.local, 'huge.bin')] },
+      to: { target: 'server', dir: f.at(f.remote) },
+      progress: ({ done }) => done > 1024 * 1024 && controller.abort(),
+      signal: controller.signal,
+    });
+    await assert.rejects(copy, /已取消/);
+    const kept = statSync(join(f.remote, 'huge.bin')).size;
+    assert.ok(kept > 0 && kept < 40 * 1024 * 1024, `kept ${kept}`);
+    // The panel's own session is still there.
+    assert.equal((await f.files.list('server', f.at(f.remote))).length, 1);
+  },
+);
