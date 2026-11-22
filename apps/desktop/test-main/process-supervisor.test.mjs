@@ -47,9 +47,27 @@ test('EPERM on a group existence probe retains cleanup ownership without crashin
   assert.equal(signals.length, 3);
 });
 
-test('a real termination denial is not treated as an absent or reclaimed group', async (t) => {
-  const { child } = fixture(t, () => {
+// What is left of a group may run as another user, as a command started with sudo does. Signals to it are refused;
+// the stop ends there instead of throwing, which in the SSH service's process would end every connection's commands.
+test('a termination denial ends the stop instead of crashing the executor', async (t) => {
+  const signals = [];
+  const { child } = fixture(t, (pid, signal) => {
+    signals.push(signal);
     throw Object.assign(new Error('termination denied'), { code: 'EPERM' });
   });
-  await assert.rejects(child.stopGroup(), { code: 'EPERM' });
+  await child.stopGroup();
+  assert.deepEqual(signals, ['SIGTERM']);
+});
+
+test('a kill denied after the grace period ends the stop once the command has exited', async (t) => {
+  const signals = [];
+  const { child } = fixture(t, (pid, signal) => {
+    signals.push(signal);
+    if (signal === 'SIGKILL') throw Object.assign(new Error('kill denied'), { code: 'EPERM' });
+    return true;
+  });
+  const stopped = child.stopGroup();
+  assert.doesNotThrow(() => t.mock.timers.tick(20));
+  await stopped;
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
 });

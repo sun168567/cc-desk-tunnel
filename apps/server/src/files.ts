@@ -6,6 +6,7 @@ import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import ssh2 from 'ssh2';
 import type { ServerChannel } from 'ssh2';
+import { serverAlgorithms } from './ssh2-hardening.ts';
 import { FILES_TARGET_ENV } from '@cc-desk-tunnel/protocol';
 
 // The file panel's way to the files of the service and of the user's online computers: SFTP, spoken by the
@@ -57,6 +58,7 @@ export class FileService {
   private dataDir: string;
   private options: FilesOptions;
   private hostKey = ssh2.utils.generateKeyPairSync('ed25519').private;
+  private serverConfig = { hostKeys: [this.hostKey], algorithms: serverAlgorithms };
   private sftpServer?: string[];
   private landlock = false;
   // Every SFTP server started for a client, which ends with its connection or with the service.
@@ -123,7 +125,7 @@ export class FileService {
     stream.once('close', () => {
       for (const child of children) child.kill();
     });
-    const server = new ssh2.Server({ hostKeys: [this.hostKey] }, (client) => {
+    const server = new ssh2.Server(this.serverConfig, (client) => {
       client.on('error', () => stream.destroy());
       client.once('close', () => {
         for (const child of children) child.kill();

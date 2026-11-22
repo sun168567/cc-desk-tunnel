@@ -45,6 +45,7 @@ export const posixService = {
     'shell-environment.mjs',
     'ssh-keys.mjs',
     'ssh-channel-output.mjs',
+    'ssh2-hardening.mjs',
   ],
   dependencies: ['ssh2'],
 };
