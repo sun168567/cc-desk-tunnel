@@ -270,7 +270,23 @@ export function createFiles({ open }) {
   // file the destination has already: `replace` it, `skip` it, or `resume` a copy that stopped part way (a
   // shorter file is taken to be its beginning). `progress` hears of the bytes done; `signal` stops the copy, and
   // what was written so far stays.
-  async function transfer({ from, to, conflict = 'replace', progress = () => {}, signal }) {
+  function transfer(options) {
+    const { signal } = options;
+    if (!signal) return copy(options);
+    // A stopped copy ends at once. Stopping ends its SFTP sessions, and ssh2 may never answer a request cut off as
+    // its session ends, such as the close of a file fastPut leaves open: waiting for that would wait for good.
+    const work = copy(options);
+    work.catch(() => {});
+    let abort;
+    const stopped = new Promise((_resolve, reject) => {
+      abort = () => reject(new Error('已取消'));
+      if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort, { once: true });
+    });
+    stopped.catch(() => {});
+    return Promise.race([work, stopped]).finally(() => signal.removeEventListener('abort', abort));
+  }
+  async function copy({ from, to, conflict = 'replace', progress = () => {}, signal }) {
     if (signal?.aborted) throw new Error('已取消');
     const own = [];
     // The copy's own SFTP sessions, which stopping it ends.
