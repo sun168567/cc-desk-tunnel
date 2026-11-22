@@ -391,6 +391,14 @@ export async function openProxyBridge(
       pair?.channels?.close();
       for (const channel of pair?.files ?? []) channel.terminate();
       await pair?.ssh?.close();
+      // What the window was last sent, such as why the connection was given up, reaches it before the end: cut
+      // at once, it would be lost with the rest of the socket's buffer.
+      const local = pair?.local;
+      if (local && local.readyState !== WebSocket.CLOSED)
+        await new Promise((resolve) => {
+          local.once('close', resolve);
+          setTimeout(resolve, 1000);
+        });
       for (const socket of wss.clients) socket.terminate();
       await new Promise((resolve) => wss.close(resolve));
       await new Promise((resolve) => server.close(resolve));

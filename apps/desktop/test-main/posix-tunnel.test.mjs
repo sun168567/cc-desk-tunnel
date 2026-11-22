@@ -176,3 +176,62 @@ test('closing the client ends what its commands were running', posix, async (t) 
     await delay(50);
   }
 });
+
+// A window that lets its connection go as soon as the bridge says it closed, as ccdt does, is still told why it was
+// given up, here a computer without an SFTP server. Cut at once, the reason was lost with the socket's buffer.
+test(
+  'a connection given up tells the window why before it ends',
+  { skip: process.platform === 'win32', timeout: 30000 },
+  async (t) => {
+    const { createProxyServer } = await import('../../server/src/server.ts');
+    const directory = await mkdtemp('/tmp/cc-given-up-');
+    await execute('openssl', [
+      ...['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes'],
+      ...['-keyout', join(directory, 'key.pem'), '-out', join(directory, 'cert.pem')],
+      ...['-subj', '/CN=localhost', '-days', '1'],
+    ]);
+    const tls = {
+      cert: await readFile(join(directory, 'cert.pem')),
+      key: await readFile(join(directory, 'key.pem')),
+    };
+    const token = `tunnel-test-${randomUUID()}`;
+    const server = createProxyServer({
+      token,
+      dataDir: join(directory, 'd'),
+      tls,
+      claude: { executable: join(directory, 'no-cli') },
+      tunnel: {},
+    });
+    const port = Number(new URL(await server.listen(0)).port);
+    let local;
+    const bridge = await openProxyBridge(
+      {
+        url: `wss://127.0.0.1:${port}/ws`,
+        fingerprint: new X509Certificate(tls.cert).fingerprint256,
+      },
+      { sftpPath: join(directory, 'no-sftp-server'), env: process.env },
+      () => local.terminate(),
+    );
+    t.after(async () => {
+      await bridge.close();
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
+    });
+    local = new WebSocket(bridge.url);
+    const messages = [];
+    local.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
+    await once(local, 'open');
+    local.send(
+      JSON.stringify({
+        type: 'auth',
+        protocolVersion: PROTOCOL_VERSION,
+        token,
+        deviceName: '测试',
+      }),
+    );
+    local.send(JSON.stringify({ type: 'device', id: randomUUID() }));
+    await once(local, 'close');
+    const reason = messages.find(({ type }) => type === 'connection.error');
+    assert.match(reason?.message ?? '', /sftp-server/);
+  },
+);
