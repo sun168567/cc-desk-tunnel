@@ -56,7 +56,7 @@ export type CliValue = NativeSettings[CliKey];
 // A setting is a switch (default / on / off), one of a few choices, or a line of text. Choices and text say
 // how their value is written in the box and read back; an empty box is "unset".
 export type CliField = { key: CliKey; title: string; detail: string } & (
-  | { kind: 'toggle' }
+  | { kind: 'toggle'; unset: string }
   | { kind: 'choice'; unset: string; options: [string, string][]; read: (text: string) => CliValue }
   | {
       kind: 'text';
@@ -88,6 +88,7 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '自动压缩上下文',
         detail: '上下文接近窗口上限时自动摘要并继续',
+        unset: '默认（开启）',
       },
       {
         key: 'autoCompactWindow',
@@ -107,24 +108,28 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '提前准备压缩摘要',
         detail: '在需要之前于后台算好摘要，压缩时少等；仅在自动压缩开启时有效',
+        unset: '默认（自动）',
       },
       {
         key: 'autoMemoryEnabled',
         kind: 'toggle',
         title: '自动记忆',
         detail: '允许读写自动记忆目录',
+        unset: '默认（开启）',
       },
       {
         key: 'autoDreamEnabled',
         kind: 'toggle',
         title: '后台整理记忆',
         detail: '空闲时在后台归并、整理已有的记忆',
+        unset: '默认（自动）',
       },
       {
         key: 'fileCheckpointingEnabled',
         kind: 'toggle',
         title: '文件检查点',
         detail: '编辑前保存快照，供 /rewind 恢复',
+        unset: '默认（开启）',
       },
     ],
   },
@@ -136,6 +141,7 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '思考',
         detail: '关闭后模型不再进行扩展思考',
+        unset: '默认（开启）',
       },
       {
         key: 'showThinkingSummaries',
@@ -143,12 +149,14 @@ export const cliSettingGroups = (
         title: '显示思考过程',
         detail:
           '向 Claude 索取思考的摘要并显示在对话里，默认开启；关闭后不再索取，模型照常思考。第三方模型自己输出的思考不受这一项影响',
+        unset: '默认（开启）',
       },
       {
         key: 'fastMode',
         kind: 'toggle',
         title: '快速模式',
         detail: '官方 fast mode：输出更快，计费与额度消耗按官方规则',
+        unset: '默认（关闭）',
       },
       {
         key: 'fallbackModel',
@@ -167,12 +175,14 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '额度用尽后自动继续',
         detail: '订阅额度触顶时等待重置并自动接着做，适合长任务',
+        unset: '默认（开启）',
       },
       {
         key: 'switchModelsOnFlag',
         kind: 'toggle',
         title: '触发安全拦截时换模型',
         detail: '消息被拦截时自动改用其他模型继续，关闭则暂停',
+        unset: '默认（自动）',
       },
       {
         key: 'promptCacheTtl',
@@ -240,6 +250,7 @@ export const cliSettingGroups = (
         title: '工具搜索',
         detail:
           '工具的说明不再随每次请求全部发出，Claude 用到时再查找，工具多（例如接了 MCP）时能明显减少上下文占用。默认：官方账号开启，第三方接口关闭；第三方接口要能转发 tool_reference 才能开启',
+        unset: '默认（自动）',
       },
       {
         key: 'enableArtifact',
@@ -247,6 +258,7 @@ export const cliSettingGroups = (
         title: 'Artifact 网页',
         detail:
           'Claude 可以把文档、方案、图表等发布成 claude.ai 上的网页（claude.ai/artifact/…），默认只有自己能看，可以分享。关闭后不再提供这个工具，Claude 也不会主动发布。默认：账号可用时开启',
+        unset: '默认（自动）',
       },
     ],
   },
@@ -259,6 +271,7 @@ export const cliSettingGroups = (
         title: '不等审批，直接拒绝',
         detail:
           '要你批准的工具调用不再等你，立即拒绝并告诉 Claude，这一轮接着做；适合无人值守的定时任务。开启后所有会话（包括 ccdt）都不会再弹出审批，允许规则和自动模式照常先判断',
+        unset: '默认（关闭）',
       },
       {
         key: 'blockWritesOutsideWorkingDirectories',
@@ -266,6 +279,7 @@ export const cliSettingGroups = (
         title: '禁止在工作目录外写文件',
         detail:
           '写文件、编辑工具不能改工作目录以外的文件，也不能改 Claude Code 的设置文件；不限制命令，Claude 自己的记忆和计划文件不受影响。这些工具只作用于服务器上的文件',
+        unset: '默认（关闭）',
       },
     ],
   },
@@ -286,6 +300,7 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '内置的提交与 PR 流程说明',
         detail: '系统提示词里附带的提交、开 PR 的做法；按自己的流程来时可以关闭',
+        unset: '默认（开启）',
       },
     ],
   },

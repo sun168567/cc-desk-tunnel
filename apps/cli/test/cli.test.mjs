@@ -474,7 +474,13 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
   const config = new Config({ cli: join(root, 'cli'), desktop: join(root, 'desktop') });
   const remote = {
     compaction: { enabled: false, afterMinutes: 50, minTokens: 100_000 },
-    cli: { autoCompactEnabled: null, autoCompactWindow: 250_000, fallbackModel: ['sonnet'] },
+    cli: {
+      autoCompactEnabled: null,
+      autoCompactWindow: 250_000,
+      fastMode: null,
+      fallbackModel: ['sonnet'],
+      toolSearch: null,
+    },
     web: { enabled: true, url: 'https://work.example.com/desk/' },
   };
   const list = entries({ waits: { ssh: 20 }, ...remote });
@@ -490,15 +496,19 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
   assert.equal(shown(named('compaction.enabled')), '关闭');
   assert.equal(shown(named('compaction.minTokens')), '100K tokens');
   assert.equal(shown(named('web.enabled')), '开启');
-  assert.equal(shown(named('cli.autoCompactEnabled')), '默认');
+  assert.equal(shown(named('cli.autoCompactEnabled')), '默认（开启）');
+  assert.equal(shown(named('cli.fastMode')), '默认（关闭）');
+  assert.equal(shown(named('cli.toolSearch')), '默认（自动）');
   // A value set by hand that is not among the choices is still one of them.
   assert.equal(shown(named('cli.autoCompactWindow')), '250K tokens');
   assert.equal(shown(named('cli.fallbackModel')), 'sonnet');
   assert.equal(shown(named('cli.instructions')), '暂不支持');
-  assert.deepEqual(
-    choices(named('cli.autoCompactEnabled')).map(([value]) => value),
-    [null, true, false],
-  );
+  assert.deepEqual(choices(named('cli.autoCompactEnabled')), [
+    [null, '默认（开启）'],
+    [true, '开启'],
+    [false, '关闭'],
+  ]);
+  assert.deepEqual(choices(named('cli.fastMode'))[0], [null, '默认（关闭）']);
   // What is written on the command line, in either language, and what will not do.
   assert.equal(parse(named('compaction.enabled'), 'on'), true);
   assert.equal(parse(named('cli.autoCompactEnabled'), '关闭'), false);

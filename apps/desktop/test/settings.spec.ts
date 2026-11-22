@@ -71,6 +71,15 @@ test('Claude Code settings load from the service and save each change at once', 
     .getByRole('button', { name: 'CLI 设置', exact: true })
     .click();
   const panel = page.getByRole('region', { name: 'CLI 设置' });
+  await expect(
+    panel.getByLabel('自动压缩上下文', { exact: true }).locator('option[value=""]'),
+  ).toHaveText('默认（开启）');
+  await expect(
+    panel.getByLabel('快速模式', { exact: true }).locator('option[value=""]'),
+  ).toHaveText('默认（关闭）');
+  await expect(
+    panel.getByLabel('工具搜索', { exact: true }).locator('option[value=""]'),
+  ).toHaveText('默认（自动）');
   await expect(panel.getByLabel('自动压缩窗口', { exact: true })).toHaveValue('250000');
   await expect(panel.getByLabel('快速模式', { exact: true })).toHaveValue('false');
   await panel.getByLabel('自动压缩窗口', { exact: true }).selectOption('1000000');
