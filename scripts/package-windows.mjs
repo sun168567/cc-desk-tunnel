@@ -5,7 +5,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import { bundleCcdt, checkCcdt, stageDesktop } from './package-desktop.mjs';
+import {
+  addNode,
+  bundleCcdt,
+  checkCcdt,
+  stageDesktop,
+  WINDOWS_LAUNCHER,
+} from './package-desktop.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const app = join(root, '.local/windows-package/app');
@@ -22,20 +28,18 @@ await stageDesktop(root, app, {
   description: 'Windows client for a native remote Claude Code session',
   files: ['prepare-ssh.ps1', 'component-host.ps1'],
 });
-// ccdt comes with the client: its script, run by the client's own program as Node, with the OpenSSH and PowerShell
-// of the package as the components of its SSH service (apps/cli/src/runtime.mjs). The installer puts its folder on
-// the user's PATH (windows-installer.nsh).
+// ccdt comes with the client, as its own package has it: the same ccdt.mjs, Node and launcher, with the OpenSSH and
+// PowerShell of this package as the components of its SSH service (apps/cli/src/runtime.mjs). The installer puts its
+// folder on the user's PATH (windows-installer.nsh).
 const productName = 'CC Desk Tunnel';
 const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
 const ccdt = join(root, '.local/windows-package/ccdt');
 rmSync(ccdt, { recursive: true, force: true });
 mkdirSync(ccdt, { recursive: true });
 await bundleCcdt(root, ccdt, { version, desktop: true });
+await addNode(root, ccdt);
 cpSync(join(root, 'apps/cli/install/desktop-path.ps1'), join(ccdt, 'desktop-path.ps1'));
-writeFileSync(
-  join(ccdt, 'ccdt.cmd'),
-  `@echo off\r\nsetlocal\r\nset ELECTRON_RUN_AS_NODE=1\r\n"%~dp0..\\..\\${productName}.exe" "%~dp0ccdt.mjs" %*\r\nexit /b %errorlevel%\r\n`,
-);
+writeFileSync(join(ccdt, 'ccdt.cmd'), WINDOWS_LAUNCHER);
 const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/package.json'), 'utf8'));
 // Security software may hold an executable for some seconds after it is copied, while it scans it; electron-builder
 // writes the executable's resources right after copying it and fails. Its writes wait for the file instead.
@@ -93,7 +97,7 @@ const results = await electronBuild({
     },
   },
 });
-// The ccdt it carries runs, with the client's program as its Node.
+// The ccdt it carries runs.
 checkCcdt(join(output, 'win-unpacked/resources/ccdt/ccdt.cmd'), version);
 // Exercise the actual packaged main process and preload before a release can upload this installer.
 // Always use an isolated profile and stay offline, even if the caller configured native testing.
