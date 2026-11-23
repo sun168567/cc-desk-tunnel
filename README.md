@@ -105,14 +105,9 @@ Claude Code（简称 CC）运行在你自己的 Linux 服务器上，会话、�
 - 每个会话在它的项目所在的电脑上执行，同时能按名字连到你其他在线的电脑。
 - 本项目只是官方 Claude Code 之上的一层胶水：图形客户端经官方 Agent SDK 运行它，`ccdt` 直接运行交互式的原版 CLI。不改 CLI 本体，不替换它的工具、审批和上下文管理。
 
-<details>
-<summary>连接示意图（以一台 Windows 电脑为例）</summary>
-
 ![工作方式：Windows 电脑与 Linux 服务器之间是一条 WSS 加密隧道，里面有两类连接。一类连接桌面客户端与代理服务，传用户消息、Claude 输出和审批请求；另一类是 SSH，连接本机的 OpenSSH 与服务器上的通道转发，传命令、文件和执行结果。Claude Code 的工具调用经通道转发和 SSH 到本机的项目里执行](docs/images/workflow.png)
 
-更多见[架构](docs/architecture.md)。
-
-</details>
+<p align="center"><sub>连接示意图，以一台 Windows 电脑为例；更多见<a href="docs/architecture.md">架构</a>。</sub></p>
 
 本仓库公开客户端、服务端和构建、部署脚本的全部自有源码，不另设闭源功能。**这不意味着 Claude Code 也被本项目开源**：官方 CLI 与 Agent SDK 由官方渠道安装，仍按 Anthropic 的条款使用；随包的第三方组件各自遵循其许可，见 [NOTICE](NOTICE)。
 
