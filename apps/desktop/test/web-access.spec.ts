@@ -91,6 +91,7 @@ async function browserFixture(page: Page, authenticated = false, withHistory = f
             version: '0.3.4',
             connectionId: randomUUID(),
             adapter: 'claude-code',
+            projects: [],
             sessions,
             browser: { sessionId, serverDeviceId, selfSigned: true },
           }),

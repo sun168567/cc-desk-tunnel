@@ -23,6 +23,7 @@ import type {
   EventPayload,
   HistoryPage,
   PermissionMode,
+  Project,
   Session,
   SessionEvent,
   SessionSnapshot,
@@ -41,6 +42,10 @@ function setMode(session: Session, permissionMode: PermissionMode) {
 }
 const pageEvents = 1000;
 const pageBytes = 512 * 1024;
+// The folders the desktop makes for plain sessions, a day and under it a time. Before the service kept the
+// projects, the folder of every other session was taken for one; this tells the two apart once, when the list is
+// first made from the sessions (and for a session from before computers were told apart, when it gets one).
+const plainFolder = /[\\/]\d{4}-\d{2}-\d{2}[\\/]\d{6}(-\d+)?[\\/]*$/;
 
 // What goes beside the copy of the history made before it is rewritten.
 const backupNote = (file: string) => `CC Desk Tunnel：会话历史备份
@@ -109,12 +114,18 @@ export class SessionStore {
       CREATE TABLE IF NOT EXISTS device_shells (
         device_id TEXT PRIMARY KEY, shells TEXT NOT NULL, preferred TEXT
       );
+      CREATE TABLE IF NOT EXISTS projects (
+        device_id TEXT NOT NULL, path_key TEXT NOT NULL, path TEXT NOT NULL, device TEXT NOT NULL,
+        name TEXT, created_at TEXT NOT NULL,
+        PRIMARY KEY (device_id, path_key)
+      );
     `);
     this.database.prepare("INSERT OR IGNORE INTO history_meta VALUES ('id', ?)").run(randomUUID());
     try {
       this.importJson();
       this.restoreUpdatedAt();
       this.mergeFragments();
+      this.seedProjects();
       for (const session of this.list()) {
         if (!session.activeRun) continue;
         const { id: runId, connectionId } = session.activeRun;
@@ -319,6 +330,75 @@ export class SessionStore {
     );
   }
 
+  // The projects start as the folders the sessions are in, but for those of plain sessions: the desktop's own
+  // folders for them, and the service's (its native/ directory).
+  private seedProjects() {
+    if (this.database.prepare("SELECT 1 FROM migrations WHERE name = 'projects'").get()) return;
+    const own = join(this.directory, 'native');
+    this.database.exec('BEGIN');
+    try {
+      // In the order they were made, the first session of a folder giving the project its place in the list.
+      const sessions = this.list().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      for (const session of sessions)
+        if (
+          session.device &&
+          !plainFolder.test(session.projectPath) &&
+          !session.projectPath.startsWith(own)
+        )
+          this.register(session.device, session.projectPath, undefined, session.createdAt);
+      this.database.prepare("INSERT INTO migrations VALUES ('projects')").run();
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  projects(): Project[] {
+    return this.database
+      .prepare(
+        `SELECT projects.device, projects.path, projects.name, projects.created_at, native_roots.root
+        FROM projects JOIN native_roots USING (device_id, path_key) ORDER BY projects.created_at, projects.rowid`,
+      )
+      .all()
+      .map((row) => ({
+        device: JSON.parse(String(row.device)) as Device,
+        path: String(row.path),
+        ...(row.name ? { name: String(row.name) } : {}),
+        root: String(row.root),
+        createdAt: String(row.created_at),
+      }));
+  }
+  isProject(deviceId: string, path: string) {
+    return !!this.database
+      .prepare('SELECT 1 FROM projects WHERE device_id = ? AND path_key = ?')
+      .get(deviceId, pathKey(path));
+  }
+  // Makes a folder of a computer one of its projects, with the directory Claude Code is to work in for it; one
+  // that is already keeps its place in the list, and its name unless another is given.
+  register(device: Device, path: string, name?: string, createdAt = new Date().toISOString()) {
+    this.rootFor(device, path);
+    this.database
+      .prepare(
+        `INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(device_id, path_key) DO UPDATE SET name = COALESCE(excluded.name, projects.name)`,
+      )
+      .run(device.id, pathKey(path), path, JSON.stringify(device), name ?? null, createdAt);
+  }
+  // The folder and its sessions stay where they are, and so does the directory Claude Code worked in for it: made a
+  // project again, it has its memory back.
+  unregister(deviceId: string, path: string) {
+    const removed = this.database
+      .prepare('DELETE FROM projects WHERE device_id = ? AND path_key = ?')
+      .run(deviceId, pathKey(path));
+    if (!removed.changes) throw new DomainError('not_found', '项目不存在。');
+  }
+  renameProject(deviceId: string, path: string, name: string) {
+    const renamed = this.database
+      .prepare('UPDATE projects SET name = ? WHERE device_id = ? AND path_key = ?')
+      .run(name || null, deviceId, pathKey(path));
+    if (!renamed.changes) throw new DomainError('not_found', '项目不存在。');
+  }
+
   list(): Session[] {
     return this.database
       .prepare('SELECT metadata FROM sessions')
@@ -434,7 +514,14 @@ export class SessionStore {
     return row ? (JSON.parse(String(row.data)) as SessionEvent) : undefined;
   }
 
-  create(requestId: string, title: string, projectPath: string, device: Device): Session {
+  // The session's folder becomes a project of its computer unless the session is a plain one.
+  create(
+    requestId: string,
+    title: string,
+    projectPath: string,
+    device: Device,
+    plain = false,
+  ): Session {
     const row = this.database
       .prepare('SELECT metadata FROM sessions WHERE create_request_id = ?')
       .get(requestId);
@@ -462,6 +549,7 @@ export class SessionStore {
       updatedAt: now,
       activeRun: null,
     };
+    if (!plain) this.register(device, projectPath);
     this.database
       .prepare('INSERT INTO sessions VALUES (?, ?, ?)')
       .run(session.id, JSON.stringify(session), requestId);
@@ -474,7 +562,7 @@ export class SessionStore {
     if (existing) {
       if (existing.device?.id !== device.id)
         throw new DomainError('request_conflict', '请求 ID 已被其他内容使用。');
-      return this.create(requestId, title, existing.projectPath, device);
+      return this.create(requestId, title, existing.projectPath, device, true);
     }
     const root = randomUUID();
     const projectPath = join(this.directory, 'native', root);
@@ -483,7 +571,7 @@ export class SessionStore {
       this.database
         .prepare('INSERT INTO native_roots VALUES (?, ?, ?)')
         .run(device.id, pathKey(projectPath), root);
-      const session = this.create(requestId, title, projectPath, device);
+      const session = this.create(requestId, title, projectPath, device, true);
       this.database.exec('COMMIT');
       return session;
     } catch (error) {
@@ -542,6 +630,8 @@ export class SessionStore {
     );
     this.database.exec('BEGIN');
     try {
+      // A copy placed in a folder of its own makes it a project; one beside its source is where that is.
+      if (place.projectPath) this.register(place.device, place.projectPath);
       this.database
         .prepare('INSERT INTO sessions VALUES (?, ?, ?)')
         .run(id, JSON.stringify(session), requestId);
@@ -719,11 +809,12 @@ export class SessionStore {
     this.save(session);
     return session;
   }
-  // Points the session at a project directory on a computer, which may be another one than it was on. What
-  // Claude knows of either changes with the next message: `notice`.
+  // Points the session at a directory on a computer, which may be another one than it was on, and makes the
+  // directory a project there. What Claude knows of either changes with the next message: `notice`.
   move(sessionId: string, projectPath: string, device: Device) {
     const { session } = this.get(sessionId);
     if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再更换项目。');
+    this.register(device, projectPath);
     if (session.projectPath === projectPath && session.device?.id === device.id) return session;
     session.projectPath = projectPath;
     session.device = device;
@@ -734,7 +825,8 @@ export class SessionStore {
     return session;
   }
   // Points a project of a computer at another directory there. Its sessions move with it, and so does the
-  // directory Claude Code works in for it, unless the other directory has one already.
+  // directory Claude Code works in for it, unless the other directory has one already. A directory that is a
+  // project already takes the moved one in, keeping its own name if it has one.
   moveProject(from: string, to: string, device: Device) {
     const members = this.list().filter(
       (session) =>
@@ -749,6 +841,19 @@ export class SessionStore {
         'UPDATE OR IGNORE native_roots SET path_key = ? WHERE device_id = ? AND path_key = ?',
       )
       .run(pathKey(to), device.id, pathKey(from));
+    const moved = this.database
+      .prepare('SELECT name, created_at FROM projects WHERE device_id = ? AND path_key = ?')
+      .get(device.id, pathKey(from));
+    this.database
+      .prepare('DELETE FROM projects WHERE device_id = ? AND path_key = ?')
+      .run(device.id, pathKey(from));
+    this.register(device, to, undefined, moved ? String(moved.created_at) : undefined);
+    if (moved?.name)
+      this.database
+        .prepare(
+          'UPDATE projects SET name = ? WHERE device_id = ? AND path_key = ? AND name IS NULL',
+        )
+        .run(moved.name, device.id, pathKey(to));
     return members.map((session) => this.move(session.id, to, device));
   }
   // The directory Claude Code works in for a directory of a computer: one for each project, shared by its
@@ -763,11 +868,13 @@ export class SessionStore {
       .get(device.id, key)!;
     return String(row.root);
   }
-  // A session from before computers were told apart becomes that of the first one to use it, where it is.
+  // A session from before computers were told apart becomes that of the first one to use it, where it is, its
+  // folder a project there as it would have been made one had the session had a computer (see `seedProjects`).
   claim(sessionId: string, device: Device) {
     const { session } = this.get(sessionId);
     if (session.device) return session;
     session.device = device;
+    if (!plainFolder.test(session.projectPath)) this.register(device, session.projectPath);
     if (session.prompt) {
       session.prompt.device ??= device.id;
       if (session.prompt.told) session.prompt.told.device ??= device.id;
@@ -775,8 +882,11 @@ export class SessionStore {
     this.save(session);
     return session;
   }
-  // A computer goes by the name it last signed in with, in every session that is on it.
+  // A computer goes by the name it last signed in with, in every session that is on it and in its projects.
   named(device: Device) {
+    this.database
+      .prepare('UPDATE projects SET device = ? WHERE device_id = ?')
+      .run(JSON.stringify(device), device.id);
     const changed: Session[] = [];
     for (const session of this.list())
       if (session.device?.id === device.id && session.device.name !== device.name) {

@@ -13,11 +13,12 @@ import {
   SquarePen,
   X,
 } from 'lucide-react';
-import type { Session } from '@cc-desk-tunnel/protocol';
+import { projectOf } from '@cc-desk-tunnel/protocol';
+import type { Project, Session } from '@cc-desk-tunnel/protocol';
 import type { ConnectedDevice } from './client.ts';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
-import { ago, folderName, isInside, pathKey } from './paths.ts';
+import { ago, pathKey, projectName } from './paths.ts';
 import { setPrefs, toggled, usePrefs } from './prefs.ts';
 import { IconButton } from './ui.tsx';
 import { terminalState } from './RunStatus.tsx';
@@ -37,12 +38,12 @@ const breathing = (run: NonNullable<Session['activeRun']>) =>
 // A list of sessions shows its latest few until it is listed in full.
 const PAGE = 5;
 
-// Another computer's sessions: by project folder, and those without a project.
+// Another computer's projects with their sessions, and its plain sessions.
 type Elsewhere = {
   name: string;
   // Connected, and its commands reach it: its sessions can be worked on from here.
   online: boolean;
-  projects: Map<string, { path: string; sessions: Session[] }>;
+  projects: Map<string, { project: Project; sessions: Session[] }>;
   plain: Session[];
 };
 
@@ -53,7 +54,6 @@ export default function Sidebar({
   devices,
   selectedId,
   projects,
-  workspaceRoots,
   connected,
   busy,
   refreshing,
@@ -70,14 +70,13 @@ export default function Sidebar({
 }: {
   localProjects?: boolean;
   sessions: Session[];
-  // Sessions on the user's other computers: listed apart, by computer and under it by project folder, and not
-  // part of any project here.
+  // Sessions on the user's other computers: listed apart, by computer and under it by project, and not part of any
+  // project here.
   elsewhere: Session[];
   devices: ConnectedDevice[];
   selectedId: string | undefined;
-  projects: string[];
-  // Sessions whose directory lies under one of these belong to no project and are listed on their own.
-  workspaceRoots: string[];
+  // The projects of all the user's computers, as the service keeps them. A session in none is a plain one.
+  projects: Project[];
   // This computer, which the other computers listed are not.
   hereId?: string;
   // Starts a session in a project of another computer that is connected; none where that cannot be done.
@@ -92,7 +91,8 @@ export default function Sidebar({
   addProject: () => void;
   createInProject: (path: string) => void;
   sessionMenu: (session: Session, position: MenuPosition) => void;
-  projectMenu: (path: string, position: MenuPosition) => void;
+  // Absent where projects are not managed.
+  projectMenu?: (project: Project, position: MenuPosition) => void;
   footer?: ReactNode;
 }) {
   const prefs = usePrefs();
@@ -100,64 +100,50 @@ export default function Sidebar({
   const [searching, setSearching] = useState(false);
   // The lists listed in full rather than their latest few, for this window only.
   const [listed, setListed] = useState<string[]>([]);
+  // The project a session is in; one from before computers were told apart that is listed here is this one's.
+  const inProject = (session: Session) =>
+    projectOf(projects, session.device?.id ?? hereId, session.projectPath);
+  // A session is found by its title, and one in a project also by the project's folder and name.
+  const found = (session: Session, project: Project | undefined, term: string) =>
+    (project ? `${session.title} ${project.path} ${project.name ?? ''}` : session.title)
+      .toLowerCase()
+      .includes(term);
   const { pinned, plain, groups } = useMemo(() => {
-    const grouped = new Map<string, Session[]>();
+    const grouped = new Map<string, { project: Project; sessions: Session[] }>();
     const plain: Session[] = [];
     const pinned: Session[] = [];
     const term = search.trim().toLowerCase();
-    for (const path of projects) grouped.set(pathKey(path), []);
+    for (const project of projects)
+      if (project.device.id === hereId)
+        grouped.set(pathKey(project.path), { project, sessions: [] });
     for (const session of sessions) {
-      const loose = isInside(session.projectPath, workspaceRoots);
-      const text = loose ? session.title : `${session.title} ${session.projectPath}`;
-      if (!text.toLowerCase().includes(term)) continue;
-      if (prefs.pinnedSessions.includes(session.id)) {
-        pinned.push(session);
-        if (loose) continue;
-      } else if (loose) {
-        plain.push(session);
-        continue;
-      }
-      const key = pathKey(session.projectPath);
-      const members = grouped.get(key) ?? [];
-      if (!prefs.pinnedSessions.includes(session.id)) members.push(session);
-      grouped.set(key, members);
+      const project = inProject(session);
+      if (!found(session, project, term)) continue;
+      if (prefs.pinnedSessions.includes(session.id)) pinned.push(session);
+      else if (project) grouped.get(pathKey(project.path))!.sessions.push(session);
+      else plain.push(session);
     }
     const first = (key: string) => (prefs.pinnedProjects.includes(key) ? 0 : 1);
     return {
       pinned,
       plain,
       groups: [...grouped.entries()]
-        .map(([key, members]) => ({
-          key,
-          path:
-            projects.find((path) => pathKey(path) === key) ??
-            sessions.find((session) => pathKey(session.projectPath) === key)!.projectPath,
-          sessions: members,
-        }))
+        .map(([key, group]) => ({ key, ...group }))
         .filter(
-          (group) => group.sessions.length || !term || group.path.toLowerCase().includes(term),
+          ({ project, sessions: members }) =>
+            members.length ||
+            !term ||
+            `${project.path} ${project.name ?? ''}`.toLowerCase().includes(term),
         )
         // Array.sort is stable: pinned projects come first, the rest keep their order.
         .sort((a, b) => first(a.key) - first(b.key)),
     };
-  }, [sessions, search, projects, workspaceRoots, prefs.pinnedSessions, prefs.pinnedProjects]);
+  }, [sessions, search, projects, hereId, prefs.pinnedSessions, prefs.pinnedProjects]);
 
   const others = useMemo(() => {
     const term = search.trim().toLowerCase();
     const groups = new Map<string, Elsewhere>();
-    // The projects another connected computer said it has, sessions or not.
-    for (const item of devices)
-      if (item.id !== hereId && !item.server && item.ready && item.projects?.length) {
-        const entry: Elsewhere = { name: item.name, online: true, projects: new Map(), plain: [] };
-        for (const path of item.projects)
-          if (!term || path.toLowerCase().includes(term))
-            entry.projects.set(pathKey(path), { path, sessions: [] });
-        if (entry.projects.size) groups.set(item.id, entry);
-      }
-    for (const session of elsewhere) {
-      if (!`${session.title} ${session.projectPath}`.toLowerCase().includes(term)) continue;
-      // A session from before computers were told apart, whose folder is not on this one.
-      const device = session.device ?? { id: '', name: '未知设备' };
+    const entryOf = (device: { id: string; name: string }) => {
       const entry: Elsewhere = groups.get(device.id) ?? {
         name: device.name,
         online: devices.some((item) => item.id === device.id && item.ready),
@@ -165,23 +151,31 @@ export default function Sidebar({
         plain: [],
       };
       groups.set(device.id, entry);
-      // The server currently creates only sessions without a project; its workspace paths are internal.
-      // Which folders hold another computer's sessions without a project is not known here; the ones this
-      // program makes are told by their shape, a day and under it a time.
+      return entry;
+    };
+    // The other computers' projects, sessions or not, whether those computers are connected or not.
+    for (const project of projects)
       if (
-        devices.some((item) => item.id === device.id && item.server) ||
-        /[\\/]\d{4}-\d{2}-\d{2}[\\/]\d{6}(-\d+)?[\\/]?$/.test(session.projectPath)
-      ) {
+        project.device.id !== hereId &&
+        (!term || `${project.path} ${project.name ?? ''}`.toLowerCase().includes(term))
+      )
+        entryOf(project.device).projects.set(pathKey(project.path), { project, sessions: [] });
+    for (const session of elsewhere) {
+      const project = inProject(session);
+      if (!found(session, project, term)) continue;
+      // A session from before computers were told apart, whose folder is not on this one.
+      const entry = entryOf(session.device ?? { id: '', name: '未知设备' });
+      if (!project) {
         entry.plain.push(session);
         continue;
       }
-      const key = pathKey(session.projectPath);
-      const project = entry.projects.get(key) ?? { path: session.projectPath, sessions: [] };
-      project.sessions.push(session);
-      entry.projects.set(key, project);
+      const key = pathKey(project.path);
+      const group = entry.projects.get(key) ?? { project, sessions: [] };
+      group.sessions.push(session);
+      entry.projects.set(key, group);
     }
     return [...groups.entries()];
-  }, [elsewhere, devices, search, hereId]);
+  }, [elsewhere, devices, projects, search, hereId]);
   const othersCount = others.reduce(
     (count, [, device]) =>
       count +
@@ -370,17 +364,18 @@ export default function Sidebar({
             </IconButton>
           </div>
         )}
-        {groups.map(({ key, path, sessions: members }) => {
+        {groups.map(({ key, project, sessions: members }) => {
+          const { path } = project;
           // A search shows what it found, folded or not.
           const collapsed = !search.trim() && prefs.collapsedProjects.includes(key);
-          const name = prefs.projectNames[key] || folderName(path);
+          const name = projectName(project);
           return (
             <section className="project-group" key={key}>
               <h2
                 title={path}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  projectMenu(path, { x: event.clientX, y: event.clientY });
+                  projectMenu?.(project, { x: event.clientX, y: event.clientY });
                 }}
               >
                 {foldToggle({
@@ -396,16 +391,18 @@ export default function Sidebar({
                     })),
                 })}
                 {prefs.pinnedProjects.includes(key) && <Pin className="pin-mark" />}
-                <IconButton
-                  title={`项目操作 · ${path}`}
-                  className="row-action"
-                  onClick={(event) => {
-                    const box = event.currentTarget.getBoundingClientRect();
-                    projectMenu(path, { x: box.left, y: box.bottom + 4 });
-                  }}
-                >
-                  <Ellipsis />
-                </IconButton>
+                {projectMenu && (
+                  <IconButton
+                    title={`项目操作 · ${path}`}
+                    className="row-action"
+                    onClick={(event) => {
+                      const box = event.currentTarget.getBoundingClientRect();
+                      projectMenu(project, { x: box.left, y: box.bottom + 4 });
+                    }}
+                  >
+                    <Ellipsis />
+                  </IconButton>
+                )}
                 <IconButton
                   title={`新建会话 · ${path}`}
                   className="row-action"
@@ -454,7 +451,7 @@ export default function Sidebar({
                         icon: open(id) ? <ChevronDown /> : <ChevronRight />,
                         name: device.name,
                         members: [
-                          ...projects.flatMap(([, project]) => project.sessions),
+                          ...projects.flatMap(([, group]) => group.sessions),
                           ...device.plain,
                         ],
                         toggle: foldElsewhere(id),
@@ -464,20 +461,40 @@ export default function Sidebar({
                       </span>
                     </div>
                     {open(id) &&
-                      projects.map(([path, project]) => {
+                      projects.map(([path, { project, sessions: members }]) => {
                         const key = `${id}\n${path}`;
-                        const name = folderName(project.path);
+                        const name = projectName(project);
                         return (
                           <Fragment key={path}>
-                            <div className="elsewhere-project" title={project.path}>
+                            <div
+                              className="elsewhere-project"
+                              title={project.path}
+                              onContextMenu={(event) => {
+                                if (!projectMenu) return;
+                                event.preventDefault();
+                                projectMenu(project, { x: event.clientX, y: event.clientY });
+                              }}
+                            >
                               {foldToggle({
                                 open: open(key),
                                 label: `项目 · ${device.name} · ${name}`,
                                 icon: open(key) ? <FolderOpen /> : <Folder />,
                                 name,
-                                members: project.sessions,
+                                members,
                                 toggle: foldElsewhere(key),
                               })}
+                              {projectMenu && (
+                                <IconButton
+                                  title={`项目操作 · ${device.name} · ${project.path}`}
+                                  className="row-action"
+                                  onClick={(event) => {
+                                    const box = event.currentTarget.getBoundingClientRect();
+                                    projectMenu(project, { x: box.left, y: box.bottom + 4 });
+                                  }}
+                                >
+                                  <Ellipsis />
+                                </IconButton>
+                              )}
                               {createElsewhere && device.online && (
                                 <IconButton
                                   title={`新建会话 · ${device.name} · ${project.path}`}
@@ -489,7 +506,7 @@ export default function Sidebar({
                                 </IconButton>
                               )}
                             </div>
-                            {open(key) && renderSessions(key, project.sessions)}
+                            {open(key) && renderSessions(key, members)}
                           </Fragment>
                         );
                       })}
@@ -525,9 +542,7 @@ export default function Sidebar({
           <strong>{card.session.title}</strong>
           <span>
             <Folder />
-            {isInside(card.session.projectPath, workspaceRoots)
-              ? '普通会话'
-              : card.session.projectPath}
+            {inProject(card.session) ? card.session.projectPath : '普通会话'}
           </span>
           <small>
             {activity(card.session)} · {new Date(card.session.updatedAt).toLocaleString('zh-CN')}

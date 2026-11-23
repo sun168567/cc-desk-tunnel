@@ -96,7 +96,6 @@ test('history read before shows from disk, the service sends only what came sinc
     const other = server.store.create(randomUUID(), '别处删除的会话', folder, device);
     for (let i = 0; i < 3; i++) turn(session, i);
     turn(other, 9);
-    await page.evaluate((folder) => window.desktop!.saveShared('projects', [folder]), folder);
     page = await signIn(page);
     await page.locator('.session-select').filter({ hasText: '别处删除的会话' }).click();
     await expect(page.getByText('缓存问题9', { exact: true })).toBeVisible();

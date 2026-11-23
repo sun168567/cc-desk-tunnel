@@ -39,6 +39,7 @@ function fixture(t) {
     version: '0.3.4',
     connectionId: randomUUID(),
     adapter: 'claude-code',
+    projects: [],
     sessions: [],
     browser,
   });

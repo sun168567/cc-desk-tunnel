@@ -66,6 +66,7 @@ async function open(page: import('@playwright/test').Page, finished = true) {
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
         return;

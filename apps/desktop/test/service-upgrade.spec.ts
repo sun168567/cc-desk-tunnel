@@ -34,6 +34,7 @@ async function connect(page: Page, version: string, sessions: Session[]) {
           version,
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions,
           update: { state: 'available', latest: '9.9.9', checkedAt: Date.now() },
         });

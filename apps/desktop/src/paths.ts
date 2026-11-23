@@ -6,7 +6,10 @@ export const folderName = (path: string) =>
     .split(isWindowsPath(path) ? /[\\/]/ : '/')
     .filter(Boolean)
     .at(-1) || path;
-// Whether a path lies under one of the folders that hold the sessions without a project.
+// What a project is called: the name the user gave it, or its folder's.
+export const projectName = (project: { name?: string; path: string }) =>
+  project.name || folderName(project.path);
+// Whether a path lies under one of the folders.
 export const isInside = (path: string, roots: string[]) =>
   roots.some((root) =>
     pathKey(path).startsWith(`${pathKey(root)}${isWindowsPath(root) ? '\\' : '/'}`),
@@ -27,5 +30,3 @@ export function ago(time: number) {
   if (minutes < 60 * 24 * 30) return `${Math.floor(minutes / 60 / 24)} 天`;
   return new Date(time).toLocaleDateString('zh-CN');
 }
-export const withProject = (projects: string[], path: string) =>
-  projects.some((item) => pathKey(item) === pathKey(path)) ? projects : [...projects, path];

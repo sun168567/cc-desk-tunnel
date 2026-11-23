@@ -169,17 +169,24 @@ export function RenameSessionDialog({
 export function RenameProjectDialog({
   path,
   name: current,
+  busy,
+  connected,
+  error,
   close,
   rename,
-}: {
+}: DialogProps & {
   path: string;
   name: string;
-  close: () => void;
   rename: (name: string) => void;
 }) {
   const [name, setName] = useState(current);
   return (
-    <Modal title="项目显示名称" onClose={close}>
+    <Modal
+      title="项目显示名称"
+      onClose={() => {
+        if (!busy) close();
+      }}
+    >
       <form
         className="dialog-form"
         onSubmit={(event) => {
@@ -198,13 +205,18 @@ export function RenameProjectDialog({
           />
         </label>
         <p className="muted">
-          只改变这台电脑上列表里的名字，不改动文件夹 <code>{path}</code>；留空恢复文件夹名。
+          只改名字，不改动文件夹 <code>{path}</code>；留空恢复文件夹名。
         </p>
+        {error && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
         <div className="dialog-actions">
-          <button type="button" className="button secondary" onClick={close}>
+          <button type="button" className="button secondary" disabled={busy} onClick={close}>
             取消
           </button>
-          <button className="button primary">
+          <button className="button primary" disabled={busy || !connected}>
             <Check />
             保存
           </button>

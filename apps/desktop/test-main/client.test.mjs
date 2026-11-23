@@ -52,6 +52,7 @@ function fixture(t) {
     version: '0.0.1',
     connectionId: randomUUID(),
     adapter: 'simulation',
+    projects: [],
     sessions,
   });
   t.after(() => {
@@ -678,6 +679,7 @@ test('a remote connection that breaks is made again through a new bridge, and on
       version: '0.0.1',
       connectionId: randomUUID(),
       adapter: 'claude-code',
+      projects: [],
       sessions: [session],
     });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 5));

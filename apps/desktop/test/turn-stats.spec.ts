@@ -51,6 +51,7 @@ async function open(page: Page, stats: Record<string, unknown>, on = true) {
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
         return;

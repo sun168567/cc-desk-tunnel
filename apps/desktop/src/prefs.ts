@@ -3,8 +3,8 @@ import { onSharedChange, saveShared, shareOnce, shared } from './shared.ts';
 import { defaultView, viewModes } from './transcriptView.ts';
 import type { TranscriptView } from './transcriptView.ts';
 
-// Choices that belong to this computer and never reach the service: what is pinned, what a project is called
-// here, which events raise a notification, and the keyboard shortcuts. The windows of the computer's
+// Choices that belong to this computer and never reach the service: what is pinned and folded, which events raise
+// a notification, and the keyboard shortcuts. The windows of the computer's
 // connections share them (see shared.ts).
 export type NotifyKind = 'done' | 'failed' | 'approval' | 'question' | 'schedule' | 'connection';
 import { connectionWaits, waitRange } from './setting-fields.ts';
@@ -31,7 +31,6 @@ export type Prefs = {
   // the computer's id, a line break and the folder's pathKey(), and the sessions with no project by the
   // computer's id and a line break.
   collapsedElsewhere: string[];
-  projectNames: Record<string, string>;
   notify: { enabled: boolean; sound: boolean } & Record<NotifyKind, boolean>;
   // `keys` holds only what the user changed, by action; an empty combination means none.
   shortcuts: { enabled: boolean; keys: Record<string, string> };
@@ -62,7 +61,6 @@ const defaults: Prefs = {
   collapsedProjects: [],
   elsewhereOpen: false,
   collapsedElsewhere: [],
-  projectNames: {},
   notify: {
     enabled: true,
     sound: true,
@@ -103,8 +101,6 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
       collapsedProjects: strings(saved.collapsedProjects),
       elsewhereOpen: saved.elsewhereOpen === true,
       collapsedElsewhere: strings(saved.collapsedElsewhere),
-      projectNames:
-        saved.projectNames && typeof saved.projectNames === 'object' ? saved.projectNames : {},
       notify: { ...defaults.notify, ...(typeof saved.notify === 'object' ? saved.notify : {}) },
       shortcuts: {
         enabled: saved.shortcuts?.enabled !== false,

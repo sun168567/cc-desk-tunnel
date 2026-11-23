@@ -190,12 +190,17 @@ test('Electron loads the built UI with sandbox and closes its execution connecti
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env))
     if (value !== undefined && name !== 'ELECTRON_RUN_AS_NODE') env[name] = value;
+  const profile = resolve('.local/ui-test/profile-smoke');
+  const args = connectionArgs(profile, true);
+  // As 0.3.17 left it: one project list for all the computer's connections, the names with the preferences.
+  const legacy = 'D:\\工作\\升级前的项目';
+  writeFileSync(resolve(profile, 'shared', 'projects.json'), JSON.stringify([legacy]));
+  writeFileSync(
+    resolve(profile, 'shared', 'prefs.json'),
+    JSON.stringify({ projectNames: { [legacy.toLowerCase()]: '升级前的名字' } }),
+  );
   const application = await _electron.launch({
-    args: [
-      resolve('apps/desktop'),
-      '--smoke-test',
-      ...connectionArgs(resolve('.local/ui-test/profile-smoke'), true),
-    ],
+    args: [resolve('apps/desktop'), '--smoke-test', ...args],
     env,
   });
   let sessionTitle = '';
@@ -235,6 +240,13 @@ test('Electron loads the built UI with sandbox and closes its execution connecti
     const page = await signInWindow(application);
     // Its window is shown, and the sign-in window gone.
     await expect.poll(security).toEqual([safe]);
+    // The connection hands the computer's old project list to its service, names and all, and the list goes.
+    await expect(
+      page.locator(`.project-group > h2[title="${legacy.replaceAll('\\', '\\\\')}"]`),
+    ).toContainText('升级前的名字');
+    await expect
+      .poll(() => existsSync(resolve(profile, 'shared', 'legacy-projects.json')))
+      .toBe(false);
     await page.locator('.new-session').click();
     const plain = page.locator('.session-list > .session-row.selected');
     await expect(plain.locator('strong')).toHaveText('新会话');
@@ -537,6 +549,33 @@ test('a session on another computer is listed apart, read, and taken over with a
   await expect(computer).toHaveAttribute('aria-expanded', 'false');
   await computer.click();
   await expect(row).toHaveCount(1);
+  // The first computer's project is named and removed from here, and that computer shows it, as the service keeps
+  // the projects for every computer.
+  const heading = async () =>
+    other.locator('.elsewhere-project').nth(
+      await row.evaluate((element) => {
+        let above = element.previousElementSibling!;
+        while (!above.classList.contains('elsewhere-project'))
+          above = above.previousElementSibling!;
+        return [...document.querySelectorAll('.elsewhere-project')].indexOf(above);
+      }),
+    );
+  await (await heading()).click({ button: 'right' });
+  await other.getByRole('menuitem', { name: '修改显示名称', exact: true }).click();
+  await other.getByRole('dialog').getByLabel('显示名称').fill('远处改的名字');
+  await other.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
+  await expect(page.locator('.composer-context')).toContainText('远处改的名字');
+  await expect(await heading()).toContainText('远处改的名字');
+  await (await heading()).click({ button: 'right' });
+  await other.getByRole('menuitem', { name: '移除项目', exact: true }).click();
+  await expect(page.locator('.composer-context')).toContainText('普通会话');
+  // Under the other computer the session is a plain one now; added again there, the folder is its project anew.
+  await expect(row).toHaveCount(1);
+  await page.getByRole('button', { name: '添加项目', exact: true }).click();
+  await page.getByLabel('本机项目目录').fill('D:\\工作\\中文项目');
+  await page.getByRole('button', { name: '添加', exact: true }).click();
+  await expect(page.locator('.composer-context')).toContainText('中文项目');
+  await expect(await heading()).toContainText('中文项目');
   await row.click();
   await expect(other.getByText('第一台电脑上的话')).toBeVisible();
   const bar = other.locator('.elsewhere-bar');

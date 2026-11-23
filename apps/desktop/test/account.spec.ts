@@ -23,6 +23,7 @@ test('setup token can be configured before any session, stays masked, and ordina
           version: '0.3.14',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [],
         });
         return;

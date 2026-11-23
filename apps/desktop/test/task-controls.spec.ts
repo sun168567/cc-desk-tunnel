@@ -54,6 +54,7 @@ test('a command waited on in the foreground can be sent to the background or end
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
         return;
