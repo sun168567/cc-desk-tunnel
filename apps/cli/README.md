@@ -12,3 +12,5 @@ node apps/cli/bin/ccdt.mjs -r         # 从这个项目的会话里选一个
 ```
 
 用法和本地的 `claude` 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。运行 `ccdt --help` 查看全部命令。
+
+程序和其他 agent 用 `ccdt -p` 与跟进命令（`tasks.mjs`）或 `ccdt acp`（`acp.mjs`）把任务交给服务端上的 Claude；两者共用 `agent.mjs`：经服务端自己的对话发消息，从会话事件里跟到 Claude 停下等人或这一轮结束。用法见 [docs/cli.md](../../docs/cli.md#供程序和其他-agent-使用)。

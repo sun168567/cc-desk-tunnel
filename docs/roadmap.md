@@ -11,6 +11,7 @@
 - 界面：三栏布局与分类设置页、项目与会话管理（置顶、更换项目、导出）、流式过程展示、提问卡片、模型 / 推理强度 / 审批模式 / 上下文、Claude Code 设置页、在 ccdt 中打开会话、账号登录与额度、调用统计、定时任务、草稿保存、系统通知、可改的快捷键、托盘后台。
 - 发行与部署：Windows 安装包（自带运行组件）、Docker / Compose 部署脚本、三种 TLS 入口、备份恢复、原地升级、跟踪发布页、从客户端一键升级服务端与客户端。
 - 终端客户端 `ccdt`：独立安装（Windows、macOS、Linux x64 与 arm64），在使用者自己的终端里打开原版 Claude Code，与图形客户端共用会话、上下文和调用统计；终端开着时图形客户端显示它在做什么，每一轮结束即可见。Windows 与 Linux 在真实部署上端到端实测过，见[终端客户端](cli.md)与[设计记录](research/standalone-cli.md)。
+- 供其他 agent 调用：`ccdt -p` 与跟进命令（状态、追加指示、等待、批准 / 拒绝 / 回答、停止）和 `ccdt acp`（Agent Client Protocol），其他 agent 和编辑器经这台电脑上的 `ccdt` 把任务交给服务端上的 Claude，审批交给调用方；在 Windows 上连接真实部署验证过，ACP 用 acpx 验证，见[终端客户端](cli.md#供程序和其他-agent-使用)。服务端上的 Claude 调用其他 agent（Codex、DeepSeek Harness 等）不需要专门支持：经执行通道运行它们的命令行即可。
 
 各版本的变化见[变更记录](../CHANGELOG.md)。
 
