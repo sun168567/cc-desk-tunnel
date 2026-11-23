@@ -777,6 +777,8 @@ const AGENT_COMMANDS = { status: statusOf, tell, wait, logs, stop, approve, deny
 // on it while they wait.
 function agentContext(config, values) {
   const here = process.cwd();
+  // Every connection made, let go of when the command ends however it ends: one left open keeps ccdt running.
+  const made = new Set();
   const deviceId = config.device();
   const online = () => !!values.server && onlineAt(onlinePath(config), values.server);
   return {
@@ -792,7 +794,9 @@ function agentContext(config, values) {
     // Without `tunnel` a channel is opened as for a terminal: unless ccdt online carries this computer's.
     async connect(tunnel) {
       try {
-        return await signIn(config, values, true, tunnel);
+        const service = await signIn(config, values, true, tunnel);
+        made.add(service);
+        return service;
       } catch (error) {
         throw Object.assign(error, { exit: error.exit ?? EXIT.connection });
       }
@@ -817,11 +821,21 @@ function agentContext(config, values) {
       }
     },
     release: (service) => service.close().catch(() => {}),
+    async done() {
+      await Promise.all([...made].map((service) => service.close().catch(() => {})));
+    },
   };
 }
 
 async function agentCommand(config, values, command, rest) {
   const context = agentContext(config, values);
+  try {
+    return await commandFor(context, values, command, rest);
+  } finally {
+    await context.done();
+  }
+}
+async function commandFor(context, values, command, rest) {
   if (values.print) {
     let prompt = [command, ...rest].filter((word) => word !== undefined).join(' ');
     if (!prompt.trim() && !process.stdin.isTTY) {
@@ -903,7 +917,14 @@ export async function main(argv) {
       });
       process.exit(code);
     }
-    if (command === 'acp') return await serveAcp(agentContext(config, values));
+    if (command === 'acp') {
+      const context = agentContext(config, values);
+      try {
+        return await serveAcp(context);
+      } finally {
+        await context.done();
+      }
+    }
     if (AGENT_COMMANDS[command]) return await agentCommand(config, values, command, rest);
     if (command && !['new', 'open', 'sessions', 'usage'].includes(command))
       return (say(`没有这个命令：${command}\n\n${HELP}`), 2);
