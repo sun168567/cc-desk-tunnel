@@ -107,11 +107,11 @@ sudo cc-desk-tunnel help      # 全部命令：更换凭据、备份恢复、证
 - macOS（实验性）：Apple 芯片或 Intel 的 `.dmg`，见 [macOS 客户端](docs/macos.md)。
 - Linux x64（实验性）：`.deb`，见 [Linux 客户端](docs/linux.md)。
 
-Windows 安装包自带 PowerShell 7 和 OpenSSH，不需要另装任何东西。启动后填入上一步的三项信息并连接。首次运行会遇到 SmartScreen 提示，处理方法见[杀毒软件与 SmartScreen](#杀毒软件与-smartscreen)。macOS 与 Linux 的客户端没有签名，升级时需要重新下载安装。
+Windows 安装包自带 PowerShell 7、OpenSSH 和终端客户端 `ccdt`，不需要另装任何东西。启动后填入上一步的三项信息并连接。首次运行会遇到 SmartScreen 提示，处理方法见[杀毒软件与 SmartScreen](#杀毒软件与-smartscreen)。macOS 与 Linux 的客户端没有签名，升级时需要重新下载安装。
 
 #### 终端客户端 ccdt
 
-Windows，在 PowerShell 里运行：
+装了 Windows 图形客户端就已经有 `ccdt`，新开的终端窗口里直接用。只用终端时单独安装，Windows 在 PowerShell 里运行：
 
 ```powershell
 irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
