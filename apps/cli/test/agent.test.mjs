@@ -115,7 +115,7 @@ test('ccdt -p starts a session of this directory, waits for the turn and prints 
   assert.match(d.err.join('\n'), /ccdt wait/);
 });
 
-test('a tool approval stops the wait for the caller, who approves it and waits again', async (t) => {
+test('a tool approval stops the wait for the caller, whose approval goes on to the next stop', async (t) => {
   const f = await fixture(t);
   const a = f.run();
   await printTask(a.context, { 'output-format': 'json' }, '准备');
@@ -131,14 +131,15 @@ test('a tool approval stops the wait for the caller, who approves it and waits a
   );
   // What to do next is said in words.
   assert.match(next(stopped), /批准：ccdt approve \S+；拒绝：ccdt deny/);
+  assert.match(next(stopped), /回复后 ccdt 接着等/);
   const seen = f.run();
   assert.equal(await status(seen.context, { json: true }, id), EXIT.needsYou);
   assert.equal(seen.json().state, 'awaiting_approval');
   // Answering a question is refused for an approval.
   await assert.rejects(answer(f.run().context, {}, id, ['是']), /请求批准，不是提问/);
-  assert.equal(await approve(f.run().context, {}, id), EXIT.done);
+  // The approval is followed as a task is: the request answered is not taken for one still waiting.
   const after = f.run();
-  assert.equal(await wait(after.context, { 'output-format': 'json' }, id), EXIT.done);
+  assert.equal(await approve(after.context, { 'output-format': 'json' }, id), EXIT.done);
   assert.equal(after.json().state, 'completed');
   assert.match(after.json().result, /模拟工具已完成/);
   // Nothing waits any more.
@@ -165,7 +166,10 @@ test('questions are answered in order; a plan is sent back with what to change',
   assert.deepEqual(question.approval.questions[1].options, ['现在', '稍后']);
   await assert.rejects(answer(f.run().context, {}, id, ['界面']), /问了 2 个问题/);
   await assert.rejects(approve(f.run().context, {}, id), /在提问/);
-  assert.equal(await answer(f.run().context, {}, id, ['界面, 文档', '现在']), EXIT.done);
+  // With --bg the answer is sent alone, and waited for apart.
+  const sent = f.run();
+  assert.equal(await answer(sent.context, { bg: true }, id, ['界面, 文档', '现在']), EXIT.done);
+  assert.match(sent.err[0], /已回复/);
   const answered = f.run();
   assert.equal(await wait(answered.context, { json: true }, id), EXIT.done);
   assert.match(answered.json().result, /收到回答：界面, 文档；现在/);
@@ -175,9 +179,8 @@ test('questions are answered in order; a plan is sent back with what to change',
   assert.equal(await wait(planned.context, { json: true }, id), EXIT.needsYou);
   assert.equal(planned.json().approval.kind, 'plan');
   assert.match(planned.json().approval.plan, /计划：整理设置页/);
-  assert.equal(await deny(f.run().context, {}, id, '先只改文档'), EXIT.done);
   const denied = f.run();
-  assert.equal(await wait(denied.context, { json: true }, id), EXIT.done);
+  assert.equal(await deny(denied.context, { json: true }, id, '先只改文档'), EXIT.done);
   assert.match(denied.json().result, /按你的意见继续规划/);
 });
 

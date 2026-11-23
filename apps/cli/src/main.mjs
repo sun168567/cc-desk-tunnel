@@ -58,7 +58,7 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
   ccdt status <会话>     在做什么、在等什么
   ccdt tell <会话> "…"   追加指示：运行中就加进正在进行的这一轮
   ccdt wait <会话>       等到这一轮结束，或 Claude 等人批准、回答
-  ccdt approve|deny <会话>  批准或拒绝 Claude 等待的请求；ccdt answer <会话> "答案" 回答它的提问
+  ccdt approve|deny <会话>  批准或拒绝 Claude 等待的请求，再等到它下次停下；ccdt answer <会话> "答案" 回答提问
   ccdt logs <会话>       最近的对话和工具调用
   ccdt stop <会话>       停止正在进行的这一轮
   ccdt acp               作为 ACP（Agent Client Protocol）agent 运行，供 Zed、JetBrains、acpx 等接入
@@ -106,7 +106,9 @@ json 结果：{"session_id","state","result","is_error","approval"?}。state 为
 或 running。approval 说明在等什么：{"kind":"tool","tool","input","reason"?}、{"kind":"plan","plan"}
 或 {"kind":"question","questions":[{"question","options","multiSelect"}]}。
 
-审批：Claude 请求批准或提问时，ccdt -p 和 ccdt wait 停下来，交给调用方用 approve、deny、answer 处理；
+审批：Claude 请求批准或提问时，ccdt -p 和 ccdt wait 停下来，交给调用方用 approve、deny、answer 处理。
+这三个命令回复后像 ccdt -p 一样接着等、输出结果、退出码相同，等待期间提供这台电脑的执行通道；
+加 --bg 只回复不等（之后命令要在这台电脑上运行时，需图形客户端或 ccdt online 开着）。
 图形客户端里同时也能处理，谁先回答算谁的。要少被问，派发时带 --permission-mode。
 
 用法提示：

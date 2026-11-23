@@ -27,7 +27,7 @@ export function next(result) {
         approval.kind === 'plan'
           ? `批准：ccdt approve ${id} [--mode auto|acceptEdits|default]；要它改计划：ccdt deny ${id} "意见"`
           : `批准：ccdt approve ${id}；拒绝：ccdt deny ${id}`,
-        `然后用 ccdt wait ${id} 等它接着做。也可以在图形客户端里处理。`,
+        `回复后 ccdt 接着等到它再停下。也可以在图形客户端里处理。`,
       ]
         .filter(Boolean)
         .join('\n');
@@ -39,7 +39,7 @@ export function next(result) {
             `${index + 1}. ${item.question}${item.options.length ? `（可选：${item.options.join(' / ')}${item.multiSelect ? '，可多选，用逗号隔开' : ''}）` : ''}`,
         ),
         `回答：ccdt answer ${id} "第 1 题的答案" ["第 2 题的答案" …]；不答：ccdt deny ${id}`,
-        `然后用 ccdt wait ${id} 等它接着做。`,
+        `回复后 ccdt 接着等到它再停下。`,
       ].join('\n');
     case 'background':
       return `这一轮已结束，Claude 启动的后台任务还在运行，结束后它会自动接着做：ccdt wait ${id} 等到那时。`;
@@ -91,9 +91,19 @@ function streamer(context) {
   };
 }
 
+// Said where a run on this computer goes on after ccdt has let go of its connection.
+const UNCARRIED = 'Claude 在这台电脑上执行命令要靠它的连接：保持图形客户端或 ccdt online 开着。';
+
 // Follows the run to where it stops, signing in again after a lost connection, and prints the result.
-async function await_(context, service, session, since, { format, timeoutMs, past } = {}) {
+async function await_(
+  context,
+  service,
+  session,
+  since,
+  { format, timeoutMs, past, answered } = {},
+) {
   const followed = new Follow(session.id, since);
+  if (answered) followed.answered.add(answered);
   const deadline = timeoutMs ? Date.now() + timeoutMs : undefined;
   const onEvent = format === 'stream-json' ? streamer(context) : undefined;
   for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
@@ -183,7 +193,7 @@ export async function printTask(context, values, prompt) {
     if (format === 'text') context.out(session.id);
     else context.out(JSON.stringify(result));
     context.err(
-      `已发出。ccdt wait ${short(session.id)} 等结果，ccdt status ${short(session.id)} 看进度。${context.carried(session) ? '' : '\nClaude 在这台电脑上执行命令要靠它的连接：保持图形客户端或 ccdt online 开着。'}`,
+      `已发出。ccdt wait ${short(session.id)} 等结果，ccdt status ${short(session.id)} 看进度。${context.carried(session) ? '' : `\n${UNCARRIED}`}`,
     );
     return EXIT.done;
   }
@@ -282,7 +292,7 @@ export async function tell(context, values, ref, text) {
   if (values.json)
     context.out(JSON.stringify({ session_id: session.id, sent: true, joined: running }));
   context.err(
-    `${running ? '已追加到正在进行的这一轮。' : '已发出。'}ccdt wait ${short(session.id)} 等结果。`,
+    `${running ? '已追加到正在进行的这一轮。' : '已发出。'}ccdt wait ${short(session.id)} 等结果。${running || context.carried(session) ? '' : `\n${UNCARRIED}`}`,
   );
   return EXIT.done;
 }
@@ -317,9 +327,10 @@ export async function stop(context, values, ref) {
   return EXIT.done;
 }
 
-// What Claude waits on in the session now, read from its latest history.
-async function waitingOn(context, ref) {
-  const { service, session } = await opened(context, ref);
+// What Claude waits on in the session now, read from its latest history. Unless only the answer is sent (`bg`),
+// the command goes on as Claude does, which on this computer needs its execution channel.
+async function waitingOn(context, ref, bg) {
+  const { service, session } = await opened(context, ref, !bg);
   const followed = new Follow(session.id);
   const snapshot = await subscribe(service, session.id);
   for (const event of snapshot?.events ?? []) followed.apply(event);
@@ -332,7 +343,10 @@ async function waitingOn(context, ref) {
   return { service, session, approval };
 }
 
+// The answer sent, and Claude followed to where it stops next, as `ccdt -p` does: what it goes on to run on this
+// computer needs the channel up before the answer lets it. `--bg` sends the answer alone.
 async function reply(context, values, service, session, approval, answer) {
+  if (!values.bg) service = await context.keep(service, session);
   await service.request({
     type: 'approval.reply',
     sessionId: session.id,
@@ -340,15 +354,24 @@ async function reply(context, values, service, session, approval, answer) {
     approvalId: approval.approvalId,
     ...answer,
   });
+  if (!values.bg)
+    return await await_(context, service, session, undefined, {
+      format: formatOf(values),
+      timeoutMs: timeoutOf(values),
+      answered: approval.approvalId,
+    });
   await context.release(service);
-  if (values.json) context.out(JSON.stringify({ session_id: session.id, answered: true }));
-  else context.err(`已回复。ccdt wait ${short(session.id)} 等它接着做。`);
+  if (values.json || formatOf(values) !== 'text')
+    context.out(JSON.stringify({ session_id: session.id, answered: true }));
+  context.err(
+    `已回复。ccdt wait ${short(session.id)} 等它接着做。${context.carried(session) ? '' : `\n${UNCARRIED}`}`,
+  );
   return EXIT.done;
 }
 
 // `ccdt approve <ID>`: allows the tool or the plan Claude waits on, as the button in the window does.
 export async function approve(context, values, ref) {
-  const { service, session, approval } = await waitingOn(context, ref);
+  const { service, session, approval } = await waitingOn(context, ref, values.bg);
   if (approval.kind === 'question') {
     await context.release(service);
     throw said(`Claude 在提问，不是请求批准：用 ccdt answer ${short(session.id)} "答案"。`);
@@ -364,7 +387,7 @@ export async function approve(context, values, ref) {
 // `ccdt deny <ID> [reason]`: refuses it; for a plan the reason is what Claude plans further by. A question is
 // left unanswered.
 export async function deny(context, values, ref, reason) {
-  const { service, session, approval } = await waitingOn(context, ref);
+  const { service, session, approval } = await waitingOn(context, ref, values.bg);
   return reply(context, values, service, session, approval, {
     allowed: false,
     ...(approval.kind === 'plan' && reason.trim() ? { plan: { feedback: reason.trim() } } : {}),
@@ -373,7 +396,7 @@ export async function deny(context, values, ref, reason) {
 
 // `ccdt answer <ID> <answer>…`: one answer per question, in their order; several choices joined with commas.
 export async function answer(context, values, ref, answers) {
-  const { service, session, approval } = await waitingOn(context, ref);
+  const { service, session, approval } = await waitingOn(context, ref, values.bg);
   if (approval.kind !== 'question') {
     await context.release(service);
     throw said(`Claude 在请求批准，不是提问：用 ccdt approve ${short(session.id)} 或 ccdt deny。`);

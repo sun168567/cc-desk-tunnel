@@ -127,6 +127,8 @@ export class Follow {
     this.texts = new Map();
     this.tools = new Map();
     this.approvals = new Map();
+    // Requests answered from here, which their events may still show as waiting.
+    this.answered = new Set();
     this.status = undefined;
     this.runId = undefined;
     this.errors = [];
@@ -162,7 +164,8 @@ export class Follow {
         break;
       }
       case 'approval.requested':
-        this.approvals.set(payload.approvalId, { ...payload, runId: event.runId });
+        if (!this.answered.has(payload.approvalId))
+          this.approvals.set(payload.approvalId, { ...payload, runId: event.runId });
         break;
       case 'approval.resolved':
         this.approvals.delete(payload.approvalId);
