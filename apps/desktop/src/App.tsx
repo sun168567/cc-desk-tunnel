@@ -63,7 +63,7 @@ import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
 import FilePanel from './FilePanel.tsx';
-import { filePlaces, sessionFolder, sftpPath } from './files.ts';
+import { filePlaces, nativeLabels, sessionFolder, sftpPath } from './files.ts';
 import type { FilePlace } from './files.ts';
 import type { ConnectionForm } from './LoginPage.tsx';
 import type { SignInReport } from './Launcher.tsx';
@@ -2110,6 +2110,7 @@ export function App({
                 noticeKey={window.desktop?.boot.connection ?? ''}
                 project={selected && onThis(selected) ? selected.projectPath : null}
                 request={filesRequest}
+                aliasOf={nativeLabels(state.projects, state.sessions)}
               />
             </aside>
           )}

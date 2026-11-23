@@ -349,6 +349,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.file-alias {
+  flex: none;
+  max-width: 50%;
+  margin-left: 6px;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .file-dir {
   flex: 1;
   min-width: 0;
