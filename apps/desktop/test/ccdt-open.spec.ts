@@ -76,8 +76,11 @@ test('a session opens in ccdt signed in as the window is, or the window says how
   await new Promise((done) => server.once('listening', done));
   const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}/ws`;
   const env: Record<string, string> = {};
+  // The search path is named Path or PATH, as the shell that started the tests has it: whatever its case, it is
+  // replaced, or the ccdt installed on this computer is found and signed in to this test's service.
   for (const [name, value] of Object.entries(process.env))
-    if (value !== undefined && name !== 'ELECTRON_RUN_AS_NODE') env[name] = value;
+    if (value !== undefined && name !== 'ELECTRON_RUN_AS_NODE' && name.toUpperCase() !== 'PATH')
+      env[name] = value;
   // ccdt is looked for only here: on this PATH and in this install folder, which holds none.
   env.Path = `${bin};${process.env.SystemRoot}\\System32`;
   env.LOCALAPPDATA = resolve(root, 'local');
