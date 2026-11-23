@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { builtinModules } from 'node:module';
 import {
   chmodSync,
   cpSync,
@@ -14,9 +13,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build as viteBuild } from 'vite';
 import { packageName } from '../apps/cli/src/runtime.mjs';
-import { copyDependency, posixService } from './package-desktop.mjs';
+import { bundleCcdt, checkCcdt, copyDependency, posixService } from './package-desktop.mjs';
 
 // The ccdt package of the system this runs on, a folder `ccdt` in a .zip (Windows) or .tar.gz (macOS, Linux): the
 // Node it runs with, ccdt with what it imports bundled into ccdt.mjs, and what its SSH service for Claude's commands
@@ -83,41 +81,7 @@ const staging = join(root, '.local/cli-package');
 const stage = join(staging, 'ccdt');
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
-await viteBuild({
-  configFile: false,
-  root,
-  logLevel: 'warn',
-  // As for the desktop bridge: a package is for the system it is built on, and holds only what that one runs.
-  define: {
-    'process.platform': JSON.stringify(process.platform),
-    __CCDT_VERSION__: JSON.stringify(version),
-  },
-  ssr: { noExternal: true },
-  build: {
-    ssr: true,
-    target: 'node24',
-    outDir: stage,
-    emptyOutDir: false,
-    rolldownOptions: {
-      input: join(root, 'apps/cli/bin/ccdt.mjs'),
-      external: [
-        ...builtinModules,
-        ...builtinModules.map((name) => `node:${name}`),
-        'bufferutil',
-        'utf-8-validate',
-        // The file panel's SFTP client, which the bridge loads only when the panel is used; ccdt has no panel.
-        'ssh2',
-        ...(windows ? [] : posixService.dependencies),
-      ],
-      output: { format: 'es', entryFileNames: 'ccdt.mjs', codeSplitting: false },
-    },
-  },
-});
-// What the bundle loads by path beside itself: the scripts of the Windows SSH service, or the modules of the
-// POSIX one's own process with the library they import.
-const electron = join(root, 'apps/desktop/electron');
-for (const file of windows ? ['prepare-ssh.ps1', 'component-host.ps1'] : posixService.files)
-  cpSync(join(electron, file), join(stage, file));
+await bundleCcdt(root, stage, { version });
 if (windows) {
   for (const name of ['openssh', 'pwsh'])
     cpSync(join(vendor, name), join(stage, 'vendor', name), {
@@ -143,25 +107,7 @@ if (windows) {
 await runtime(stage);
 cpSync(join(root, 'apps/cli/install/README.txt'), join(stage, 'README.txt'));
 
-// The check: the packaged program starts, says its version, and fails a sign-in to nowhere with a message instead
-// of an error of its own; that loads the bundled connection.
-const launcher = windows ? join(stage, 'ccdt.cmd') : join(stage, 'bin', 'ccdt');
-const run = (args, input) =>
-  execFileSync(windows ? 'cmd.exe' : launcher, windows ? ['/d', '/c', launcher, ...args] : args, {
-    input,
-    encoding: 'utf8',
-    env: { ...process.env, CCDT_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'ccdt-check-')) },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-const reported = run(['--version']).trim();
-if (reported !== `ccdt ${version}`) throw new Error(`The package reports "${reported}".`);
-try {
-  run(['login', 'wss://127.0.0.1:9/ws', '--token-stdin'], 'x'.repeat(32));
-  throw new Error('A sign-in to nowhere succeeded.');
-} catch (error) {
-  if (error.status !== 1 || /Error:|at .+\(/.test(String(error.stderr)))
-    throw new Error(`The packaged sign-in failed badly:\n${error.stderr ?? error.message}`);
-}
+checkCcdt(windows ? join(stage, 'ccdt.cmd') : join(stage, 'bin', 'ccdt'), version);
 
 mkdirSync(output, { recursive: true });
 rmSync(archive, { force: true });

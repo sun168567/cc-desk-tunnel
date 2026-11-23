@@ -1,13 +1,16 @@
+import { execFileSync } from 'node:child_process';
 import { builtinModules, createRequire } from 'node:module';
 import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { build as viteBuild } from 'vite';
 
@@ -128,4 +131,67 @@ export async function stageDesktop(root, app, { description, files = [], depende
       2,
     ) + '\n',
   );
+}
+
+// ccdt, the terminal client, with what it imports bundled into one ccdt.mjs in `outDir`, and the scripts of its SSH
+// service that it loads by path beside it. `desktop`: the ccdt the desktop package carries, run by the desktop's own
+// program and updated with it rather than by itself.
+export async function bundleCcdt(root, outDir, { version, desktop = false }) {
+  const windows = process.platform === 'win32';
+  await viteBuild({
+    configFile: false,
+    root,
+    logLevel: 'warn',
+    // As for the desktop bridge: a package is for the system it is built on, and holds only what that one runs.
+    define: {
+      'process.platform': JSON.stringify(process.platform),
+      __CCDT_VERSION__: JSON.stringify(version),
+      __CCDT_DESKTOP__: JSON.stringify(desktop),
+    },
+    ssr: { noExternal: true },
+    build: {
+      ssr: true,
+      target: 'node24',
+      outDir,
+      emptyOutDir: false,
+      rolldownOptions: {
+        input: join(root, 'apps/cli/bin/ccdt.mjs'),
+        external: [
+          ...builtinModules,
+          ...builtinModules.map((name) => `node:${name}`),
+          'bufferutil',
+          'utf-8-validate',
+          // The file panel's SFTP client, which the bridge loads only when the panel is used; ccdt has no panel.
+          'ssh2',
+          ...(windows ? [] : posixService.dependencies),
+        ],
+        output: { format: 'es', entryFileNames: 'ccdt.mjs', codeSplitting: false },
+      },
+    },
+  });
+  const electron = join(root, 'apps/desktop/electron');
+  for (const file of windows ? ['prepare-ssh.ps1', 'component-host.ps1'] : posixService.files)
+    cpSync(join(electron, file), join(outDir, file));
+}
+
+// The check of a packaged ccdt: it starts, says its version, and fails a sign-in to nowhere with a message instead
+// of an error of its own; that loads the bundled connection.
+export function checkCcdt(launcher, version) {
+  const windows = process.platform === 'win32';
+  const run = (args, input) =>
+    execFileSync(windows ? 'cmd.exe' : launcher, windows ? ['/d', '/c', launcher, ...args] : args, {
+      input,
+      encoding: 'utf8',
+      env: { ...process.env, CCDT_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'ccdt-check-')) },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  const reported = run(['--version']).trim();
+  if (reported !== `ccdt ${version}`) throw new Error(`The package's ccdt reports "${reported}".`);
+  try {
+    run(['login', 'wss://127.0.0.1:9/ws', '--token-stdin'], 'x'.repeat(32));
+    throw new Error('A sign-in to nowhere succeeded.');
+  } catch (error) {
+    if (error.status !== 1 || /Error:|at .+\(/.test(String(error.stderr)))
+      throw new Error(`The packaged sign-in failed badly:\n${error.stderr ?? error.message}`);
+  }
 }
