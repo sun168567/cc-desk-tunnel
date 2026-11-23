@@ -2,7 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
+import { FORCED_UPGRADE_SINCE, projectOf } from '@cc-desk-tunnel/protocol';
 import { upgradeService } from '../../desktop/electron/service-upgrade.mjs';
 import { Config, hostOf, sameService, serviceKey } from './config.mjs';
 import { Service, proxyFor } from './connection.mjs';
@@ -665,8 +665,9 @@ async function show(config, values, service, session, fresh) {
   process.once('SIGHUP', close);
   process.once('SIGTERM', close);
   for (const stream of [process.stdin, process.stdout]) stream.on('error', close);
+  const project = projectOf(service.projects, session.device?.id, session.projectPath);
   say(
-    `${dim('项目')} ${session.projectPath}  ${dim('会话')} ${session.title}${fresh ? dim('（新建）') : ''}`,
+    `${dim('项目')} ${project?.name ? `${project.name} ${dim(session.projectPath)}` : session.projectPath}  ${dim('会话')} ${session.title}${fresh ? dim('（新建）') : ''}`,
   );
   if (newer(service.update)) say(notice(newer(service.update)));
   // A terminal of ccdt is taken over; a run from the desktop client has to finish first.
