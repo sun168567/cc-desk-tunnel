@@ -1951,8 +1951,8 @@ export function App({
               <div className="elsewhere-bar" role="status">
                 <Unplug />
                 <p>
-                  与服务端的连接断开了，正在重新连接。运行中的任务仍在服务端继续，连上之后这里会补上期间的内容；
-                  {state.error ? `原因：${state.error.split('\n')[0]}` : '不需要做什么。'}
+                  与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。
+                  {state.error ? `原因：${state.error.split('\n')[0]}` : ''}
                 </p>
                 <button type="button" className="button" onClick={disconnect}>
                   断开并回到登录页
@@ -1964,7 +1964,7 @@ export function App({
                 <Laptop />
                 <p>
                   连接{beside.join('、')}
-                  里有会话正在这个文件夹里运行。两边同时改动文件可能互相覆盖，建议等一边做完，或让它们在不同的文件夹里工作。
+                  里也有会话在这个文件夹运行，两边同时改动文件可能互相覆盖。
                 </p>
               </div>
             )}
@@ -1975,14 +1975,13 @@ export function App({
                   <p>
                     这个会话在设备“{selected.device?.name}”上，项目目录是{' '}
                     <code>{selected.projectPath}</code>
-                    。在这里发的消息、审批和停止都作用于那台电脑上的会话，命令也在那里执行。要换到这台电脑上做，选它在这里的项目目录或分叉到本机。
+                    。在这里的对话、审批和停止都作用于那台电脑，命令也在那里执行。
                   </p>
                 ) : (
                   <p>
                     这个会话在设备“{selected.device?.name ?? '未知设备'}”上，项目目录是{' '}
                     <code>{selected.projectPath}</code>
-                    。那台电脑目前不在线，这里只能查看；它连上服务后可以直接在这里操作。要在这台电脑上接着做，先选它在这里的项目目录；下一条消息会告诉
-                    Claude 换了电脑。
+                    。那台电脑不在线，这里只能查看，它上线后可以直接操作。
                   </p>
                 )}
                 <button

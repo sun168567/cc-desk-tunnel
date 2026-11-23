@@ -225,7 +225,7 @@ test('Electron: a sign-in window signs in to a service in its own process, one w
       resolve('..'),
     );
     await expect(second2.locator('.elsewhere-bar')).toContainText(
-      `连接“${shown(serverUrl)}”里有会话正在这个文件夹里运行`,
+      `连接“${shown(serverUrl)}”里也有会话在这个文件夹运行`,
     );
     await page.evaluate(() => window.desktop!.setBusy([]));
     await expect(second2.locator('.elsewhere-bar')).toHaveCount(0);

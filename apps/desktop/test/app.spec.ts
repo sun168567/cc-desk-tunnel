@@ -581,7 +581,7 @@ test('a session on another computer is listed apart, read, and taken over with a
   const bar = other.locator('.elsewhere-bar');
   await expect(bar).toContainText('浏览器');
   // The first computer is connected: the session can be worked on from here, running there.
-  await expect(bar).toContainText('在这里发的消息');
+  await expect(bar).toContainText('作用于那台电脑');
   await expect(other.locator('.composer')).toBeVisible();
   await other.screenshot({ path: resolve(screenshots, 'desktop-elsewhere.png') });
   other.once('dialog', (dialog) => void dialog.accept('E:\\另一台\\接管目录'));
