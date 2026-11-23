@@ -93,6 +93,22 @@ test('a project moved to another folder keeps its place and name, or joins the p
   store.renameProject(desktop.id, 'D:\\项目\\乙', '乙方');
   store.moveProject('E:\\新家\\甲', 'D:\\项目\\乙', desktop);
   assert.deepEqual(listed(store), [['台式机', 'D:\\项目\\乙', '乙方']]);
+  // Made in the same moment, the first stays first when it moves; a folder written another way stays the project.
+  const moment = '2026-01-01T00:00:00.000Z';
+  store.register(desktop, 'D:\\丙', undefined, moment);
+  store.register(desktop, 'D:\\丁', undefined, moment);
+  store.moveProject('D:\\丙', 'D:\\戊', desktop);
+  assert.deepEqual(listed(store), [
+    ['台式机', 'D:\\戊', null],
+    ['台式机', 'D:\\丁', null],
+    ['台式机', 'D:\\项目\\乙', '乙方'],
+  ]);
+  store.moveProject('D:\\戊', 'd:\\戊\\', desktop);
+  assert.deepEqual(listed(store), [
+    ['台式机', 'd:\\戊\\', null],
+    ['台式机', 'D:\\丁', null],
+    ['台式机', 'D:\\项目\\乙', '乙方'],
+  ]);
 });
 
 test('a computer signing in under a new name renames it in its projects', (t) => {

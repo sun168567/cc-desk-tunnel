@@ -841,19 +841,23 @@ export class SessionStore {
         'UPDATE OR IGNORE native_roots SET path_key = ? WHERE device_id = ? AND path_key = ?',
       )
       .run(pathKey(to), device.id, pathKey(from));
-    const moved = this.database
-      .prepare('SELECT name, created_at FROM projects WHERE device_id = ? AND path_key = ?')
-      .get(device.id, pathKey(from));
-    this.database
-      .prepare('DELETE FROM projects WHERE device_id = ? AND path_key = ?')
-      .run(device.id, pathKey(from));
-    this.register(device, to, undefined, moved ? String(moved.created_at) : undefined);
-    if (moved?.name)
+    // The project's row moves where it is, and so keeps its place among projects made in the same moment. Into a
+    // folder that is a project already, it joins that one, which takes its name if it has none.
+    if (pathKey(to) !== pathKey(from) && this.isProject(device.id, to)) {
       this.database
         .prepare(
-          'UPDATE projects SET name = ? WHERE device_id = ? AND path_key = ? AND name IS NULL',
+          `UPDATE projects SET name = COALESCE(name,
+            (SELECT name FROM projects WHERE device_id = ? AND path_key = ?)) WHERE device_id = ? AND path_key = ?`,
         )
-        .run(moved.name, device.id, pathKey(to));
+        .run(device.id, pathKey(from), device.id, pathKey(to));
+      this.database
+        .prepare('DELETE FROM projects WHERE device_id = ? AND path_key = ?')
+        .run(device.id, pathKey(from));
+    } else
+      this.database
+        .prepare('UPDATE projects SET path_key = ?, path = ? WHERE device_id = ? AND path_key = ?')
+        .run(pathKey(to), to, device.id, pathKey(from));
+    this.register(device, to);
     return members.map((session) => this.move(session.id, to, device));
   }
   // The directory Claude Code works in for a directory of a computer: one for each project, shared by its
