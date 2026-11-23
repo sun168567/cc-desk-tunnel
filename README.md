@@ -10,7 +10,6 @@ Claude Code on your own server, working on every computer you own.
 
 [![最新版本](https://img.shields.io/github/v/release/sun168567/cc-desk-tunnel?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&color=2ea44f)](https://github.com/sun168567/cc-desk-tunnel/releases/latest)
 [![下载量](https://img.shields.io/github/downloads/sun168567/cc-desk-tunnel/total?label=%E4%B8%8B%E8%BD%BD)](https://github.com/sun168567/cc-desk-tunnel/releases)
-[![检查](https://github.com/sun168567/cc-desk-tunnel/actions/workflows/check.yml/badge.svg)](https://github.com/sun168567/cc-desk-tunnel/actions/workflows/check.yml)
 [![客户端](https://img.shields.io/badge/%E5%AE%A2%E6%88%B7%E7%AB%AF-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)](#2-安装客户端)
 [![服务端](https://img.shields.io/badge/%E6%9C%8D%E5%8A%A1%E7%AB%AF-Linux%20%2B%20Docker-f0883e)](#1-部署服务端)
 [![许可](https://img.shields.io/github/license/sun168567/cc-desk-tunnel?label=%E8%AE%B8%E5%8F%AF)](LICENSE)
@@ -25,15 +24,6 @@ Claude Code on your own server, working on every computer you own.
 [🩺 常见问题](docs/troubleshooting.md)
 
 </div>
-
-![CC Desk Tunnel 图形客户端：左侧是本机的项目与会话，以及其他设备（在线或离线）上的项目；右侧一个会话里，Claude 按名字连到两台内网机器巡检，要重启服务时停下来等待审批](docs/images/desktop-client.png)
-
-<p align="center"><sub>左侧：本机项目，以及其他电脑上的项目和会话，在线的可直接操作。右侧：一个会话按名字操作两台内网机器，改动前等你批准。</sub></p>
-
-> [!WARNING]
-> **本项目主要由 AI 编写**，个人维护，没有经过专业安全审计。它让一台服务器能在你的电脑上执行命令，使用前请读完[安全须知](#安全须知)和[账号须知](docs/account.md)，自行评估风险。
->
-> 本项目与 Anthropic 没有隶属或合作关系；“Claude”“Claude Code”是 Anthropic 的商标。
 
 ## 💡 这是什么
 
@@ -62,6 +52,11 @@ Claude Code（简称 CC）运行在你自己的 Linux 服务器上，会话、�
 - 🤖 **和其他 agent 协作**：其他 agent 或脚本用 `ccdt -p` 把任务交给 Claude，审批交回调用方；编辑器用 `ccdt acp` 接入。反过来，Claude 也能调用你电脑上的 Codex 等命令行 agent。
 
 只有一台电脑、在本机跑 Claude Code 已经很顺手时，直接用本地版更简单，延迟也更低。
+
+> [!WARNING]
+> **本项目主要由 AI 编写**，个人维护，没有经过专业安全审计。它让一台服务器能在你的电脑上执行命令，使用前请读完[安全须知](#安全须知)和[账号须知](docs/account.md)，自行评估风险。
+>
+> 本项目与 Anthropic 没有隶属或合作关系；“Claude”“Claude Code”是 Anthropic 的商标。
 
 <a id="界面预览"></a>
 
