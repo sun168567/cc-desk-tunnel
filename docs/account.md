@@ -1,5 +1,7 @@
 # 账号须知
 
+**简体中文** | [English](account.en.md)
+
 用自己的 Claude 账号登录服务端之前，请读完这一页。
 
 ## 本项目在 Anthropic 看来是什么

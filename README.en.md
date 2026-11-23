@@ -1,79 +1,129 @@
+<div align="center">
+
+<img src="apps/desktop/public/assets/icon-192.png" width="88" alt="CC Desk Tunnel icon">
+
 # CC Desk Tunnel
 
-[简体中文](README.md) | **English**
+**Claude Code on your own server, working on every computer you own**
 
-Drive Claude Code in the cloud from a desktop client, and let it work on your Windows PC through a reverse tunnel.
+一台服务器上的 Claude Code，做你所有电脑共同的大脑
 
-Claude Code (CC for short) runs on a Linux server; your code, compilers and tools stay on Windows. CC Desk Tunnel connects the two: a container on the server, a desktop client on Windows, and an encrypted reverse SSH channel through which Claude reads and writes files and runs commands on your computer.
+[![Latest release](https://img.shields.io/github/v/release/sun168567/cc-desk-tunnel?label=release&color=2ea44f)](https://github.com/sun168567/cc-desk-tunnel/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/sun168567/cc-desk-tunnel/total?label=downloads)](https://github.com/sun168567/cc-desk-tunnel/releases)
+[![Clients](https://img.shields.io/badge/clients-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)](#2-install-a-client)
+[![Server](https://img.shields.io/badge/server-Linux%20%2B%20Docker-f0883e)](#1-deploy-the-service)
+[![License](https://img.shields.io/github/license/sun168567/cc-desk-tunnel)](LICENSE)
 
-**Download**: [Desktop client](#desktop-client) · [Terminal client ccdt](#terminal-client-ccdt) · [Server](#1-deploy-the-service) · [All releases](https://github.com/sun168567/cc-desk-tunnel/releases) | [Quick start](#quick-start) · [Security](#security) · [Documentation](#documentation) · License: [Apache-2.0](LICENSE)
+[简体中文](README.md) · **English**
 
-> [!WARNING]
-> **This project is mostly written by AI**, maintained by one person, and has not had a professional security audit. It may contain undiscovered defects. It gives a server the ability to run commands on your computer: read [Security](#security) and [Your account](#your-account) first and judge the risk for yourself.
->
-> This project is not affiliated with Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic.
->
-> The client interface, the installer prompts and the detailed documentation are currently in Chinese only.
+[📥 Download](https://github.com/sun168567/cc-desk-tunnel/releases/latest) ·
+[🚀 Quick start](#quick-start) ·
+[🖼️ Screenshots](#screenshots) ·
+[🔒 Security](#security) ·
+[📖 Documentation](#documentation) ·
+[🩺 Troubleshooting](docs/troubleshooting.en.md)
 
-## What it solves
+</div>
+
+## 💡 What it is
+
+Claude Code (CC for short) runs on a Linux server of your own, and sessions, context, memory and the Claude account all live there. Each of your computers, including machines on a private network with no public IP, connects out over an encrypted tunnel and becomes a place where Claude works: code, toolchains and files stay on their own computers, and Claude reads and writes files and runs commands there through the tunnel.
+
+- 🧠 **One place for everything**: switch computers or open a browser or your phone, and carry on in the same session.
+- 🔌 **No public address needed**: computers connect out; no inbound ports, no VPN or port forwarding.
+- 🤝 **Shared by every client**: the desktop client, the browser and phone, `ccdt` in your terminal, and other agents such as Codex all work on the same sessions.
+
+### How it differs from the usual setups
+
+A personal agent usually lives on the computer that has the code, and remote or web access extends that one computer; or the code is cloned again into a cloud sandbox. CC Desk Tunnel turns this around: **the agent lives on the server, and your computers are its hands.**
 
 | The usual way | What gets in the way | With CC Desk Tunnel |
 | --- | --- | --- |
-| Move the project to a server and let Claude Code develop there | You set up the toolchain again; builds and tests need an expensive machine; your local editor, emulators and desktop software are out of reach | Project and toolchain stay local and commands run locally; the server only runs Claude Code, so a small one is enough |
-| Use the CLI on the server through remote desktop or an SSH terminal | Lag, awkward input methods and copy-paste, long output that is hard to read back | A local desktop app with native input, scrolling and copying |
-| Use the command-line interface as it is | Several projects and sessions are hard to keep apart; tool calls and thinking scroll by in one stream of text | Sessions grouped by project; the process folded into summaries you can expand |
+| Install and sign in to Claude Code on every computer | Sessions and memory stay on each computer, so switching breaks the thread; credentials are scattered across machines | Sessions, memory and the account live on the service and continue anywhere; no Claude credentials on your computers |
+| Move the project to a server or cloud sandbox and develop there | The toolchain is set up again; your local editor, emulators, desktop software and private network are out of reach | Project and toolchain stay where they are and commands run there; the server only runs Claude Code, so a small one is enough |
+| Reach private machines through a VPN, port forwarding or remote desktop | Needs a public entry point or a network overlay, with ports and keys to manage; remote desktop lags | Computers connect out; one session can work on every online computer by name |
+| Use the command-line interface as it is | Several projects and sessions are hard to keep apart; the process scrolls by in one stream of text | Sessions grouped by project, the process folded into summaries; the official CLI is still there in `ccdt` |
 
-## Screenshots
+### What it is good for
 
-Desktop client: sessions grouped by project, including sessions from another computer that you can pick up here.
+- 🔁 **Hand work between computers**: start a session on the office desktop, continue on the laptop at home or on your phone on the way.
+- 🗄️ **Run a fleet of private machines from one place**: a NAS, a home lab, test machines and Raspberry Pis each keep `ccdt online` running. Ask "check the disks and services on these", and Claude goes through them with `ssh device-<name>`; before changing anything it asks you, and the approval card shows which machine runs what.
+- 📱 **Keep up when away from your desk**: long tasks run on your computer while you follow progress, approve and add instructions from a phone; the computer being worked on exposes no port.
+- 🤖 **Work with other agents**: other agents and scripts hand tasks to Claude with `ccdt -p` and get its approvals back; editors connect with `ccdt acp`. The other way round, Claude can run Codex and other command-line agents on your computers.
 
-![Desktop client: sessions grouped by project and sessions on other devices on the left, the conversation and input box on the right](docs/images/desktop-client.png)
+If you have one computer and Claude Code runs well on it locally, the local version is simpler and has less latency.
 
-Terminal client `ccdt`: the official Claude Code in your own terminal, sharing sessions with the desktop client (its interface is in Chinese).
+> [!WARNING]
+> **This project is mostly written by AI**, maintained by one person, and has not had a professional security audit. It lets a server run commands on your computers: read [Security](#security) and [Your account](docs/account.en.md) first and judge the risk for yourself.
+>
+> This project is not affiliated with Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic. The client interface and the detailed documentation are in Chinese.
 
-![ccdt help: commands to continue or create a session, list sessions, show usage, sign in and sign out](docs/images/ccdt-help.png)
+<a id="screenshots"></a>
 
-![In ccdt, Claude Code creates and runs a PowerShell script in a local project directory](docs/images/ccdt-session.png)
+## 🖼️ Screenshots
 
-## How it works
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/preview-files.png" alt="File panel: switch between this computer, the server and other online computers in one panel, browsing and previewing a script on build-server"></td>
+    <td width="50%"><img src="docs/images/preview-mobile.png" alt="Phone browser: the session list with other devices on the left, a session waiting for approval on the right"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>📂 File panel</b><br><sub>Files of this computer, the server and every online computer: browse, preview, copy between them</sub></td>
+    <td align="center"><b>📱 Browser and phone</b><br><sub>Optional: follow progress, approve, add instructions</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/preview-schedule.png" alt="Scheduled tasks: a list of tasks such as a daily check and a weekly report draft, and the form to edit one"></td>
+    <td width="50%"><img src="docs/images/ccdt-session.png" alt="Terminal client ccdt: the official Claude Code in your own terminal, creating and running a script in a local project"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>⏰ Scheduled tasks</b><br><sub>Send a prepared prompt to a session at a set time; Claude can set these up for you</sub></td>
+    <td align="center"><b>⌨️ Terminal client ccdt</b><br><sub>The official Claude Code terminal interface, sharing sessions with the desktop client</sub></td>
+  </tr>
+</table>
 
-```text
-Windows: desktop client + bundled OpenSSH + your projects
-  │  WSS: sign-in, conversation, approvals, settings
-  ▼
-Linux (Docker): proxy service ── official Agent SDK ── unmodified Claude Code ── model service
-  │                                                     │
-  │                                         native Bash runs ssh
-  └──── execution channel (WSS on the same address, loopback) ─┘
-                         │
-                         ▼
-Windows: PowerShell 7 reads and writes files, runs commands; results return to Claude
-```
-
-- Windows connects out. It needs no public IP and no inbound port.
-- SSH keys are generated for each connection and destroyed when it ends; nothing is installed as a permanent service on Windows.
-- The project is glue on top of the official Agent SDK and the unmodified official Claude Code: it does not change the CLI or replace its tools, approvals or context management. Sessions and long-term memory are kept by Claude Code itself on the server.
-
-This repository publishes all of its own client, server, build and deployment source, with no separate closed-source features. **This does not make Claude Code open source**: the official CLI and Agent SDK are installed from official channels and remain subject to Anthropic's terms. Bundled third-party components retain their own licenses; see [NOTICE](NOTICE).
-
-## Features
+## ✨ Features
 
 | | |
 | --- | --- |
-| **Projects and sessions** | Grouped by Windows folder; create, rename, delete, search, fork; edit and resend any of your own messages |
-| **The conversation** | Streaming replies, thinking summaries, tool calls with their input and results; add messages during a run, stop at any time |
-| **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; one click opens the session in the terminal client `ccdt` when you need it |
-| **Terminal client** | `ccdt` opens the official Claude Code in your own terminal, sharing sessions, context and usage statistics with the desktop client |
-| **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics |
-| **Scheduled tasks** | Send a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
-| **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
-| **One-click upgrades** | The service follows the release page; upgrade service and client from the client, without logging in to the server |
+| 🖥️ **Several computers** | Projects and sessions of every computer in one list, offline ones included; start a session on another online computer or move one there; a session reaches your other online computers by name; `ccdt online` keeps a machine without a desktop online |
+| 🗂️ **Projects and sessions** | Projects are registered on the service and shared by every client; rename or remove them; create, search, fork, export to Markdown; edit and resend any of your own messages |
+| 💬 **The conversation** | Streaming replies, thinking summaries, tool calls with their input and results; add messages during a run, stop at any time; plans shown as documents you can edit before they run |
+| 🎛️ **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; open the current session in `ccdt` with one click |
+| ⌨️ **Terminal client** | `ccdt` opens the official Claude Code in your own terminal, sharing sessions, context and usage statistics with the desktop client; it uses less of the 5-hour quota (see [Your account](docs/account.en.md)) |
+| 🤖 **Working with other agents** | Other agents and scripts hand out and follow tasks and answer approvals through `ccdt -p`, editors connect through `ccdt acp`; Claude can also run command-line agents on your computers |
+| 📂 **File panel** | Browse the files of this computer, the server and other online computers: preview, upload and download, copy and paste between them |
+| 📱 **Browser and phone** | Optional: work on sessions of online computers, or start plain sessions that run on the server; install it as an app on a phone; adds no port or container |
+| 📊 **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics; compact automatically before the prompt cache expires |
+| ⏰ **Scheduled tasks** | The client sends a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
+| ⬆️ **Upgrades and backups** | Upgrade the service and the clients with one click in the client, without logging in to the server; back up and restore the service with one command |
+| 🧩 **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
 
-## Quick start
+## ⚙️ How it works
 
-You need a Linux server with a public IP or domain name (x86_64, or arm64 as experimental support; Ubuntu recommended, Docker installed) and a Windows 10 / 11 x64 PC. The desktop client and `ccdt` also run on macOS and Linux, as experimental support.
+- Between the server and each computer there is a single **encrypted WSS tunnel**, on one address and port. It carries two kinds of connection: the conversation between client and service, and the execution channel through which Claude Code works on the computer over SSH.
+- Computers **connect out**, so they need no public IP and no inbound port. SSH keys are generated for each connection and destroyed when it ends; nothing is installed as a permanent service.
+- Each session runs on the computer its project is on, and can reach your other online computers by name.
+- The project is glue on top of the official Claude Code: the desktop client runs it through the official Agent SDK, and `ccdt` runs the interactive official CLI directly. It does not change the CLI or replace its tools, approvals or context management.
 
-**The server can be small.** Builds, tests and development tools all run on your Windows PC; the server only hosts Claude Code and a lightweight proxy service, so an entry-level machine with 2 vCPUs and 1 GB of memory is enough. Size it for heavier work only if you plan to have Claude build or run demanding tasks on the server itself.
+<details>
+<summary>Connection diagram (one Windows computer as the example)</summary>
+
+![How it works: a WSS tunnel between a Windows computer and a Linux server carries two kinds of connection. One links the desktop client and the proxy service, carrying user messages, Claude's output and approval requests; the other is SSH between the local OpenSSH and the channel forwarding on the server, carrying commands, files and results. Claude Code's tool calls reach the local project through the channel forwarding and SSH](docs/images/workflow.png)
+
+More in [Architecture](docs/architecture.md) (in Chinese).
+
+</details>
+
+This repository publishes all of its own client, server, build and deployment source, with no separate closed-source features. **This does not make Claude Code open source**: the official CLI and Agent SDK are installed from official channels and remain subject to Anthropic's terms. Bundled third-party components keep their own licenses; see [NOTICE](NOTICE).
+
+<a id="quick-start"></a>
+
+## 🚀 Quick start
+
+**You need:**
+
+- 🐧 **A server**: Linux with a public IP or domain name and Docker installed, Ubuntu recommended; x86_64, or arm64 as experimental support. Builds and tests run on your computers, so **an entry-level machine with 2 vCPUs and 1 GB of memory is enough**.
+- 💻 **Computers**: Windows 10 / 11 x64. The desktop client and `ccdt` on macOS and Linux are experimental; use `ccdt` on Linux without a desktop.
 
 ### 1. Deploy the service
 
@@ -83,16 +133,17 @@ On the server:
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
 ```
 
-The script:
+Press Enter through the questions. At the end it prints what the client needs — **service address, certificate fingerprint, service token** — and the port to open in the firewall (TCP 8787 by default, the only one). From then on, the client's Settings → About and updates upgrades the service too, so you rarely need the server again.
+
+<details>
+<summary>What the script does · everyday commands</summary>
 
 1. Checks for Docker, Docker Compose and a few tools. If something is missing it tells you the command to install it; it does not install system software itself.
-2. Downloads the newest server archive from this repository's releases, verifies it and unpacks it to `/opt/cc-desk-tunnel`.
-3. Asks for the public address, certificate mode, ports and data directory (every question has a default), then pulls the image of that version and starts it.
-4. Prints what the client needs — **service address, certificate fingerprint, service token** — and the TCP port to open in the firewall (8787 by default, the only one).
+2. Downloads the newest server archive from the releases, verifies it and unpacks it to `/opt/cc-desk-tunnel`.
+3. Asks for the public address, certificate mode, ports and data directory (all with defaults), then pulls the image of that version and starts it. The image is prebuilt at `ghcr.io/sun168567/cc-desk-tunnel` (x86_64 or arm64 as needed); if the server cannot reach ghcr.io, it is built on the server, which takes a few minutes more the first time.
+4. Prints the three values for the client and the port to open. The script does not touch the firewall, nginx or SSH.
 
-The image is prebuilt on GitHub (`ghcr.io/sun168567/cc-desk-tunnel`, x86_64 or arm64 as your server needs), so installing takes a few minutes. If the server cannot reach ghcr.io, the script builds the image on the server instead, which takes a few minutes more the first time. The script does not touch the firewall, nginx or SSH.
-
-Once installed, manage the service with the `cc-desk-tunnel` command, from any directory:
+Manage the service with the `cc-desk-tunnel` command, from any directory:
 
 ```sh
 sudo cc-desk-tunnel status    # is it running
@@ -101,127 +152,100 @@ sudo cc-desk-tunnel upgrade   # upgrade to the newest release; data, accounts an
 sudo cc-desk-tunnel help      # every command: new token, backup and restore, certificates
 ```
 
-Usually you do not need the server for upgrades: the client's Settings → About and updates upgrades the service too. Manual installation, the three certificate modes, backup and restore are covered in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md).
+</details>
+
+Manual installation, the three certificate modes, backup and restore are in the [deployment manual](deploy/README.md); if you already run nginx with a domain, see [reverse proxying with nginx](deploy/nginx.md) (both in Chinese).
 
 ### 2. Install a client
 
-There are two clients; install either or both. Each must be the same version as the service.
+Install either client or both. Each must be the **same version** as the service.
 
-- **Desktop client**: a desktop app that groups sessions by project and folds each conversation's work into summaries you can expand.
-- **Terminal client `ccdt`**: the official Claude Code in your own terminal, sharing sessions with the desktop client.
+| | Good for | Get it |
+| --- | --- | --- |
+| 🖥️ **Desktop client** | Managing sessions on all your computers by project, the process folded into summaries | The table at the top of the [latest release](https://github.com/sun168567/cc-desk-tunnel/releases/latest): Windows `.exe`; macOS `.dmg` and Linux `.deb` (experimental, see [macOS](docs/macos.md) · [Linux](docs/linux.md), in Chinese) |
+| ⌨️ **Terminal client** | `ccdt`: the official Claude Code in your own terminal; also machines without a desktop | Included with the Windows desktop client; install it on its own with the commands below |
 
-#### Desktop client
+The Windows installer bundles PowerShell 7, OpenSSH and `ccdt`; nothing else is needed. Start it, enter the three values from step 1 and connect.
 
-Download it from the [latest release](https://github.com/sun168567/cc-desk-tunnel/releases/latest); the table at the top of the page lists the installer for each system, one click each:
+> [!NOTE]
+> The installers are not code-signed. When Windows shows "Windows protected your PC" on first run, choose "More info → Run anyway"; if security software blocks a bundled component, verify before allowing it, see [Antivirus and SmartScreen](docs/troubleshooting.en.md#antivirus-and-smartscreen). The macOS and Linux clients are upgraded by downloading and installing the new package.
 
-- Windows 10 / 11 x64: the `.exe` installer.
-- macOS (experimental): the Apple silicon or Intel `.dmg`; see [macOS client](docs/macos.md) (in Chinese).
-- Linux x64 (experimental): the `.deb`; see [Linux client](docs/linux.md) (in Chinese).
-
-The Windows installer bundles PowerShell 7 and OpenSSH; nothing else is needed. Start it, enter the three values from step 1 and connect. Expect a SmartScreen prompt on first run; see [Antivirus and SmartScreen](#antivirus-and-smartscreen). The macOS and Linux clients are unsigned and upgraded by downloading and installing the new package.
-
-#### Terminal client ccdt
-
-On Windows, in PowerShell:
+To install `ccdt` on its own (for the current user, no administrator rights needed; then run `ccdt login`):
 
 ```powershell
+# Windows (PowerShell)
 irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
 ```
 
-On macOS and Linux (experimental):
-
 ```sh
+# macOS, Linux (experimental)
 curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
 ```
 
-The script downloads the newest release, checks it against `SHA256SUMS`, installs it for the current user and puts `ccdt` on the PATH; no administrator rights are needed. Then run `ccdt login`. If the service is not on the newest release, install the same version as the service; see [Terminal client](docs/cli.md#安装) (in Chinese).
+The script installs the newest release and checks it against `SHA256SUMS`; if the service is not on the newest release, install the same version as the service, see [Terminal client](docs/cli.md#安装) (in Chinese).
 
 ### 3. Sign in to Claude
 
-Open Settings → Account and quota, sign in to your Claude account, then add a project folder and start a conversation. Choose normal sign-in (`claude auth login`) or setup token sign-in. The latter can run `claude setup-token` on the server: complete browser authorization and paste back its code to save the generated token automatically and show it once for you to copy. You can also paste a token you already have. Credentials are stored on the server and shared by graphical sessions and `ccdt`. To replace a token, sign out first. Setup tokens may not expose account details, full subscription quotas or an expiry date; a successful model request determines whether the token works. See [authentication details](docs/native-runtime.md#登录方式).
+Open Settings → Account and quota in the client, sign in to your Claude account, add a project folder and start a conversation.
 
-## Security
+- **Normal sign-in**: open the official authorization page and paste back the code it gives you, the same as the official `claude auth login`.
+- **Setup token sign-in**: the service runs the official command to create one and saves it after authorization; you can also paste a token you already have. The token is stored on the service only and shared by the desktop client and `ccdt`. Account details and the full quota are usually not visible this way; see [authentication details](docs/native-runtime.md#登录方式) (in Chinese).
 
-**One premise: the server must be a machine you control and trust.** While you are connected, the server can run any command as your Windows user. A compromised server is a compromised PC. Do not deploy on a machine you share with others or do not know the history of.
+### 4. Add more computers
 
-### Ports
+- **Other computers**: install the desktop client or `ccdt` and sign in to the same service. Their projects and sessions appear under "Other devices" in every client, and sessions can reach them by name. On a machine without a desktop, `ccdt online` keeps it online; to start it at boot, see [Staying online](docs/cli.md#保持在线) (in Chinese).
+- **Browser and phone**: turn it on in the desktop client under Settings → Browser access, then sign in at the address shown with the service token; two-step verification is recommended. The browser is not a place where commands run: it works on sessions of online computers, or starts plain sessions that run on the service. See [Browser access](docs/server-web.md) (in Chinese); leave it off when unused.
 
-| Port | Purpose | Open it? | Protected by |
-| --- | --- | --- | --- |
-| Service port (8787/TCP by default) | Client sign-in and conversation; the client also sets up Claude's execution channel to your PC through it | Yes. In nginx mode open nginx's 443 instead; 8787 then listens on the server only | TLS + service token + sign-in throttling; the execution channel also has a random secret for each connection |
-| The SSH port leading to Windows (random) | Claude running commands on your PC | **No, and it cannot be opened** | Listens only on the loopback address inside the container; it is not published to the server, let alone the internet, and accepts only the temporary public key of this connection |
+<a id="security"></a>
 
-- **On Windows** no inbound port is needed; the local SSH server listens on loopback only and runs only while connected.
-- **If the server's firewall allows every port**: the SSH port still cannot be reached from outside. The project still exposes only the one port above, and its security rests on the service token. Allowing everything does expose whatever else runs on the server (its own SSH, for example), so open only what you need.
-- To tighten further, allow only your own egress IP to reach the port in your cloud provider's security group. Ports published by Docker usually bypass `ufw` rules, so restrict sources in the provider's security group.
-- **Deployments upgraded from 0.2.9 or earlier** also opened a tunnel port (7000/TCP by default). It is no longer used from 0.2.10 and can be removed from the firewall and security group.
+## 🔒 Security
 
-### Four things you must know
+> [!IMPORTANT]
+> **The server must be a machine you control and trust.** While connected, the server can run any command as your user on every connected computer. A compromised server means compromised computers, and the more you connect, the more is at stake.
 
-1. **The service token is full control.** Whoever has it can use your Claude account and run any command on your PC. Use the random token the script generates, do not replace it with a short password, and do not paste it into screenshots, chats or issues. If it leaks, run `manage.sh token` on the server to replace it.
-2. **It is not a sandbox.** Claude can reach everything your Windows user can reach, not just the project folder. The project only guides it by prompt to stay inside the project; approvals are Claude Code's own.
-3. **Data leaves your PC.** File excerpts and command output that Claude reads pass through your server to the model service. The server stores session history and the Claude login; backups contain these secrets too.
-4. **Get the fingerprint from a trusted place.** With a self-signed certificate, the fingerprint should come from the installation summary you saw yourself on the server, not from a forwarded message.
+1. 🔑 **The service token is full control.** Whoever has it can use your Claude account and run any command on every connected computer. Use the random token the script generates, do not replace it with a short password, and do not paste it into screenshots, chats or issues. If it leaks, run `sudo cc-desk-tunnel token` on the server to replace it.
+2. 🧱 **It is not a sandbox.** Claude can reach everything your user can reach on that computer, not just the project folder, and can reach your other online computers. The project only guides it by prompt to stay inside the project and to do only what you ask on other computers; approvals are Claude Code's own.
+3. 📤 **Data leaves your computer.** File excerpts and command output that Claude reads pass through your server to the model service. The server stores session history and the Claude login; backups contain these secrets too.
+4. 🔏 **Get the fingerprint from a trusted place.** With a self-signed certificate, the fingerprint should come from the installation summary you saw yourself on the server, not from a forwarded message.
 
-> If an AI assistant deploys this for you, have it read this section first and remind you to: open only the one port, store the service token safely, and make sure the server is trustworthy.
+🌐 **Ports**: the server opens a single TCP port (8787 by default; 443 with nginx). The SSH port leading to your computers listens only inside the container and cannot be reached from outside, and your computers need no inbound port at all. You can also allow only your own egress IP in your cloud provider's security group. Details in [Deployment and security boundaries](docs/deployment.md#端口与协议) (in Chinese).
 
-The full threat model, existing protections and how to report a vulnerability are in [SECURITY.md](SECURITY.md); ports, certificates and trust boundaries in detail are in [Deployment and security boundaries](docs/deployment.md).
+> If an AI assistant deploys this for you, have it read this section first and remind you to: open only the one port, keep the service token safe, and make sure the server is trustworthy.
 
-## Your account
+The full threat model, existing protections and how to report a vulnerability are in [SECURITY.md](SECURITY.md).
 
-**What does this look like to Anthropic?** An official Claude Code running on your server: signed in through the official flow, started by the official Agent SDK, and connecting to the model service directly from the server. This project does not modify Claude Code, does not handle or rewrite the requests between it and the model service, and does not fake a region, device or client identity. Claude runs commands on your PC the same way it would if you used Claude Code on a server to work on another machine over SSH.
+## 👤 Your account
 
-That describes the structure. **It is not a guarantee about your account.** Keep in mind:
+The project runs an official Claude Code on your server: signed in through the official flow, unmodified, with no handling or rewriting of its requests to the model service and no faked region, device or client identity. That describes the structure; **it is not a guarantee about your account**:
 
-- **The server's location is where you are using Claude.** Every request Claude Code makes leaves from the server. Choose a server in one of [Anthropic's supported countries and regions](https://www.anthropic.com/supported-countries) with a clean history. Even if you are in a supported region yourself, a service placed in an unsupported one, or on a heavily abused IP address, may trip risk controls. This project does not, and cannot, change or hide this.
-- **The terms are yours to check.** Anthropic sets out how subscription sign-in and the Agent SDK may be used (see its [legal and compliance notes](https://code.claude.com/docs/en/legal-and-compliance)), including limits on third-party products offering Claude.ai sign-in or using subscription quota on a user's behalf. That something works does not mean your use is permitted; when unsure, use an API key instead (configured in `config/provider.json` in the data directory).
-- **One account, one person.** Do not use this to share or resell an account; the project offers no such feature and will not accept one.
-- The project makes no promise about account standing, availability or compliance.
+- 📍 **The server's location is where you use Claude**: every request leaves from the server. Choose a server in one of [Anthropic's supported countries and regions](https://www.anthropic.com/supported-countries) with a clean history; an unsupported region or a heavily abused IP address may trip risk controls.
+- 📜 **The terms are yours to check**: how subscription sign-in and the Agent SDK may be used is set out in Anthropic's [legal and compliance notes](https://code.claude.com/docs/en/legal-and-compliance); when unsure, use an API key.
+- ⏱️ **The 5-hour quota**: community tests ([#136](https://github.com/sun168567/cc-desk-tunnel/issues/136)) found that work run through the Agent SDK counts about twice as much toward the 5-hour quota as in the interactive CLI; the weekly quota is not affected. When it is tight, run long tasks in `ccdt`.
+- 👤 **Single user**: one service serves one person, and an account is for that person only, not to be shared or resold.
 
-## Antivirus and SmartScreen
+Read all of it in [Your account](docs/account.en.md).
 
-- **frpc is no longer bundled.** Clients up to 0.2.9 shipped `frpc.exe` from the tunnelling tool frp, which Windows Defender and other antivirus products often quarantine as "hack tool / riskware". From 0.2.10 the client sets up the execution channel itself through the service address; neither the installer nor the server image contains frp, and the installer removes the old `frpc.exe` on upgrade.
-- **Verify before allowing a bundled component.** The client still bundles the official releases of OpenSSH and PowerShell 7, verifies their SHA256 when packaging, runs them only while connected and has them listen on this machine only. They are rarely blocked; if it happens, check that the installer comes from this repository's [releases page](https://github.com/sun168567/cc-desk-tunnel/releases/latest), verify it against `SHA256SUMS`, and identify the file that was blocked. After checking the source, make only the necessary exception for the verified component file; do not disable antivirus or exclude a whole drive. Restore quarantined files or reinstall only after verification.
-- **SmartScreen.** The installer is not code-signed. On first run Windows shows "Windows protected your PC": choose "More info → Run anyway".
-- The project never changes the settings of any security software. If in doubt, build from source.
+<a id="documentation"></a>
 
-### When a working connection drops
-
-Nothing needs doing when the connection drops: the client stays where it is and reconnects by itself, for as long as it takes, then catches up on what happened meanwhile. A task that was running goes on in the service; only the command that was executing on the computer at that moment fails, which Claude sees and deals with, and later commands wait for the computer to come back.
-
-A task stops only after the computer has been away for more than 5 minutes (`PROXY_GRACE_SECONDS` on the server changes this). Back in the session, the "continue" button at the lower right of the message box takes it up again without writing anything; the same goes for a task stopped by hand. Choosing "Disconnect" or quitting the client ends a task at once.
-
-The client checks every 15 seconds that the service is still there and, after about 45 seconds without any answer, treats the connection as lost; the service does the same for the client. It returns to the sign-in page only when the service refuses it outright (wrong token, another version).
-
-To find which part of the way failed, compare both records:
-
-- **Client**: `client.log` under "Settings → About and updates → Open log folder". For each connection it records when it was made, when it ended, whether the window or the service side ended it first, and why. It contains no credentials, conversations or commands.
-- **Server**: `sudo docker logs <container> 2>&1 | grep Connection`. For each connection it records which computer it was, the address it came from, how long it lasted and how it ended. `no heartbeat answer for 45s` means the service got no answer from the client; `code 1006` means the other side went away without saying so, usually somewhere on the network, a proxy or a reverse proxy in between.
-
-When connecting through a proxy or a reverse proxy, make sure it does not cut connections that carry little data for a long time; see [nginx as a reverse proxy](deploy/nginx.md) for nginx.
-
-## Scope
-
-- **Single user.** One service serves one person, who may have several of their computers connected at once; each session runs on the computer its project directory is on. There are no multiple users, permission levels or tenant isolation, and none are planned.
-- **No modification of the official client, no evasion.** Nothing here is designed to get around risk controls or detection, or to get past the service's regional restrictions.
-
-## Documentation
+## 📖 Documentation
 
 | Document | Contents |
 | --- | --- |
-| [Deployment manual](deploy/README.md) | Installation, upgrades, three TLS modes, backup and restore, operations |
-| [Deployment and security boundaries](docs/deployment.md) | Ports, certificates, credentials, data and trust boundaries |
-| [Security](SECURITY.md) | Threat model, protections, known gaps, reporting a vulnerability |
-| [Architecture](docs/architecture.md) | Components, how a connection is established, key design decisions |
-| [Native runtime and session storage](docs/native-runtime.md) | How the official CLI is driven, who owns context, approvals, retention |
-| [Windows client](apps/desktop/README.md) · [Linux service](apps/server/README.md) · [Message contract](packages/protocol/README.md) | Implementation notes per module |
-| [Terminal client `ccdt`](docs/cli.md) | Installation, sign-in, commands, sessions shared with the desktop client |
-| [Roadmap and status](docs/roadmap.md) · [Changelog](CHANGELOG.md) | Done, unverified and planned; changes per version |
-| [Development conventions](docs/development.md) | Branches, commits, checks, releases |
+| 🩺 [Troubleshooting](docs/troubleshooting.en.md) | Connection failures, dropped connections, antivirus and SmartScreen |
+| 👤 [Your account](docs/account.en.md) | What this looks like to Anthropic, location, terms, quota, scope |
+| 📦 [Deployment manual](deploy/README.md) | Installation, upgrades, three TLS modes, backup and restore, operations |
+| 🛡️ [Deployment and security boundaries](docs/deployment.md) · [Security](SECURITY.md) | Ports, certificates, credentials, trust boundaries; threat model, known gaps, reporting |
+| ⌨️ [Terminal client ccdt](docs/cli.md) | Installation, sign-in, commands, staying online, use by other agents |
+| 🌐 [Browser access](docs/server-web.md) | The optional web workspace, sign-in, domain and path, certificates and reverse proxies |
+| 🍎 [macOS client](docs/macos.md) · 🐧 [Linux client](docs/linux.md) | Experimental: installation, differences from Windows, what has been verified |
+| 🏗️ [Architecture](docs/architecture.md) · [Native runtime and session storage](docs/native-runtime.md) | Components and how a connection is made; how the official CLI is driven, context, approvals, retention |
+| 🧭 [Roadmap and status](docs/roadmap.md) · [Changelog](CHANGELOG.md) | Done, unverified and planned; changes per version |
 
-These documents are in Chinese.
+Module notes: [desktop client](apps/desktop/README.md) · [service](apps/server/README.md) · [message contract](packages/protocol/README.md). Apart from Troubleshooting and Your account, the documents are in Chinese.
 
-## Building from source
+<a id="building-from-source"></a>
+
+## 🛠️ Building from source
 
 You need Git, Node.js 24 and npm; on Windows, PowerShell 7.
 
@@ -233,23 +257,31 @@ npm run package:windows   # builds the Windows installer; preparation in apps/de
 npm run package:server    # builds the server archive; on the server, run its deploy/install.sh
 ```
 
+<details>
+<summary>Repository layout</summary>
+
 ```text
-apps/desktop/       Windows client: UI (React), Electron main process, connection bridge, local execution components
-apps/server/        Linux service: sessions, Claude Code adapter, Windows tunnel, usage statistics, release tracking
+apps/desktop/       Desktop client: UI (React, shared with browser access), Electron main process, connection bridge, local execution components
+apps/cli/           Terminal client ccdt
+apps/server/        Service: sessions and projects, Claude Code adapter, device execution channel, files, usage statistics, release tracking
 packages/protocol/  Message contract between the two sides (Zod)
 deploy/             Docker deployment and operations scripts
 scripts/            Checks, development launcher, packaging, release
 docs/               Architecture, deployment and development documentation
 ```
 
-## Community
+</details>
+
+See [Development conventions](docs/development.md) (in Chinese).
+
+## 🤝 Community
 
 We recognize [LINUX DO](https://linux.do/) and its values of sincerity, friendliness, solidarity and professionalism, and appreciate the community's discussions of remote development and open-source tools. Feedback is welcome; redact account details, service tokens, server addresses and private project information first. Report security vulnerabilities through the [private reporting channel](SECURITY.md#报告漏洞).
 
-## Star history
+## ⭐ Star history
 
 [![Star history chart](https://api.star-history.com/svg?repos=sun168567/cc-desk-tunnel&type=Date)](https://star-history.com/#sun168567/cc-desk-tunnel&Date)
 
-## License
+## 📄 License
 
 [Apache License 2.0](LICENSE). Bundled third-party components and their licenses are listed in [NOTICE](NOTICE).
