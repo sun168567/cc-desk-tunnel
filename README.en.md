@@ -105,14 +105,9 @@ If you have one computer and Claude Code runs well on it locally, the local vers
 - Each session runs on the computer its project is on, and can reach your other online computers by name.
 - The project is glue on top of the official Claude Code: the desktop client runs it through the official Agent SDK, and `ccdt` runs the interactive official CLI directly. It does not change the CLI or replace its tools, approvals or context management.
 
-<details>
-<summary>Connection diagram (one Windows computer as the example)</summary>
-
 ![How it works: a WSS tunnel between a Windows computer and a Linux server carries two kinds of connection. One links the desktop client and the proxy service, carrying user messages, Claude's output and approval requests; the other is SSH between the local OpenSSH and the channel forwarding on the server, carrying commands, files and results. Claude Code's tool calls reach the local project through the channel forwarding and SSH](docs/images/workflow.png)
 
-More in [Architecture](docs/architecture.md) (in Chinese).
-
-</details>
+<p align="center"><sub>Connection diagram, with one Windows computer as the example. More in <a href="docs/architecture.md">Architecture</a> (in Chinese).</sub></p>
 
 This repository publishes all of its own client, server, build and deployment source, with no separate closed-source features. **This does not make Claude Code open source**: the official CLI and Agent SDK are installed from official channels and remain subject to Anthropic's terms. Bundled third-party components keep their own licenses; see [NOTICE](NOTICE).
 
