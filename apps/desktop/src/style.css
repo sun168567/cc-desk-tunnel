@@ -1407,32 +1407,15 @@ dialog:has(.release-notes) {
 .help-text p:last-child {
   margin: 0;
 }
-.key-list {
-  margin: 0;
-}
-.key-list > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line-soft);
-}
-.key-list > div:last-child {
-  border-bottom: 0;
-}
-.key-list dd {
-  margin: 0;
-  color: var(--muted);
+.help-text code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--hover);
+  font-size: 12.5px;
 }
 kbd {
   font-family: inherit;
   font-size: 12.5px;
-}
-.key-list kbd {
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface-2);
 }
 .key-button {
   flex: none;

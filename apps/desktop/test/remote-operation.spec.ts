@@ -48,7 +48,7 @@ test('another computer works on a session while its own is connected; both see t
   await expect(other.locator('.device-state.online')).toHaveCount(1);
   await other.locator('.session-row').filter({ hasText: title }).click();
   const bar = other.locator('.elsewhere-bar');
-  await expect(bar).toContainText('在这里发的消息');
+  await expect(bar).toContainText('作用于那台电脑');
   await send(other, '从另一台电脑发的话', 'tool');
   // The run is the first computer's: it shows there as well, and either window answers its approval.
   await expect(page.getByText('从另一台电脑发的话', { exact: true })).toBeVisible();

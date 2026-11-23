@@ -43,8 +43,7 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
   ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认
   ccdt server            已登录的服务端：选一个作为默认连接的，或登录新的
   ccdt login [wss 地址]  登录服务端；不写地址时从图形客户端保存的里选。--fingerprint 证书指纹，
-                         --token-stdin 从标准输入读凭据，--no-save 不保存，
-                         --no-verify 不连接验证、只保存（图形客户端交给 ccdt 已在用的凭据时用）
+                         --token-stdin 从标准输入读凭据，--no-save 不保存
   ccdt logout            退出一个服务端（登录了几个时先选），其他的不受影响
   ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用
   ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本；
@@ -68,8 +67,7 @@ const HELP = `ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的�
   --server <名称>        直接指定服务端：图形客户端里的连接名、主机名或地址，写出能区分的一段即可
 不指定时连接上一次连接的服务端。
 
-用法和本地的 claude 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。
-终端里聊的内容会记入这个会话，图形客户端里也能看到。`;
+用法和本地的 claude 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。`;
 
 export const AGENT_HELP = `ccdt 供程序和其他 agent 使用：把任务交给服务端上的 Claude Code，跟进到它完成。
 会话和图形客户端里的是同一个：窗口里能看到它在做什么，也能插话、批准。

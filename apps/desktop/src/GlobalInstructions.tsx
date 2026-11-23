@@ -49,7 +49,7 @@ export default function GlobalInstructions({ client }: { client: ProxyClient }) 
   return (
     <Page
       title="全局说明"
-      intro="云端 Claude Code 的用户级 CLAUDE.md：这个服务上的每个会话开始时都会读取，从下一次运行起生效。Claude Code 在用户级只读 CLAUDE.md，AGENTS.md 只在项目里读取；项目在你的电脑上，其中的 CLAUDE.md 与 AGENTS.md 不会自动读取，需要时在消息里请 Claude 去读。"
+      intro="云端 Claude Code 的用户级 CLAUDE.md，这个服务上的每个会话都会读取，下一次运行起生效。用户级不读 AGENTS.md；你电脑上项目里的 CLAUDE.md、AGENTS.md 也不会自动读取，需要时让 Claude 去读。"
     >
       <div className="card instructions-card">
         <textarea

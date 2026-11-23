@@ -424,7 +424,7 @@ export default function Sidebar({
         {plain.map(renderSession)}
         {others.length > 0 && (
           <section className="project-group">
-            <h2 title="这些会话的项目目录在你的其他电脑上；那台电脑在线时可以直接在这里操作，也可以接到这台电脑上继续">
+            <h2 title="你其他电脑上的项目和会话：那台电脑在线时可以直接在这里操作，离线时可以接到这台电脑上继续">
               {foldToggle({
                 open: othersOpen,
                 label: '其他设备的会话',
