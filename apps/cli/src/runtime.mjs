@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 // Where ccdt runs from. A package (scripts/package-cli.mjs) holds ccdt.mjs with `vendor/` beside it: on Windows the
 // OpenSSH and PowerShell that the SSH service for Claude's commands is made of, as the desktop installer bundles
-// them. From the source tree they are the ones prepared for the desktop client.
+// them. The ccdt the desktop client carries is in its resources, beside the client's own `vendor/`. From the source
+// tree they are the ones prepared for the desktop client.
 const here = fileURLToPath(new URL('.', import.meta.url));
-const packaged = existsSync(join(here, 'vendor'));
-const vendor = packaged
-  ? join(here, 'vendor')
-  : fileURLToPath(new URL('../../desktop/vendor/', import.meta.url));
+const vendor =
+  [join(here, 'vendor'), join(here, '..', 'vendor')].find((directory) => existsSync(directory)) ??
+  fileURLToPath(new URL('../../desktop/vendor/', import.meta.url));
 
 export const components = (env = process.env) => ({
   openssh: env.CCDT_OPENSSH_DIR ?? join(vendor, 'openssh'),
@@ -28,6 +28,9 @@ export const version =
 // ccdt runs from a package (scripts/package-cli.mjs), which it can replace with another release's, rather than from
 // the source tree.
 export const bundled = typeof __CCDT_VERSION__ === 'string';
+
+// The ccdt the desktop client carries, which the client's updates replace (scripts/package-windows.mjs).
+export const desktop = typeof __CCDT_DESKTOP__ === 'boolean' && __CCDT_DESKTOP__;
 
 // The name of the ccdt package of a release for a system, as the release page has it; undefined for a system there
 // is none for.
