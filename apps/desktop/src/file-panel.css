@@ -174,21 +174,34 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
+/* A long name is shortened, never the alias after it. */
 .file-crumb-list button {
+  display: flex;
   flex: none;
+  align-items: center;
   max-width: 160px;
   padding: 2px 4px;
-  overflow: hidden;
   border: 0;
   border-radius: 5px;
   background: none;
   color: var(--muted);
   font-size: 12.5px;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.file-crumb-list button:has(.file-alias) {
+  max-width: 320px;
+}
+.file-crumb-list .file-alias {
+  max-width: 180px;
+}
+.file-crumb-list button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .file-crumb-list button:not(:last-child)::after {
   content: '›';
+  flex: none;
   margin-left: 6px;
   color: var(--faint);
 }
@@ -356,6 +369,7 @@
   overflow: hidden;
   color: var(--faint);
   font-size: 12px;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -406,6 +420,10 @@
   padding: 8px 12px 6px;
   color: var(--text-2);
   font-weight: 600;
+  white-space: nowrap;
+}
+.file-list-caption svg {
+  flex: none;
 }
 .file-list table {
   width: 100%;
@@ -421,19 +439,29 @@
   font-size: 12px;
   font-weight: 500;
   text-align: left;
+  white-space: nowrap;
 }
 .file-list td {
   padding: 5px 12px;
   color: var(--muted);
   white-space: nowrap;
 }
+/* The name takes the room the other columns leave, shortened rather than pushing them out of view. */
 .file-list td:first-child {
+  width: 100%;
+  max-width: 0;
+  color: var(--text-2);
+}
+.file-list td:first-child > div {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-2);
+}
+.file-list td:first-child svg {
+  flex: none;
 }
 .file-list td:first-child span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }

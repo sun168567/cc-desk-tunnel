@@ -731,7 +731,8 @@ export default function FilePanel({
     >
       <div className="file-list-caption" title={listFolder}>
         <FolderOpen />
-        {baseName(style, listFolder)}
+        <span className="file-name">{baseName(style, listFolder)}</span>
+        {aliasMark(baseName(style, listFolder))}
       </div>
       <table>
         <thead>
@@ -755,9 +756,11 @@ export default function FilePanel({
                 onContextMenu={(event) => entryMenu(event, path, directory)}
               >
                 <td>
-                  {iconOf(entry.name, directory)}
-                  <span>{entry.name}</span>
-                  {directory && aliasMark(entry.name)}
+                  <div>
+                    {iconOf(entry.name, directory)}
+                    <span>{entry.name}</span>
+                    {directory && aliasMark(entry.name)}
+                  </div>
                 </td>
                 <td>{directory ? '' : formatSize(entry.size)}</td>
                 <td>{formatTime(entry.mtime)}</td>
@@ -940,7 +943,7 @@ export default function FilePanel({
                 className={index === all.length - 1 ? 'current' : ''}
                 onClick={() => index < all.length - 1 && void go(step.path)}
               >
-                {step.label}
+                <span>{step.label}</span>
                 {aliasMark(step.label)}
               </button>
             ))}
