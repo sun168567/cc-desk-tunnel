@@ -56,6 +56,7 @@ test('a session opens in ccdt signed in as the window is, or the window says how
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
       if (!message.requestId) return;

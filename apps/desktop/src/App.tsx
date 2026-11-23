@@ -15,6 +15,7 @@ import {
   Download,
   FileDown,
   FolderInput,
+  FolderMinus,
   FolderOpen,
   FolderSymlink,
   GitFork,
@@ -38,10 +39,11 @@ import type {
   Effort,
   EventPayload,
   PermissionMode,
+  Project,
   Session,
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
-import { FORCED_UPGRADE_SINCE, platformOf, runWorking } from '@cc-desk-tunnel/protocol';
+import { FORCED_UPGRADE_SINCE, platformOf, projectOf, runWorking } from '@cc-desk-tunnel/protocol';
 import { browserSession, browserSocket, watchActivity } from './browser-api.ts';
 import { CertificateWarning } from './WebGate.tsx';
 import { hostCapabilities } from './host-capabilities.ts';
@@ -61,14 +63,14 @@ import { taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
 import FilePanel from './FilePanel.tsx';
-import { filePlaces, sessionFolder, sftpPath } from './files.ts';
+import { filePlaces, nativeLabels, sessionFolder, sftpPath } from './files.ts';
 import type { FilePlace } from './files.ts';
 import type { ConnectionForm } from './LoginPage.tsx';
 import type { SignInReport } from './Launcher.tsx';
 import { exportSession } from './exportSession.ts';
-import { onSharedChange, saveShared, shared, useShared } from './shared.ts';
+import { useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
-import { folderName, isInside, isNewer, pathKey, withProject } from './paths.ts';
+import { isInside, isNewer, pathKey, projectName } from './paths.ts';
 import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
 import { UPDATE_TICK_MS, lookDue } from './update-check.ts';
 import { actions, comboOf, keyFor, show as comboText } from './shortcuts.ts';
@@ -107,24 +109,13 @@ function latest<T extends EventPayload['type']>(events: SessionEvent[], type: T)
 type OpenMenu = MenuPosition &
   (
     | { kind: 'session'; sessionId: string }
-    | { kind: 'project'; path: string }
+    | { kind: 'project'; deviceId: string; path: string }
     | { kind: 'move'; sessionId: string }
     | { kind: 'settings' }
     | { kind: 'update' }
     | { kind: 'bar'; label: string }
   );
 const narrow = () => matchMedia('(max-width: 700px)').matches;
-// The computer's projects, which the windows of its connections share (see shared.ts).
-function savedProjects(value: unknown = shared('projects')): string[] {
-  try {
-    value ??= JSON.parse(localStorage.getItem('proxy-projects') ?? '[]');
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === 'string')
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 // Owns the connection, the selection and every request; the components below render and report user intent.
 // On the desktop the window is a connection's: it signs in with what its sign-in window handed over, tells that
@@ -188,8 +179,7 @@ export function App({
   const quotaPrimed = useRef<string | null>(null);
   const [findRequest, setFindRequest] = useState(0);
   const refreshed = useRef(new Set<string>());
-  const [projects, setProjects] = useState(savedProjects);
-  // The folders that hold sessions without a project; new ones are made in the first.
+  // The folders that hold plain sessions; new ones are made in the first.
   const [workspaceRoots, setWorkspaceRoots] = useState<string[]>([]);
   const [drafts, setDraft] = useDrafts();
   const [scenario, setScenario] = useState<Scenario>('chat');
@@ -279,7 +269,7 @@ export function App({
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteSession, setDeleteSession] = useState<Session | null>(null);
   const [renameSession, setRenameSession] = useState<Session | null>(null);
-  const [renameProject, setRenameProject] = useState<string | null>(null);
+  const [renameProject, setRenameProject] = useState<Project | null>(null);
   const [repointProject, setRepointProject] = useState<string | null>(null);
 
   const nativeMode = state.adapter === 'claude-code';
@@ -315,6 +305,16 @@ export function App({
   const onThis = (session: Session) => !browser && isHere(session, state.device, absent);
   const sessions = state.sessions.filter((session) => onThis(session));
   const elsewhere = state.sessions.filter((session) => !onThis(session));
+  // This computer's projects, as the service keeps them for all the user's computers.
+  const projects = state.projects.filter((project) => project.device.id === state.device?.id);
+  // The project a session is in, of whichever computer; one from before computers were told apart that is
+  // listed here is this one's. A session in none is a plain session.
+  const projectIn = (session: Session) =>
+    projectOf(
+      state.projects,
+      session.device?.id ?? (onThis(session) ? state.device?.id : undefined),
+      session.projectPath,
+    );
   const away = !!selected && !onThis(selected);
   // Another computer's session is worked on from here while that computer is connected and its commands
   // reach it: what is sent here runs there, as if sent there.
@@ -702,25 +702,20 @@ export function App({
   useEffect(() => {
     if (connected) void window.desktop?.workspaceRoots().then(setWorkspaceRoots);
   }, [connected]);
+  // Before the service kept the projects, the computer kept one list for all its connections. A connection there
+  // was then hands it to its service once (see `projects:legacy` in electron/main.cjs).
   useEffect(() => {
-    localStorage.setItem('proxy-projects', JSON.stringify(projects));
-    saveShared('projects', projects);
-  }, [projects]);
-  // This computer's projects, for the user's other computers to start or move sessions into.
-  useEffect(() => {
-    if (!connected || browser || !state.device) return;
-    void client.request({ type: 'device.projects', projects }).catch(() => {});
-  }, [projects, connected, state.connectionId]);
-  useEffect(
-    () =>
-      onSharedChange('projects', (value) => {
-        const next = savedProjects(value);
-        setProjects((current) =>
-          JSON.stringify(current) === JSON.stringify(next) ? current : next,
-        );
-      }),
-    [],
-  );
+    if (!connected || !window.desktop) return;
+    void (async () => {
+      const legacy = await window.desktop!.legacyProjects();
+      if (!legacy) return;
+      for (const path of legacy.projects) {
+        const name = legacy.names[pathKey(path)]?.trim().slice(0, 60);
+        await client.request({ type: 'project.add', path, ...(name ? { name } : {}) });
+      }
+      await window.desktop!.legacyProjectsMoved();
+    })().catch(() => {});
+  }, [connected]);
   // Each session's native state is read once when it is first shown idle.
   useEffect(() => {
     if (
@@ -974,8 +969,14 @@ export function App({
       ),
     );
   }
-  async function createSession(projectPath: string) {
-    const response = await client.request({ type: 'session.create', title: '新会话', projectPath });
+  // In a folder of this computer, which becomes a project unless the session is a plain one.
+  async function createSession(projectPath: string, plain = false) {
+    const response = await client.request({
+      type: 'session.create',
+      title: '新会话',
+      projectPath,
+      ...(plain ? { plain } : {}),
+    });
     if (response.sessionId) show(response.sessionId);
   }
   async function createInProject(path: string) {
@@ -1000,7 +1001,7 @@ export function App({
     }
     await act(async () => {
       const path = await window.desktop!.chooseProject();
-      if (path) setProjects((value) => withProject(value, path));
+      if (path) await client.request({ type: 'project.add', path });
     });
   }
   // The desktop gives an ordinary session a local directory; the browser creates one on the server.
@@ -1016,7 +1017,7 @@ export function App({
       await act(async () => {
         const directory = await window.desktop!.createWorkspace();
         try {
-          await createSession(directory);
+          await createSession(directory, true);
         } catch (error) {
           await window.desktop!.removeWorkspace(directory);
           throw error;
@@ -1025,7 +1026,7 @@ export function App({
       return;
     }
     const path =
-      (away ? undefined : selected?.projectPath) ?? projects[0] ?? sessions[0]?.projectPath;
+      (away ? undefined : selected?.projectPath) ?? projects[0]?.path ?? sessions[0]?.projectPath;
     if (path) await createInProject(path);
     else await addProject();
   }
@@ -1103,7 +1104,6 @@ export function App({
       const projectPath = await placeHere(session);
       if (!projectPath) return;
       await client.request({ type: 'session.move', sessionId: session.id, projectPath });
-      setProjects((value) => withProject(value, projectPath));
     });
   }
   // A fork continues from the same context in a session of its own. Forking before a message brings that
@@ -1267,38 +1267,62 @@ export function App({
       },
     ];
   }
-  function projectMenu(path: string): MenuItem[] {
+  // A project of this computer or of another of the user's, connected or not. Only this computer's are pinned,
+  // opened or pointed at another folder here; a new session goes into another computer's while it is connected.
+  function projectMenu(entry: Project): MenuItem[] {
+    const { path } = entry;
+    const here = entry.device.id === state.device?.id;
     const key = pathKey(path);
     const pinned = prefs.pinnedProjects.includes(key);
+    const reached = state.devices.some((device) => device.id === entry.device.id && device.ready);
     return [
       {
         label: '新建会话',
         icon: <Plus />,
-        disabled: !connected || busy || refreshing,
+        disabled: !connected || busy || refreshing || (!here && !reached),
         run: () => {
-          void createInProject(path);
+          void (here ? createInProject(path) : createElsewhere(entry.device.id, path));
         },
       },
+      ...(here
+        ? [
+            {
+              label: pinned ? '取消置顶' : '置顶',
+              icon: pinned ? <PinOff /> : <Pin />,
+              run: () =>
+                setPrefs((value) => ({
+                  ...value,
+                  pinnedProjects: toggled(value.pinnedProjects, key),
+                })),
+            },
+          ]
+        : []),
       {
-        label: pinned ? '取消置顶' : '置顶',
-        icon: pinned ? <PinOff /> : <Pin />,
-        run: () =>
-          setPrefs((value) => ({ ...value, pinnedProjects: toggled(value.pinnedProjects, key) })),
-      },
-      { label: '修改显示名称', icon: <Pencil />, run: () => setRenameProject(path) },
-      {
-        label: '更改文件夹…',
-        icon: <FolderInput />,
-        disabled: !connected || busy,
+        label: '修改显示名称',
+        icon: <Pencil />,
+        disabled: !connected,
         run: () => {
-          if (!window.desktop) return setRepointProject(path);
-          void act(async () => {
-            const chosen = await window.desktop!.chooseProject();
-            if (chosen) await repoint(path, chosen);
-          });
+          setError(null);
+          setRenameProject(entry);
         },
       },
-      ...(window.desktop
+      ...(here
+        ? [
+            {
+              label: '更改文件夹…',
+              icon: <FolderInput />,
+              disabled: !connected || busy,
+              run: () => {
+                if (!window.desktop) return setRepointProject(path);
+                void act(async () => {
+                  const chosen = await window.desktop!.chooseProject();
+                  if (chosen) await repoint(path, chosen);
+                });
+              },
+            },
+          ]
+        : []),
+      ...(here && window.desktop
         ? [
             {
               label: '打开文件夹',
@@ -1310,68 +1334,69 @@ export function App({
             },
           ]
         : []),
+      // The folder and its sessions stay; the sessions are plain ones until it is a project again.
+      {
+        label: '移除项目',
+        icon: <FolderMinus />,
+        danger: true,
+        separated: true,
+        disabled: !connected || busy,
+        run: () => {
+          void act(async () => {
+            await client.request({ type: 'project.remove', deviceId: entry.device.id, path });
+          });
+        },
+      },
     ];
-  }
-  const projectLabel = (path: string) => prefs.projectNames[pathKey(path)] || folderName(path);
-  // The projects of this computer: the ones listed here and the folders its sessions are in.
-  function herePaths() {
-    const paths = [...projects];
-    for (const item of sessions)
-      if (
-        !isInside(item.projectPath, workspaceRoots) &&
-        !paths.some((path) => pathKey(path) === pathKey(item.projectPath))
-      )
-        paths.push(item.projectPath);
-    return paths;
   }
   // Every project the session could belong to, the one it is in marked. A session of another computer is in
   // none of them, also when a folder here has the same path: moving it into one takes it over.
   function moveMenu(session: Session): MenuItem[] {
     const here = onThis(session);
     return [
-      ...herePaths().map((path) => ({
-        label: projectLabel(path),
-        detail: path,
-        checked: here && pathKey(path) === pathKey(session.projectPath),
+      ...projects.map((entry) => ({
+        label: projectName(entry),
+        detail: entry.path,
+        checked: here && pathKey(entry.path) === pathKey(session.projectPath),
         run: () => {
-          if (!here || pathKey(path) !== pathKey(session.projectPath))
+          if (!here || pathKey(entry.path) !== pathKey(session.projectPath))
             void act(async () => {
               await client.request({
                 type: 'session.move',
                 sessionId: session.id,
-                projectPath: path,
+                projectPath: entry.path,
               });
             });
         },
       })),
       // The projects of the user's other computers that are connected, under each computer's name.
       ...state.devices
-        .filter(
-          (device) =>
-            device.id !== state.device?.id && !device.server && device.ready && device.projects,
-        )
+        .filter((device) => device.id !== state.device?.id && !device.server && device.ready)
         .flatMap((device) =>
-          device.projects!.map((path, index) => ({
-            label: folderName(path),
-            detail: `${device.name} · ${path}`,
-            separated: index === 0,
-            checked:
-              session.device?.id === device.id && pathKey(path) === pathKey(session.projectPath),
-            run: () => {
-              if (
-                session.device?.id !== device.id ||
-                pathKey(path) !== pathKey(session.projectPath)
-              )
-                void act(async () => {
-                  await client.request({
-                    type: 'session.move',
-                    sessionId: session.id,
-                    projectPath: path,
-                    deviceId: device.id,
+          state.projects
+            .filter((entry) => entry.device.id === device.id)
+            .map((entry, index) => ({
+              label: projectName(entry),
+              detail: `${device.name} · ${entry.path}`,
+              separated: index === 0,
+              checked:
+                session.device?.id === device.id &&
+                pathKey(entry.path) === pathKey(session.projectPath),
+              run: () => {
+                if (
+                  session.device?.id !== device.id ||
+                  pathKey(entry.path) !== pathKey(session.projectPath)
+                )
+                  void act(async () => {
+                    await client.request({
+                      type: 'session.move',
+                      sessionId: session.id,
+                      projectPath: entry.path,
+                      deviceId: device.id,
+                    });
                   });
-                });
-            },
-          })),
+              },
+            })),
         ),
       // A folder that is no project yet becomes one with the move.
       {
@@ -1384,32 +1409,19 @@ export function App({
       },
     ];
   }
-  // Points a project at another folder: the service moves its sessions there with what Claude Code keeps of
-  // the project, and what this computer keeps about it (its place in the list, its name, its pin) follows.
+  // Points a project at another folder: the service moves it there, its name and place in the list along with its
+  // sessions and what Claude Code keeps of it, and this computer's pin follows.
   async function repoint(from: string, to: string) {
     const key = pathKey(from);
     const next = pathKey(to);
     if (key === next) return;
     await client.request({ type: 'project.move', from, to });
-    setProjects((value) => [
-      ...new Map(
-        value
-          .map((path) => (pathKey(path) === key ? to : path))
-          .map((path) => [pathKey(path), path]),
-      ).values(),
-    ]);
-    setPrefs((value) => {
-      const projectNames = { ...value.projectNames };
-      if (projectNames[key] && !projectNames[next]) projectNames[next] = projectNames[key];
-      delete projectNames[key];
-      return {
-        ...value,
-        projectNames,
-        pinnedProjects: [
-          ...new Set(value.pinnedProjects.map((item) => (item === key ? next : item))),
-        ],
-      };
-    });
+    setPrefs((value) => ({
+      ...value,
+      pinnedProjects: [
+        ...new Set(value.pinnedProjects.map((item) => (item === key ? next : item))),
+      ],
+    }));
   }
   const adapterName = nativeMode ? 'Claude Code' : 'Simulation';
   const accountName = signedOut
@@ -1652,15 +1664,17 @@ export function App({
     return <main className="app-waiting" aria-busy="true" />;
   const menuSession =
     menu?.kind === 'session' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
+  const menuProject =
+    menu?.kind === 'project' ? projectOf(state.projects, menu.deviceId, menu.path) : undefined;
   const moved =
     menu?.kind === 'move' ? state.sessions.find((item) => item.id === menu.sessionId) : null;
   const openMenu =
-    !menu || (menu.kind === 'session' && !menuSession)
+    !menu || (menu.kind === 'session' && !menuSession) || (menu.kind === 'project' && !menuProject)
       ? null
       : menu.kind === 'session'
         ? { label: `会话操作 · ${menuSession!.title}`, items: sessionMenu(menuSession!) }
         : menu.kind === 'project'
-          ? { label: `项目操作 · ${menu.path}`, items: projectMenu(menu.path) }
+          ? { label: `项目操作 · ${menu.path}`, items: projectMenu(menuProject!) }
           : menu.kind === 'move'
             ? {
                 label: '会话所在的项目',
@@ -1790,7 +1804,7 @@ export function App({
         <SchedulePanel
           schedules={schedules}
           sessions={sessions}
-          projects={projects}
+          projects={projects.map((entry) => entry.path)}
           capabilities={capabilities}
         />
       ) : (
@@ -1800,9 +1814,8 @@ export function App({
             elsewhere={elsewhere}
             devices={state.devices}
             selectedId={selected?.id}
-            projects={host.localProjects ? projects : []}
+            projects={state.projects}
             localProjects={host.localProjects}
-            workspaceRoots={workspaceRoots}
             connected={connected}
             busy={busy}
             refreshing={refreshing}
@@ -1828,7 +1841,17 @@ export function App({
             sessionMenu={(session, position) =>
               setMenu({ kind: 'session', sessionId: session.id, ...position })
             }
-            projectMenu={(path, position) => setMenu({ kind: 'project', path, ...position })}
+            projectMenu={
+              browser
+                ? undefined
+                : (entry, position) =>
+                    setMenu({
+                      kind: 'project',
+                      deviceId: entry.device.id,
+                      path: entry.path,
+                      ...position,
+                    })
+            }
             footer={quotaFooter}
           />
           <main className="workspace">
@@ -1968,7 +1991,7 @@ export function App({
                   disabled={controlsDisabled}
                   onClick={(event) => {
                     // With projects here the session goes into one of them, or into a folder chosen there.
-                    if (!herePaths().length) return void takeOver(selected);
+                    if (!projects.length) return void takeOver(selected);
                     const box = event.currentTarget.getBoundingClientRect();
                     setMenu({
                       kind: 'move',
@@ -2017,13 +2040,7 @@ export function App({
               <Composer
                 openAccount={() => open('settings', 'account')}
                 session={selected}
-                projectName={
-                  state.devices.some(
-                    (device) => device.server && device.id === selected.device?.id,
-                  ) || isInside(selected.projectPath, workspaceRoots)
-                    ? null
-                    : projectLabel(selected.projectPath)
-                }
+                projectName={projectIn(selected) ? projectName(projectIn(selected)!) : null}
                 chooseProject={
                   controlsDisabled || away
                     ? undefined
@@ -2093,6 +2110,7 @@ export function App({
                 noticeKey={window.desktop?.boot.connection ?? ''}
                 project={selected && onThis(selected) ? selected.projectPath : null}
                 request={filesRequest}
+                aliasOf={nativeLabels(state.projects, state.sessions)}
               />
             </aside>
           )}
@@ -2139,7 +2157,7 @@ export function App({
             void act(async () => {
               if (!written) return;
               const path = (await window.desktop?.asOnDisk(written)) ?? written;
-              setProjects((value) => withProject(value, path));
+              await client.request({ type: 'project.add', path });
               setCreateOpen(false);
             });
           }}
@@ -2158,7 +2176,7 @@ export function App({
               await client.request({ type: 'session.delete', sessionId: deleteSession.id });
               setDraft(deleteSession.id, '');
               // A plain session's directory goes with it when the session left nothing there.
-              if (isInside(deleteSession.projectPath, workspaceRoots))
+              if (onThis(deleteSession) && !projectIn(deleteSession))
                 void window.desktop?.removeWorkspace(deleteSession.projectPath);
               setDeleteSession(null);
             });
@@ -2167,17 +2185,22 @@ export function App({
       )}
       {renameProject && (
         <RenameProjectDialog
-          path={renameProject}
-          name={prefs.projectNames[pathKey(renameProject)] ?? ''}
+          path={renameProject.path}
+          name={renameProject.name ?? ''}
+          busy={busy}
+          connected={connected}
+          error={actionError}
           close={() => setRenameProject(null)}
           rename={(name) => {
-            setPrefs((value) => {
-              const projectNames = { ...value.projectNames };
-              if (name) projectNames[pathKey(renameProject)] = name;
-              else delete projectNames[pathKey(renameProject)];
-              return { ...value, projectNames };
+            void act(async () => {
+              await client.request({
+                type: 'project.rename',
+                deviceId: renameProject.device.id,
+                path: renameProject.path,
+                name,
+              });
+              setRenameProject(null);
             });
-            setRenameProject(null);
           }}
         />
       )}

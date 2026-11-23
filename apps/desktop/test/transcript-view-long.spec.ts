@@ -102,6 +102,7 @@ for (const mode of ['standard', 'expanded']) {
             version: '0.0.1',
             connectionId,
             adapter: 'claude-code',
+            projects: [],
             sessions: [session],
           });
           return;

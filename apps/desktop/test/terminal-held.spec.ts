@@ -75,6 +75,7 @@ test('a session a terminal of ccdt holds says what the terminal does, and takes 
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
       if (message.type === 'session.subscribe')

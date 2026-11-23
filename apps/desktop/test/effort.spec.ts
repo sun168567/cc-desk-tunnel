@@ -37,6 +37,7 @@ test('effort drag previews continuously, saves on release and keeps the menu ope
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
       } else if (message.type === 'session.subscribe') {

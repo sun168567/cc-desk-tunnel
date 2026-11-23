@@ -21,7 +21,6 @@ export type Account = Connection & {
 export type Run = { id: string; folder: string };
 export type Shared = {
   prefs?: unknown;
-  projects?: unknown;
   connections: Connection[];
   // What the other connections have running now, by their names.
   busy: { name: string; runs: Run[] }[];
@@ -49,14 +48,14 @@ export function onSharedChange<K extends keyof Shared>(key: K, take: (value: Sha
 export const shared = <K extends keyof Shared>(key: K) => values[key];
 export const useShared = <K extends keyof Shared>(key: K) =>
   useSyncExternalStore(onShared, () => values[key]);
-export function saveShared(key: 'prefs' | 'projects', value: unknown) {
+export function saveShared(key: 'prefs', value: unknown) {
   values[key] = value;
   void window.desktop?.saveShared(key, value).catch(() => {});
 }
 // A connection had these values to itself before they were shared, and brings them along: the first to start, an
 // earlier version's first connection after its move (see `adopt` in electron/connections.cjs). A sign-in window
 // has none of its own.
-export function shareOnce(key: 'prefs' | 'projects', value: unknown) {
+export function shareOnce(key: 'prefs', value: unknown) {
   if (boot && !boot.launcher && values[key] === undefined) saveShared(key, value);
 }
 // Two addresses are one service when they name the same place; see `serviceKey` in electron/connections.cjs.

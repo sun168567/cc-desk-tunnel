@@ -63,6 +63,7 @@ test('an approval asked by a safety check says so, and why, even when permission
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
+          projects: [],
           sessions: [session],
         });
         return;

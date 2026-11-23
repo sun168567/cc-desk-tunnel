@@ -322,6 +322,37 @@ test('the profiles of 0.3.16 give their page storage to partitions of the profil
   assert.ok(existsSync(join(base, 'Local Storage')));
 });
 
+test('the project list of before the service kept the projects waits for each connection there was to hand it over', (context) => {
+  const base = profile(context);
+  const first = signedIn(base, 'wss://first/ws');
+  const second = signedIn(base, 'wss://second/ws');
+  const gone = signedIn(base, 'wss://gone/ws');
+  connections.writeShared(base, 'projects', ['D:\\工作\\甲', 'D:\\工作\\乙', 3]);
+  connections.writeShared(base, 'prefs', {
+    theme: 'dark',
+    projectNames: { 'd:\\工作\\甲': '甲方', 'd:\\工作\\乙': 7 },
+  });
+  connections.migrate(base);
+  // The names leave the page's preferences, and the list its old place.
+  assert.deepEqual(connections.readShared(base, 'prefs'), { theme: 'dark' });
+  assert.equal(connections.readShared(base, 'projects'), undefined);
+  const legacy = { projects: ['D:\\工作\\甲', 'D:\\工作\\乙'], names: { 'd:\\工作\\甲': '甲方' } };
+  assert.deepEqual(connections.legacyProjects(base, first), legacy);
+  // A later start finds nothing to set aside, and a connection made since has nothing to hand over.
+  connections.migrate(base);
+  assert.deepEqual(connections.legacyProjects(base, second), legacy);
+  const later = signedIn(base, 'wss://later/ws');
+  assert.equal(connections.legacyProjects(base, later), null);
+  // Handed over once; the list goes when no connection there was is left, a removed one not waited for.
+  connections.projectsMoved(base, first);
+  assert.equal(connections.legacyProjects(base, first), null);
+  assert.deepEqual(connections.legacyProjects(base, second), legacy);
+  connections.remove(base, gone);
+  connections.projectsMoved(base, second);
+  assert.equal(connections.readShared(base, 'legacy-projects'), undefined);
+  assert.equal(connections.legacyProjects(base, second), null);
+});
+
 test('a damaged list and a shared value that is not there are passed over', (context) => {
   const base = profile(context);
   assert.equal(connections.readShared(base, 'prefs'), undefined);

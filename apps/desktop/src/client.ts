@@ -16,6 +16,7 @@ import type {
   NativeCapabilities,
   NativeMetrics,
   ServerMessage,
+  Project,
   ServiceUpdate,
   Session,
   SessionEvent,
@@ -135,6 +136,8 @@ export type ClientState = {
   // computer's sessions can be worked on from here while it is listed and ready.
   devices: ConnectedDevice[];
   sessions: Session[];
+  // The projects of all the user's computers, as the service keeps them.
+  projects: Project[];
   events: Record<string, SessionEvent[]>;
   // Output a run is in the middle of, as far as it has arrived. It has no place in the history yet: the
   // event that records it takes its place.
@@ -181,6 +184,7 @@ export class ProxyClient {
     files: null,
     devices: [],
     sessions: [],
+    projects: [],
     events: {},
     live: {},
     history: {},
@@ -508,6 +512,7 @@ export class ProxyClient {
           browser: message.browser ?? null,
           files: message.files ?? null,
           sessions: message.sessions,
+          projects: message.projects,
           selectedId,
           error: null,
           adapter: message.adapter,
@@ -596,6 +601,8 @@ export class ProxyClient {
         );
       } else if (message.type === 'devices') {
         this.update({ devices: message.devices });
+      } else if (message.type === 'projects') {
+        this.update({ projects: message.projects });
       } else if (message.type === 'session.updated') {
         this.upsert(message.session);
       } else if (message.type === 'session.deleted') {

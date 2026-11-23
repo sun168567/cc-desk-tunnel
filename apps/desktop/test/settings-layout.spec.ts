@@ -51,6 +51,7 @@ async function serve(page: Page, url: string, shells?: string[], chosen: unknown
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [],
         });
         return;

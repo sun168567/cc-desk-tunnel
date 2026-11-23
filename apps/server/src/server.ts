@@ -232,8 +232,6 @@ type Seat = {
   door?: Door;
   opening?: Promise<void>;
   away?: NodeJS.Timeout;
-  // The computer's projects, as its client last said them.
-  projects?: string[];
 };
 type Login = { process: NativeLogin; owner: Peer; url?: string };
 type CommandOf<T extends Command['type']> = Extract<Command, { type: T }>;
@@ -459,21 +457,24 @@ export function createProxyServer(options: ServerOptions) {
     }
   }
   // Where a session is made or moved to: the computer of the connection, or another of the user's that is
-  // connected, into one of the projects it said it has or holds sessions in.
+  // connected, into one of its projects.
   function destination(peer: Peer, command: { deviceId?: string; projectPath: string }) {
     if (!command.deviceId || command.deviceId === peer.device?.id) return deviceOf(peer);
     const seat = seats.get(command.deviceId);
     const device = seat && [...seat.peers].findLast((other) => other.device)?.device;
     if (!device) throw new DomainError('device_offline', '那台电脑不在线。');
-    const key = pathKey(command.projectPath);
-    if (
-      !seat.projects?.some((path) => pathKey(path) === key) &&
-      !store
-        .list()
-        .some((other) => other.device?.id === device.id && pathKey(other.projectPath) === key)
-    )
+    if (!store.isProject(device.id, command.projectPath))
       throw new DomainError('unknown_project', '那台电脑上没有这个项目。');
     return device;
+  }
+  // Tells every window the projects when they changed.
+  let projectList = JSON.stringify(store.projects());
+  function announceProjects() {
+    const projects = store.projects();
+    const text = JSON.stringify(projects);
+    if (text === projectList) return;
+    projectList = text;
+    broadcast({ type: 'projects', projects });
   }
   function deviceOf(peer: Peer) {
     if (!peer.device) throw new DomainError('device_unknown', '客户端没有报告设备标识。');
@@ -493,6 +494,7 @@ export function createProxyServer(options: ServerOptions) {
           '此会话在一台 Windows 电脑上。要在本机接着做，请先为它选择本机的项目目录，或把它分叉到本机。',
         );
       updated(store.claim(session.id, device).id);
+      announceProjects();
     }
     const place = session.device ?? device!;
     const seat = seats.get(place.id);
@@ -537,7 +539,6 @@ export function createProxyServer(options: ServerOptions) {
               ready: !options.tunnel || !!seat.door?.ready,
               shells,
               ...(shell ? { shell } : {}),
-              ...(seat.projects ? { projects: seat.projects } : {}),
             },
           ];
         }),
@@ -1441,6 +1442,7 @@ export function createProxyServer(options: ServerOptions) {
         before,
       );
       broadcast({ type: 'session.updated', session: created });
+      announceProjects();
       return created.id;
     } catch (error) {
       if (error instanceof DomainError) throw error;
@@ -1703,12 +1705,6 @@ export function createProxyServer(options: ServerOptions) {
         store.prefer(deviceOf(peer).id, command.shell);
         announce();
         return undefined;
-      case 'device.projects': {
-        const seat = seats.get(deviceOf(peer).id);
-        if (seat) seat.projects = [...new Set(command.projects)];
-        announce();
-        return undefined;
-      }
       case 'instructions.get':
       case 'instructions.update': {
         if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有全局说明。');
@@ -1775,18 +1771,34 @@ export function createProxyServer(options: ServerOptions) {
           throw new DomainError('session_busy', '会话正在更新，请稍后重试。');
         for (const session of store.moveProject(command.from, command.to, deviceOf(peer)))
           broadcast({ type: 'session.updated', session });
+        announceProjects();
         return undefined;
       }
+      case 'project.add':
+        store.register(deviceOf(peer), command.path, command.name);
+        announceProjects();
+        return undefined;
+      case 'project.remove':
+        store.unregister(command.deviceId ?? deviceOf(peer).id, command.path);
+        announceProjects();
+        return undefined;
+      case 'project.rename':
+        store.renameProject(command.deviceId ?? deviceOf(peer).id, command.path, command.name);
+        announceProjects();
+        return undefined;
       case 'session.create': {
+        const device = destination(peer, command);
         const session = store.create(
           command.requestId,
           command.title,
           command.projectPath,
-          destination(peer, command),
+          device,
+          command.plain && device === peer.device,
         );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
         broadcast({ type: 'session.updated', session });
+        announceProjects();
         return session.id;
       }
     }
@@ -1891,6 +1903,7 @@ export function createProxyServer(options: ServerOptions) {
           type: 'session.updated',
           session: store.move(command.sessionId, command.projectPath, device),
         });
+        announceProjects();
         break;
       }
       case 'session.delete':
@@ -1933,6 +1946,7 @@ export function createProxyServer(options: ServerOptions) {
         model: options.claude?.model,
         version,
         sessions: store.list(),
+        projects: store.projects(),
         historyId: store.historyId,
         browser: {
           sessionId: peer.browser,
@@ -1989,6 +2003,7 @@ export function createProxyServer(options: ServerOptions) {
       update: updates?.state,
       client: installer(),
       sessions: store.list(),
+      projects: store.projects(),
       historyId: store.historyId,
       ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
@@ -2393,6 +2408,7 @@ export function createProxyServer(options: ServerOptions) {
             );
           for (const session of store.named(peer.device))
             broadcast({ type: 'session.updated', session });
+          announceProjects();
           enter(peer);
           announce();
           track(adopt(peer), tunnelTasks);

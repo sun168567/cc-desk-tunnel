@@ -126,6 +126,7 @@ test("a terminal's turns fold as a chat's do, each once its CLI waits for the ne
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [chat, held],
         });
       if (message.type === 'session.subscribe') {

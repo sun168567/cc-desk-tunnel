@@ -45,6 +45,7 @@ test('Claude Code settings load from the service and save each change at once', 
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [],
         });
         return;
@@ -135,6 +136,7 @@ test('the global CLAUDE.md is edited here and saved only over what was read', as
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
+          projects: [],
           sessions: [],
         });
         return;

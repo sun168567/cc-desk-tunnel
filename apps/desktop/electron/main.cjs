@@ -957,7 +957,7 @@ function dismissOthers() {
 }
 // The page's choices that are the computer's (see prefs.ts) and the list of connections, as last read. Every
 // connection's window looks at the files every two seconds and takes what another one wrote.
-const sharedKeys = ['prefs', 'projects'];
+const sharedKeys = ['prefs'];
 const snapshot = (key) =>
   key === 'connections'
     ? connections.list(base).map((entry) => ({ ...entry, label: connections.labelOf(base, entry) }))
@@ -998,6 +998,13 @@ handle('shared:save', (_event, key, value) => {
   connections.writeShared(base, key, value);
   seen[key] = text;
   if (key === 'prefs') followTheme(value);
+});
+// The project list from before the service kept them, for this connection to hand over (see connections.cjs).
+handle('projects:legacy', () =>
+  connectionId ? connections.legacyProjects(base, connectionId) : null,
+);
+handle('projects:moved', () => {
+  if (connectionId) connections.projectsMoved(base, connectionId);
 });
 // The window's own parts, its ground before the page draws and the system's buttons over the title bar, take
 // the colours the page chose (`theme` in prefs.ts); the system's menus and dialogs follow the same choice.

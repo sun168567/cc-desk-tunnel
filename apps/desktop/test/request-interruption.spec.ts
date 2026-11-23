@@ -52,6 +52,7 @@ for (const delivery of ['not_sent', 'unconfirmed', 'received'] as const) {
             version: '0.3.15',
             connectionId,
             adapter: 'claude-code',
+            projects: [],
             sessions: [session],
           });
           return;

@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION, serverMessageSchema } from '@cc-desk-tunnel/protocol';
-import type { ServerMessage, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
+import type { Project, ServerMessage, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { readIdleCompaction } from '../src/idle-compaction.ts';
 import { createProxyServer, upgradeHeld } from '../src/server.ts';
 import { SessionStore } from '../src/store.ts';
@@ -1244,26 +1244,95 @@ test('an upgrade is held back only by what is at work, and says what that is', (
   assert.match(upgradeHeld([], true, true) ?? '', /有会话正在移动或修改，Claude 账号正在登录/);
 });
 
+test('the projects are kept by the service, told to every window, and named or removed from any', async (t) => {
+  const f = await fixture(t);
+  const laptop = { id: randomUUID(), name: '笔记本' };
+  const desk = await f.connect();
+  let away = await f.connect(laptop);
+  const told = async (client: Client, check: (list: Project[]) => boolean) => {
+    const message = await client.wait((item) => item.type === 'projects' && check(item.projects));
+    assert.ok(message.type === 'projects');
+    return message.projects;
+  };
+  // Added on the laptop, as the laptop's, and every window is told; adding it again changes nothing.
+  for (let time = 0; time < 2; time++) {
+    const added = await away.request({ type: 'project.add', path: 'E:\\笔记本\\项目' });
+    assert.ok(added.type === 'response' && added.ok);
+  }
+  const list = await told(desk, (projects) => projects.length === 1);
+  assert.deepEqual(
+    list.map(({ device, path, name }) => [device, path, name]),
+    [[laptop, 'E:\\笔记本\\项目', undefined]],
+  );
+  // Its sessions work in the directory it names on the service.
+  const made = await away.request({
+    type: 'session.create',
+    title: '在笔记本上',
+    projectPath: 'e:/笔记本/项目',
+  });
+  assert.ok(made.type === 'response' && made.sessionId);
+  assert.equal(f.server.store.get(made.sessionId).session.nativeRoot, list[0].root);
+  // Named from the desk, and an empty name gives it back the folder's.
+  const renamed = await desk.request({
+    type: 'project.rename',
+    deviceId: laptop.id,
+    path: 'e:\\笔记本\\项目',
+    name: '笔记',
+  });
+  assert.ok(renamed.type === 'response' && renamed.ok);
+  await told(away, (projects) => projects[0]?.name === '笔记');
+  await desk.request({
+    type: 'project.rename',
+    deviceId: laptop.id,
+    path: 'E:\\笔记本\\项目',
+    name: '',
+  });
+  await told(away, (projects) => projects.length === 1 && !projects[0].name);
+  // A computer that signs in under another name has its projects follow; one that is gone still has them, and a
+  // window that signs in is told them.
+  away.send({ type: 'leave' });
+  away.socket.terminate();
+  away = await f.connect({ ...laptop, name: '新笔记本' });
+  await told(desk, (projects) => projects[0]?.device.name === '新笔记本');
+  away.send({ type: 'leave' });
+  away.socket.terminate();
+  const late = new Client(f.url);
+  f.clients.push(late);
+  const ready = await late.open();
+  assert.ok(ready.type === 'ready');
+  assert.deepEqual(
+    ready.projects.map(({ device, path }) => [device.name, path]),
+    [['新笔记本', 'E:\\笔记本\\项目']],
+  );
+  // Removed from the desk while the laptop is away: its session stays where it is, a plain one now.
+  const removed = await desk.request({
+    type: 'project.remove',
+    deviceId: laptop.id,
+    path: 'E:\\笔记本\\项目',
+  });
+  assert.ok(removed.type === 'response' && removed.ok);
+  await told(desk, (projects) => projects.length === 0);
+  assert.equal(f.server.store.get(made.sessionId).session.projectPath, 'e:/笔记本/项目');
+  const missing = await desk.request({
+    type: 'project.remove',
+    deviceId: laptop.id,
+    path: 'E:\\笔记本\\项目',
+  });
+  assert.ok(missing.type === 'response' && !missing.ok && missing.code === 'not_found');
+  // Made a project again, it has the directory it had, and with it what Claude Code kept there.
+  away = await f.connect(laptop);
+  await away.request({ type: 'project.add', path: 'E:\\笔记本\\项目', name: '回来了' });
+  const back = await told(desk, (projects) => projects[0]?.name === '回来了');
+  assert.deepEqual([back.length, back[0].root], [1, list[0].root]);
+});
+
 test('a session is started on or moved to a project of another connected computer, and nowhere else', async (t) => {
   const f = await fixture(t);
   const laptop = { id: randomUUID(), name: '笔记本' };
   const desk = await f.connect();
   const away = await f.connect(laptop);
-  // The laptop says its projects, and every window is told them with the computer.
-  const said = await away.request({
-    type: 'device.projects',
-    projects: ['E:\\笔记本\\项目', 'E:\\笔记本\\项目'],
-  });
+  const said = await away.request({ type: 'project.add', path: 'E:\\笔记本\\项目' });
   assert.ok(said.type === 'response' && said.ok);
-  const told = await desk.wait(
-    (message) =>
-      message.type === 'devices' &&
-      message.devices.some((item) => item.id === laptop.id && item.projects?.length),
-  );
-  assert.ok(told.type === 'devices');
-  assert.deepEqual(told.devices.find((item) => item.id === laptop.id)!.projects, [
-    'E:\\笔记本\\项目',
-  ]);
   // Started from the desk, the session is the laptop's.
   const made = await desk.request({
     type: 'session.create',
@@ -1274,7 +1343,7 @@ test('a session is started on or moved to a project of another connected compute
   assert.ok(made.type === 'response' && made.ok && made.sessionId);
   const there = f.server.store.get(made.sessionId).session;
   assert.deepEqual([there.device, there.projectPath], [laptop, 'e:\\笔记本\\项目']);
-  // Not in a folder it did not say.
+  // Not in a folder that is no project there.
   const unknown = await desk.request({
     type: 'session.create',
     title: '别处',

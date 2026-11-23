@@ -9,7 +9,11 @@ declare global {
       // Which of this computer's connections the window is ('' the first), and what they all share.
       // `launcher`: a sign-in window, which is no connection's (see Launcher.tsx).
       boot: { connection: string; launcher?: boolean; shared: import('./shared.ts').Shared };
-      saveShared: (key: 'prefs' | 'projects', value: unknown) => Promise<void>;
+      saveShared: (key: 'prefs', value: unknown) => Promise<void>;
+      // The computer's project list from before the service kept them, while this connection has yet to hand it
+      // to its service, and the call that says it has (see App.tsx).
+      legacyProjects: () => Promise<{ projects: string[]; names: Record<string, string> } | null>;
+      legacyProjectsMoved: () => Promise<void>;
       onSharedChanged: (
         callback: (key: keyof import('./shared.ts').Shared, value: unknown) => void,
       ) => () => void;

@@ -119,6 +119,7 @@ test('a run tells what it is doing, background tasks tell they are alive, and th
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
+          projects: [],
           sessions: [waiting, building, silent],
         });
       if (message.type === 'session.subscribe') {
