@@ -600,7 +600,9 @@ handle('service:upgrade', async (event, config) => {
 });
 handle('ccdt:open', async (_event, request) => {
   const { openSession } = await import(pathToFileURL(path.join(__dirname, 'ccdt.mjs')).href);
-  return openSession(request, { version: app.getVersion() });
+  // The ccdt this client carries, where its package has one (Windows).
+  const own = app.isPackaged ? path.join(process.resourcesPath, 'ccdt', 'ccdt.cmd') : undefined;
+  return openSession(request, { version: app.getVersion(), own });
 });
 // The service token is kept only when the user asks, encrypted for the current account of the system (DPAPI on
 // Windows, the login keychain on macOS) with the key of the profile all processes share. The address is kept from

@@ -8,12 +8,13 @@ import { delimiter, join } from 'node:path';
 // through its command line alone. It is signed in to the service this window is connected to, with the token the
 // window holds, then opens the session in a terminal window of the system's.
 
-// Where ccdt is: on the PATH, else where its install script puts it, as a client started before ccdt was installed
-// has the PATH from before.
+// Where ccdt is: the one this client carries (`own`), which is of its release; else on the PATH, else where its install
+// script puts it, as a client started before ccdt was installed has the PATH from before.
 export function locate(
-  { platform = process.platform, env = process.env, home = homedir() } = {},
+  { platform = process.platform, env = process.env, home = homedir(), own } = {},
   exists = existsSync,
 ) {
+  if (own && exists(own)) return own;
   const windows = platform === 'win32';
   const installed = windows
     ? join(env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'Programs', 'ccdt')
@@ -124,7 +125,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // the window then says how to install it. Anything else that goes wrong is thrown, in words for the user.
 export async function openSession(
   { url, fingerprint, token, sessionId, projectPath },
-  { version, platform = process.platform, env = process.env, home = homedir() },
+  { version, platform = process.platform, env = process.env, home = homedir(), own },
 ) {
   if (
     !uuid.test(sessionId) ||
@@ -132,7 +133,7 @@ export async function openSession(
     !/^[0-9A-Fa-f:]*$/.test(fingerprint ?? '')
   )
     throw new Error('这个连接的地址不能交给 ccdt。');
-  const system = { platform, env, home };
+  const system = { platform, env, home, own };
   const ccdt = locate(system);
   if (!ccdt) return { status: 'missing' };
   const installed = (await run(ccdt, ['--version'], system)).trim().replace(/^ccdt\s+/, '');

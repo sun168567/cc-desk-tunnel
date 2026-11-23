@@ -1,13 +1,17 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { builtinModules, createRequire } from 'node:module';
 import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { build as viteBuild } from 'vite';
 
@@ -128,4 +132,120 @@ export async function stageDesktop(root, app, { description, files = [], depende
       2,
     ) + '\n',
   );
+}
+
+// ccdt, the terminal client, with what it imports bundled into one ccdt.mjs in `outDir`, and the scripts of its SSH
+// service that it loads by path beside it. `desktop`: the ccdt the desktop package carries, run by the desktop's own
+// program and updated with it rather than by itself.
+export async function bundleCcdt(root, outDir, { version, desktop = false }) {
+  const windows = process.platform === 'win32';
+  await viteBuild({
+    configFile: false,
+    root,
+    logLevel: 'warn',
+    // As for the desktop bridge: a package is for the system it is built on, and holds only what that one runs.
+    define: {
+      'process.platform': JSON.stringify(process.platform),
+      __CCDT_VERSION__: JSON.stringify(version),
+      __CCDT_DESKTOP__: JSON.stringify(desktop),
+    },
+    ssr: { noExternal: true },
+    build: {
+      ssr: true,
+      target: 'node24',
+      outDir,
+      emptyOutDir: false,
+      rolldownOptions: {
+        input: join(root, 'apps/cli/bin/ccdt.mjs'),
+        external: [
+          ...builtinModules,
+          ...builtinModules.map((name) => `node:${name}`),
+          'bufferutil',
+          'utf-8-validate',
+          // The file panel's SFTP client, which the bridge loads only when the panel is used; ccdt has no panel.
+          'ssh2',
+          ...(windows ? [] : posixService.dependencies),
+        ],
+        output: { format: 'es', entryFileNames: 'ccdt.mjs', codeSplitting: false },
+      },
+    },
+  });
+  const electron = join(root, 'apps/desktop/electron');
+  for (const file of windows ? ['prepare-ssh.ps1', 'component-host.ps1'] : posixService.files)
+    cpSync(join(electron, file), join(outDir, file));
+}
+
+// The check of a packaged ccdt: it starts, says its version, and fails a sign-in to nowhere with a message instead
+// of an error of its own; that loads the bundled connection.
+export function checkCcdt(launcher, version) {
+  const windows = process.platform === 'win32';
+  const run = (args, input) =>
+    execFileSync(windows ? 'cmd.exe' : launcher, windows ? ['/d', '/c', launcher, ...args] : args, {
+      input,
+      encoding: 'utf8',
+      env: { ...process.env, CCDT_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'ccdt-check-')) },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  const reported = run(['--version']).trim();
+  if (reported !== `ccdt ${version}`) throw new Error(`The package's ccdt reports "${reported}".`);
+  try {
+    run(['login', 'wss://127.0.0.1:9/ws', '--token-stdin'], 'x'.repeat(32));
+    throw new Error('A sign-in to nowhere succeeded.');
+  } catch (error) {
+    if (error.status !== 1 || /Error:|at .+\(/.test(String(error.stderr)))
+      throw new Error(`The packaged sign-in failed badly:\n${error.stderr ?? error.message}`);
+  }
+}
+
+// What starts ccdt on Windows: its Node, beside it, running ccdt.mjs.
+export const WINDOWS_LAUNCHER =
+  '@echo off\r\n"%~dp0node.exe" "%~dp0ccdt.mjs" %*\r\nexit /b %errorlevel%\r\n';
+
+// The Node ccdt runs with, of a pinned release, wherever ccdt is packaged: on its own and in the Windows desktop
+// installer alike. From https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.
+const NODE = '24.22.2';
+export const nodeRuntimes = {
+  'win32-x64': ['win-x64.zip', 'ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2'],
+  'darwin-arm64': [
+    'darwin-arm64.tar.gz',
+    'aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a',
+  ],
+  'darwin-x64': [
+    'darwin-x64.tar.gz',
+    'd5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52',
+  ],
+  'linux-x64': [
+    'linux-x64.tar.gz',
+    '361718c444e49af2ca5a110c83ba6a8901143f23ab285ebbef0341f391f482a9',
+  ],
+  'linux-arm64': [
+    'linux-arm64.tar.gz',
+    '95c264150aceb7f3437a29fd6984924f5f8d1511ea3cbd6c508b83f6c555dae2',
+  ],
+};
+
+// Puts that Node, checked against the hash above, into `directory` as node.exe or node; the download is kept in
+// .tools for the next build.
+export async function addNode(root, directory) {
+  const windows = process.platform === 'win32';
+  // The system's own tar, which reads .zip on Windows; a shell may put another one first on the PATH.
+  const tar = windows
+    ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
+  const [suffix, sha256] = nodeRuntimes[`${process.platform}-${process.arch}`];
+  const name = `node-v${NODE}-${suffix}`;
+  const cached = join(root, '.tools', name);
+  if (!existsSync(cached)) {
+    const response = await fetch(`https://nodejs.org/dist/v${NODE}/${name}`);
+    if (!response.ok) throw new Error(`Node download failed: ${response.status}`);
+    mkdirSync(join(root, '.tools'), { recursive: true });
+    writeFileSync(cached, Buffer.from(await response.arrayBuffer()));
+  }
+  if (createHash('sha256').update(readFileSync(cached)).digest('hex') !== sha256)
+    throw new Error(`Checksum mismatch for ${name}`);
+  const extracted = mkdtempSync(join(tmpdir(), 'ccdt-node-'));
+  const inside = `${name.replace(/\.(zip|tar\.gz)$/, '')}/${windows ? 'node.exe' : 'bin/node'}`;
+  execFileSync(tar, ['-xf', cached, '-C', extracted, inside]);
+  cpSync(join(extracted, inside), join(directory, windows ? 'node.exe' : 'node'));
+  rmSync(extracted, { recursive: true, force: true });
 }

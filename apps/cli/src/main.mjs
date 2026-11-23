@@ -10,7 +10,7 @@ import { readKeys } from './keys.mjs';
 import { pad, pick } from './picker.mjs';
 import { choices, entries, parse, readRemote, save, shown } from './settings.mjs';
 import { discard, protect, reveal } from './secret.mjs';
-import { bundled, releasePage, version } from './runtime.mjs';
+import { bundled, desktop, releasePage, version } from './runtime.mjs';
 import { relay } from './terminal.mjs';
 import { markOnline, onlineAt, stayOnline } from './online.mjs';
 import { FIRST_UPGRADABLE, download, install } from './upgrade.mjs';
@@ -382,6 +382,10 @@ const older = (a, b) => a.localeCompare(b, undefined, { numeric: true }) < 0;
 
 // The service first, the way the desktop client upgrades it: it fetches its newest release and restarts. Then ccdt
 // becomes the release of the service, which is what it can speak to: newer, or older where ccdt was ahead of it.
+// The ccdt the desktop client carries is updated with the client, which offers the service's release when it connects.
+const DESKTOP_UPGRADE = (next) =>
+  `这个 ccdt 随图形客户端安装，跟着它更新：打开图形客户端，按提示升级到 ${next} 即可。`;
+
 async function upgrade(config, values) {
   const server = await target(config, values);
   const token = credentials(server);
@@ -460,6 +464,10 @@ async function upgrade(config, values) {
   }
   if (!bundled) {
     say(`从源码运行的 ccdt 不自行更新：服务端是 ${next}，请换到这个版本的源码。`);
+    return 1;
+  }
+  if (desktop) {
+    say(DESKTOP_UPGRADE(next));
     return 1;
   }
   say(dim(`正在下载 ccdt ${next}……`));
@@ -1055,7 +1063,9 @@ export async function main(argv) {
           }
       }
       say(
-        `这个 ccdt 是 ${version}，服务端是 ${error.service}：运行 ccdt upgrade 升级，或安装与服务端相同版本的 ccdt：${releasePage(error.service)}`,
+        desktop && older(version, error.service)
+          ? DESKTOP_UPGRADE(error.service)
+          : `这个 ccdt 是 ${version}，服务端是 ${error.service}：运行 ccdt upgrade 升级，或安装与服务端相同版本的 ccdt：${releasePage(error.service)}`,
       );
     }
     return 1;

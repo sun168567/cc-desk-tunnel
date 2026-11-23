@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { locate, openSession, terminalCommand } from '../electron/ccdt.mjs';
 
-test('ccdt is looked for on the PATH first, then where its install script puts it', () => {
+test('ccdt is the client’s own, else looked for on the PATH, then where its install script puts it', () => {
   const windows = {
     platform: 'win32',
     env: { Path: 'C:\\tools;C:\\other', LOCALAPPDATA: 'C:\\L' },
@@ -32,6 +32,14 @@ test('ccdt is looked for on the PATH first, then where its install script puts i
     join('/Users/me', '.local', 'bin', 'ccdt'),
   );
   assert.equal(locate(mac, found()), undefined);
+  // The one the client carries comes first: it is of the client's release, whatever else is installed.
+  const own = join('C:\\Program Files\\CC Desk Tunnel', 'resources', 'ccdt', 'ccdt.cmd');
+  assert.equal(locate({ ...windows, own }, found(own, join('C:\\other', 'ccdt.cmd'))), own);
+  // A client that carries none, run from the source tree, looks further.
+  assert.equal(
+    locate({ ...windows, own }, found(join('C:\\other', 'ccdt.cmd'))),
+    join('C:\\other', 'ccdt.cmd'),
+  );
 });
 
 test('the terminal window runs ccdt quoted for the shell that reads it, and waits on an error', () => {
