@@ -69,6 +69,23 @@ export function subscribe(service, sessionId) {
   });
 }
 
+// The newest page of the session's history, read for `follow`. Events that come meanwhile, which may be newer than
+// some on the page or among them, wait for it and are applied after it, in order. `each(event, live)` is told of
+// every event new to `follow`: `live` for one that came while the page was read.
+export async function catchUp(service, follow, each = () => {}) {
+  follow.held = [];
+  let snapshot, held;
+  try {
+    snapshot = await subscribe(service, follow.sessionId);
+  } finally {
+    held = follow.held;
+    follow.held = undefined;
+  }
+  for (const event of snapshot?.events ?? []) if (follow.apply(event)) each(event, false);
+  for (const event of held) if (follow.apply(event)) each(event, true);
+  return snapshot;
+}
+
 const QUESTION = 'AskUserQuestion';
 const PLAN = 'ExitPlanMode';
 const parse = (text) => {
@@ -115,7 +132,9 @@ export class Follow {
     this.errors = [];
   }
   apply(event) {
-    if (event.sessionId !== this.sessionId || event.sequence <= this.seen) return false;
+    if (event.sessionId !== this.sessionId) return false;
+    if (this.held) return (this.held.push(event), false);
+    if (event.sequence <= this.seen) return false;
     this.seen = event.sequence;
     const payload = event.payload;
     switch (payload.type) {
@@ -241,9 +260,10 @@ export async function follow(service, follow, { deadline, past, onEvent } = {}) 
   };
   service.on('message', listen);
   try {
-    const snapshot = await subscribe(service, follow.sessionId);
+    const snapshot = await catchUp(service, follow, (event, live) => {
+      if (live) onEvent?.(event.payload, false);
+    });
     if (snapshot?.session) service.sessions.set(snapshot.session.id, snapshot.session);
-    for (const event of snapshot?.events ?? []) follow.apply(event);
     for (;;) {
       const found = stop();
       if (found) return found;

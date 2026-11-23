@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -8,7 +9,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { createProxyServer } from '../../server/src/server.ts';
 import { promptText, serveAcp } from '../src/acp.mjs';
-import { EXIT, Follow, findSession } from '../src/agent.mjs';
+import { EXIT, Follow, findSession, follow } from '../src/agent.mjs';
 import { Service } from '../src/connection.mjs';
 import { printing } from '../src/main.mjs';
 import {
@@ -239,6 +240,50 @@ test('what is followed begins at the message sent, and ends where the run stops 
   // The run gone with its end not read is a run that ended.
   followed.apply(event(8, { type: 'run.status', status: 'running', connectionId: 'c' }));
   assert.deepEqual(followed.stopped(null), { state: 'completed' });
+});
+
+// As on a real service: the message's events come before the answer to it, and one more before the page of history,
+// which holds them all. The page is read first, then what came meanwhile, so the message is found and the end seen.
+test('events that come while the page of history is read are applied after it, in order', async () => {
+  const event = (sequence, payload) => ({
+    type: 'session.event',
+    event: { sessionId: 's', runId: 'r', sequence, payload },
+  });
+  const mine = [
+    event(9, { type: 'message.user', messageId: 'mine', text: '' }),
+    event(10, { type: 'run.status', status: 'running', connectionId: 'c' }),
+    event(11, { type: 'message.delivery', messageId: 'mine', status: 'queued' }),
+  ];
+  const service = Object.assign(new EventEmitter(), {
+    ended: false,
+    sessions: new Map([['s', { id: 's', activeRun: { id: 'r' } }]]),
+    send(message) {
+      if (message.type !== 'session.subscribe') return;
+      setImmediate(() => {
+        this.emit('message', mine[2]);
+        this.emit('message', {
+          type: 'session.snapshot',
+          requestId: message.requestId,
+          session: { id: 's', activeRun: { id: 'r' } },
+          events: [
+            event(7, { type: 'message.user', messageId: 'earlier', text: '' }).event,
+            event(8, { type: 'run.status', status: 'completed', connectionId: 'c' }).event,
+            ...mine.map((item) => item.event),
+          ],
+        });
+        this.emit('message', event(12, { type: 'text.delta', messageId: 'm', text: '好了' }));
+        this.emit(
+          'message',
+          event(13, { type: 'run.status', status: 'completed', connectionId: 'c' }),
+        );
+      });
+    },
+  });
+  const followed = new Follow('s', 'mine');
+  assert.deepEqual(await follow(service, followed, { deadline: Date.now() + 5000 }), {
+    state: 'completed',
+  });
+  assert.equal(followed.reply(), '好了');
 });
 
 // An ACP client of ccdt acp over a pair of pipes: what it is sent, and its answers to requests for permission.

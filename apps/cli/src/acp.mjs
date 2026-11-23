@@ -2,7 +2,7 @@ import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { terminalStatuses } from '@cc-desk-tunnel/protocol';
-import { Follow, findSession, subscribe } from './agent.mjs';
+import { Follow, catchUp, findSession } from './agent.mjs';
 
 // `ccdt acp`: Claude Code on the service as an agent of the Agent Client Protocol (agentclientprotocol.com), over
 // standard input and output, for the editors and agents that speak it (Zed, JetBrains, acpx…). It is a translation of
@@ -353,9 +353,9 @@ export async function serveAcp(context, { input = process.stdin, output = proces
       const made = await connected();
       const session = findSession([...made.sessions.values()], sessionId);
       const entry = serve(session);
-      const snapshot = await subscribe(made, session.id);
-      for (const event of snapshot?.events ?? [])
-        if (entry.follow.apply(event)) translate(entry, event.payload, false);
+      const snapshot = await catchUp(made, entry.follow, (event, live) =>
+        translate(entry, event.payload, live),
+      );
       return { modes: modes(snapshot?.session?.permissionMode ?? session.permissionMode) };
     },
     // The client is done with the session here; it stays on the service, as every session does.
@@ -420,9 +420,7 @@ export async function serveAcp(context, { input = process.stdin, output = proces
         for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
           try {
             const again = await connected({ id: entry.id });
-            const snapshot = await subscribe(again, entry.id);
-            for (const event of snapshot?.events ?? [])
-              if (entry.follow.apply(event)) translate(entry, event.payload, true);
+            await catchUp(again, entry.follow, (event) => translate(entry, event.payload, true));
             break;
           } catch (error) {
             if (error.code === 'unauthorized' || error.code === 'version_mismatch') throw error;
