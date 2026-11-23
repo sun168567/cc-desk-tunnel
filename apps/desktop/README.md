@@ -6,7 +6,7 @@ Electron + React 的 Windows 桌面客户端：界面、到服务端的连接桥
 
 用户双击 `CC Desk Tunnel.exe` 或快捷方式启动，不需要终端、源码仓库、Node / npm。标准安装包为 `CC-Desk-Tunnel-Setup-<版本>-x64.exe`（构建产物在 `artifacts/windows/`），支持当前用户安装、选择目录、开始菜单 / 桌面快捷方式、覆盖升级和卸载；卸载默认保留客户端项目 / 地址偏好，不删除 Windows 项目或 Linux Claude 登录 / 会话。服务凭据默认只在内存里；勾选“记住凭据”后经 DPAPI 加密保存。
 
-不安装时，直接运行 `artifacts/windows/win-unpacked/CC Desk Tunnel.exe`；必须保留同目录全部资源。每个连接单实例，重复启动聚焦已有窗口。发行包为 Windows x64，未签名；SmartScreen 与杀毒软件的提示及处理见[根目录说明](../../README.md#杀毒软件与-smartscreen)，应用不自动修改安全软件设置。
+不安装时，直接运行 `artifacts/windows/win-unpacked/CC Desk Tunnel.exe`；必须保留同目录全部资源。每个连接单实例，重复启动聚焦已有窗口。发行包为 Windows x64，未签名；SmartScreen 与杀毒软件的提示及处理见[常见问题与排查](../../docs/troubleshooting.md#杀毒软件与-smartscreen)，应用不自动修改安全软件设置。
 
 开发时根目录执行 `npm ci`；浏览器开发用 `npm run dev`，该 Vite 开发入口连接环回模拟服务，模拟登录信息位于 `.local/dev-connection.json`。正式浏览器入口由服务端提供，见下节；桌面原生连接仍由 Electron 主进程管理。从源码运行的桌面端默认选择远程模式，离线测试需选择本地模拟；安装版不提供本地模拟，登录页也不显示这个切换。
 
