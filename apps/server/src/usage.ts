@@ -410,7 +410,7 @@ export class UsageLog {
   // A whole session's requests, subagents included, summed the way turnStats sums a turn. Turns are the distinct
   // prompts; a request without one belongs to no turn.
   sessionStats(sessionId: string) {
-    const { streamedTokens, streamedMs, costUsd, ...sums } = this.database
+    const { streamedTokens, streamedMs, ...sums } = this.database
       .prepare(
         `SELECT ${totals}, COUNT(DISTINCT prompt_id) AS turns, COALESCE(SUM(duration_ms), 0) AS modelMs, ${streaming}
       FROM api_requests WHERE session_id = ?`,

@@ -24,7 +24,6 @@ const turn = (at, usedTokens = 150_000, cacheTtl = '1h') =>
       categories: [],
     },
     usage: null,
-    rateLimits: null,
     cacheTtl,
   });
 

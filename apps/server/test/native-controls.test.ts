@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Query, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { AccountQuota } from '@cc-desk-tunnel/protocol';
 import {
   nativeCapabilities,
   nativeMetrics,
@@ -94,7 +95,10 @@ test('context comes from the native summary and is distinct from cumulative usag
       },
     },
   } as unknown as SDKResultMessage;
-  const metrics = await nativeMetrics(query, result);
+  const quotas = new Quotas();
+  const metrics = await nativeMetrics(query, result, {
+    quota: (query) => quotas.through('', query, { asked: true }),
+  });
   assert.ok(metrics.type === 'native.metrics');
   assert.equal(metrics.context?.usedTokens, 2500);
   assert.deepEqual(metrics.context?.categories, [
@@ -107,9 +111,12 @@ test('context comes from the native summary and is distinct from cumulative usag
   assert.equal(metrics.usage?.costUsd, 0.5);
   assert.deepEqual(detail, { detail: 'summary' });
   assert.deepEqual(skip, { skipBehaviors: true });
-  assert.equal(metrics.rateLimits?.available, false);
-  assert.deepEqual(metrics.rateLimits?.windows, []);
-  assert.ok(metrics.rateLimits?.measuredAt);
+  // The plan quota is the account's: the service holds it, and the session's figures do not carry it.
+  assert.equal('rateLimits' in metrics, false);
+  const { rateLimits } = quotas.current();
+  assert.equal(rateLimits?.available, false);
+  assert.deepEqual(rateLimits?.windows, []);
+  assert.ok(rateLimits?.measuredAt);
 });
 
 test('unavailable native telemetry stays unavailable rather than fabricating quotas or context', async () => {
@@ -121,14 +128,17 @@ test('unavailable native telemetry stays unavailable rather than fabricating quo
       throw new Error('unavailable');
     },
   } as unknown as Query;
-  const metrics = await nativeMetrics(query);
+  const quotas = new Quotas();
+  const metrics = await nativeMetrics(query, undefined, {
+    quota: (query) => quotas.through('', query, { asked: true }),
+  });
   assert.deepEqual(metrics, {
     type: 'native.metrics',
     context: null,
     usage: null,
-    rateLimits: null,
-    errors: { context: '原生接口读取失败', usage: '原生接口读取失败' },
+    errors: { context: '原生接口读取失败' },
   });
+  assert.deepEqual(quotas.current(), { rateLimits: null, error: '原生接口读取失败' });
   assert.equal(resultUsage({} as SDKResultMessage), null);
 });
 
@@ -141,11 +151,15 @@ test('optional native telemetry has a bounded wait and cannot hold a completed t
       return { rate_limits_available: false, rate_limits: null };
     },
   } as unknown as Query;
-  const metrics = await nativeMetrics(query, undefined, { timeoutMs: 10 });
+  const quotas = new Quotas();
+  const metrics = await nativeMetrics(query, undefined, {
+    timeoutMs: 10,
+    quota: (query) => quotas.through('', query, { asked: true, timeoutMs: 10 }),
+  });
   assert.ok(metrics.type === 'native.metrics');
   assert.equal(metrics.context, null);
-  assert.equal(metrics.rateLimits?.available, false);
-  assert.deepEqual(metrics.rateLimits?.windows, []);
+  assert.equal(quotas.current().rateLimits?.available, false);
+  assert.deepEqual(quotas.current().rateLimits?.windows, []);
   assert.equal(metrics.errors?.context, '原生接口读取超时');
 });
 
@@ -184,12 +198,16 @@ test('native additive quota arrays cannot hide all account and context metrics',
       };
     },
   } as unknown as Query;
-  const metrics = await nativeMetrics(query);
+  const now = Date.parse('2026-10-03T00:00:00Z');
+  const quotas = new Quotas();
+  const metrics = await nativeMetrics(query, undefined, {
+    quota: (query) => quotas.through('', query, { asked: true, now }),
+  });
   assert.ok(metrics.type === 'native.metrics');
   assert.equal(metrics.context?.windowTokens, 1000000);
   assert.equal(metrics.usage?.inputTokens, 100);
-  assert.equal(metrics.rateLimits?.windows.length, 2);
-  assert.equal(metrics.rateLimits?.windows[0].utilization, 3);
+  assert.equal(quotas.current(now).rateLimits?.windows.length, 2);
+  assert.equal(quotas.current(now).rateLimits?.windows[0].utilization, 3);
 });
 
 test('the service reads the quota once a minute for every run under a login, and only while it is wanted', async () => {
@@ -250,7 +268,7 @@ test('the service reads the quota once a minute for every run under a login, and
   });
   assert.ok(kept.type === 'native.metrics');
   assert.deepEqual(kept.usage, previous);
-  assert.equal(kept.rateLimits?.windows[0]?.utilization, 24);
+  assert.equal(quotas.current(130_000).rateLimits?.windows[0]?.utilization, 24);
 });
 
 test('a resolved native model remains native instead of appearing as provider configuration', () => {
@@ -302,29 +320,6 @@ test('new models and their effort levels pass through the native catalog without
   ]);
 });
 
-test('concurrent quota readings keep request order even when the older one finishes last', async (t) => {
-  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T12:00:00Z') });
-  let release!: () => void;
-  const wait = new Promise<null>((resolve) => {
-    release = () => resolve(null);
-  });
-  const query = (context: Promise<null>) =>
-    ({
-      getContextUsage: () => context,
-      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => ({
-        rate_limits_available: false,
-        rate_limits: null,
-      }),
-    }) as unknown as Query;
-  const first = nativeMetrics(query(wait));
-  t.mock.timers.tick(100);
-  const second = await nativeMetrics(query(Promise.resolve(null)));
-  release();
-  const older = await first;
-  assert.ok(older.type === 'native.metrics' && second.type === 'native.metrics');
-  assert.ok(older.rateLimits!.measuredAt! < second.rateLimits!.measuredAt!);
-});
-
 test('native quota windows retain reset times and per-model rows without exposing spend credentials', async () => {
   const query = {
     async getContextUsage() {
@@ -345,9 +340,12 @@ test('native quota windows retain reset times and per-model rows without exposin
       };
     },
   } as unknown as Query;
-  const metrics = await nativeMetrics(query);
-  assert.ok(metrics.type === 'native.metrics');
-  assert.deepEqual(metrics.rateLimits?.windows, [
+  const now = Date.parse('2026-10-02T00:00:00Z');
+  const quotas = new Quotas();
+  await nativeMetrics(query, undefined, {
+    quota: (query) => quotas.through('', query, { asked: true, now }),
+  });
+  assert.deepEqual(quotas.current(now).rateLimits?.windows, [
     { name: 'five_hour', utilization: 37, resetsAt: '2026-10-02T15:00:00Z' },
     { name: 'seven_day', utilization: 12, resetsAt: '2026-10-09T15:00:00Z' },
     { name: 'seven_day:Fable', utilization: 41, resetsAt: '2026-10-09T15:00:00Z' },
@@ -576,7 +574,7 @@ test('what the replies carry stands in where the quota is not read or does not a
       return {
         rate_limits_available: true,
         rate_limits: {
-          five_hour: { utilization: 7, resets_at: '2026-10-03T02:00:00Z' },
+          five_hour: { utilization: 7, resets_at: new Date(later * 1000).toISOString() },
           model_scoped: [{ display_name: 'Fable', utilization: 3, resets_at: null }],
         },
       };
@@ -626,7 +624,8 @@ test('what a terminal shows goes to the login last seen, or to the first one see
   } as unknown as Query;
   // Heard before any run or read: it becomes the first login's.
   const early = new Quotas();
-  assert.deepEqual(early.observeTerminal(window(5), now)?.windows, window(5));
+  early.observeTerminal(window(5), now);
+  assert.deepEqual(early.current(now).rateLimits?.windows, window(5));
   assert.deepEqual((await early.through('a', query, { now })).rateLimits?.windows, window(5));
   // Heard after: the login seen last, whose replies' windows it brings up to date.
   const known = new Quotas();
@@ -641,4 +640,57 @@ test('what a terminal shows goes to the login last seen, or to the first one see
   );
   known.observeTerminal(window(9), now);
   assert.deepEqual((await known.through('a', query, { now })).rateLimits?.windows, window(9));
+});
+
+test('the service is told of the quota each time it stands otherwise, and only then', async () => {
+  const now = Date.now();
+  const later = new Date(now + 3600_000).toISOString();
+  const told: unknown[] = [];
+  const quotas = new Quotas();
+  quotas.changed = (quota) => told.push(quota);
+  const window = (utilization: number) => [{ name: 'five_hour', utilization, resetsAt: later }];
+  quotas.observeTerminal(window(5), now);
+  quotas.observeTerminal(window(5), now);
+  assert.equal(told.length, 1, 'the same reading at the same time is not told again');
+  quotas.observeTerminal(window(6), now + 1000);
+  assert.equal(told.length, 2);
+  // A read that fails keeps the reading and says why.
+  const failing = {
+    async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET() {
+      throw new Error('unavailable');
+    },
+  } as unknown as Query;
+  await quotas.through('', failing, { asked: true, now: now + 2000 });
+  assert.deepEqual(told.at(-1), {
+    rateLimits: {
+      available: true,
+      windows: window(6),
+      measuredAt: new Date(now + 1000).toISOString(),
+    },
+    error: '原生接口读取失败',
+  });
+  // Signing out leaves nothing to show.
+  quotas.clear();
+  assert.deepEqual(told.at(-1), { rateLimits: null });
+});
+
+test('a window that resets is dropped and told of when its reset time comes, without a reply or a read', (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.parse('2026-10-08T12:00:00Z') });
+  const now = Date.now();
+  const told: AccountQuota[] = [];
+  const quotas = new Quotas();
+  quotas.changed = (quota) => told.push(quota);
+  quotas.observeTerminal(
+    [
+      { name: 'five_hour', utilization: 80, resetsAt: new Date(now + 60_000).toISOString() },
+      { name: 'seven_day', utilization: 30, resetsAt: new Date(now + 86_400_000).toISOString() },
+    ],
+    now,
+  );
+  assert.equal(told.at(-1)?.rateLimits?.windows.length, 2);
+  t.mock.timers.tick(61_000);
+  assert.deepEqual(
+    told.at(-1)?.rateLimits?.windows.map((window) => window.name),
+    ['seven_day'],
+  );
 });

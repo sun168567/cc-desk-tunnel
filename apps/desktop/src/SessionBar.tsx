@@ -95,6 +95,12 @@ export default function SessionBar({
   const since = stats?.firstRecordAt
     ? `调用记录最早从 ${new Date(stats.firstRecordAt).toLocaleDateString('zh-CN')} 起，更早的请求不在统计内。`
     : undefined;
+  // How the cache writes split by lifetime, which only the CLI's own totals say (CLI 2.1.311 and later).
+  const usage = metrics?.usage;
+  const lifetimes =
+    usage?.cacheWrite1hTokens !== undefined
+      ? `CLI 报告的缓存写入中，1 小时缓存 ${usage.cacheWrite1hTokens.toLocaleString('zh-CN')}、5 分钟缓存 ${(usage.cacheWrite5mTokens ?? 0).toLocaleString('zh-CN')} tokens；1 小时缓存的写入单价是 5 分钟的 1.6 倍。`
+      : undefined;
   return (
     <div className="session-bar">
       {shown && stats && (
@@ -113,7 +119,7 @@ export default function SessionBar({
             chosen={sessionBar.summary}
             title="Token 用量"
             icon={<Database />}
-            note={since}
+            note={[lifetimes, since].filter(Boolean).join('') || undefined}
           />
         </>
       )}

@@ -314,7 +314,6 @@ test('reading the native state of a session leaves its time of last use alone', 
     type: 'native.metrics',
     context: null,
     usage: null,
-    rateLimits: null,
   };
   store.append(session.id, randomUUID(), reading);
   assert.equal(store.get(session.id).session.updatedAt, used);

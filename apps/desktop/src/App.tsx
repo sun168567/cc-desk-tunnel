@@ -452,16 +452,6 @@ export function App({
   );
   const capabilities = latest(events, 'native.capabilities') ?? state.capabilities;
   const metrics = latest(events, 'native.metrics');
-  // Quota belongs to the account, so the newest reading from any session wins over the selected session's.
-  const quota = [metrics, state.metrics]
-    .filter((item) => !!item?.rateLimits)
-    .sort((a, b) =>
-      (b!.rateLimits!.measuredAt ?? '').localeCompare(a!.rateLimits!.measuredAt ?? ''),
-    )[0];
-  const accountMetrics =
-    (metrics ?? state.metrics) && quota
-      ? { ...(metrics ?? state.metrics)!, rateLimits: quota.rateLimits }
-      : (metrics ?? state.metrics);
   const canCompact = !!latest(events, 'native.context')?.persisted;
   // A chat run holds the CLI's state while it goes; a terminal holds only its own session.
   const anyChat = state.sessions.some(
@@ -493,6 +483,8 @@ export function App({
     lastStatus.surface !== 'terminal' &&
     (lastStatus.status === 'cancelled' || lastStatus.status === 'failed');
   const signedOut = state.account?.loggedIn === false;
+  // The account's quota, as the service holds it; no session's figures carry it.
+  const quota = signedOut ? null : state.quota;
   const quotaSession = selected ?? state.sessions[0];
   const actionError = error instanceof RequestInterruptedError ? error.describe(connected) : error;
   const currentError = actionError ?? state.error;
@@ -1692,7 +1684,7 @@ export function App({
   const quotaFooter =
     inBrowser && nativeMode ? (
       <QuotaSummary
-        metrics={signedOut ? null : accountMetrics}
+        quota={quota}
         connected={connected}
         emptyMessage={signedOut ? '尚未登录 Claude' : undefined}
         onOpen={() => open('settings', 'account')}
@@ -1787,7 +1779,7 @@ export function App({
               }
               account={nativeMode ? state.account : null}
               capabilities={signedOut ? null : capabilities}
-              metrics={signedOut ? null : accountMetrics}
+              quota={quota}
               refreshing={refreshing}
               disabled={
                 !state.sessions.length || !connected || refreshing || (inBrowser && signedOut)
@@ -2063,6 +2055,7 @@ export function App({
                 capabilities={capabilities}
                 nativeSession={nativeSession}
                 metrics={metrics}
+                quota={quota}
                 send={(text) => {
                   void send(text);
                 }}

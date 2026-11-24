@@ -422,19 +422,48 @@ test('late responses cannot restore an evicted session or seed a cursor from uns
   snapshot(sessions[0], []);
 });
 
-test('an event of a session not shown, as the quota of a terminal sent to all, leaves its cached history to be fetched', async (t) => {
+test('the quota is the account’s: each change the service sends sets it, and no session’s figures touch it', (t) => {
+  const { client, socket, sessions } = fixture(t);
+  assert.equal(client.state.quota, null);
+  const rateLimits = {
+    available: true,
+    measuredAt: new Date().toISOString(),
+    windows: [
+      {
+        name: 'five_hour',
+        utilization: 12,
+        resetsAt: new Date(Date.now() + 3600_000).toISOString(),
+      },
+    ],
+  };
+  socket.message({ type: 'quota', rateLimits });
+  assert.deepEqual(client.state.quota, { rateLimits });
+  client.select(sessions[0].id);
+  socket.message({
+    type: 'session.event',
+    event: {
+      ...event(sessions[0].id, 1),
+      payload: { type: 'native.metrics', context: null, usage: null },
+    },
+  });
+  assert.deepEqual(client.state.quota, { rateLimits });
+  socket.message({ type: 'quota', rateLimits, error: '原生接口读取失败' });
+  assert.equal(client.state.quota.error, '原生接口读取失败');
+});
+
+test('an event of a session not shown leaves its cached history to be fetched', async (t) => {
   const { client, socket, sessions, snapshot } = fixture(t);
   const [held, shown] = sessions;
   client.select(held.id);
   snapshot(held, [event(held.id, 1)]);
   client.select(shown.id);
   snapshot(shown, []);
-  // While another session is shown, the terminal's turn is recorded (2) and its quota sent to every connection (3).
+  // While another session is shown, two of its events are recorded (2, 3), and only the second reaches this one.
   socket.message({
     type: 'session.event',
     event: {
       ...event(held.id, 3),
-      payload: { type: 'native.metrics', context: null, usage: null, rateLimits: null },
+      payload: { type: 'native.metrics', context: null, usage: null },
     },
   });
   await new Promise((resolve) => setTimeout(resolve, 50));
