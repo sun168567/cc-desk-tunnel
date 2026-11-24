@@ -11,10 +11,11 @@ import {
 import type { PermissionMode } from '@cc-desk-tunnel/protocol';
 import { usePrefs } from './prefs.ts';
 import { modeNames } from './modes.ts';
+import HelpLink from './HelpLink.tsx';
 
 // The modes are Claude Code's own; the lines under them say what each asks the user for.
 type Mode = { value: PermissionMode; name: string; detail: string; icon: typeof Hand };
-const modes: Mode[] = [
+export const modes: Mode[] = [
   {
     value: 'auto',
     name: modeNames.auto,
@@ -117,7 +118,10 @@ export default function PermissionMenu({
       )}
       {open && !confirming && (
         <div className="permission-menu" role="menu" aria-label="审批模式">
-          <p className="menu-heading">Claude Code 操作前如何征求同意？</p>
+          <p className="menu-heading">
+            Claude Code 操作前如何征求同意？
+            <HelpLink article="approval" title="各模式怎么选" />
+          </p>
           {offered.map(({ value, name, detail, icon: Icon }) => (
             <button
               type="button"

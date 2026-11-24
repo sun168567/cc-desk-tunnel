@@ -131,7 +131,6 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
     ['账号与额度', '账号与额度'],
     ['CLI 设置', 'CLI 设置'],
     ['全局说明', '全局说明'],
-    ['帮助', '帮助'],
     ['关于与更新', '关于与更新'],
   ]) {
     await sections.getByRole('button', { name, exact: true }).click();

@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Bell,
   Cable,
-  CircleHelp,
   FileText,
   Globe,
   Hourglass,
@@ -23,7 +22,6 @@ import {
 import type { ConnectedDevice, ProxyClient } from './client.ts';
 import WebAccessSettings from './WebAccessSettings.tsx';
 import InstallAppSettings from './InstallAppSettings.tsx';
-import Help from './Help.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
 import { connectionWaits, setPrefs, themes, usePrefs, waitRange } from './prefs.ts';
 import { viewModes } from './transcriptView.ts';
@@ -39,6 +37,7 @@ import { useShared } from './shared.ts';
 import type { Account } from './shared.ts';
 import ShellSettings from './ShellSettings.tsx';
 import ShortcutSettings from './ShortcutSettings.tsx';
+import HelpLink from './HelpLink.tsx';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
@@ -55,7 +54,6 @@ export type Section =
   | 'claude'
   | 'instructions'
   | 'install'
-  | 'help'
   | 'about';
 // The groups say where their settings are kept and what they apply to: this computer, the service (for every device
 // connected to it), or Claude Code's own files on the cloud host. `words` is what the search box matches besides the
@@ -151,7 +149,6 @@ export const sections: {
     icon: Smartphone,
     words: '添加至手机 安装 名称 图标 角标',
   },
-  { id: 'help', name: '帮助', group: '其他', icon: CircleHelp, words: '说明 常见问题' },
   {
     id: 'about',
     name: '关于与更新',
@@ -1017,7 +1014,11 @@ export default function SettingsPage({
             <Page title="全局说明" intro="离线模拟没有全局说明；连接远程代理后在这里修改。" />
           )
         ) : section === 'context' ? (
-          <Page title="上下文与缓存" intro={everyDevice}>
+          <Page
+            title="上下文与缓存"
+            intro={everyDevice}
+            actions={<HelpLink article="context" title="缓存与压缩是怎么回事" />}
+          >
             <IdleCompactionSettings client={client} />
           </Page>
         ) : section === 'shell' && here ? (
@@ -1025,7 +1026,11 @@ export default function SettingsPage({
             <ShellSettings client={client} here={here} />
           </Page>
         ) : section === 'web' ? (
-          <Page title="浏览器访问" intro={everyDevice}>
+          <Page
+            title="浏览器访问"
+            intro={everyDevice}
+            actions={<HelpLink article="browser" title="浏览器与手机怎么用" />}
+          >
             <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
           </Page>
         ) : section === 'install' && browser ? (
@@ -1045,8 +1050,6 @@ export default function SettingsPage({
           <Notices />
         ) : section === 'shortcuts' ? (
           <ShortcutSettings />
-        ) : section === 'help' ? (
-          <Help />
         ) : (
           <About
             version={version}

@@ -7,13 +7,16 @@ export type Place = {
   section: Section;
   sessionId: string | null;
   settingsIndex?: boolean;
+  // The help's article; none is its front page.
+  article?: string;
 };
 type Entry = { place: Place; index: number; drawer?: boolean; furthest?: number };
 const same = (a: Place, b: Place) =>
   a.page === b.page &&
   a.section === b.section &&
   a.sessionId === b.sessionId &&
-  !!a.settingsIndex === !!b.settingsIndex;
+  !!a.settingsIndex === !!b.settingsIndex &&
+  a.article === b.article;
 
 // Only navigation metadata goes in history; content and credentials stay out of it.
 export function useWebNavigation(
