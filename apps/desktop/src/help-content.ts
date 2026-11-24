@@ -40,6 +40,9 @@ import type { Section } from './SettingsPage.tsx';
 // article, with `news` naming the change for the page of what is new. It is marked while the program is of that
 // version and goes by itself with the next; the page of what is new is made of these marks. When a release brings
 // a feature, write how to use it here and mark it (scripts/release.mjs reminds of this).
+//
+// `依据` above an article names the pages of https://code.claude.com/docs/en/ its facts come from. Those facts
+// change with Claude Code, not with this program: check them again when its behaviour changes.
 
 export type Doing = 'addProject' | 'newSession' | 'schedules' | 'files' | 'chat';
 export type Target = { article: string } | { settings: Section } | { doing: Doing };
@@ -736,6 +739,7 @@ export const articles: Article[] = [
   },
 
   // 设置
+  // 依据：settings-reference（各项设置在交互式终端以外的行为）
   {
     id: 'settings',
     group: 'settings',
@@ -794,6 +798,7 @@ export const articles: Article[] = [
     related: ['context', 'unattended', 'model-settings'],
     words: '设置 选项 配置 本机 服务端 Claude Code CLI config 默认 ccdt',
   },
+  // 依据：prompt-caching、settings-reference#idlecompaction、settings-reference#autocompactwindow
   {
     id: 'context',
     group: 'settings',
@@ -900,6 +905,7 @@ export const articles: Article[] = [
     words:
       '缓存 过期 压缩 compact 上下文 空闲 1 小时 5 分钟 ttl 提示缓存 自动压缩 窗口 缓存读取 缓存写入 省',
   },
+  // 依据：settings-reference#askuserquestiontimeout、interactive-mode（额度用尽自动继续）
   {
     id: 'unattended',
     group: 'settings',
@@ -979,6 +985,7 @@ export const articles: Article[] = [
     related: ['schedules', 'approval', 'background'],
     words: '无人值守 夜里 长任务 定时 自动 不等审批 直接拒绝 提问 超时 额度用尽 继续 睡眠',
   },
+  // 依据：settings-reference#alwaysthinkingenabled、fast-mode、settings-reference#fallbackmodel、settings-reference#switchmodelsonflag
   {
     id: 'model-settings',
     group: 'settings',
@@ -1020,6 +1027,7 @@ export const articles: Article[] = [
     words:
       '思考 thinking 推理强度 effort 显示思考 快速模式 fast 额外用量 usage credits 备用模型 fallback 安全拦截 换模型',
   },
+  // 依据：memory、settings-reference#includegitinstructions、settings-reference#language
   {
     id: 'memory',
     group: 'settings',
@@ -1089,6 +1097,7 @@ export const articles: Article[] = [
     words:
       '记忆 memory 自动记忆 CLAUDE.md AGENTS.md 全局说明 说明文件 记住 忘掉 回复语言 中文 署名 git 提交 PR',
   },
+  // 依据：settings-reference#bashoutputmaxchars、mcp（tool search）
   {
     id: 'execution',
     group: 'settings',
@@ -1139,6 +1148,7 @@ export const articles: Article[] = [
     words:
       'shell powershell git bash 命令输出 截断 上限 工具搜索 mcp artifact 连接等待 超时 域控制器 安全软件',
   },
+  // 依据：settings-reference#filecheckpointingenabled、settings-reference（permissions）
   {
     id: 'permissions',
     group: 'settings',
