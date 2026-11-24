@@ -1,17 +1,11 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import files from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import {
-  addNode,
-  bundleCcdt,
-  checkCcdt,
-  stageDesktop,
-  WINDOWS_LAUNCHER,
-} from './package-desktop.mjs';
+import { checkCcdt, stageCcdt, stageDesktop } from './package-desktop.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const app = join(root, '.local/windows-package/app');
@@ -28,18 +22,15 @@ await stageDesktop(root, app, {
   description: 'Windows client for a native remote Claude Code session',
   files: ['prepare-ssh.ps1', 'component-host.ps1'],
 });
-// ccdt comes with the client, as its own package has it: the same ccdt.mjs, Node and launcher, with the OpenSSH and
+// ccdt comes with the client, as its own package has it: the same ccdt.mjs, Node and launchers, with the OpenSSH and
 // PowerShell of this package as the components of its SSH service (apps/cli/src/runtime.mjs). The installer puts its
-// folder on the user's PATH (windows-installer.nsh).
+// folder on the user's PATH, ahead of a ccdt installed on its own (windows-installer.nsh).
 const productName = 'CC Desk Tunnel';
 const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
 const ccdt = join(root, '.local/windows-package/ccdt');
 rmSync(ccdt, { recursive: true, force: true });
-mkdirSync(ccdt, { recursive: true });
-await bundleCcdt(root, ccdt, { version, desktop: true });
-await addNode(root, ccdt);
+await stageCcdt(root, ccdt, { version, desktop: true });
 cpSync(join(root, 'apps/cli/install/desktop-path.ps1'), join(ccdt, 'desktop-path.ps1'));
-writeFileSync(join(ccdt, 'ccdt.cmd'), WINDOWS_LAUNCHER);
 const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/package.json'), 'utf8'));
 // Security software may hold an executable for some seconds after it is copied, while it scans it; electron-builder
 // writes the executable's resources right after copying it and fails. Its writes wait for the file instead.
