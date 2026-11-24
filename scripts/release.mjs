@@ -83,13 +83,13 @@ const notes = [
   `curl -fsSL ${raw}/install-ccdt.sh | sh`,
   '```',
   '',
-  '- **已在使用**：在图形客户端的“设置 → 关于与更新”里先升级服务端，再按提示升级客户端；`ccdt` 运行 `ccdt upgrade`，服务端与它自己一起升级。',
+  '- **已在使用**：在图形客户端的“设置 → 关于与更新”里先升级服务端，再按提示升级客户端；单独安装的 `ccdt` 运行 `ccdt upgrade`，服务端与它自己一起升级，Windows 图形客户端自带的 `ccdt` 随图形客户端升级。',
   `- **新部署服务端**：在服务器上用一条命令安装，见[快速开始](${repository}#快速开始)；镜像为 \`ghcr.io/sun168567/cc-desk-tunnel:${version}\`，${link('服务端程序包', server)}是安装和升级时下载的。`,
   `- **校验**：${link('SHA256SUMS', 'SHA256SUMS')} · ${link('release.json', 'release.json')}。Windows 安装包没有代码签名，SmartScreen 与杀毒软件的提示见[说明](${repository}/blob/main/docs/troubleshooting.md#杀毒软件与-smartscreen)。`,
   '',
   '---',
   '',
-  '> 用桌面客户端驱动云端的 Claude Code，经反向隧道在你自己的电脑上执行。',
+  '> 在一台服务器上集中运行 Claude Code，让它在你的多台电脑上执行开发和操作，无公网的机器也能连入；会话在桌面、手机和终端之间共用。',
   '',
   // The change log links to files beside it; on the release page those links need the whole address.
   body
