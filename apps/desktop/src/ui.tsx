@@ -1,6 +1,10 @@
-import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
+import HelpLink from './HelpLink.tsx';
+
+// The help article explaining the pages shown inside it, given by whoever shows them (the settings).
+export const PageHelp = createContext<string | null>(null);
 
 // A settings page: its title, a line on what its settings apply to, and its sections.
 export function Page({
@@ -17,11 +21,19 @@ export function Page({
   actions?: ReactNode;
   children?: ReactNode;
 }) {
-  const heading = <h1 className="page-title">{title}</h1>;
+  const help = useContext(PageHelp);
+  const heading = help ? (
+    <div className="page-title-row">
+      <h1 className="page-title">{title}</h1>
+      <HelpLink article={help} title={`${title}：说明`} />
+    </div>
+  ) : (
+    <h1 className="page-title">{title}</h1>
+  );
   return (
     <section className="page" aria-label={label}>
       <div className="page-body">
-        {actions ? (
+        {actions || help ? (
           <header className="page-header">
             {heading}
             {actions}

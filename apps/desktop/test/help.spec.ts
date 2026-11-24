@@ -8,6 +8,11 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await login(page);
+  // The "?" beside a heading is styled before the help has ever been opened.
+  await expect(page.getByRole('button', { name: '项目和会话是什么', exact: true })).toHaveCSS(
+    'width',
+    '20px',
+  );
   const rail = page.getByRole('navigation', { name: '页面' });
   await rail.getByRole('button', { name: '帮助', exact: true }).click();
   await expect(page.locator('.titlebar h1')).toHaveText('帮助');
@@ -30,6 +35,14 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   await page.locator('.help-result').first().click();
   await expect(page.locator('.help-article-head h1')).toHaveText('额度与用量');
   await expect(page.getByLabel('搜索帮助')).toHaveValue('');
+  // A settings page's "?" opens its part of the settings guide.
+  await page.getByRole('button', { name: '账号与额度', exact: true }).click();
+  await page.getByRole('button', { name: '账号与额度：说明', exact: true }).click();
+  await expect(page.locator('.help-article-head h1')).toHaveText('设置指南');
+  await expect(page.locator('#help-account')).toBeInViewport();
+  await page.getByRole('button', { name: '后退', exact: true }).click();
+  await page.getByRole('button', { name: '后退', exact: true }).click();
+  await expect(page.locator('.help-article-head h1')).toHaveText('额度与用量');
   // A setting the article talks about opens from it.
   await page.getByRole('button', { name: '账号与额度', exact: true }).click();
   await expect(page.locator('.titlebar h1')).toHaveText('账号与额度');

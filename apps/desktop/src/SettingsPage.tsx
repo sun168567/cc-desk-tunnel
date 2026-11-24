@@ -38,7 +38,7 @@ import type { Account } from './shared.ts';
 import ShellSettings from './ShellSettings.tsx';
 import ShortcutSettings from './ShortcutSettings.tsx';
 import HelpLink from './HelpLink.tsx';
-import { IconButton, Page, Row, Switch } from './ui.tsx';
+import { IconButton, Page, PageHelp, Row, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
 export type Section =
@@ -157,6 +157,8 @@ export const sections: {
     words: '版本 升级 检查更新 项目主页 日志 排查 断开 开发者工具 控制台',
   },
 ];
+// The heading of the settings guide (help-content.ts) that tells about a page.
+const helpAnchor = (section: Section) => (section === 'shortcuts' ? 'notifications' : section);
 // What a page's settings apply to, said under its title.
 const here = (browser: boolean) =>
   browser
@@ -955,6 +957,7 @@ export default function SettingsPage({
             </IconButton>
           )}
           <span className="brand">{back ? '本机设置' : '设置'}</span>
+          {!back && <HelpLink article="settings" title="设置怎么分组、各页管什么" />}
         </div>
         <label className="session-search">
           <Search />
@@ -996,69 +999,63 @@ export default function SettingsPage({
         )}
       </aside>
       <main className="workspace">
-        {indexOnly ? null : section === 'account' ? (
-          account
-        ) : section === 'claude' ? (
-          native ? (
-            <SettingsPanel client={client} />
-          ) : (
-            <Page
-              title="CLI 设置"
-              intro="离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。"
+        <PageHelp.Provider value={back ? null : `settings#${helpAnchor(section)}`}>
+          {indexOnly ? null : section === 'account' ? (
+            account
+          ) : section === 'claude' ? (
+            native ? (
+              <SettingsPanel client={client} />
+            ) : (
+              <Page
+                title="CLI 设置"
+                intro="离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。"
+              />
+            )
+          ) : section === 'instructions' ? (
+            native ? (
+              <GlobalInstructions client={client} />
+            ) : (
+              <Page title="全局说明" intro="离线模拟没有全局说明；连接远程代理后在这里修改。" />
+            )
+          ) : section === 'context' ? (
+            <Page title="上下文与缓存" intro={everyDevice}>
+              <IdleCompactionSettings client={client} />
+            </Page>
+          ) : section === 'shell' && here ? (
+            <Page title="Shell" intro={thisDevice}>
+              <ShellSettings client={client} here={here} />
+            </Page>
+          ) : section === 'web' ? (
+            <Page title="浏览器访问" intro={everyDevice}>
+              <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
+            </Page>
+          ) : section === 'install' && browser ? (
+            <InstallAppSettings />
+          ) : section === 'general' ? (
+            <General
+              client={client}
+              browser={browser}
+              workspaceRoot={workspaceRoot}
+              chooseWorkspace={chooseWorkspace}
             />
-          )
-        ) : section === 'instructions' ? (
-          native ? (
-            <GlobalInstructions client={client} />
+          ) : section === 'appearance' ? (
+            <Appearance browser={browser} />
+          ) : section === 'connection' ? (
+            <ConnectionSettings form={form} changeForm={changeForm} />
+          ) : section === 'notifications' ? (
+            <Notices />
+          ) : section === 'shortcuts' ? (
+            <ShortcutSettings />
           ) : (
-            <Page title="全局说明" intro="离线模拟没有全局说明；连接远程代理后在这里修改。" />
-          )
-        ) : section === 'context' ? (
-          <Page
-            title="上下文与缓存"
-            intro={everyDevice}
-            actions={<HelpLink article="context" title="缓存与压缩是怎么回事" />}
-          >
-            <IdleCompactionSettings client={client} />
-          </Page>
-        ) : section === 'shell' && here ? (
-          <Page title="Shell" intro={thisDevice}>
-            <ShellSettings client={client} here={here} />
-          </Page>
-        ) : section === 'web' ? (
-          <Page
-            title="浏览器访问"
-            intro={everyDevice}
-            actions={<HelpLink article="browser" title="浏览器与手机怎么用" />}
-          >
-            <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
-          </Page>
-        ) : section === 'install' && browser ? (
-          <InstallAppSettings />
-        ) : section === 'general' ? (
-          <General
-            client={client}
-            browser={browser}
-            workspaceRoot={workspaceRoot}
-            chooseWorkspace={chooseWorkspace}
-          />
-        ) : section === 'appearance' ? (
-          <Appearance browser={browser} />
-        ) : section === 'connection' ? (
-          <ConnectionSettings form={form} changeForm={changeForm} />
-        ) : section === 'notifications' ? (
-          <Notices />
-        ) : section === 'shortcuts' ? (
-          <ShortcutSettings />
-        ) : (
-          <About
-            version={version}
-            service={service}
-            adapterName={adapterName}
-            updates={updates}
-            showNotes={showNotes}
-          />
-        )}
+            <About
+              version={version}
+              service={service}
+              adapterName={adapterName}
+              updates={updates}
+              showNotes={showNotes}
+            />
+          )}
+        </PageHelp.Provider>
       </main>
     </>
   );
