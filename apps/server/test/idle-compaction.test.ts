@@ -30,7 +30,6 @@ function metrics(usedTokens: number, ttl?: '5m' | '1h'): Metrics {
       categories: [],
     },
     usage: null,
-    rateLimits: null,
     ...(ttl ? { cacheTtl: ttl } : {}),
   };
 }

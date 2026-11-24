@@ -9,6 +9,7 @@ import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION, serverMessageSchema } from '@cc-desk-tunnel/protocol';
 import type { Project, ServerMessage, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { readIdleCompaction } from '../src/idle-compaction.ts';
+import { quotas } from '../src/claude.ts';
 import { createProxyServer, upgradeHeld } from '../src/server.ts';
 import { SessionStore } from '../src/store.ts';
 import { serviceVersion } from '../src/updates.ts';
@@ -1378,4 +1379,24 @@ test('a session is started on or moved to a project of another connected compute
     deviceId: laptop.id,
   });
   assert.ok(gone.type === 'response' && !gone.ok && gone.code === 'device_offline');
+});
+
+test('the quota is the account’s: a new connection is handed what the service holds, and every connection hears each change', async (t) => {
+  const f = await fixture(t);
+  quotas.clear();
+  t.after(() => quotas.clear());
+  const first = await f.connect();
+  const resetsAt = new Date(Date.now() + 3600_000).toISOString();
+  const used = (message: ServerMessage) =>
+    message.type === 'quota' ? message.rateLimits?.windows[0]?.utilization : undefined;
+  quotas.observeTerminal([{ name: 'five_hour', utilization: 12, resetsAt }]);
+  assert.equal(used(await first.wait((message) => message.type === 'quota')), 12);
+  const late = new Client(f.url, undefined, { id: randomUUID(), name: '另一台' });
+  f.clients.push(late);
+  const ready = await late.open();
+  assert.ok(ready.type === 'ready');
+  assert.equal(ready.quota?.rateLimits?.windows[0]?.utilization, 12);
+  quotas.observeTerminal([{ name: 'five_hour', utilization: 13, resetsAt }]);
+  for (const client of [first, late])
+    assert.equal(used(await client.wait((message) => message.type === 'quota')), 13);
 });

@@ -205,6 +205,7 @@ test('a session report is asked for by session and answers with its figures', ()
     modelMs: 11500,
     ttftMs: null,
     outputPerSecond: null,
+    costUsd: 0,
     firstRecordAt: null,
   };
   assert.equal(serverMessageSchema.safeParse(stats).success, true);

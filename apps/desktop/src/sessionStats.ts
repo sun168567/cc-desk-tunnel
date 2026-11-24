@@ -1,6 +1,6 @@
 import type { ServerMessage } from '@cc-desk-tunnel/protocol';
 import { cacheHitRate, percent } from './UsageCharts.tsx';
-import { seconds, tokens } from './UsagePanel.tsx';
+import { dollars, seconds, tokens } from './UsagePanel.tsx';
 
 export type SessionStats = Extract<ServerMessage, { type: 'session.stats' }>;
 
@@ -106,6 +106,15 @@ export const sessionFields: SessionField[] = [
     summary: false,
     value: (stats) => count(stats.outputTokens),
   },
+  {
+    key: 'cost',
+    group: 'tokens',
+    label: '等价费用',
+    summary: false,
+    // The official CLI's API-price estimate, not a subscription bill.
+    value: (stats) => (stats.requests ? `${dollars(stats.costUsd)}（按 API 价格估算）` : null),
+    short: (stats) => `等价 ${dollars(stats.costUsd)}`,
+  },
 ];
 
 // `chosen` holds only the switches the user has flipped, by key.
@@ -137,5 +146,6 @@ export const sampleSession: SessionStats = {
   modelMs: 412_000,
   ttftMs: 1100,
   outputPerSecond: 96.4,
+  costUsd: 4.82,
   firstRecordAt: null,
 };

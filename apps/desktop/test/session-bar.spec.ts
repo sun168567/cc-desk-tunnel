@@ -23,6 +23,7 @@ const figures = {
   modelMs: 28200,
   ttftMs: 952,
   outputPerSecond: 99.3,
+  costUsd: 1.27,
   firstRecordAt: '2026-10-01T00:00:00.000Z',
 };
 
@@ -117,8 +118,16 @@ async function open(
                     { name: 'Free space', tokens: 941333, kind: 'free' },
                   ],
                 },
-                usage: null,
-                rateLimits: null,
+                usage: {
+                  costUsd: 1.2,
+                  inputTokens: 100,
+                  outputTokens: 2000,
+                  cacheReadTokens: 40000,
+                  cacheWriteTokens: 8000,
+                  cacheWrite1hTokens: 7000,
+                  cacheWrite5mTokens: 1000,
+                  measuredAt: now,
+                },
               },
             },
           ],
@@ -186,6 +195,7 @@ test('the bar under the input box shows the session, and each part opens a card 
     '缓存读取',
     '缓存写入',
     '输出',
+    '等价费用',
   ]);
   await expect(tokens.locator('dd')).toHaveText([
     /^\d+(\.\d)?%$/,
@@ -193,7 +203,9 @@ test('the bar under the input box shows the session, and each part opens a card 
     '40,000 tok',
     '8,000 tok',
     '2,000 tok',
+    '$1.27（按 API 价格估算）',
   ]);
+  await expect(tokens.locator('p')).toContainText('1 小时缓存 7,000、5 分钟缓存 1,000 tokens');
   // Clicking elsewhere closes it.
   await page.locator('.message.assistant').click();
   await expect(tokens).toBeHidden();

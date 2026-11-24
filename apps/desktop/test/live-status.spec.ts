@@ -65,16 +65,6 @@ test('a run tells what it is doing, background tasks tell they are alive, and th
           type: 'native.metrics',
           context: null,
           usage: null,
-          rateLimits: {
-            available: true,
-            measuredAt: ago(199),
-            windows: [
-              { name: 'five_hour', utilization: 7.2, resetsAt: ago(-7200) },
-              { name: 'seven_day', utilization: 78, resetsAt: ago(-86400) },
-              { name: 'seven_day:opus', utilization: 41, resetsAt: ago(-86400) },
-              { name: 'seven_day_oauth_apps', utilization: 99, resetsAt: null },
-            ],
-          },
         }),
         event(waiting, 5, 198, {
           type: 'run.status',
@@ -121,6 +111,18 @@ test('a run tells what it is doing, background tasks tell they are alive, and th
           adapter: 'claude-code',
           projects: [],
           sessions: [waiting, building, silent],
+          quota: {
+            rateLimits: {
+              available: true,
+              measuredAt: ago(199),
+              windows: [
+                { name: 'five_hour', utilization: 7.2, resetsAt: ago(-7200) },
+                { name: 'seven_day', utilization: 78, resetsAt: ago(-86400) },
+                { name: 'seven_day:opus', utilization: 41, resetsAt: ago(-86400) },
+                { name: 'seven_day_oauth_apps', utilization: 99, resetsAt: null },
+              ],
+            },
+          },
         });
       if (message.type === 'session.subscribe') {
         const events = histories.get(message.sessionId)!;

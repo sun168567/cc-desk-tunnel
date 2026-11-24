@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, Check, RotateCcw } from 'lucide-r
 import { usePrefs } from './prefs.ts';
 import { quotaFigures } from './quota.ts';
 import type {
+  AccountQuota,
   Effort,
   NativeCapabilities,
   NativeMetrics,
@@ -26,6 +27,7 @@ export default function ComposerControls({
   capabilities,
   nativeSession,
   metrics,
+  quota: account,
   openAccount,
   disabled,
   configure,
@@ -38,6 +40,8 @@ export default function ComposerControls({
   capabilities: NativeCapabilities | null;
   nativeSession: NativeSession | null;
   metrics: NativeMetrics | null;
+  // The account's quota, shown beside the session's context.
+  quota: AccountQuota | null;
   openAccount: () => void;
   disabled: boolean;
   configure: (values: { model?: string | null; effort?: Effort | null }) => Promise<void>;
@@ -95,7 +99,7 @@ export default function ComposerControls({
     commitPending.current = false;
     dragging.current = false;
   }, [model]);
-  const quota = usePrefs().quota ? quotaFigures(metrics?.rateLimits) : [];
+  const quota = usePrefs().quota ? quotaFigures(account?.rateLimits) : [];
   const fullest = Math.max(0, ...quota.map((figure) => figure.used));
   return (
     <div className="composer-controls" ref={container}>

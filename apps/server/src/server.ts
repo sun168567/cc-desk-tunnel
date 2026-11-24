@@ -204,9 +204,10 @@ type Terminal = {
     last?: string;
     settingsPath: string;
     hooksPath: string;
-    // What its CLI last showed in the status line, and the quota last heard from it.
+    // What its CLI last showed in the status line, and the quota and context last heard from it.
     statusPath: string;
     quota?: string;
+    context?: string;
     offset: number;
     heard: Promise<void>;
     activity?: TerminalActivity;
@@ -282,6 +283,11 @@ export function createProxyServer(options: ServerOptions) {
   const usageReceiver = options.claude ? createUsageReceiver(usage) : undefined;
   const peers = new Set<Peer>();
   quotas.wanted = () => [...peers].some((peer) => peer.quotaWanted);
+  // The quota is the account's: every connection hears each change, and the usage periods follow it.
+  quotas.changed = (quota) => {
+    if (quota.rateLimits?.available) usage.observe(quota.rateLimits);
+    broadcast({ type: 'quota', ...quota });
+  };
   // One run or one terminal per session, each a CLI process of its own in the session's directory. What reads
   // or changes the state the CLI keeps for all of them — a status read or session change (`mutations`), an
   // account change — waits until none is going.
@@ -588,10 +594,8 @@ export function createProxyServer(options: ServerOptions) {
     broadcast({ type: 'session.updated', session: store.get(sessionId).session });
   }
 
-  // Stores an event and sends it to the session's subscribers; quota readings also drive the usage periods.
+  // Stores an event and sends it to the session's subscribers.
   function record(sessionId: string, runId: string, payload: EventPayload, createdAt?: string) {
-    if (payload.type === 'native.metrics' && payload.rateLimits?.available)
-      usage.observe(payload.rateLimits);
     const event = store.append(sessionId, runId, payload, createdAt);
     broadcast({ type: 'session.event', event }, sessionId);
     if (payload.type === 'native.metrics' && payload.cacheTtl)
@@ -1123,7 +1127,7 @@ export function createProxyServer(options: ServerOptions) {
       });
       updated(command.sessionId);
       watchFile(current.continued.hooksPath, { interval: 500 }, () => void heardTerminal(current));
-      watchFile(current.continued.statusPath, { interval: 1000 }, () => terminalQuota(current));
+      watchFile(current.continued.statusPath, { interval: 1000 }, () => terminalStatus(current));
       send(peer, { type: 'terminal.opened', sessionId: command.sessionId, terminalId: current.id });
     } catch {
       await current.process?.close();
@@ -1261,13 +1265,13 @@ export function createProxyServer(options: ServerOptions) {
       type: 'native.metrics',
       context: terminalContext(terminal) ?? last?.context ?? null,
       usage: last?.usage ?? null,
-      rateLimits: null,
       cacheTtl: ttl,
     });
   }
-  // The quota a terminal's CLI showed in its status line, its replies' as a chat run's stream would carry it: it goes
-  // to the account's quota, and every connection is told, as the quota is the account's, not the session's.
-  function terminalQuota(terminal: Terminal) {
+  // What a terminal's CLI showed in its status line, each part where it belongs: the quota its replies carried, as a
+  // chat run's stream would, goes to the account's (see `Quotas`); how full the context is goes to the session, as a
+  // chat run's figures do during a turn.
+  function terminalStatus(terminal: Terminal) {
     const { continued } = terminal;
     let windows;
     let context;
@@ -1279,20 +1283,20 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     const heard = JSON.stringify(windows);
-    if (!windows.length || heard === continued.quota) return;
-    continued.quota = heard;
-    const last = store.lastMetrics(terminal.sessionId);
-    const rateLimits = quotas.observeTerminal(windows);
-    // Nothing the status line showed still holds: the quota the clients have is left as it is.
-    if (!rateLimits?.available) return;
-    usage.observe(rateLimits);
-    const event = store.append(terminal.sessionId, terminal.id, {
+    if (windows.length && heard !== continued.quota) {
+      continued.quota = heard;
+      quotas.observeTerminal(windows);
+    }
+    const shown = context
+      ? JSON.stringify([context.model, context.usedTokens, context.windowTokens])
+      : undefined;
+    if (!context || shown === continued.context) return;
+    continued.context = shown;
+    record(terminal.sessionId, terminal.id, {
       type: 'native.metrics',
-      context: context ?? last?.context ?? null,
-      usage: last?.usage ?? null,
-      rateLimits,
+      context,
+      usage: store.lastMetrics(terminal.sessionId)?.usage ?? null,
     });
-    broadcast({ type: 'session.event', event });
   }
   // A turn the user interrupts runs no hook and leaves nothing in the CLI's record (CLI 2.1.293). A key that
   // interrupts it, typed while the CLI works, with no hook after it in a while, is taken for the end of the turn:
@@ -1948,6 +1952,7 @@ export function createProxyServer(options: ServerOptions) {
         sessions: store.list(),
         projects: store.projects(),
         historyId: store.historyId,
+        quota: quotas.current(),
         browser: {
           sessionId: peer.browser,
           serverDeviceId: serverDevice.id,
@@ -2005,6 +2010,7 @@ export function createProxyServer(options: ServerOptions) {
       sessions: store.list(),
       projects: store.projects(),
       historyId: store.historyId,
+      quota: quotas.current(),
       ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
     send(peer, devices());

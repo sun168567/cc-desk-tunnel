@@ -1,22 +1,22 @@
 import { ChevronRight } from 'lucide-react';
-import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
+import type { AccountQuota } from '@cc-desk-tunnel/protocol';
 import { quotaFigures } from './quota.ts';
 import './quota-summary.css';
 
 const tone = (used: number) => (used >= 90 ? 'danger' : used >= 70 ? 'warn' : '');
 export function QuotaSummary({
-  metrics,
+  quota,
   connected,
   emptyMessage = '暂未获取额度',
   onOpen,
 }: {
-  metrics: NativeMetrics | null;
+  quota: AccountQuota | null;
   connected: boolean;
   emptyMessage?: string;
   onOpen: () => void;
 }) {
-  const figures = quotaFigures(metrics?.rateLimits);
-  const unavailable = metrics?.rateLimits?.available === false;
+  const figures = quotaFigures(quota?.rateLimits);
+  const unavailable = quota?.rateLimits?.available === false;
   return (
     <div className="sidebar-quota">
       <button type="button" className="quota-summary" aria-label="查看订阅用量" onClick={onOpen}>

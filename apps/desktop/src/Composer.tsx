@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
 import type {
+  AccountQuota,
   Effort,
   NativeCapabilities,
   NativeMetrics,
@@ -76,6 +77,7 @@ export default function Composer({
   capabilities,
   nativeSession,
   metrics,
+  quota,
   openAccount,
   send,
   resume,
@@ -107,6 +109,7 @@ export default function Composer({
   capabilities: NativeCapabilities | null;
   nativeSession: NativeSession | null;
   metrics: NativeMetrics | null;
+  quota: AccountQuota | null;
   openAccount: () => void;
   // Sends the draft, or the text given instead of it.
   send: (text?: string) => void;
@@ -410,6 +413,7 @@ export default function Composer({
               capabilities={capabilities}
               nativeSession={nativeSession}
               metrics={metrics}
+              quota={quota}
               openAccount={openAccount}
               disabled={controlsDisabled}
               configure={configure}

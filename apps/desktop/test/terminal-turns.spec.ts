@@ -90,7 +90,6 @@ function conversation(sessionId: string, terminal?: string) {
       categories: [],
     },
     usage: null,
-    rateLimits: null,
     cacheTtl: '1h',
   });
   if (terminal)
