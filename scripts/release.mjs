@@ -34,6 +34,15 @@ const section = new RegExp(
   .exec(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))?.[1]
   .trim();
 if (!section) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
+// The help marks what a version brought and makes its page of what is new from those marks (help-content.ts).
+if (
+  !readFileSync(join(root, 'apps/desktop/src/help-content.ts'), 'utf8').includes(
+    `since: '${version}'`,
+  )
+)
+  console.log(
+    `Note: the help marks nothing as new in ${version}. If it brings features, write how to use them in apps/desktop/src/help-content.ts and mark them with since: '${version}'.`,
+  );
 // The section's GitHub alerts (`> [!WARNING]` and the like) are what a reader must see before upgrading: they open
 // the notes, above how to download, in the colours GitHub gives them.
 const alert = /^> \[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n(?:>.*(?:\n|$))*/gm;

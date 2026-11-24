@@ -14,10 +14,12 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { articles, groups, release, starters } from './help-content.ts';
-import type { Article, Block, Prompt, Target } from './help-content.ts';
+import changelog from '../../../CHANGELOG.md?raw';
+import { articles, freshness, groups, newsOf, starters } from './help-content.ts';
+import type { Article, Block, News, Prompt, Target } from './help-content.ts';
 import Figure from './HelpFigures.tsx';
 import { CopyButton } from './copy.tsx';
+import { releaseSection } from './notes.ts';
 import { usePrefs } from './prefs.ts';
 import { actions as shortcutActions, keyFor, show as keyText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
@@ -28,18 +30,22 @@ type Context = {
   here: string;
   others: string[];
   browser: boolean;
+  version: string;
   go: (article?: string) => void;
   run: (target: Target) => void;
   tryPrompt?: (text: string) => void;
 };
+const NEWS = 'whats-new';
 
 // The help, a page of its own: the articles by group on the left with a search, the front page or an article on the
-// right. Articles link to each other, to the settings they talk about and to what they explain how to do.
+// right. Articles link to each other (`article#heading` goes to a heading in it), to the settings they talk about and
+// to what they explain how to do. What the program's version brought is marked, and has a page of its own.
 export default function HelpCenter({
-  article,
+  article: place,
   here,
   others,
   browser,
+  version,
   go,
   run,
   tryPrompt,
@@ -48,22 +54,47 @@ export default function HelpCenter({
   here: string;
   others: string[];
   browser: boolean;
+  version: string;
   go: (article?: string) => void;
   run: (target: Target) => void;
   tryPrompt?: (text: string) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [id, anchor] = (place ?? '').split('#');
   const shown = useMemo(() => articles.filter((item) => !browser || !item.desktop), [browser]);
-  const current = shown.find((item) => item.id === article);
-  const context: Context = { here, others, browser, go, run, tryPrompt };
+  const news = useMemo(() => newsOf(version, shown), [version, shown]);
+  const current = shown.find((item) => item.id === id);
+  const context: Context = { here, others, browser, version, go, run, tryPrompt };
   const found = useMemo(() => search(shown, query, context), [shown, query, here, others]);
   const page = useRef<HTMLElement>(null);
+  // An article opens at its top, or at the heading asked for, which is flashed to be found.
   useEffect(() => {
-    page.current?.scrollTo({ top: 0 });
-  }, [article, query]);
-  const open = (id?: string) => {
+    const target = anchor && document.getElementById(anchorId(anchor));
+    if (!target) return void page.current?.scrollTo({ top: 0 });
+    target.scrollIntoView({ block: 'start' });
+    target.classList.remove('help-flash');
+    void target.offsetWidth;
+    target.classList.add('help-flash');
+  }, [place, query]);
+  const open = (target?: string) => {
     setQuery('');
-    go(id);
+    go(target);
+  };
+  const item = (entry: Article) => {
+    const fresh = freshness(entry, version);
+    return (
+      <button
+        type="button"
+        key={entry.id}
+        className="side-action"
+        aria-current={current?.id === entry.id && !query ? 'page' : undefined}
+        onClick={() => open(entry.id)}
+      >
+        <entry.icon />
+        <span className="help-nav-name">{entry.title}</span>
+        {fresh && <Fresh kind={fresh} />}
+      </button>
+    );
   };
   return (
     <>
@@ -95,31 +126,31 @@ export default function HelpCenter({
           <button
             type="button"
             className="side-action"
-            aria-current={!current && !query ? 'page' : undefined}
+            aria-current={!current && id !== NEWS && !query ? 'page' : undefined}
             onClick={() => open()}
           >
             <House />
             首页
           </button>
+          {news.length > 0 && (
+            <button
+              type="button"
+              className="side-action help-nav-news"
+              aria-current={id === NEWS && !query ? 'page' : undefined}
+              onClick={() => open(NEWS)}
+            >
+              <Sparkles />
+              <span className="help-nav-name">这一版新增</span>
+              <span className="help-count">{news.length}</span>
+            </button>
+          )}
           {groups.map((group) => {
-            const members = shown.filter((item) => item.group === group.id);
+            const members = shown.filter((entry) => entry.group === group.id);
             if (!members.length) return null;
             return (
               <Fragment key={group.id}>
                 <div className="list-heading">{group.name}</div>
-                {members.map((item) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className="side-action"
-                    aria-current={current?.id === item.id && !query ? 'page' : undefined}
-                    onClick={() => open(item.id)}
-                  >
-                    <item.icon />
-                    <span className="help-nav-name">{item.title}</span>
-                    {item.since === release && <span className="help-new">新</span>}
-                  </button>
-                ))}
+                {members.map(item)}
               </Fragment>
             );
           })}
@@ -130,10 +161,12 @@ export default function HelpCenter({
           <div className="page-body help-body">
             {query.trim() ? (
               <Results query={query} found={found} open={open} />
+            ) : id === NEWS && news.length ? (
+              <NewsView news={news} context={{ ...context, go: open }} />
             ) : current ? (
               <ArticleView article={current} list={shown} context={{ ...context, go: open }} />
             ) : (
-              <Home list={shown} context={{ ...context, go: open }} />
+              <Home list={shown} news={news} context={{ ...context, go: open }} />
             )}
           </div>
         </section>
@@ -142,10 +175,30 @@ export default function HelpCenter({
   );
 }
 
+const anchorId = (anchor: string) => `help-${anchor}`;
+
+function Fresh({ kind }: { kind: 'new' | 'changed' }) {
+  return kind === 'new' ? (
+    <span className="help-new" title="这一版新增">
+      新
+    </span>
+  ) : (
+    <span className="help-new changed" title="这一版有新内容">
+      更新
+    </span>
+  );
+}
+
+// The one line of the changelog that says what a version is about.
+function summary(version: string) {
+  const section = releaseSection(changelog, version);
+  const line = section?.split('\n').find((text) => text.trim() && !text.startsWith('#'));
+  return line?.replace(/`/g, '') ?? '';
+}
+
 // The front page: what this is in one picture, how to begin, what to try, and every subject.
-function Home({ list, context }: { list: Article[]; context: Context }) {
-  const { here, others, go, run } = context;
-  const news = list.find((item) => item.id === 'whats-new');
+function Home({ list, news, context }: { list: Article[]; news: News[]; context: Context }) {
+  const { here, others, go, run, version } = context;
   const offered = starters.filter(
     (item) => (!item.device || others.length > 0) && list.some((a) => a.id === item.article),
   );
@@ -172,12 +225,12 @@ function Home({ list, context }: { list: Article[]; context: Context }) {
         </div>
         <Figure name="map" here={here} others={others} browser={context.browser} />
       </header>
-      {news && (
-        <button type="button" className="help-banner" onClick={() => go(news.id)}>
+      {news.length > 0 && (
+        <button type="button" className="help-banner" onClick={() => go(NEWS)}>
           <Sparkles />
           <span>
-            <strong>这一版新增</strong>
-            <small>{news.lead}</small>
+            <strong>{version} 新增了什么</strong>
+            <small>{summary(version) || `${news.length} 项新功能，点开看怎么用`}</small>
           </span>
           <ChevronRight />
         </button>
@@ -242,17 +295,20 @@ function Home({ list, context }: { list: Article[]; context: Context }) {
                   <group.icon />
                   <strong>{group.name}</strong>
                 </div>
-                {members.map((item) => (
-                  <button
-                    type="button"
-                    className="help-group-link"
-                    key={item.id}
-                    onClick={() => go(item.id)}
-                  >
-                    {item.title}
-                    {item.since === release && <span className="help-new">新</span>}
-                  </button>
-                ))}
+                {members.map((item) => {
+                  const fresh = freshness(item, version);
+                  return (
+                    <button
+                      type="button"
+                      className="help-group-link"
+                      key={item.id}
+                      onClick={() => go(item.id)}
+                    >
+                      {item.title}
+                      {fresh && <Fresh kind={fresh} />}
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
@@ -270,6 +326,66 @@ function Home({ list, context }: { list: Article[]; context: Context }) {
   );
 }
 
+// What the program's version brought, each with the way to its article.
+function NewsView({ news, context }: { news: News[]; context: Context }) {
+  const { version, go } = context;
+  return (
+    <article className="help-article">
+      <nav className="help-crumbs" aria-label="位置">
+        <button type="button" className="text-link" onClick={() => go()}>
+          帮助
+        </button>
+        <ChevronRight />
+        <span>开始使用</span>
+      </nav>
+      <header className="help-article-head">
+        <span className="help-article-icon">
+          <Sparkles />
+        </span>
+        <div>
+          <div className="help-title-row">
+            <h1>{version} 新增</h1>
+          </div>
+          <p className="help-lead">{summary(version) || '这一版带来的新功能，点开看怎么用。'}</p>
+        </div>
+      </header>
+      <div className="help-news">
+        {news.map((item) => (
+          <button
+            type="button"
+            className="help-news-card"
+            key={item.title}
+            onClick={() => go(item.article)}
+          >
+            <strong>
+              <item.icon />
+              {item.title}
+            </strong>
+            <small>
+              <Inline text={item.text} context={context} />
+            </small>
+            <span className="help-news-more">
+              看怎么用
+              <ArrowRight />
+            </span>
+          </button>
+        ))}
+      </div>
+      <aside className="help-callout note">
+        <Info />
+        <div>
+          <strong>完整的变更</strong>
+          <p>
+            每一项改动与修复见
+            <InlineLink words="关于与更新" to="settings:about" context={context} />
+            里的“更新内容”。文中标着“新”的段落，是这一版加的。
+          </p>
+        </div>
+      </aside>
+    </article>
+  );
+}
+
 function ArticleView({
   article,
   list,
@@ -279,7 +395,7 @@ function ArticleView({
   list: Article[];
   context: Context;
 }) {
-  const { go } = context;
+  const { go, version } = context;
   const group = groups.find((item) => item.id === article.group);
   const index = list.indexOf(article);
   const previous = list[index - 1];
@@ -287,6 +403,11 @@ function ArticleView({
   const related = (article.related ?? [])
     .map((id) => list.find((item) => item.id === id))
     .filter((item): item is Article => !!item);
+  const fresh = freshness(article, version);
+  // A long article lists its headings at the top, each a way to it.
+  const headings = article.blocks.flatMap((block) =>
+    block.kind === 'heading' ? [{ text: block.text, id: block.id ?? block.text }] : [],
+  );
   return (
     <article className="help-article">
       <nav className="help-crumbs" aria-label="位置">
@@ -303,16 +424,37 @@ function ArticleView({
         <div>
           <div className="help-title-row">
             <h1>{article.title}</h1>
-            {article.since === release && <span className="help-new large">新</span>}
+            {fresh === 'new' && <Fresh kind="new" />}
           </div>
           <p className="help-lead">
             <Inline text={article.lead} context={context} />
           </p>
         </div>
       </header>
-      {article.blocks.map((block, at) => (
-        <BlockView key={at} block={block} context={context} />
-      ))}
+      {headings.length >= 4 && (
+        <nav className="help-toc" aria-label="本页内容">
+          {headings.map((heading) => (
+            <button
+              type="button"
+              key={heading.id}
+              onClick={() => go(`${article.id}#${heading.id}`)}
+            >
+              {heading.text}
+            </button>
+          ))}
+        </nav>
+      )}
+      {article.blocks.map((block, at) =>
+        // Within an article that is new as a whole, nothing more is marked.
+        block.since === version && fresh !== 'new' ? (
+          <div className="help-fresh" key={at}>
+            <span className="help-fresh-tag">{version} 新增</span>
+            <BlockView block={block} context={context} />
+          </div>
+        ) : (
+          <BlockView key={at} block={block} context={context} />
+        ),
+      )}
       {related.length > 0 && (
         <section className="help-related">
           <h2>相关</h2>
@@ -370,7 +512,11 @@ function BlockView({ block, context }: { block: Block; context: Context }) {
         </p>
       );
     case 'heading':
-      return <h2 className="help-h2">{block.text}</h2>;
+      return (
+        <h2 className="help-h2" id={anchorId(block.id ?? block.text)}>
+          {block.text}
+        </h2>
+      );
     case 'list':
       return (
         <ul className="help-list">
@@ -487,34 +633,6 @@ function BlockView({ block, context }: { block: Block; context: Context }) {
               ))}
             </details>
           ))}
-        </div>
-      );
-    case 'news':
-      return (
-        <div className="help-news">
-          {block.items.map((item) => {
-            const Icon = articles.find((entry) => entry.id === item.article)?.icon ?? Sparkles;
-            return (
-              <button
-                type="button"
-                className="help-news-card"
-                key={item.title}
-                onClick={() => context.go(item.article)}
-              >
-                <strong>
-                  <Icon />
-                  {item.title}
-                </strong>
-                <small>
-                  <Inline text={item.text} context={context} />
-                </small>
-                <span className="help-news-more">
-                  看怎么用
-                  <ArrowRight />
-                </span>
-              </button>
-            );
-          })}
         </div>
       );
     case 'keys':
@@ -686,14 +804,12 @@ function blockText(block: Block): string[] {
       return block.rows.flat();
     case 'faq':
       return block.items.flatMap((item) => [item.q, ...item.a]);
-    case 'news':
-      return block.items.flatMap((item) => [item.title, item.text]);
     default:
       return [];
   }
 }
 
-// Every word must be found; a match in the title or lead counts more than one deep in the text.
+// Every word must be found; a match in the title counts most, then one in the lead, then one deep in the text.
 function search(list: Article[], query: string, context: Context) {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
@@ -703,7 +819,11 @@ function search(list: Article[], query: string, context: Context) {
       const lines = article.blocks.flatMap(blockText).map((line) => plain(line, context));
       const body = lines.join(' ').toLowerCase();
       if (!terms.every((term) => head.includes(term) || body.includes(term))) return null;
-      const score = terms.reduce((sum, term) => sum + (head.includes(term) ? 3 : 1), 0);
+      const title = article.title.toLowerCase();
+      const score = terms.reduce(
+        (sum, term) => sum + (title.includes(term) ? 6 : head.includes(term) ? 3 : 1),
+        0,
+      );
       const line =
         lines.find((text) => terms.some((term) => text.toLowerCase().includes(term))) ??
         plain(article.lead, context);

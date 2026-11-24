@@ -1,4 +1,5 @@
 import {
+  BellRing,
   Bot,
   CalendarClock,
   CircleHelp,
@@ -14,13 +15,12 @@ import {
   Plug,
   Rocket,
   Server,
+  Settings,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   SquareTerminal,
   UserRound,
   Wifi,
-  BellRing,
 } from 'lucide-react';
 import type { Section } from './SettingsPage.tsx';
 
@@ -28,29 +28,37 @@ import type { Section } from './SettingsPage.tsx';
 // pictures of the real controls, and links between them.
 //
 // In text: `code`, **bold**, [[action]] for the key of a shortcut (an action of shortcuts.ts), and [words](target)
-// for a link: `#article`, `settings:<section>`, `do:<action>` (something the window does) or a web address.
-// `{device}` is the name of another of the user's computers that is online, or a stand-in; `{here}` is this one.
+// for a link: `#article` or `#article#heading`, `settings:<section>`, `do:<action>` (something the window does) or a
+// web address. `{device}` is the name of another of the user's computers that is online, or a stand-in; `{here}` is
+// this one.
+//
+// What is new: `since` on an article that a version brought, or on a block that a version added to an older
+// article, with `news` naming the change for the page of what is new. It is marked while the program is of that
+// version and goes by itself with the next; the page of what is new is made of these marks. When a release brings
+// a feature, write how to use it here and mark it (scripts/release.mjs reminds of this).
 
 export type Doing = 'addProject' | 'newSession' | 'schedules' | 'files' | 'chat';
 export type Target = { article: string } | { settings: Section } | { doing: Doing };
 export type Prompt = { text: string; note?: string };
-export type Block =
-  | { kind: 'p'; text: string }
-  | { kind: 'heading'; text: string }
-  | { kind: 'list'; items: string[] }
-  | {
-      kind: 'steps';
-      items: { title: string; text: string; action?: { label: string; target: Target } }[];
-    }
-  | { kind: 'prompts'; title?: string; items: Prompt[] }
-  | { kind: 'callout'; tone: 'tip' | 'note' | 'warn'; title: string; text: string }
-  | { kind: 'figure'; name: Figure; caption?: string }
-  | { kind: 'code'; label?: string; text: string }
-  | { kind: 'table'; head: [string, string]; rows: [string, string][] }
-  | { kind: 'faq'; items: { q: string; a: string[] }[] }
-  | { kind: 'news'; items: { title: string; text: string; article: string }[] }
-  | { kind: 'keys' }
-  | { kind: 'actions'; items: { label: string; target: Target }[] };
+type Fresh = { since?: string; news?: string };
+export type Block = Fresh &
+  (
+    | { kind: 'p'; text: string }
+    | { kind: 'heading'; text: string; id?: string }
+    | { kind: 'list'; items: string[] }
+    | {
+        kind: 'steps';
+        items: { title: string; text: string; action?: { label: string; target: Target } }[];
+      }
+    | { kind: 'prompts'; title?: string; items: Prompt[] }
+    | { kind: 'callout'; tone: 'tip' | 'note' | 'warn'; title: string; text: string }
+    | { kind: 'figure'; name: Figure; caption?: string }
+    | { kind: 'code'; label?: string; text: string }
+    | { kind: 'table'; head: [string, string]; rows: [string, string][] }
+    | { kind: 'faq'; items: { q: string; a: string[] }[] }
+    | { kind: 'keys' }
+    | { kind: 'actions'; items: { label: string; target: Target }[] }
+  );
 export type Figure =
   | 'map'
   | 'approval'
@@ -67,7 +75,7 @@ export type Article = {
   title: string;
   icon: typeof Bot;
   lead: string;
-  // The version that brought it, marked as new while that is the program's version.
+  // The version that brought the whole article.
   since?: string;
   // What a browser cannot do: such an article is not offered there.
   desktop?: boolean;
@@ -83,12 +91,15 @@ export const groups = [
   { id: 'devices', name: '多台电脑', icon: Laptop },
   { id: 'agents', name: '终端与 agent', icon: SquareTerminal },
   { id: 'account', name: '额度与账号', icon: Gauge },
+  { id: 'settings', name: '设置', icon: Settings },
   { id: 'care', name: '维护与安全', icon: ShieldCheck },
   { id: 'faq', name: '遇到问题', icon: CircleHelp },
 ] as const;
 
-// The release the "new" marks and the page of what is new belong to.
-export const release = '0.3.18';
+const settingsOf = (section: Section, label: string) => ({
+  kind: 'actions' as const,
+  items: [{ label, target: { settings: section } }],
+});
 
 export const articles: Article[] = [
   // 开始使用
@@ -171,64 +182,8 @@ export const articles: Article[] = [
         text: '直接点“新建会话”，得到一个普通会话，列在“最近”。',
       },
     ],
-    related: ['how-it-works', 'approval', 'conversation'],
+    related: ['how-it-works', 'approval', 'settings'],
     words: '入门 开始 上手 新手 教程 添加项目 新建会话',
-  },
-  {
-    id: 'whats-new',
-    group: 'start',
-    title: '这一版新增',
-    icon: Sparkles,
-    lead: '0.3.18：一个会话能用上你所有在线的电脑，其他 agent 也能把任务交给 Claude。',
-    blocks: [
-      {
-        kind: 'news',
-        items: [
-          {
-            title: '让 Claude 操作其他电脑',
-            text: '在任何会话里说“在 {device} 上……”，它就过去执行，也能在两台电脑间传文件。',
-            article: 'remote-ops',
-          },
-          {
-            title: '在另一台电脑上开会话',
-            text: '“其他设备”下悬停那台电脑的项目点 +；会话也能移过去。',
-            article: 'devices',
-          },
-          {
-            title: '无界面的机器保持在线',
-            text: 'NAS、服务器上运行 `ccdt online`，Claude 随时能过去。',
-            article: 'always-online',
-          },
-          {
-            title: '其他 agent 调用 Claude',
-            text: 'Codex、脚本用 `ccdt -p` 派发任务，审批交回调用方。',
-            article: 'agents',
-          },
-          {
-            title: '在编辑器里用',
-            text: 'Zed、JetBrains 把 `ccdt acp` 配成 agent 即可。',
-            article: 'acp',
-          },
-          {
-            title: '项目各端一致',
-            text: '项目由服务端保存，每台电脑、浏览器和 `ccdt` 看到同一份。',
-            article: 'sessions',
-          },
-          {
-            title: '自带 ccdt',
-            text: '装了图形客户端就有 `ccdt`，随它升级。',
-            article: 'ccdt',
-          },
-        ],
-      },
-      {
-        kind: 'callout',
-        tone: 'note',
-        title: '完整的变更',
-        text: '每一项改动与修复见[关于与更新](settings:about)里的“更新内容”。',
-      },
-    ],
-    words: '新功能 更新 变化 版本',
   },
 
   // 日常使用
@@ -238,16 +193,28 @@ export const articles: Article[] = [
     title: '项目与会话',
     icon: FolderTree,
     lead: '项目是电脑上的一个文件夹；会话是一段对话，上下文和记忆都在服务端。',
-    since: '0.3.18',
     blocks: [
       {
         kind: 'list',
         items: [
-          '**项目**：左栏“项目”旁点 + 添加。由服务端登记，每台电脑、浏览器和 `ccdt` 看到同一份，可以改名。在 `ccdt` 里开会话，也会把那个文件夹登记为项目。',
+          '**项目**：左栏“项目”旁点 + 添加，可以改名。在 `ccdt` 里开会话，也会把那个文件夹登记为项目。',
           '**普通会话**：点“新建会话”得到，不属于项目，列在“最近”。工作目录默认在“文档\\CC Desk Tunnel”下，可在[常规](settings:general)里更换。',
+        ],
+      },
+      {
+        kind: 'list',
+        since: '0.3.18',
+        news: '项目由服务端保存，各端看到同一份',
+        items: [
+          '**各端同一份项目**：项目由服务端登记，每台电脑、浏览器和 `ccdt` 看到的一样，离线电脑的项目也在；改名各端一致。',
+          '**移除项目**：只是不再列为项目。文件夹、会话和项目记忆都不动，其中的会话变成普通会话；再添加同一个文件夹，就都回来了。',
+        ],
+      },
+      {
+        kind: 'list',
+        items: [
           '**移到别处**：点输入框上方的项目标签，把会话移到另一个项目或另一台在线电脑。聊过的会话移走后，仍沿用原项目的记忆。',
           '**编辑重发**：鼠标移到自己的消息上点“编辑重发”，从那条消息之前分叉出新会话。原会话保留，已经做过的文件改动不会撤回。',
-          '**移除项目**：只是不再列为项目。文件夹、会话和项目记忆都不动，其中的会话变成普通会话；再添加同一个文件夹，就都回来了。',
         ],
       },
       {
@@ -309,13 +276,19 @@ export const articles: Article[] = [
       { kind: 'figure', name: 'approval', caption: '审批卡片：允许一次，或拒绝并说明原因。' },
       {
         kind: 'callout',
+        tone: 'note',
+        title: '“Claude Code 安全拦截”在任何模式下都会问',
+        text: '有些操作，Claude Code 自己的安全检查一定会请你确认，自动审批、绕过权限也一样。这类卡片上标着“Claude Code 安全拦截”。',
+      },
+      {
+        kind: 'callout',
         tone: 'warn',
         title: '绕过权限',
-        text: '什么都不问，包括删除文件。默认不出现，要先在[常规](settings:general)里允许。',
+        text: '除了安全拦截，什么都不问，包括删除文件和在你的电脑上执行任意命令。默认不出现，要先在[常规](settings:general)里允许；只建议在测试机或虚拟机上用。',
       },
     ],
     related: ['conversation', 'remote-ops', 'browser'],
-    words: '审批 权限 允许 拒绝 自动 手动 计划 接受编辑 绕过 bypass',
+    words: '审批 权限 允许 拒绝 自动 手动 计划 接受编辑 绕过 bypass 安全拦截',
   },
   {
     id: 'files',
@@ -333,10 +306,7 @@ export const articles: Article[] = [
             text: '标题栏右侧的文件按钮，或按 [[toggleFiles]]。',
             action: { label: '打开文件面板', target: { doing: 'files' } },
           },
-          {
-            title: '切换位置',
-            text: '左上角选本机、服务端或其他在线电脑。',
-          },
+          { title: '切换位置', text: '左上角选本机、服务端或其他在线电脑。' },
           {
             title: '预览、上传下载、复制粘贴',
             text: '在不同位置之间复制粘贴，就是在电脑之间传文件。',
@@ -345,10 +315,13 @@ export const articles: Article[] = [
       },
       {
         kind: 'list',
-        items: [
-          '服务端上以编号命名的文件夹是会话的工作目录，旁边标出它属于哪个项目或会话。',
-          '给 Claude 文件不用经过面板：拖进输入框即可。',
-        ],
+        items: ['给 Claude 文件不用经过面板：拖进输入框即可。'],
+      },
+      {
+        kind: 'list',
+        since: '0.3.18',
+        news: '文件面板标出服务端工作目录属于哪个会话',
+        items: ['服务端上以编号命名的文件夹是会话的工作目录，旁边标出它属于哪个项目或会话。'],
       },
       {
         kind: 'prompts',
@@ -407,27 +380,44 @@ export const articles: Article[] = [
     title: '多台电脑',
     icon: Laptop,
     lead: '登录同一个服务端的每台电脑，都列在“其他设备”下。',
-    since: '0.3.18',
     blocks: [
       { kind: 'figure', name: 'devices' },
       {
         kind: 'list',
         items: [
           '**接入**：在另一台电脑上装图形客户端，登录同一个服务端。没有图形界面的机器用 [ccdt online](#always-online)。',
-          '**在那台电脑上开会话**：它在线时，悬停它的项目点 +，会话就在那台电脑上执行。',
-          '**把会话移过去**：点输入框上方的项目标签，“移到项目…”按电脑列出。运行中的会话不能移到另一台电脑。',
           '**那台离线时**：会话只能查看，可以接到本机继续，或分叉到本机。',
         ],
       },
       {
-        kind: 'callout',
-        tone: 'tip',
-        title: '不切会话也能用那台电脑',
-        text: '在任何会话里直接说“在 {device} 上……”。见[让 Claude 操作其他电脑](#remote-ops)。',
+        kind: 'list',
+        since: '0.3.18',
+        news: '在另一台电脑的项目里开会话，或把会话移过去',
+        items: [
+          '**在那台电脑上开会话**：它在线时，悬停它的项目点 +，会话就在那台电脑上执行。',
+          '**把会话移过去**：点输入框上方的项目标签，“移到项目…”按电脑列出。运行中的会话不能移到另一台电脑。',
+        ],
+      },
+      { kind: 'heading', text: '那台电脑上还没有项目' },
+      {
+        kind: 'p',
+        text: '这里只能在别的电脑已有的项目里开会话。它还没有项目时，两种办法：',
+      },
+      {
+        kind: 'list',
+        items: [
+          '**在那台电脑上添加**：在它的客户端里添加项目，或在它的项目文件夹里运行一次 `ccdt`。之后这里就能在它的项目里开会话。',
+          '**不建项目，直接让 Claude 过去做**：在这台电脑的任何会话里说出那台电脑的名字。',
+        ],
+      },
+      {
+        kind: 'prompts',
+        since: '0.3.18',
+        items: [{ text: '看看 {device} 的 D:\\work 下有哪些项目，挑最近改过的那个跑一遍测试' }],
       },
     ],
     related: ['remote-ops', 'always-online', 'browser'],
-    words: '其他设备 多台 另一台 电脑 移动 离线 在线 分叉',
+    words: '其他设备 多台 另一台 电脑 移动 离线 在线 分叉 新建 项目',
   },
   {
     id: 'remote-ops',
@@ -554,9 +544,34 @@ export const articles: Article[] = [
     title: '终端客户端 ccdt',
     icon: SquareTerminal,
     lead: '在自己的终端里用原版 Claude Code，和这里共用同一批会话。',
-    since: '0.3.18',
     blocks: [
       { kind: 'figure', name: 'terminal' },
+      { kind: 'heading', text: '推荐用法：在 ccdt 里干活，在客户端里看' },
+      {
+        kind: 'steps',
+        items: [
+          {
+            title: '在客户端里建好项目和会话',
+            text: '项目和会话一目了然，之后在哪一端都能接着。',
+            action: { label: '添加项目', target: { doing: 'addProject' } },
+          },
+          {
+            title: '会话右键“用 ccdt 打开”',
+            text: '直接在终端里接着这个会话，不用再登录。',
+          },
+          {
+            title: '一边在 ccdt 里做，一边在客户端里看',
+            text: '终端里的请求更省 5 小时额度；客户端同步显示它做了什么，折叠排版更好读。',
+          },
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'note',
+        title: '同一个会话同时只在一处输入',
+        text: '终端开着时，客户端里显示它在做什么，输入框变灰；关掉终端就能接着在客户端里聊。',
+      },
+      { kind: 'heading', text: '常用命令' },
       {
         kind: 'table',
         head: ['命令', '作用'],
@@ -571,21 +586,15 @@ export const articles: Article[] = [
       },
       {
         kind: 'list',
+        since: '0.3.18',
+        news: '图形客户端自带 ccdt',
         items: [
-          '**已经装好了**：图形客户端自带 `ccdt`，新开一个终端窗口就能用。macOS 要先把应用放进“应用程序”打开一次。',
-          '**从这里打开**：会话右键“用 ccdt 打开”，直接在终端里接着当前会话。',
-          '**同一个会话同时只在一处用**：终端开着时，这里显示它在做什么、输入框变灰；关掉终端就能接着在这里聊。',
+          '**已经装好了**：图形客户端自带 `ccdt`，随它升级，新开一个终端窗口就能用。macOS 要先把应用放进“应用程序”打开一次。',
         ],
-      },
-      {
-        kind: 'callout',
-        tone: 'tip',
-        title: '更省 5 小时额度',
-        text: '长任务放在 `ccdt` 里做，见[额度与用量](#quota)。',
       },
     ],
     related: ['quota', 'agents', 'always-online'],
-    words: 'ccdt 终端 命令行 CLI 原版 terminal',
+    words: 'ccdt 终端 命令行 CLI 原版 terminal 额度 省',
   },
   {
     id: 'agents',
@@ -611,11 +620,7 @@ export const articles: Article[] = [
         kind: 'p',
         text: '其他 agent 或脚本在电脑上运行 `ccdt -p`，写法与 `claude -p` 相同。派出的任务就是普通会话，这里看得到、能插话、能审批。',
       },
-      {
-        kind: 'code',
-        label: '派发',
-        text: 'ccdt -p "修复登录页的报错" --output-format json',
-      },
+      { kind: 'code', label: '派发', text: 'ccdt -p "修复登录页的报错" --output-format json' },
       {
         kind: 'table',
         head: ['跟进', '作用'],
@@ -686,13 +691,13 @@ export const articles: Article[] = [
       {
         kind: 'list',
         items: [
-          '**5 小时额度紧张时用 `ccdt`**：图形客户端经官方 Agent SDK 运行。据社区实测，同样的用量，计入 5 小时额度的比例约为交互式 CLI 的两倍；每周额度不受影响。',
+          '**5 小时额度紧张时用 `ccdt`**：图形客户端经官方 Agent SDK 运行。据社区实测，同样的用量，计入 5 小时额度的比例约为交互式 CLI 的两倍；每周额度不受影响。见 [ccdt 的推荐用法](#ccdt)。',
           '**输入框旁显示额度**：在[外观](settings:appearance)里打开。',
           '**调用日志**：每次请求的模型、Token 和等价费用；金额按 API 价格估算，不是账单。',
           '**额度是空的**：它来自 Claude Code 的一次运行，发一条消息，或在账号页里刷新。',
         ],
       },
-      { kind: 'actions', items: [{ label: '账号与额度', target: { settings: 'account' } }] },
+      settingsOf('account', '账号与额度'),
     ],
     related: ['ccdt', 'context', 'account'],
     words: '额度 用量 5 小时 每周 限额 费用 token 调用日志 省',
@@ -714,10 +719,7 @@ export const articles: Article[] = [
           '输入框上方的上下文占用，显示这个会话用了多少。',
         ],
       },
-      {
-        kind: 'actions',
-        items: [{ label: '上下文与缓存', target: { settings: 'context' } }],
-      },
+      settingsOf('context', '上下文与缓存'),
     ],
     related: ['quota', 'conversation'],
     words: '缓存 过期 压缩 compact 上下文 空闲 1 小时',
@@ -743,10 +745,126 @@ export const articles: Article[] = [
         title: '服务器所在地就是你的使用地点',
         text: '请求都从服务器发出。请用位于支持地区、来源正常的服务器，见[账号须知](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/account.md)。',
       },
-      { kind: 'actions', items: [{ label: '账号与额度', target: { settings: 'account' } }] },
+      settingsOf('account', '账号与额度'),
     ],
     related: ['quota', 'safety'],
     words: '登录 退出 账号 setup token 订阅 授权',
+  },
+
+  // 设置
+  {
+    id: 'settings',
+    group: 'settings',
+    title: '设置指南',
+    icon: Settings,
+    lead: '设置按保存在哪里分成三组。看分组就知道改了影响谁；拿不准的保持默认。',
+    blocks: [
+      {
+        kind: 'table',
+        head: ['分组', '影响范围'],
+        rows: [
+          ['**本机**', '只影响这台电脑上的这个客户端'],
+          ['**服务端**', '保存在服务端，对连到它的所有电脑生效（Shell 只对这台电脑）'],
+          ['**Claude Code**', '服务器上 Claude Code 自己的设置，所有会话和 `ccdt` 共用'],
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'tip',
+        title: '找设置',
+        text: '设置页左上角的搜索框按功能找，比如“托盘”“额度”“压缩”。每个设置页标题旁的 ? 跳到这里对应的一段。',
+      },
+      { kind: 'heading', text: '常规', id: 'general' },
+      {
+        kind: 'list',
+        items: [
+          '**关闭窗口时留在后台**：默认开，关窗口只是收到托盘，任务继续。',
+          '**普通会话的文件夹**：“新建会话”在哪里建工作目录。',
+          '**对话记录**：读过的对话缓存在本机，可以看占用、清理。',
+          '**允许绕过权限**：打开后，审批模式里才出现“绕过权限”。',
+        ],
+      },
+      settingsOf('general', '打开常规'),
+      { kind: 'heading', text: '外观', id: 'appearance' },
+      {
+        kind: 'list',
+        items: [
+          '主题；对话里的工作步骤展示多少。',
+          '**会话栏**和**回复小结**：输入框下方那一行、每轮回复末尾，显示哪些数字。',
+          '**在输入框旁显示额度**：5 小时和每周额度，一眼可见。',
+        ],
+      },
+      settingsOf('appearance', '打开外观'),
+      { kind: 'heading', text: '连接', id: 'connection' },
+      {
+        kind: 'list',
+        items: [
+          '**记住凭据、自动登录**：打开程序直接连上。',
+          '**登录过的服务**：改备注名或删掉；“新的登录窗口”同时连另一个服务端。',
+          '**连接等待时间**：网络或电脑慢、总是超时才调大，平时不用动。',
+        ],
+      },
+      settingsOf('connection', '打开连接'),
+      { kind: 'heading', text: '通知与快捷键', id: 'notifications' },
+      {
+        kind: 'list',
+        items: [
+          '**通知**：完成、失败、等待审批、提问、定时任务未发出、连接中断，每一类可以单独关；可开提示音。',
+          '**快捷键**：查看和修改，也可以全部关掉。',
+        ],
+      },
+      {
+        kind: 'actions',
+        items: [
+          { label: '打开通知', target: { settings: 'notifications' } },
+          { label: '打开快捷键', target: { settings: 'shortcuts' } },
+        ],
+      },
+      { kind: 'heading', text: '上下文与缓存', id: 'context' },
+      {
+        kind: 'p',
+        text: '缓存过期前自动压缩：空闲多久后压缩、上下文至少多大才值得压缩。为什么要压缩见[上下文与缓存](#context)。',
+      },
+      settingsOf('context', '打开上下文与缓存'),
+      { kind: 'heading', text: 'Shell', id: 'shell' },
+      {
+        kind: 'p',
+        text: 'Claude 在这台 Windows 电脑上写脚本时，优先用 PowerShell 还是 Git Bash。装了 Git for Windows 才有 Git Bash。',
+      },
+      settingsOf('shell', '打开 Shell'),
+      { kind: 'heading', text: '浏览器访问', id: 'web' },
+      {
+        kind: 'p',
+        text: '开关、访问地址、HTTPS 证书、两步验证和反向代理。怎么用见[浏览器与手机](#browser)。',
+      },
+      settingsOf('web', '打开浏览器访问'),
+      { kind: 'heading', text: '账号与额度', id: 'account' },
+      {
+        kind: 'p',
+        text: '登录或退出 Claude 账号，看额度、重置时间和调用日志。“运行中每分钟读取一次额度”让额度保持最新。见[额度与用量](#quota)。',
+      },
+      settingsOf('account', '打开账号与额度'),
+      { kind: 'heading', text: 'CLI 设置', id: 'claude' },
+      {
+        kind: 'p',
+        text: 'Claude Code 自己的常用设置，和它的 `/config` 是同一份：自动压缩、思考、快速模式、自动记忆、备用模型、回复语言、提交署名等。每项写着默认是什么。',
+      },
+      settingsOf('claude', '打开 CLI 设置'),
+      { kind: 'heading', text: '全局说明', id: 'instructions' },
+      {
+        kind: 'p',
+        text: '服务器上 Claude Code 的用户级 `CLAUDE.md`，每个会话都会读。你电脑上项目里的 `CLAUDE.md`、`AGENTS.md` 不会自动读，需要时让 Claude 去读。',
+      },
+      settingsOf('instructions', '打开全局说明'),
+      { kind: 'heading', text: '关于与更新', id: 'about' },
+      {
+        kind: 'p',
+        text: '两端的版本和升级；反馈问题时用到的连接日志和开发者工具。见[升级](#upgrade)。',
+      },
+      settingsOf('about', '打开关于与更新'),
+    ],
+    related: ['first-steps', 'background', 'upgrade'],
+    words: '设置 选项 配置 本机 服务端 Claude Code 常规 外观 连接 通知 快捷键 Shell CLI 全局说明',
   },
 
   // 维护与安全
@@ -766,7 +884,7 @@ export const articles: Article[] = [
           '**多个服务端**：每个服务端一个窗口，凭据、草稿和定时任务各自保存。',
         ],
       },
-      { kind: 'actions', items: [{ label: '通知设置', target: { settings: 'notifications' } }] },
+      settingsOf('notifications', '通知设置'),
     ],
     related: ['schedules', 'upgrade'],
     words: '托盘 后台 通知 断线 重连 睡眠 多个服务端 窗口',
@@ -787,10 +905,7 @@ export const articles: Article[] = [
             action: { label: '关于与更新', target: { settings: 'about' } },
           },
           { title: '先升级服务端', text: '约一分钟后自动重连。有会话正在运行时会提示。' },
-          {
-            title: '再升级客户端',
-            text: 'Windows 自动下载安装；macOS、Linux 重新下载安装。',
-          },
+          { title: '再升级客户端', text: 'Windows 自动下载安装；macOS、Linux 重新下载安装。' },
         ],
       },
       {
@@ -913,6 +1028,12 @@ export const articles: Article[] = [
             ],
           },
           {
+            q: '在另一台电脑上开不了会话？',
+            a: [
+              '那台电脑要在线，而且要有项目。没有项目时，在任何会话里让 Claude 连过去做。见[多台电脑](#devices#那台电脑上还没有项目)。',
+            ],
+          },
+          {
             q: 'Claude 把文件建在了服务器上？',
             a: ['步骤里的路径以 `/data/state/native/` 开头时是这样。告诉它“改在我的电脑上做”。'],
           },
@@ -932,8 +1053,41 @@ export const articles: Article[] = [
   },
 ];
 
-// The prompts the front page and an empty session offer, most telling first. Those naming another computer are
-// offered only when one is online.
+// The page of what is new in a version is made of the articles and blocks marked with it.
+export type News = { title: string; text: string; article: string; icon: typeof Bot };
+export function newsOf(version: string, list: Article[] = articles): News[] {
+  const found: News[] = [];
+  for (const article of list) {
+    if (article.since === version)
+      found.push({
+        title: article.title,
+        text: article.lead,
+        article: article.id,
+        icon: article.icon,
+      });
+    else
+      for (const block of article.blocks)
+        if (block.since === version && block.news)
+          found.push({
+            title: block.news,
+            text: `见“${article.title}”`,
+            article: article.id,
+            icon: article.icon,
+          });
+  }
+  return found;
+}
+export const hasNews = (version: string) => newsOf(version).length > 0;
+// How new an article is in a version: brought by it, or changed by it.
+export const freshness = (article: Article, version: string) =>
+  article.since === version
+    ? 'new'
+    : article.blocks.some((block) => block.since === version)
+      ? 'changed'
+      : null;
+
+// The prompts the front page offers, most telling first. Those naming another computer are offered only when one is
+// online.
 export const starters: (Prompt & { device?: boolean; article: string })[] = [
   { text: '看看 {device} 上各个磁盘还剩多少空间', device: true, article: 'remote-ops' },
   { text: '这个项目是做什么的？读一遍目录结构，用三句话告诉我', article: 'first-steps' },

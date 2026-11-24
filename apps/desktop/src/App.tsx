@@ -1840,6 +1840,7 @@ export function App({
             here={state.device?.name ?? '这台电脑'}
             others={onlineOthers}
             browser={!!browser}
+            version={version || state.service || ''}
             go={showHelp}
             run={runHelp}
             tryPrompt={host.localProjects ? (text) => void startWith(text) : undefined}

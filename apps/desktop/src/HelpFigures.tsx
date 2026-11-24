@@ -200,20 +200,22 @@ export default function Figure({
           </div>
           <div className="fig-side-row project hover">
             <FolderOpen />
-            <span>web-app</span>
+            <span>项目文件夹</span>
             <Plus className="end fig-pulse" />
           </div>
-          <div className="fig-side-row session">修复登录页</div>
-          <div className="fig-side-row device">
-            <ChevronRight />
-            <span>{others[1] ?? 'nas'}</span>
-            <em className="online">在线</em>
-          </div>
-          <div className="fig-side-row device off">
-            <ChevronRight />
-            <span>家里的笔记本</span>
-            <em>离线</em>
-          </div>
+          <div className="fig-side-row session">它的会话</div>
+          {others.slice(1, 3).map((name) => (
+            <div className="fig-side-row device" key={name}>
+              <ChevronRight />
+              <span>{name}</span>
+              <em className="online">在线</em>
+            </div>
+          ))}
+          {others.length > 3 && (
+            <div className="fig-side-row device">
+              <span className="fig-more">还有 {others.length - 3} 台</span>
+            </div>
+          )}
           <p className="fig-side-tip">悬停项目点 +，会话就在那台电脑上执行</p>
         </div>
       );
@@ -271,6 +273,7 @@ function Approval({
 
 function DeviceMap({ here, others }: { here: string | null; others: string[] }) {
   const shown = others.slice(0, here ? 2 : 3);
+  const more = others.length - shown.length;
   return (
     <div className="fig fig-map" aria-hidden="true">
       <div className="fig-map-server">
@@ -300,6 +303,14 @@ function DeviceMap({ here, others }: { here: string | null; others: string[] }) 
             </span>
           </div>
         ))}
+        {more > 0 && (
+          <div className="fig-map-device more">
+            <Laptop />
+            <span>
+              <strong>还有 {more} 台在线</strong>
+            </span>
+          </div>
+        )}
         {shown.length === 0 && (
           <div className="fig-map-device ghost">
             <Laptop />

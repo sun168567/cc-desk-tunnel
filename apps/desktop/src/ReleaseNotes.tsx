@@ -5,7 +5,7 @@ import { project } from './project.tsx';
 import RichText from './RichText.tsx';
 import { Modal } from './ui.tsx';
 import { openHelp } from './help-nav.ts';
-import { release } from './help-content.ts';
+import { hasNews } from './help-content.ts';
 
 // What changed in a version, shown where the user decides about an upgrade. This program carries the notes up
 // to its own version; those of a newer one are read from that release's page on GitHub, and when that cannot
@@ -55,7 +55,7 @@ export default function ReleaseNotes({
         )}
       </div>
       <div className="setting-actions">
-        {version === release && (
+        {hasNews(version) && (
           <button
             type="button"
             className="button"
