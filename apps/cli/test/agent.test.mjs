@@ -21,6 +21,7 @@ import {
   printTask,
   status,
   stop,
+  streamer,
   tell,
   wait,
 } from '../src/tasks.mjs';
@@ -214,6 +215,19 @@ test('a turn is stopped, a wait gives up at its timeout, and logs tell what happ
   assert.equal(items.at(-1).type, 'assistant');
 });
 
+test('stream-json says text and reasoning as they arrive, not again when recorded whole', () => {
+  const out = [];
+  const say = streamer({ out: (line) => out.push(JSON.parse(line)) });
+  say({ type: 'thinking.delta', messageId: 'm1', text: '先看看' }, true);
+  say({ type: 'thinking.delta', messageId: 'm1', text: '先看看' }, false);
+  say({ type: 'text.delta', messageId: 'm2', text: '好的' }, true);
+  say({ type: 'text.delta', messageId: 'm2', text: '好的' }, false);
+  assert.deepEqual(out, [
+    { type: 'thinking', message_id: 'm1', text: '先看看' },
+    { type: 'text', message_id: 'm2', text: '好的' },
+  ]);
+});
+
 test('a session is named by the start of its ID, once that tells it apart', () => {
   const sessions = [{ id: 'abc12345-0000' }, { id: 'abd12345-0000' }];
   assert.equal(findSession(sessions, 'ABC').id, 'abc12345-0000');
@@ -294,6 +308,14 @@ function acpClient(f, choose) {
   const input = new PassThrough();
   const output = new PassThrough();
   const { context } = f.run();
+  // The connections ccdt acp makes, to say to it what the service would.
+  const made = [];
+  const connect = context.connect;
+  context.connect = async () => {
+    const service = await connect();
+    made.push(service);
+    return service;
+  };
   const messages = [];
   const waiting = new Map();
   let next = 1;
@@ -313,6 +335,7 @@ function acpClient(f, choose) {
   const served = serveAcp({ ...context, version: '0.0.0-test' }, { input, output });
   return {
     messages,
+    made,
     served,
     request: (method, params) =>
       new Promise((resolve) => {
@@ -432,6 +455,116 @@ test('ccdt acp: a loaded session replays the newest page of its history', async 
   client.end();
   loader.end();
   await Promise.all([client.served, loader.served]);
+});
+
+test('ccdt acp: the models Claude Code offers are chosen in the client, with how hard the one chosen reasons', async (t) => {
+  const f = await fixture(t);
+  const client = acpClient(f, () => ({ outcome: 'cancelled' }));
+  await client.request('initialize', { protocolVersion: 1, clientCapabilities: {} });
+  const created = await client.request('session/new', { cwd: here, mcpServers: [] });
+  const sessionId = created.result.sessionId;
+  const shown = (options) =>
+    options.map((option) => [option.id, option.category, option.currentValue]);
+  // Before Claude Code has said which models there are, the session's own is the one offered.
+  assert.deepEqual(shown(created.result.configOptions), [
+    ['model', 'model', 'default'],
+    ['mode', 'mode', 'auto'],
+  ]);
+  const options = () =>
+    client
+      .updates(sessionId)
+      .filter((update) => update.sessionUpdate === 'config_option_update')
+      .at(-1)?.configOptions;
+  const until = async (check) => {
+    while (!check()) await new Promise((resolve) => setTimeout(resolve, 10));
+  };
+  // Claude Code says what it offers, as it does when a run starts: the client is offered its models.
+  client.made[0].emit('message', {
+    type: 'session.event',
+    event: {
+      sessionId,
+      sequence: 1000,
+      payload: {
+        type: 'native.capabilities',
+        models: [
+          {
+            value: 'default',
+            displayName: 'Default',
+            description: '推荐',
+            resolvedModel: 'claude-opus-5-5',
+            source: 'native',
+            supportedEffortLevels: ['low', 'high'],
+          },
+          {
+            value: 'haiku',
+            displayName: 'Haiku',
+            description: '最快',
+            source: 'native',
+            supportedEffortLevels: [],
+          },
+        ],
+        account: {},
+        commands: [],
+      },
+    },
+  });
+  await until(() => options());
+  assert.deepEqual(
+    options()[0].options.map((option) => option.value),
+    ['default', 'haiku'],
+  );
+  assert.deepEqual(
+    options()[1].options.map((option) => option.value),
+    ['default', 'low', 'high'],
+  );
+  assert.equal(options()[1].category, 'thought_level');
+  // Effort, then a model, chosen in the client are the session's; a model starts at its own default effort.
+  const effort = await client.request('session/set_config_option', {
+    sessionId,
+    configId: 'effort',
+    value: 'high',
+  });
+  assert.equal(effort.result.configOptions[1].currentValue, 'high');
+  assert.equal((await f.connect()).sessions.get(sessionId).effort, 'high');
+  const model = await client.request('session/set_config_option', {
+    sessionId,
+    configId: 'model',
+    value: 'haiku',
+  });
+  assert.deepEqual(shown(model.result.configOptions), [
+    ['model', 'model', 'haiku'],
+    ['mode', 'mode', 'auto'],
+  ]);
+  const session = (await f.connect()).sessions.get(sessionId);
+  assert.equal(session.model, 'haiku');
+  assert.equal(session.effort, null);
+  assert.equal(
+    (
+      await client.request('session/set_config_option', {
+        sessionId,
+        configId: 'model',
+        value: 'gpt',
+      })
+    ).error.code,
+    -32602,
+  );
+  // The mode is an option too, and still told as a mode.
+  await client.request('session/set_config_option', { sessionId, configId: 'mode', value: 'plan' });
+  assert.ok(
+    client
+      .updates(sessionId)
+      .some(
+        (update) =>
+          update.sessionUpdate === 'current_mode_update' && update.currentModeId === 'plan',
+      ),
+  );
+  // A model chosen in a window shows in the client.
+  await (
+    await f.connect()
+  ).request({ type: 'session.configure', sessionId, permissionMode: 'plan', model: null });
+  await until(() => options()?.[0].currentValue === 'default');
+  client.end();
+  await client.served;
 });
 
 test('a prompt is the text of its blocks: files referred to by address, embedded ones with their text', () => {

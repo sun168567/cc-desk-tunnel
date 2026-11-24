@@ -76,7 +76,8 @@ export const AGENT_HELP = `ccdt 供程序和其他 agent 使用：把任务交�
   ccdt -p "任务" [选项]
     默认在当前目录的项目里新建会话；-c 接这个项目最近的会话；-r <会话> 接指定会话
     --bg                    发出后立即返回会话 ID，不等结果
-    --output-format text|json|stream-json   默认 text：只输出 Claude 最后的回复
+    --output-format text|json|stream-json   默认 text：只输出 Claude 最后的回复；
+                            stream-json 逐行输出文字、思考、工具调用与结果、状态
     --permission-mode auto|default|plan|acceptEdits|bypassPermissions
     --model <模型>  --effort low|medium|high|xhigh|max  --title <标题>
     --timeout <秒>          最多等这么久；到时仍在运行就返回（退出码 6）
