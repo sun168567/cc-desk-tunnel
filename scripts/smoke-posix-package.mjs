@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readlinkSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { _electron } from '@playwright/test';
@@ -8,7 +8,9 @@ import { _electron } from '@playwright/test';
 // Starts a packaged macOS or Linux application offline, with a profile of its own: the main process, the
 // preload and the page have to come up, and the SSH service has to start from the packaged files alone and
 // run a script the way the service sends one. The package's own program serves as the Node that checks the
-// latter. Takes the application (the .app of macOS, the program file of Linux) and further arguments for it.
+// latter. The ccdt it carries has to become the user's ccdt, of a home of its own here, unless it is a Mac application
+// started from outside the Applications folder, which links nothing. Takes the application (the .app of macOS, the
+// program file of Linux) and further arguments for it.
 const mac = process.platform === 'darwin';
 if (process.platform === 'win32' || !process.argv[2] || mac !== process.argv[2].endsWith('.app'))
   throw new Error('Usage: node scripts/smoke-posix-package.mjs <application> [arguments]');
@@ -27,6 +29,9 @@ const env = Object.fromEntries(
   ),
 );
 env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+const home = join(directory, 'home');
+mkdirSync(home);
+env.HOME = home;
 const args = [
   ...process.argv.slice(3),
   '--smoke-test',
@@ -102,6 +107,22 @@ try {
     },
   );
   assert.deepEqual(errors, []);
+  const ccdt = join(dirname(archive), 'ccdt', 'bin', 'ccdt');
+  const link = join(home, '.local', 'bin', 'ccdt');
+  const installed = !mac || /^\/Applications\//.test(resolve(process.argv[2]));
+  for (let waited = 0; installed && !existsSync(link) && waited < 10_000; waited += 200)
+    await delay(200);
+  if (installed) {
+    assert.equal(readlinkSync(link), ccdt);
+    const version = await application.evaluate(({ app }) => app.getVersion());
+    assert.equal(
+      execFileSync(link, ['--version'], {
+        encoding: 'utf8',
+        env: { ...env, CCDT_CONFIG_DIR: home },
+      }).trim(),
+      `ccdt ${version}`,
+    );
+  } else assert.equal(existsSync(link), false);
   // A picture of the window as the system draws it, for whoever reviews a build without a Mac at hand.
   if (process.env.SMOKE_SCREENSHOT) {
     await application.evaluate(({ BrowserWindow }) => {
@@ -129,7 +150,9 @@ try {
   }
   // A connection's own process starts only once its sign-in succeeds, so offline there is none to open here; with a
   // service, the Windows package test (apps/desktop/test/package.spec.ts) checks one window to a connection.
-  console.log('PASS: the packaged client starts offline and its SSH service runs a script.');
+  console.log(
+    `PASS: the packaged client starts offline and its SSH service runs a script; ${installed ? "its ccdt is the user's ccdt" : 'it links no ccdt from outside the Applications folder'}.`,
+  );
 } finally {
   // The sign-in window may have gone already.
   if (application.process().exitCode === null) await application.close().catch(() => {});

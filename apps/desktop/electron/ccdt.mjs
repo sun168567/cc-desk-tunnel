@@ -1,8 +1,9 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import * as files from 'node:fs';
 import { existsSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { homedir, tmpdir, userInfo } from 'node:os';
+import { delimiter, join, posix } from 'node:path';
 
 // A session opened in ccdt, the terminal client, from the desktop client: ccdt is a program of its own, spoken to
 // through its command line alone. It is signed in to the service this window is connected to, with the token the
@@ -23,6 +24,87 @@ export function locate(
     .filter(Boolean)
     .map((directory) => join(directory, windows ? 'ccdt.cmd' : 'ccdt'))
     .find((file) => exists(file));
+}
+
+// The ccdt a macOS or Linux client carries (`own`) becomes the user's `ccdt`: ~/.local/bin/ccdt, where ccdt's own
+// install script links it (apps/cli/install/install.sh). A client installed takes the place of a ccdt installed on its
+// own there, as the Windows installer puts its ccdt ahead of that one on the PATH: the link goes to this one when it
+// goes to a ccdt package or to nothing that is left; a file or a link of the user's own is left alone. A Mac client
+// runs from a place of the moment when started from its disk image or from where it was downloaded, and links
+// nothing then: it is in the Applications folder that it stays. There the mark of the download goes from the ccdt it
+// carries, as the install script takes it from its own, lest the system refuse its Node when started from a terminal.
+// ~/.local/bin goes on the PATH as that script puts it there, once, for the shells started from then on.
+export function linkCcdt(
+  {
+    platform = process.platform,
+    home = homedir(),
+    own,
+    application,
+    env = process.env,
+    shell = env.SHELL || userInfo().shell || '',
+  },
+  fs = files,
+) {
+  const { delimiter, dirname, join, resolve, sep } = posix;
+  if (platform === 'win32' || !own || !fs.existsSync(own)) return { linked: false, reason: 'none' };
+  if (
+    platform === 'darwin' &&
+    (!application ||
+      application.includes('/AppTranslocation/') ||
+      ![`/Applications/`, join(home, 'Applications') + '/'].some((folder) =>
+        application.startsWith(folder),
+      ))
+  )
+    return { linked: false, reason: 'not-in-applications' };
+  if (platform === 'darwin')
+    try {
+      execFileSync('xattr', ['-dr', 'com.apple.quarantine', dirname(dirname(own))], {
+        stdio: 'ignore',
+      });
+    } catch {}
+  const bin = join(home, '.local', 'bin');
+  const link = join(bin, 'ccdt');
+  let current;
+  try {
+    current = fs.lstatSync(link);
+  } catch {}
+  if (current && !current.isSymbolicLink()) return { linked: false, reason: 'taken', path: link };
+  if (current) {
+    const target = resolve(bin, fs.readlinkSync(link));
+    const ccdtPackage = [
+      `${sep}.local${sep}share${sep}ccdt${sep}`,
+      `${sep}resources${sep}ccdt${sep}`,
+    ].some((part) => target.includes(part) && target.endsWith(join('bin', 'ccdt')));
+    if (target !== own && !ccdtPackage && fs.existsSync(target))
+      return { linked: false, reason: 'taken', path: link };
+  }
+  if (!current || resolve(bin, fs.readlinkSync(link)) !== own) {
+    fs.mkdirSync(bin, { recursive: true });
+    const next = `${link}.${process.pid}`;
+    fs.rmSync(next, { force: true });
+    fs.symlinkSync(own, next);
+    fs.renameSync(next, link);
+  }
+  const path = (env.PATH ?? '').split(delimiter);
+  if (platform === 'darwin' || !path.includes(bin)) {
+    const line = 'export PATH="$HOME/.local/bin:$PATH"';
+    const rc = join(
+      home,
+      shell.endsWith('/zsh')
+        ? '.zshrc'
+        : shell.endsWith('/bash')
+          ? platform === 'darwin'
+            ? '.bash_profile'
+            : '.bashrc'
+          : '.profile',
+    );
+    let text = '';
+    try {
+      text = fs.readFileSync(rc, 'utf8');
+    } catch {}
+    if (!text.includes(line)) fs.appendFileSync(rc, `\n# ccdt\n${line}\n`);
+  }
+  return { linked: true, path: link };
 }
 
 // What goes on a command line here is a path, a session ID and an address: quoted for the shell that reads it. An

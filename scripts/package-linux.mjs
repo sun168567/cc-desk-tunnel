@@ -1,14 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import { posixService, stageDesktop } from './package-desktop.mjs';
+import { checkCcdt, posixService, stageCcdt, stageDesktop } from './package-desktop.mjs';
 
 // Builds the Linux package: a .deb for x64, made for and tried on the current Ubuntu LTS. Like the macOS
 // package it carries no OpenSSH or shell of its own: the SSH service runs inside the program, with the
-// user's shell and the system's sftp-server, which the package asks for. It cannot upgrade itself.
+// user's shell and the system's sftp-server, which the package asks for. It cannot upgrade itself. It carries ccdt, as
+// its own package has it, which the client links into ~/.local/bin when it starts (apps/desktop/electron/ccdt.mjs).
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
 if (args.some((arg) => arg !== '--dir')) throw new Error('Usage: npm run package:linux -- [--dir]');
@@ -22,6 +23,10 @@ await stageDesktop(root, app, {
   description: 'Linux client for a native remote Claude Code session',
   ...posixService,
 });
+const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
+const ccdt = join(root, '.local/linux-package/ccdt');
+rmSync(ccdt, { recursive: true, force: true });
+await stageCcdt(root, ccdt, { version, desktop: true });
 const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/package.json'), 'utf8'));
 const results = await electronBuild({
   targets: Platform.LINUX.createTarget(unpacked ? 'dir' : 'deb', Arch.x64),
@@ -35,6 +40,7 @@ const results = await electronBuild({
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
+    extraResources: [{ from: ccdt, to: 'ccdt' }],
     linux: {
       target: 'deb',
       executableName: 'cc-desk-tunnel',
@@ -64,6 +70,8 @@ const results = await electronBuild({
     },
   },
 });
+// The ccdt it carries runs.
+checkCcdt(join(output, 'linux-unpacked/resources/ccdt/bin/ccdt'), version);
 // Started offline before it counts as built, where there is a screen to start it on. What is started is the
 // unpacked program, whose sandbox the installed package sets up; scripts/smoke-posix-package.mjs can be run
 // on the installed one as well.
