@@ -187,7 +187,7 @@ ccdt -p "…" --permission-mode acceptEdits --model sonnet --effort high
 
 ### ACP
 
-`ccdt acp` 让 `ccdt` 作为 [Agent Client Protocol](https://agentclientprotocol.com) 的 agent 运行，经标准输入输出通信。会说 ACP 的编辑器和 agent 工具（Zed、JetBrains、[acpx](https://github.com/openclaw/acpx) 等）把它配成 agent 命令，就能像使用本地 agent 一样使用服务端上的 Claude：会话在启动目录对应的项目里新建，也可以加载已有会话（回放最近一页记录）；回复和工具调用逐条显示；审批作为权限请求交给客户端；审批模式作为会话模式切换。
+`ccdt acp` 让 `ccdt` 作为 [Agent Client Protocol](https://agentclientprotocol.com) 的 agent 运行，经标准输入输出通信。会说 ACP 的编辑器和 agent 工具（Zed、JetBrains、[acpx](https://github.com/openclaw/acpx) 等）把它配成 agent 命令，就能像使用本地 agent 一样使用服务端上的 Claude：会话在启动目录对应的项目里新建，也可以加载已有会话（回放最近一页记录）；回复和工具调用逐条显示；审批作为权限请求交给客户端。模型、推理强度和审批模式作为会话选项（ACP 的 session config options）给出，客户端显示成选择器：模型列表就是图形客户端里的那份，取自 Claude Code，这个 `ccdt acp` 进程里第一次新建会话时读一次（要几秒）；选的模型和强度存在会话上，和在窗口里选的一样，在窗口里改了也会同步到客户端。只认会话模式的旧客户端照常能切换审批模式。
 
 ```json
 // acpx：项目目录里的 .acpxrc.json，之后 acpx ccdt "任务"、acpx ccdt exec "任务"
@@ -255,7 +255,7 @@ Windows 上 acpx 只接受可执行文件，写 `ccdt` 自带的 node 和脚本�
 - Linux（x64）：在一台没有图形界面、经 SSH 登录的 Ubuntu 上，用 GitHub 打出的包验证过安装、登录（系统密钥服务用不了时凭据存进设置文件）、新建与选择会话、Claude 的命令经执行通道在这台电脑上运行、终端状态与每一轮的导入、服务端断开 50 秒后接回、关窗口即结束。arm64 的包在 GitHub 的 arm64 机器上打包、安装并启动过。
 - macOS：打包、安装脚本与安装后的启动，钥匙串的保存与读取，以及在真实终端里按键原样传过去（Ctrl+C 交给 Claude Code，不结束 `ccdt`）、窗口尺寸传过去，都在 GitHub 的 Mac 上检查；手头没有 Mac，需要有人操作的部分（连接真实服务端、在“终端”或 iTerm2 里使用、关窗口）没有实际用过。执行通道是与 macOS 图形客户端同一套代码。
 
-- 供程序和其他 agent 使用（`ccdt -p` 与跟进命令、`ccdt acp`）：在离线模拟服务上有自动测试，覆盖派发、续接、事件流输出、工具审批、按顺序回答提问、退回计划、停止、超时，以及 ACP 的新建与加载会话、逐条回复、权限请求、切换模式。在 Windows 上连接真实部署验证过：`ccdt -p` 得到回复；“每次询问”模式下停在审批，`approve` 后接着拿到结果；`--bg` 发出后 `tell` 中途改了指令，Claude 照新指令完成；用 acpx 0.22 经 `ccdt acp` 一次性和持久会话各跑通，权限请求的拒绝和批准都生效。在 Linux 上用真实的 Claude Code（接第三方模型）验证过：Claude 经 ccdt 的执行通道在这台电脑上运行命令，`approve`、`deny`、`answer` 回复后接着拿到结果，`ccdt online` 开着时 `--bg`、`tell`、`stop` 生效，acpx 经 `ccdt acp` 的批准和拒绝生效。Zed 和 JetBrains 没有实际接入过。
+- 供程序和其他 agent 使用（`ccdt -p` 与跟进命令、`ccdt acp`）：在离线模拟服务上有自动测试，覆盖派发、续接、事件流输出、工具审批、按顺序回答提问、退回计划、停止、超时，以及 ACP 的新建与加载会话、逐条回复、权限请求、切换模式、模型与推理强度的选项。在 Windows 上连接真实部署验证过：`ccdt -p` 得到回复；“每次询问”模式下停在审批，`approve` 后接着拿到结果；`--bg` 发出后 `tell` 中途改了指令，Claude 照新指令完成；用 acpx 0.22 经 `ccdt acp` 一次性和持久会话各跑通，权限请求的拒绝和批准都生效；`ccdt acp` 第一次新建会话时给出了账号可用的模型和各自的推理强度，选择后存在会话上。在 Linux 上用真实的 Claude Code（接第三方模型）验证过：Claude 经 ccdt 的执行通道在这台电脑上运行命令，`approve`、`deny`、`answer` 回复后接着拿到结果，`ccdt online` 开着时 `--bg`、`tell`、`stop` 生效，acpx 经 `ccdt acp` 的批准和拒绝生效。Zed 和 JetBrains 没有实际接入过。
 
 ## 致谢
 
