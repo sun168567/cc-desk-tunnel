@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { IdleCompaction } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import { idleCompactionFields as fields } from './setting-fields.ts';
-import { Row, Switch } from './ui.tsx';
+import { Row, SettingText, SettingsHeading, Switch } from './ui.tsx';
 
 // The service's own setting, kept with its sessions and not in the CLI's file: before an idle session's one-hour prompt
 // cache lapses, the service compacts it as the compact button does. Each change is saved at once.
@@ -33,11 +33,9 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
   }
   return (
     <>
-      <h2 className="page-heading">缓存过期前自动压缩</h2>
+      <SettingsHeading help="context#idle">缓存过期前自动压缩</SettingsHeading>
       <p className="muted page-section-note">
-        提示缓存在最后一次请求后 1
-        小时过期，过期后压缩要按全价重读整段上下文。开启后，会话空闲到设定时间时，服务端用当前模型执行
-        /compact，与手动点“压缩”相同，读取的是缓存；不需要客户端或会话所在电脑在线。这是一次真实请求，会计入额度；已知额度用完时不压缩。关闭时，会话里会在过期前提醒。
+        会话空闲到设定时间，服务端趁缓存还在替你压缩，回来时不用全价重读。电脑不用在线；压缩计入额度。
       </p>
       {failure && (
         <p className="error-text" role="alert">
@@ -55,10 +53,7 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
             />
           </Row>
           <label>
-            <span>
-              <strong>{fields.afterMinutes.title}</strong>
-              <small>{fields.afterMinutes.detail}</small>
-            </span>
+            <SettingText title={fields.afterMinutes.title} detail={fields.afterMinutes.detail} />
             <select
               aria-label={fields.afterMinutes.title}
               disabled={saving}
@@ -75,10 +70,7 @@ export default function IdleCompactionSettings({ client }: { client: ProxyClient
             </select>
           </label>
           <label>
-            <span>
-              <strong>{fields.minTokens.title}</strong>
-              <small>{fields.minTokens.detail}</small>
-            </span>
+            <SettingText title={fields.minTokens.title} detail={fields.minTokens.detail} />
             <select
               aria-label={fields.minTokens.title}
               disabled={saving}

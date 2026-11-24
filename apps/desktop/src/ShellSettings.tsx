@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DeviceShell } from '@cc-desk-tunnel/protocol';
 import type { ConnectedDevice, ProxyClient } from './client.ts';
 import { shellField } from './setting-fields.ts';
+import { SettingText } from './ui.tsx';
 
 // The shell Claude is told the user prefers for scripts on this Windows computer. Git Bash is listed whether or not the
 // computer has it, and can be chosen once it does. The service keeps the choice for this computer alone and lists it
@@ -31,8 +32,8 @@ export default function ShellSettings({
     <>
       <h2 className="page-heading">脚本用哪种 Shell</h2>
       <p className="muted page-section-note">
-        PowerShell 7 随客户端自带；装了 Git for Windows 的电脑还可以用它的 Git Bash，两种都在时
-        Claude 按任务选用。改动在每个会话的下一条消息时告诉 Claude。
+        PowerShell 7 随客户端自带；装了 Git for Windows 还能用 Git
+        Bash。改动从每个会话的下一条消息起生效。
       </p>
       {failure && (
         <p className="error-text" role="alert">
@@ -41,10 +42,7 @@ export default function ShellSettings({
       )}
       <div className="settings-list card">
         <label>
-          <span>
-            <strong>{shellField.title}</strong>
-            <small>{shellField.detail}</small>
-          </span>
+          <SettingText title={shellField.title} detail={shellField.detail} help={shellField.help} />
           <select
             aria-label={shellField.title}
             disabled={saving}

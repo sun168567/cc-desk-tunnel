@@ -38,7 +38,7 @@ import type { Account } from './shared.ts';
 import ShellSettings from './ShellSettings.tsx';
 import ShortcutSettings from './ShortcutSettings.tsx';
 import HelpLink from './HelpLink.tsx';
-import { IconButton, Page, PageHelp, Row, Switch } from './ui.tsx';
+import { IconButton, Page, PageHelp, Row, SettingsHeading, Switch } from './ui.tsx';
 import type { MenuItem } from './ui.tsx';
 
 export type Section =
@@ -158,7 +158,19 @@ export const sections: {
   },
 ];
 // The heading of the settings guide (help-content.ts) that tells about a page.
-const helpAnchor = (section: Section) => (section === 'shortcuts' ? 'notifications' : section);
+// The help each settings page's "?" opens: the article on what its settings are for.
+const pageHelp: Partial<Record<Section, string>> = {
+  connection: 'execution#waits',
+  notifications: 'background',
+  shortcuts: 'conversation',
+  context: 'context',
+  shell: 'execution#shell',
+  web: 'browser',
+  account: 'quota',
+  claude: 'settings#cli',
+  instructions: 'memory',
+  about: 'upgrade',
+};
 // What a page's settings apply to, said under its title.
 const here = (browser: boolean) =>
   browser
@@ -308,7 +320,11 @@ function ReplyStats() {
     <>
       <h2 className="page-heading">回复小结</h2>
       <div className="card">
-        <Row title="显示回复小结" detail="每轮回复末尾一个小按钮，点开看全部明细">
+        <Row
+          title="显示回复小结"
+          detail="每轮回复末尾一个小按钮，点开看全部明细"
+          help="context#numbers"
+        >
           <Switch
             label="显示回复小结"
             checked={stats.enabled}
@@ -577,7 +593,8 @@ function General({
           <div className="card">
             <Row
               title="关闭窗口时留在后台"
-              detail="关闭只是收到托盘，连接和运行中的任务继续；在托盘图标上选“退出”才结束"
+              detail="关窗口只是收到托盘，任务照常；托盘里选“退出”才结束"
+              help="background"
             >
               <Switch
                 label="关闭窗口时留在后台"
@@ -596,7 +613,7 @@ function General({
               title="普通会话的文件夹"
               detail={
                 <>
-                  不属于任何项目的新会话在这里各得一个工作目录；已有的会话留在原处
+                  不属于项目的新会话各在这里建一个文件夹；已有的不动
                   <code className="setting-path">{workspaceRoot}</code>
                 </>
               }
@@ -618,7 +635,8 @@ function General({
       <div className="card">
         <Row
           title="允许绕过权限"
-          detail="审批模式里多出“绕过权限”：Claude 做任何事都不再询问，包括在你的电脑上执行命令。只建议在测试机或虚拟机里打开"
+          detail="审批模式里多出“绕过权限”，什么都不再问。只建议在测试机上打开"
+          help="permissions#bypass"
         >
           <Switch
             label="允许绕过权限"
@@ -640,10 +658,7 @@ function Appearance({ browser }: { browser: boolean }) {
         <>
           <h2 className="page-heading">输入框</h2>
           <div className="card">
-            <Row
-              title="在输入框旁显示额度"
-              detail="5 小时和每周额度的已用比例，取自最近一次读数；点它打开“账号与额度”"
-            >
+            <Row title="在输入框旁显示额度" detail="5 小时和每周额度用了多少；点它打开账号与额度">
               <Switch
                 label="在输入框旁显示额度"
                 checked={quota}
@@ -690,7 +705,7 @@ function ConnectionSettings({
         </Row>
       </div>
       <Connections />
-      <h2 className="page-heading">连接等待时间</h2>
+      <SettingsHeading help="execution#waits">连接等待时间</SettingsHeading>
       <div className="card">
         {waitFields.map(({ step, title, detail }) => (
           <Row key={step} title={title} detail={`${detail}。默认 ${connectionWaits[step]} 秒`}>
@@ -842,7 +857,7 @@ function About({
           <div className="card">
             <Row
               title="连接日志"
-              detail="记录每次连接何时建立、何时断开、是哪一方先断开及原因，保存在本机；不含服务凭据、对话和命令内容。连接无故中断时可以对照服务端日志查看"
+              detail="每次连接何时建立、断开及原因，存在本机，不含凭据和对话。连接无故中断时用得上"
             >
               <button
                 type="button"
@@ -854,7 +869,7 @@ function About({
             </Row>
             <Row
               title="开发者工具"
-              detail="查看界面的控制台报错、检查元素或录制性能记录，反馈界面问题时用得上。在单独的窗口里打开；其中能看到当前页面的全部内容，包括对话，不要按他人的要求在里面粘贴代码"
+              detail="反馈界面问题时查看报错。里面能看到对话，别按他人要求在其中粘贴代码"
             >
               <button
                 type="button"
@@ -999,7 +1014,7 @@ export default function SettingsPage({
         )}
       </aside>
       <main className="workspace">
-        <PageHelp.Provider value={back ? null : `settings#${helpAnchor(section)}`}>
+        <PageHelp.Provider value={back ? null : (pageHelp[section] ?? 'settings')}>
           {indexOnly ? null : section === 'account' ? (
             account
           ) : section === 'claude' ? (

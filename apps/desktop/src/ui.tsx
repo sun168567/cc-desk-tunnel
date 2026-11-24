@@ -47,24 +47,52 @@ export function Page({
     </section>
   );
 }
-// One setting: what it is and does on the left, its control on the right.
+// One setting: what it is and does on the left, its control on the right. `help` is where the help explains it.
 export function Row({
   title,
   detail,
+  help,
   children,
 }: {
   title: string;
   detail?: ReactNode;
+  help?: string;
   children: ReactNode;
 }) {
   return (
     <div className="setting-row">
-      <span>
-        <strong>{title}</strong>
-        {detail && <small>{detail}</small>}
-      </span>
+      <SettingText title={title} detail={detail} help={help} />
       {children}
     </div>
+  );
+}
+// A setting's name, its "?" when the help says more of it, and its line of detail.
+export function SettingText({
+  title,
+  detail,
+  help,
+}: {
+  title: string;
+  detail?: ReactNode;
+  help?: string;
+}) {
+  return (
+    <span>
+      <strong>
+        {title}
+        {help && <HelpLink article={help} title={`${title}：说明`} className="setting-help" />}
+      </strong>
+      {detail && <small>{detail}</small>}
+    </span>
+  );
+}
+// A heading over a group of settings, with a "?" when the help explains the group.
+export function SettingsHeading({ children, help }: { children: string; help?: string }) {
+  return (
+    <h2 className="page-heading">
+      {children}
+      {help && <HelpLink article={help} title={`${children}：说明`} className="setting-help" />}
+    </h2>
   );
 }
 
