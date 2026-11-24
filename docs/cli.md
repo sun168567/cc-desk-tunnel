@@ -179,7 +179,7 @@ ccdt -p "…" --permission-mode acceptEdits --model sonnet --effort high
 | `ccdt logs <会话> [--last N]` | 最近的对话和工具调用 |
 | `ccdt stop <会话>` | 停止这一轮 |
 
-这些命令都可以加 `--json`（`-p` 和 `wait` 用 `--output-format`，还有逐条输出事件的 `stream-json`）。结果写在标准输出，说明和下一步该怎么做写在标准错误。退出码：0 完成，2 在等批准或回答，3 失败，4 已停止，5 连不上或未登录，6 到 `--timeout` 时仍在运行。`ccdt help agents` 给出写给 agent 看的完整说明。
+这些命令都可以加 `--json`（`-p` 和 `wait` 用 `--output-format`，还有逐行输出事件的 `stream-json`：回复文字、工具调用与结果、状态和最后的结果；CLI 设置开了“显示思考过程”时也有思考）。结果写在标准输出，说明和下一步该怎么做写在标准错误。退出码：0 完成，2 在等批准或回答，3 失败，4 已停止，5 连不上或未登录，6 到 `--timeout` 时仍在运行。`ccdt help agents` 给出写给 agent 看的完整说明。
 
 - **审批交给调用方**：Claude 请求批准或提问时，`ccdt -p` 和 `ccdt wait` 停下来（退出码 2），把要批准什么、为什么一并输出，由调用方用 `approve`、`deny`、`answer` 处理。这三个命令回复后像 `ccdt -p` 一样接着等到 Claude 再停下，输出和退出码相同，等待期间提供这台电脑的执行通道；加 `--bg` 只回复不等。图形客户端里同时也能处理，谁先回答算谁的。不想被问，派发时带 `--permission-mode`。
 - **长任务**：调用方把 `ccdt -p` 放进自己的后台任务里运行，结束时它的工具就会通知它；或者用 `--bg` 发出，之后 `ccdt wait`。Claude 这一轮结束、只剩它启动的后台任务时，状态是 `background`：后台任务结束后 Claude 会自动接着做，`ccdt wait` 可以等到那时。

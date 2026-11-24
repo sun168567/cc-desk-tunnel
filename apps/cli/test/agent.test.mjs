@@ -21,6 +21,7 @@ import {
   printTask,
   status,
   stop,
+  streamer,
   tell,
   wait,
 } from '../src/tasks.mjs';
@@ -212,6 +213,19 @@ test('a turn is stopped, a wait gives up at its timeout, and logs tell what happ
   // The simulation replies in two messages after it.
   assert.deepEqual(items[0], { type: 'user', text: '换个方向' });
   assert.equal(items.at(-1).type, 'assistant');
+});
+
+test('stream-json says text and reasoning as they arrive, not again when recorded whole', () => {
+  const out = [];
+  const say = streamer({ out: (line) => out.push(JSON.parse(line)) });
+  say({ type: 'thinking.delta', messageId: 'm1', text: '先看看' }, true);
+  say({ type: 'thinking.delta', messageId: 'm1', text: '先看看' }, false);
+  say({ type: 'text.delta', messageId: 'm2', text: '好的' }, true);
+  say({ type: 'text.delta', messageId: 'm2', text: '好的' }, false);
+  assert.deepEqual(out, [
+    { type: 'thinking', message_id: 'm1', text: '先看看' },
+    { type: 'text', message_id: 'm2', text: '好的' },
+  ]);
 });
 
 test('a session is named by the start of its ID, once that tells it apart', () => {

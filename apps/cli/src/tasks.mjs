@@ -66,12 +66,15 @@ function print(context, result, format) {
 }
 
 // One line of JSON per thing that happens, for a caller that shows the run as it goes. Text arrives in pieces
-// (fragments); the event recorded once a stretch is over repeats it whole and is left out here.
-function streamer(context) {
+// (fragments); the event recorded once a stretch is over repeats it whole and is left out here. Claude's reasoning
+// comes only where the CLI setting to show it is on, as in the windows.
+export function streamer(context) {
   return (payload, fragment) => {
     const line = (value) => context.out(JSON.stringify(value));
     if (payload.type === 'text.delta' && fragment)
       line({ type: 'text', message_id: payload.messageId, text: payload.text });
+    else if (payload.type === 'thinking.delta' && fragment)
+      line({ type: 'thinking', message_id: payload.messageId, text: payload.text });
     else if (payload.type === 'tool.requested')
       line({ type: 'tool', tool_id: payload.toolId, name: payload.name, input: payload.input });
     else if (payload.type === 'tool.result')
