@@ -23,6 +23,7 @@ import { setPrefs, toggled, usePrefs } from './prefs.ts';
 import { IconButton } from './ui.tsx';
 import { terminalState } from './RunStatus.tsx';
 import type { MenuPosition } from './ui.tsx';
+import HelpLink from './HelpLink.tsx';
 
 function activity(session: Session) {
   if (!session.activeRun) return ago(Date.parse(session.updatedAt));
@@ -358,7 +359,10 @@ export default function Sidebar({
         {pinned.map(renderSession)}
         {localProjects && (
           <div className="list-heading">
-            项目
+            <span className="list-heading-name">
+              项目
+              <HelpLink article="sessions" title="项目和会话是什么" />
+            </span>
             <IconButton title="添加项目" disabled={!connected || busy} onClick={addProject}>
               <Plus />
             </IconButton>
@@ -434,6 +438,7 @@ export default function Sidebar({
                 toggle: () =>
                   setPrefs((value) => ({ ...value, elsewhereOpen: !value.elsewhereOpen })),
               })}
+              <HelpLink article="devices" title="多台电脑怎么用" className="row-help" />
             </h2>
             {othersOpen &&
               others.map(([id, device]) => {

@@ -50,6 +50,7 @@ import {
 import type { FileEntry, FilePlace, FilesInfo, Preview } from './files.ts';
 import { IconButton, Menu, Modal } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
+import HelpLink from './HelpLink.tsx';
 
 // The file panel: the files of this computer, of the service and of the user's other connected computers, in a
 // tree with a preview beside it, and what is copied between them. It is as wide as the user makes it; wide
@@ -899,6 +900,7 @@ export default function FilePanel({
       <header className="file-panel-head">
         {placesBar}
         <span className="grow" />
+        <HelpLink article="files" title="文件面板怎么用" />
         <IconButton
           title="上传文件…"
           disabled={!root}
