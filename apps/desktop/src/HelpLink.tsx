@@ -1,5 +1,6 @@
 import { CircleHelp } from 'lucide-react';
 import { openHelp } from './help-nav.ts';
+import './help-link.css';
 
 // A small "?" beside a control whose name and a few words cannot say everything: it opens the help at the article
 // that explains it.

@@ -851,72 +851,6 @@
   white-space: nowrap;
 }
 
-/* The "?" beside a control elsewhere in the window. */
-.help-link {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: var(--faint);
-  cursor: pointer;
-  vertical-align: middle;
-}
-.help-link:hover {
-  background: var(--hover);
-  color: var(--accent-strong);
-}
-.help-link svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* An empty session's suggestions. */
-.empty-suggestions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: min(560px, 100%);
-  margin-top: 22px;
-}
-.empty-suggestions > small {
-  color: var(--faint);
-  font-size: 12.5px;
-}
-.empty-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-2);
-  font: inherit;
-  font-size: 13.5px;
-  text-align: left;
-  cursor: pointer;
-}
-.empty-suggestion:hover {
-  border-color: var(--focus-line);
-  color: var(--text);
-}
-.empty-suggestion svg {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  color: var(--accent);
-}
-.empty-suggestions .text-link {
-  font-size: 12.5px;
-}
-
 /* Pictures. */
 .fig {
   padding: 18px;
@@ -1516,24 +1450,104 @@
   }
 }
 
-/* The "?" beside a heading of the side column and of a menu. */
-.list-heading-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+/* What the program's version brought: a whole article, or a part added to one. */
+.help-new.changed {
+  background: var(--ok-soft);
+  color: var(--ok-text);
 }
-.project-group h2 .row-help {
-  margin-left: 2px;
-  opacity: 0;
+.help-count {
+  flex: none;
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
 }
-.project-group h2:hover .row-help,
-.project-group h2 .row-help:focus-visible {
-  opacity: 1;
+.help-nav-news > svg {
+  color: var(--accent);
 }
-.menu-heading .help-link {
-  margin-left: 4px;
-  vertical-align: -4px;
+.help-fresh {
+  position: relative;
+  margin: 22px 0 18px;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--accent);
 }
-.sidebar-brand .help-link {
-  margin-left: 2px;
+.help-fresh > :first-child + * {
+  margin-top: 6px;
+}
+.help-fresh > :last-child {
+  margin-bottom: 0;
+}
+.help-fresh-tag {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.help-h2 {
+  scroll-margin-top: 16px;
+}
+.help-flash {
+  animation: help-flash 1.6s ease-out;
+}
+@keyframes help-flash {
+  0%,
+  30% {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 8px var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.fig-map-device.more {
+  padding: 5px 10px;
+  border-style: dashed;
+  background: none;
+}
+.fig-map-device.more strong {
+  color: var(--muted);
+  font-weight: 500;
+}
+.fig-side-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fig-more {
+  padding-left: 23px;
+  color: var(--faint);
+}
+
+/* The headings of a long article, at its top. */
+.help-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 22px;
+}
+.help-toc button {
+  padding: 3px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.help-toc button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
