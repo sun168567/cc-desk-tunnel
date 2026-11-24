@@ -134,6 +134,12 @@ jobs:
         shell: bash
         env:
           SMOKE_SCREENSHOT: artifacts/macos/window-${{ matrix.arch }}.png
+      # Started again from the Applications folder, where a user keeps it: there the ccdt it carries becomes the user's.
+      - run: |
+          app=(artifacts/macos/mac*/"CC Desk Tunnel.app")
+          ditto "${app[0]}" "/Applications/CC Desk Tunnel.app"
+          node scripts/smoke-posix-package.mjs "/Applications/CC Desk Tunnel.app"
+        shell: bash
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}

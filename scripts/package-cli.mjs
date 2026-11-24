@@ -1,28 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packageName } from '../apps/cli/src/runtime.mjs';
-import {
-  addNode,
-  bundleCcdt,
-  checkCcdt,
-  copyDependency,
-  nodeRuntimes,
-  posixService,
-  WINDOWS_LAUNCHER,
-} from './package-desktop.mjs';
+import { checkCcdt, nodeRuntimes, stageCcdt } from './package-desktop.mjs';
 
 // The ccdt package of the system this runs on, a folder `ccdt` in a .zip (Windows) or .tar.gz (macOS, Linux): the
 // Node it runs with, ccdt with what it imports bundled into ccdt.mjs, and what its SSH service for Claude's commands
@@ -48,27 +29,18 @@ const staging = join(root, '.local/cli-package');
 const stage = join(staging, 'ccdt');
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
-await bundleCcdt(root, stage, { version });
+await stageCcdt(root, stage, { version });
 if (windows) {
   for (const name of ['openssh', 'pwsh'])
     cpSync(join(vendor, name), join(stage, 'vendor', name), {
       recursive: true,
       filter: (path) => !path.endsWith('runtime.json'),
     });
-  writeFileSync(join(stage, 'ccdt.cmd'), WINDOWS_LAUNCHER);
   cpSync(join(root, 'apps/cli/install/install.ps1'), join(stage, 'install.ps1'));
 } else {
-  for (const name of posixService.dependencies) copyDependency(root, stage, name);
-  mkdirSync(join(stage, 'bin'));
-  writeFileSync(
-    join(stage, 'bin', 'ccdt'),
-    '#!/bin/sh\n# ccdt with the Node it was packaged with, wherever the command is linked from.\nself=$(readlink -f "$0" 2>/dev/null || realpath "$0")\ndir=$(dirname "$(dirname "$self")")\nexec "$dir/node" "$dir/ccdt.mjs" "$@"\n',
-  );
-  chmodSync(join(stage, 'bin', 'ccdt'), 0o755);
   cpSync(join(root, 'apps/cli/install/install.sh'), join(stage, 'install.sh'));
   chmodSync(join(stage, 'install.sh'), 0o755);
 }
-await addNode(root, stage);
 cpSync(join(root, 'apps/cli/install/README.txt'), join(stage, 'README.txt'));
 
 checkCcdt(windows ? join(stage, 'ccdt.cmd') : join(stage, 'bin', 'ccdt'), version);

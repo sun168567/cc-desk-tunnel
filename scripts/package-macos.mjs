@@ -1,15 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import { posixService, stageDesktop } from './package-desktop.mjs';
+import { checkCcdt, posixService, stageCcdt, stageDesktop } from './package-desktop.mjs';
 
 // Builds the macOS package: a disk image to install from and a ZIP of the same application. It is not signed
 // with a Developer ID and not notarized, so macOS asks the user to allow it on first start (see docs/macos.md),
 // and it cannot upgrade itself. It carries no OpenSSH or shell of its own: the SSH service runs inside the
-// program, with the user's shell and the system's sftp-server.
+// program, with the user's shell and the system's sftp-server. It carries ccdt, as its own package has it, which the
+// client links into ~/.local/bin when it starts from the Applications folder (apps/desktop/electron/ccdt.mjs).
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
 if (
@@ -31,6 +32,10 @@ await stageDesktop(root, app, {
   description: 'macOS client for a native remote Claude Code session',
   ...posixService,
 });
+const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
+const ccdt = join(root, `.local/macos-package/${architecture}/ccdt`);
+rmSync(ccdt, { recursive: true, force: true });
+await stageCcdt(root, ccdt, { version, desktop: true, arch: architecture });
 // The system's icon format wants a source of 512 pixels or more; the artwork is the one of the Windows package.
 const icon = join(app, 'macos-icon.png');
 execFileSync(
@@ -59,6 +64,7 @@ const results = await electronBuild({
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
+    extraResources: [{ from: ccdt, to: 'ccdt' }],
     mac: {
       category: 'public.app-category.developer-tools',
       minimumSystemVersion: '13.0',
@@ -85,7 +91,9 @@ const results = await electronBuild({
   },
 });
 execFileSync('codesign', ['--verify', '--deep', '--strict', bundle], { stdio: 'inherit' });
-// A package of this machine's architecture is started, offline, before it counts as built.
+// A package of this machine's architecture is started, offline, before it counts as built, and so is its ccdt.
+if (architecture === process.arch)
+  checkCcdt(join(bundle, 'Contents/Resources/ccdt/bin/ccdt'), version);
 if (architecture === process.arch)
   execFileSync(process.execPath, [join(root, 'scripts/smoke-posix-package.mjs'), bundle], {
     cwd: root,

@@ -158,7 +158,7 @@ sudo cc-desk-tunnel help      # 全部命令：更换凭据、备份恢复、证
 | | 适合 | 获取 |
 | --- | --- | --- |
 | 🖥️ **图形客户端** | 按项目管理各台电脑上的会话，过程折叠成摘要 | [最新发布页](https://github.com/sun168567/cc-desk-tunnel/releases/latest)开头的表格：Windows `.exe`；macOS `.dmg`、Linux `.deb`（实验性，见 [macOS](docs/macos.md) · [Linux](docs/linux.md)） |
-| ⌨️ **终端客户端** | 即 `ccdt`：在自己的终端里用原版 Claude Code；也适合没有图形界面的机器 | Windows 图形客户端已自带；单独安装用下面的命令 |
+| ⌨️ **终端客户端** | 即 `ccdt`：在自己的终端里用原版 Claude Code；也适合没有图形界面的机器 | 图形客户端已自带；只用终端时，单独安装用下面的命令 |
 
 Windows 安装包自带 PowerShell 7、OpenSSH 和 `ccdt`，不用另装任何东西；启动后填入上一步的三项信息并连接。
 

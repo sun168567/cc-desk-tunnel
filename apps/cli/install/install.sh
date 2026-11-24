@@ -13,8 +13,19 @@ fi
 # it would have the system ask about, or refuse, the Node and the SSH library inside.
 if [ "$(uname -s)" = Darwin ]; then xattr -dr com.apple.quarantine "$target" 2>/dev/null || true; fi
 mkdir -p "$HOME/.local/bin"
-ln -sf "$target/bin/ccdt" "$HOME/.local/bin/ccdt"
-echo "ccdt 已安装到 ${target}，命令为 ~/.local/bin/ccdt。"
+# A desktop client that carries ccdt has made ~/.local/bin/ccdt its own (apps/desktop/electron/ccdt.mjs): that is the
+# ccdt the terminal runs, updated with the client, and it stays so.
+desktop=
+current=$(readlink "$HOME/.local/bin/ccdt" 2>/dev/null || true)
+case "$current" in
+*/resources/ccdt/bin/ccdt) if [ -e "$current" ]; then desktop=$current; fi ;;
+esac
+if [ -n "$desktop" ]; then
+  echo "ccdt 已安装到 ${target}。图形客户端自带的 ccdt（${desktop}）是 ~/.local/bin/ccdt，终端里用的是它，随图形客户端升级。"
+else
+  ln -sf "$target/bin/ccdt" "$HOME/.local/bin/ccdt"
+  echo "ccdt 已安装到 ${target}，命令为 ~/.local/bin/ccdt。"
+fi
 # ~/.local/bin is not on the PATH everywhere, never on macOS by default: the line that puts it there goes once into
 # the configuration file of the user's shell, marked as ccdt's, for every shell started from now on.
 case ":$PATH:" in

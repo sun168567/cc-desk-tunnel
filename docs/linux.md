@@ -14,6 +14,8 @@ sudo apt install ./CC-Desk-Tunnel-<版本>-linux-amd64.deb
 
 升级需要手动：到发布页下载新版本的安装包，用同一条命令再安装一次，设置会保留。两端版本要一致，不一致时登录页会提示去发布页下载。
 
+安装包自带终端客户端 `ccdt`，不用另外安装。应用每次启动时把 `~/.local/bin/ccdt` 链接到它自带的那份；`~/.local/bin` 不在 PATH 里时，在 shell 的配置文件（bash 为 `~/.bashrc`，zsh 为 `~/.zshrc`）里加一行带 `# ccdt` 标记的 PATH，只加一次。之后新开的终端窗口里就能运行 `ccdt`，它随安装包一起升级。已经单独安装过 `ccdt` 时，`~/.local/bin/ccdt` 改为指向自带的那份；它是你自己的文件、或链接到别处时不会被改动。卸载安装包后这个链接失效，删掉即可。
+
 其他发行版没有安装包，可以[从源码运行](macos.md#从源码运行与打包)；需要系统里有 OpenSSH 的客户端和 sftp-server。
 
 ## 与 macOS 的不同

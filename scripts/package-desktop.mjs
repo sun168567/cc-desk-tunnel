@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { builtinModules, createRequire } from 'node:module';
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -175,8 +176,41 @@ export async function bundleCcdt(root, outDir, { version, desktop = false }) {
     cpSync(join(electron, file), join(outDir, file));
 }
 
+// ccdt as a package lays it out in `directory`, on its own (scripts/package-cli.mjs) or inside a desktop package
+// (`desktop`): ccdt.mjs with the files of its SSH service, the Node it runs with, and what starts it. On Windows that
+// is ccdt.cmd, and `ccdt` for Git Bash; elsewhere bin/ccdt, with the modules of the SSH service. `arch`: of the
+// package, whose Node it gets.
+export async function stageCcdt(
+  root,
+  directory,
+  { version, desktop = false, arch = process.arch },
+) {
+  mkdirSync(directory, { recursive: true });
+  await bundleCcdt(root, directory, { version, desktop });
+  if (process.platform === 'win32') {
+    writeFileSync(join(directory, 'ccdt.cmd'), WINDOWS_LAUNCHER);
+    writeFileSync(join(directory, 'ccdt'), GIT_BASH_LAUNCHER);
+  } else {
+    for (const name of posixService.dependencies) copyDependency(root, directory, name);
+    mkdirSync(join(directory, 'bin'), { recursive: true });
+    writeFileSync(join(directory, 'bin', 'ccdt'), POSIX_LAUNCHER);
+    chmodSync(join(directory, 'bin', 'ccdt'), 0o755);
+  }
+  await addNode(root, directory, arch);
+}
+
+// Git Bash, which a Windows agent may run its commands in, as Claude Code does.
+function gitBash() {
+  const program = process.env.ProgramFiles ?? 'C:\\Program Files';
+  return [
+    join(program, 'Git', 'bin', 'bash.exe'),
+    join(program, 'Git', 'usr', 'bin', 'bash.exe'),
+  ].find((path) => existsSync(path));
+}
+
 // The check of a packaged ccdt: it starts, says its version, and fails a sign-in to nowhere with a message instead
-// of an error of its own; that loads the bundled connection.
+// of an error of its own; that loads the bundled connection. On Windows it is started from Git Bash too, where
+// there is one, by the name alone.
 export function checkCcdt(launcher, version) {
   const windows = process.platform === 'win32';
   const run = (args, input) =>
@@ -188,6 +222,17 @@ export function checkCcdt(launcher, version) {
     });
   const reported = run(['--version']).trim();
   if (reported !== `ccdt ${version}`) throw new Error(`The package's ccdt reports "${reported}".`);
+  const bash = windows && gitBash();
+  if (bash) {
+    const folder = execFileSync(bash, ['-c', 'cygpath -u "$1"', '_', dirname(launcher)], {
+      encoding: 'utf8',
+    }).trim();
+    const said = execFileSync(bash, ['-lc', 'PATH="$1:$PATH" ccdt --version', '_', folder], {
+      encoding: 'utf8',
+      env: { ...process.env, CCDT_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'ccdt-check-')) },
+    }).trim();
+    if (said !== `ccdt ${version}`) throw new Error(`ccdt in Git Bash reports "${said}".`);
+  }
   try {
     run(['login', 'wss://127.0.0.1:9/ws', '--token-stdin'], 'x'.repeat(32));
     throw new Error('A sign-in to nowhere succeeded.');
@@ -200,6 +245,25 @@ export function checkCcdt(launcher, version) {
 // What starts ccdt on Windows: its Node, beside it, running ccdt.mjs.
 export const WINDOWS_LAUNCHER =
   '@echo off\r\n"%~dp0node.exe" "%~dp0ccdt.mjs" %*\r\nexit /b %errorlevel%\r\n';
+
+// The same for Git Bash and the other shells of MSYS2 on Windows, which find ccdt.cmd only by its whole name. Their
+// runtime would turn an argument that looks like a path into a Windows one, a task such as "/review" among them: the
+// arguments go as written, and ccdt takes back the variables that said so before anything it starts sees them
+// (apps/cli/src/runtime.mjs). A program without a console of its own needs winpty where the shell gives it none
+// (`disable_pcon`), as Git for Windows has it for node; winpty would break a pipe, so only in a terminal.
+export const GIT_BASH_LAUNCHER = `#!/bin/sh
+dir=$(dirname "$0")
+script=$(cygpath -w "$dir/ccdt.mjs")
+run=
+case "\${MSYS:-}" in
+*disable_pcon*) [ -t 0 ] && [ -t 1 ] && command -v winpty >/dev/null && run=winpty ;;
+esac
+CCDT_ARGUMENTS_AS_WRITTEN=1 MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' exec $run "$dir/node.exe" "$script" "$@"
+`;
+
+// What starts ccdt elsewhere: bin/ccdt, which finds the package through the link it is reached by.
+export const POSIX_LAUNCHER =
+  '#!/bin/sh\n# ccdt with the Node it was packaged with, wherever the command is linked from.\nself=$(readlink -f "$0" 2>/dev/null || realpath "$0")\ndir=$(dirname "$(dirname "$self")")\nexec "$dir/node" "$dir/ccdt.mjs" "$@"\n';
 
 // The Node ccdt runs with, of a pinned release, wherever ccdt is packaged: on its own and in the Windows desktop
 // installer alike. From https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.
@@ -226,13 +290,13 @@ export const nodeRuntimes = {
 
 // Puts that Node, checked against the hash above, into `directory` as node.exe or node; the download is kept in
 // .tools for the next build.
-export async function addNode(root, directory) {
+export async function addNode(root, directory, arch = process.arch) {
   const windows = process.platform === 'win32';
   // The system's own tar, which reads .zip on Windows; a shell may put another one first on the PATH.
   const tar = windows
     ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
     : 'tar';
-  const [suffix, sha256] = nodeRuntimes[`${process.platform}-${process.arch}`];
+  const [suffix, sha256] = nodeRuntimes[`${process.platform}-${arch}`];
   const name = `node-v${NODE}-${suffix}`;
   const cached = join(root, '.tools', name);
   if (!existsSync(cached)) {

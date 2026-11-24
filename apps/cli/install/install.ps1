@@ -22,4 +22,13 @@ if (-not (($path -split ';') -contains $target)) {
   [Environment]::SetEnvironmentVariable('Path', ((@($path, $target) | Where-Object { $_ }) -join ';'), 'User')
   Write-Output "已把 $target 加入当前用户的 PATH。"
 }
-Write-Output "ccdt 已安装到 $target。打开一个新的终端窗口，运行 ccdt login 登录服务端。"
+# A desktop client that carries ccdt puts its own ahead of this one on the PATH (desktop-path.ps1): that is the ccdt
+# the terminal runs, updated with the client.
+$desktop = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ } |
+  ForEach-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') } |
+  Where-Object { $_ -like '*\resources\ccdt' -and (Test-Path (Join-Path $_ 'ccdt.cmd')) } | Select-Object -First 1
+if ($desktop) {
+  Write-Output "ccdt 已安装到 $target。图形客户端自带的 ccdt（$desktop）在 PATH 中排在前面，终端里用的是它，随图形客户端升级。"
+} else {
+  Write-Output "ccdt 已安装到 $target。打开一个新的终端窗口，运行 ccdt login 登录服务端。"
+}
