@@ -210,7 +210,7 @@ export const articles: Article[] = [
       },
       {
         kind: 'list',
-        since: '0.3.18',
+        since: '0.3.19',
         news: '项目由服务端保存，各端看到同一份',
         items: [
           '**各端同一份项目**：项目由服务端登记，每台电脑、浏览器和 `ccdt` 看到的一样，离线电脑的项目也在；改名各端一致。',
@@ -327,7 +327,7 @@ export const articles: Article[] = [
       },
       {
         kind: 'list',
-        since: '0.3.18',
+        since: '0.3.19',
         news: '文件面板标出服务端工作目录属于哪个会话',
         items: ['服务端上以编号命名的文件夹是会话的工作目录，旁边标出它属于哪个项目或会话。'],
       },
@@ -399,7 +399,7 @@ export const articles: Article[] = [
       },
       {
         kind: 'list',
-        since: '0.3.18',
+        since: '0.3.19',
         news: '在另一台电脑的项目里开会话，或把会话移过去',
         items: [
           '**在那台电脑上开会话**：它在线时，悬停它的项目点 +，会话就在那台电脑上执行。',
@@ -420,7 +420,7 @@ export const articles: Article[] = [
       },
       {
         kind: 'prompts',
-        since: '0.3.18',
+        since: '0.3.19',
         items: [{ text: '看看 {device} 的 D:\\work 下有哪些项目，挑最近改过的那个跑一遍测试' }],
       },
     ],
@@ -433,7 +433,7 @@ export const articles: Article[] = [
     title: '让 Claude 操作其他电脑',
     icon: Network,
     lead: '在任何会话里说出电脑的名字，Claude 就到那台电脑上执行命令，或在两台电脑之间传文件。',
-    since: '0.3.18',
+    since: '0.3.19',
     blocks: [
       {
         kind: 'prompts',
@@ -475,7 +475,7 @@ export const articles: Article[] = [
     title: '无界面的机器保持在线',
     icon: Wifi,
     lead: 'NAS、服务器、树莓派这类没有图形界面的机器，用 ccdt online 一直在线，Claude 随时能过去。',
-    since: '0.3.18',
+    since: '0.3.19',
     blocks: [
       {
         kind: 'steps',
@@ -594,7 +594,7 @@ export const articles: Article[] = [
       },
       {
         kind: 'list',
-        since: '0.3.18',
+        since: '0.3.19',
         news: '图形客户端自带 ccdt',
         items: [
           '**已经装好了**：图形客户端自带 `ccdt`，随它升级，新开一个终端窗口就能用。macOS 要先把应用放进“应用程序”打开一次。',
@@ -610,7 +610,7 @@ export const articles: Article[] = [
     title: '与其他 agent 协作',
     icon: Bot,
     lead: 'Claude 能调用你电脑上的 Codex 等 agent；其他 agent 和脚本也能把任务交给 Claude。',
-    since: '0.3.18',
+    since: '0.3.19',
     blocks: [
       { kind: 'figure', name: 'agents' },
       { kind: 'heading', text: '让 Claude 调用其他 agent' },
@@ -655,7 +655,7 @@ export const articles: Article[] = [
     title: '在编辑器里用（ACP）',
     icon: Plug,
     lead: 'Zed、JetBrains、acpx 等支持 ACP 的工具，把 ccdt acp 配成 agent，就能在编辑器里用服务端上的 Claude。',
-    since: '0.3.18',
+    since: '0.3.19',
     blocks: [
       {
         kind: 'code',
@@ -671,7 +671,7 @@ export const articles: Article[] = [
         kind: 'list',
         items: [
           '会话建在编辑器打开的文件夹对应的项目里，这里同样看得到。',
-          '审批变成编辑器里的权限请求；审批模式变成会话模式。',
+          '审批变成编辑器里的权限请求；模型、推理强度和审批模式在编辑器里直接选。',
           'ACP 没有“提问”：Claude 的问题作为回复显示，下一条消息就是回答。',
           '不能往进行中的一轮追加内容，要纠偏就取消后重发。',
         ],
@@ -745,6 +745,7 @@ export const articles: Article[] = [
     group: 'settings',
     title: '设置指南',
     icon: Settings,
+    since: '0.3.19',
     lead: '设置项多，大多数保持默认就好。先看想达到什么效果，再去改对应的几项；几项合起来才起作用的，下面各篇讲清楚怎么搭配。',
     blocks: [
       {
