@@ -82,7 +82,7 @@ export default function SettingsPanel({ client }: { client: ProxyClient }) {
           })
         }
       >
-        <option value="">{field.kind === 'toggle' ? '默认' : field.unset}</option>
+        <option value="">{field.unset}</option>
         {options.map(([option, name]) => (
           <option key={option} value={option}>
             {name}

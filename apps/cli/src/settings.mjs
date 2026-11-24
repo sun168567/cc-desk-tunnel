@@ -143,7 +143,7 @@ export function shown(entry) {
   if (kind === 'seconds') return value === null ? `${entry.fallback} 秒（默认）` : `${value} 秒`;
   if (kind === 'switch') return onOff(value);
   if (value === null || value === undefined)
-    return kind === 'choice' ? (entry.unset ?? '默认') : '默认';
+    return kind === 'toggle' || kind === 'choice' ? (entry.unset ?? '默认') : '默认';
   if (kind === 'toggle') return onOff(value);
   if (kind === 'choice')
     return entry.options.find(([option]) => option === String(value))?.[1] ?? String(value);
@@ -159,7 +159,7 @@ export function choices(entry) {
     ];
   if (entry.kind === 'toggle')
     return [
-      [null, '默认'],
+      [null, entry.unset ?? '默认'],
       [true, '开启'],
       [false, '关闭'],
     ];
