@@ -1,6 +1,7 @@
 import {
   BellRing,
   Bot,
+  Brain,
   CalendarClock,
   CircleHelp,
   Compass,
@@ -9,9 +10,12 @@ import {
   Gauge,
   Hourglass,
   Laptop,
+  Lock,
   MessagesSquare,
   MonitorSmartphone,
+  Moon,
   Network,
+  NotebookPen,
   Plug,
   Rocket,
   Server,
@@ -262,14 +266,15 @@ export const articles: Article[] = [
     group: 'daily',
     title: '审批模式',
     icon: ShieldCheck,
-    lead: '决定 Claude 动手前问不问你。在输入框左下角切换，[[cycleMode]] 轮换。',
+    lead: '决定 Claude 动手前问不问你，在输入框左下角切换。',
     blocks: [
       { kind: 'figure', name: 'modes' },
       {
         kind: 'list',
         items: [
           '**大多数时候用自动审批**（默认）：由 Claude Code 自己判断风险，只在必要时问你。',
-          '**无人值守时一定用自动审批**：长任务、定时任务用别的模式，会停在审批处一直等人。',
+          '**无人值守时用自动审批**：别的模式会停在审批处一直等人。自动审批偶尔也会问，搭配[“不等审批，直接拒绝”](#unattended#deny)就不会停。',
+          '**切换**：点输入框左下角，或按 [[cycleMode]] 轮换。',
           '**要问你时**，对话里出现审批卡片，写着要做什么、在哪台电脑上做。手机和浏览器里也能批准。',
         ],
       },
@@ -287,7 +292,7 @@ export const articles: Article[] = [
         text: '除了安全拦截，什么都不问，包括删除文件和在你的电脑上执行任意命令。默认不出现，要先在[常规](settings:general)里允许；只建议在测试机或虚拟机上用。',
       },
     ],
-    related: ['conversation', 'remote-ops', 'browser'],
+    related: ['conversation', 'unattended', 'permissions'],
     words: '审批 权限 允许 拒绝 自动 手动 计划 接受编辑 绕过 bypass 安全拦截',
   },
   {
@@ -365,11 +370,11 @@ export const articles: Article[] = [
         items: [
           '由这台电脑上的客户端到点发送：客户端要开着并已连接。关窗口只是收到托盘，不影响。',
           '晚了 10 分钟还发不出的那一次跳过，并通知你。',
-          '用自动审批，否则会停在审批处等人。',
+          '用自动审批，否则会停在审批处等人；怎么让它一路做完见[让任务自己跑完](#unattended)。',
         ],
       },
     ],
-    related: ['approval', 'background'],
+    related: ['unattended', 'approval', 'background'],
     words: '定时 计划任务 每天 每周 cron 周报 自动',
   },
 
@@ -693,36 +698,15 @@ export const articles: Article[] = [
         items: [
           '**5 小时额度紧张时用 `ccdt`**：图形客户端经官方 Agent SDK 运行。据社区实测，同样的用量，计入 5 小时额度的比例约为交互式 CLI 的两倍；每周额度不受影响。见 [ccdt 的推荐用法](#ccdt)。',
           '**输入框旁显示额度**：在[外观](settings:appearance)里打开。',
+          '**快速模式不走套餐额度**：订阅账号开了它，直接从额外用量扣费，见[快速模式](#model-settings#fast)。',
           '**调用日志**：每次请求的模型、Token 和等价费用；金额按 API 价格估算，不是账单。',
           '**额度是空的**：它来自 Claude Code 的一次运行，发一条消息，或在账号页里刷新。',
         ],
       },
       settingsOf('account', '账号与额度'),
     ],
-    related: ['ccdt', 'context', 'account'],
+    related: ['ccdt', 'context', 'model-settings'],
     words: '额度 用量 5 小时 每周 限额 费用 token 调用日志 省',
-  },
-  {
-    id: 'context',
-    group: 'account',
-    title: '上下文与缓存',
-    icon: Hourglass,
-    lead: '会话空闲约 1 小时，提示缓存就过期；之后的第一条消息要按全价重读整段上下文。',
-    blocks: [
-      { kind: 'figure', name: 'cache' },
-      {
-        kind: 'list',
-        items: [
-          '**自动压缩**：开启后，服务端在缓存过期前把会话压缩好，回来时更省。',
-          '不开时，快过期会在输入框旁提醒。',
-          '**手动压缩**：输入 `/compact`，或从 `/` 命令菜单里选。',
-          '输入框上方的上下文占用，显示这个会话用了多少。',
-        ],
-      },
-      settingsOf('context', '上下文与缓存'),
-    ],
-    related: ['quota', 'conversation'],
-    words: '缓存 过期 压缩 compact 上下文 空闲 1 小时',
   },
   {
     id: 'account',
@@ -757,114 +741,440 @@ export const articles: Article[] = [
     group: 'settings',
     title: '设置指南',
     icon: Settings,
-    lead: '设置按保存在哪里分成三组。看分组就知道改了影响谁；拿不准的保持默认。',
+    lead: '设置项多，大多数保持默认就好。先看想达到什么效果，再去改对应的几项；几项合起来才起作用的，下面各篇讲清楚怎么搭配。',
     blocks: [
       {
         kind: 'table',
-        head: ['分组', '影响范围'],
+        head: ['想要', '看这里'],
         rows: [
-          ['**本机**', '只影响这台电脑上的这个客户端'],
-          ['**服务端**', '保存在服务端，对连到它的所有电脑生效（Shell 只对这台电脑）'],
-          ['**Claude Code**', '服务器上 Claude Code 自己的设置，所有会话和 `ccdt` 共用'],
+          ['离开一两个小时，回来接着聊也不贵', '[缓存与压缩](#context)'],
+          ['夜里、出门时让任务自己跑完', '[让任务自己跑完](#unattended)'],
+          [
+            '看到 Claude 在想什么；更快；主模型忙时不中断',
+            '[思考、速度与备用模型](#model-settings)',
+          ],
+          ['Claude 记住我的习惯，照我的规矩提交代码', '[记忆与说明](#memory)'],
+          ['命令输出被截断、连接总超时、脚本用哪种 Shell', '[在你电脑上执行](#execution)'],
+          ['限制 Claude 能改什么', '[权限相关的开关](#permissions)'],
         ],
       },
       {
         kind: 'callout',
         tone: 'tip',
         title: '找设置',
-        text: '设置页左上角的搜索框按功能找，比如“托盘”“额度”“压缩”。每个设置页标题旁的 ? 跳到这里对应的一段。',
+        text: '设置页左上角的搜索框按功能找，比如“托盘”“额度”“压缩”。难懂的设置旁有 ?，点开就是讲它的那一段。',
       },
-      { kind: 'heading', text: '常规', id: 'general' },
+      { kind: 'heading', text: '设置分三组', id: 'scopes' },
       {
-        kind: 'list',
-        items: [
-          '**关闭窗口时留在后台**：默认开，关窗口只是收到托盘，任务继续。',
-          '**普通会话的文件夹**：“新建会话”在哪里建工作目录。',
-          '**对话记录**：读过的对话缓存在本机，可以看占用、清理。',
-          '**允许绕过权限**：打开后，审批模式里才出现“绕过权限”。',
+        kind: 'table',
+        head: ['分组', '改了影响谁'],
+        rows: [
+          ['**本机**', '只影响这台电脑上的这个客户端'],
+          ['**服务端**', '连到这个服务端的所有电脑（Shell 只对这台电脑）'],
+          ['**Claude Code**', '服务器上 Claude Code 自己的设置，所有会话和 `ccdt` 共用'],
         ],
       },
-      settingsOf('general', '打开常规'),
-      { kind: 'heading', text: '外观', id: 'appearance' },
+      { kind: 'heading', text: '有几项 CLI 设置只在 ccdt 里起作用', id: 'cli' },
       {
-        kind: 'list',
-        items: [
-          '主题；对话里的工作步骤展示多少。',
-          '**会话栏**和**回复小结**：输入框下方那一行、每轮回复末尾，显示哪些数字。',
-          '**在输入框旁显示额度**：5 小时和每周额度，一眼可见。',
+        kind: 'p',
+        text: 'CLI 设置和 Claude Code 的 `/config` 是同一份，从下一次运行起生效。其中几项是官方终端界面的功能，图形客户端里的会话用不上：',
+      },
+      {
+        kind: 'table',
+        head: ['设置', '在图形客户端里'],
+        rows: [
+          ['额度用尽后自动继续', '这一轮随额度用尽结束；可以[到点发一句“继续”](#unattended#limit)'],
+          ['提问无人回答时', '提问卡片一直等你回答'],
+          ['文件检查点', '不记录；图形客户端里没有 `/rewind`'],
+          ['触发安全拦截时换模型（关闭时）', '不会暂停让你选，这一轮出错结束'],
         ],
       },
-      settingsOf('appearance', '打开外观'),
-      { kind: 'heading', text: '连接', id: 'connection' },
+      settingsOf('claude', '打开 CLI 设置'),
+    ],
+    related: ['context', 'unattended', 'model-settings'],
+    words: '设置 选项 配置 本机 服务端 Claude Code CLI config 默认 ccdt',
+  },
+  {
+    id: 'context',
+    group: 'settings',
+    title: '缓存与压缩',
+    icon: Hourglass,
+    lead: 'Claude 每一轮都要把整个会话重读一遍。有缓存时重读很便宜；缓存过期或被打断，下一轮就按全价重读。好几项设置都围绕这件事。',
+    blocks: [
+      { kind: 'figure', name: 'cache' },
+      { kind: 'heading', text: '缓存是怎么回事', id: 'how' },
+      {
+        kind: 'p',
+        text: '每发一条消息，Claude Code 都把系统提示、说明文件、之前的每条消息和工具结果整段再发一遍。和上一轮相同的前半段从缓存里读，价格约为正常输入的十分之一；缓存没了，这一整段就要重新处理、重新写入。会话越长，离开后回来的第一轮越慢、越贵。',
+      },
       {
         kind: 'list',
         items: [
-          '**记住凭据、自动登录**：打开程序直接连上。',
-          '**登录过的服务**：改备注名或删掉；“新的登录窗口”同时连另一个服务端。',
-          '**连接等待时间**：网络或电脑慢、总是超时才调大，平时不用动。',
+          '**缓存会过期**：最后一次请求后 5 分钟或 1 小时没有新请求，就过期。每次请求都重新计时。',
+          '**这些操作会让缓存作废**：换模型、开关快速模式、接入或移除 MCP 服务、压缩。老一些的模型换推理强度也会。模型最好在会话开头选定。',
+          '**改说明文件不会**，但正在进行的会话也读不到新内容，压缩或新建会话后才用上。',
         ],
       },
-      settingsOf('connection', '打开连接'),
-      { kind: 'heading', text: '通知与快捷键', id: 'notifications' },
+      { kind: 'heading', text: '缓存时长：5 分钟还是 1 小时', id: 'ttl' },
+      {
+        kind: 'p',
+        text: '1 小时的缓存撑得过午饭、开会这样的空档，代价是写入更贵：按 API 价格，写入 1 小时缓存是正常输入的 2 倍，5 分钟的是 1.25 倍。一直连续对话、从不停下超过 5 分钟的，1 小时只是多花。',
+      },
+      {
+        kind: 'table',
+        head: ['请求', '默认'],
+        rows: [
+          ['订阅账号的主对话', '1 小时'],
+          ['订阅账号的子代理、工作流、压缩等', '5 分钟'],
+          ['API Key、第三方接口', '都是 5 分钟'],
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'note',
+        title: '套餐额度用完后，默认会变成 5 分钟',
+        text: '超出套餐额度、开始用额外用量（usage credits）付费时，Claude Code 把主对话改用 5 分钟缓存。想这时也保留 1 小时，把[“提示缓存时长”](settings:claude)明确设为 1 小时。',
+      },
+      {
+        kind: 'p',
+        text: '“子任务的提示缓存时长”管子代理、工作流、压缩这些主对话之外的请求，一般保持默认。',
+      },
+      { kind: 'heading', text: '离开前自动压缩', id: 'idle' },
+      {
+        kind: 'p',
+        text: '压缩把长长的会话换成一份摘要，之后每轮重读的只是摘要。趁缓存还在时压缩，读的是缓存，便宜；过期后再压缩，就得按全价读一遍。[上下文与缓存](settings:context)里的自动压缩就是替你抢在过期前做这件事：会话空闲到设定时间，服务端自己压缩，你的电脑和客户端不用在线。',
+      },
       {
         kind: 'list',
         items: [
-          '**通知**：完成、失败、等待审批、提问、定时任务未发出、连接中断，每一类可以单独关；可开提示音。',
-          '**快捷键**：查看和修改，也可以全部关掉。',
+          '**默认关**，在[上下文与缓存](settings:context)里打开。',
+          '**只对 1 小时缓存的会话有效**。“提示缓存时长”设成 5 分钟，或用 API Key 登录时，缓存等不到压缩就过期了，自动压缩不会发生。',
+          '**空闲多久后压缩**：默认 50 分钟。越接近 60 分钟，你中途回来、压缩白做的可能越小，但留给它的余量也越少。',
+          '**上下文至少**：小会话就算全价重读也不贵，不值得压缩。',
+          '**压缩是一次真实请求**，计入额度，摘要也会丢掉细节。离开一会儿就回来的，用不着它。',
+          '**关掉时**，快过期时在会话里提醒你，压不压你来定。已经过期的长会话，先切到便宜些的模型再压缩，或者干脆新开一个。',
+          '`ccdt` 里的会话由 Claude Code 自己压缩：开关和上下文大小用这里的，时间固定在约 54 分钟。',
+        ],
+      },
+      { kind: 'heading', text: '上下文快满时的压缩', id: 'window' },
+      {
+        kind: 'p',
+        text: '这是另一回事：会话长到接近模型的上下文上限时，Claude Code 自动压缩后接着做。由 [CLI 设置](settings:claude)里的“自动压缩上下文”控制，默认开。',
+      },
+      {
+        kind: 'list',
+        items: [
+          '**自动压缩窗口**：上下文到多大就压缩，最小 10 万。设小一些，每轮重读的少，更省、Claude 也更专注；代价是更常压缩、丢细节。1M 上下文的模型可以设在 30 万～50 万，免得会话越聊越贵。',
+          '**提前准备压缩摘要**：后台先把摘要算好，到压缩时少等一会儿。',
+          '**关掉“自动压缩上下文”**，上下文满了只能手动压缩或新开会话；`ccdt` 里的空闲压缩也随之关闭。',
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'tip',
+        title: '手动压缩挑时机',
+        text: '在两件事之间输入 `/compact`，比做到一半被自动压缩好。走错了路、想整段放弃时，新开一个会话比压缩更干净。',
+      },
+      { kind: 'heading', text: '从数字看缓存', id: 'numbers' },
+      {
+        kind: 'p',
+        text: '回复小结和会话栏可以显示“缓存读取”和“缓存写入”，在[外观](settings:appearance)里选。',
+      },
+      {
+        kind: 'list',
+        items: [
+          '**读取远大于写入**：缓存在起作用。',
+          '**某一轮写入特别大**：缓存刚作废，通常是离开太久、换了模型或刚压缩过。',
+          '**每一轮写入都很大**：有什么在不断打断缓存，比如来回换模型。',
         ],
       },
       {
         kind: 'actions',
         items: [
-          { label: '打开通知', target: { settings: 'notifications' } },
-          { label: '打开快捷键', target: { settings: 'shortcuts' } },
+          { label: '打开上下文与缓存', target: { settings: 'context' } },
+          { label: '打开 CLI 设置', target: { settings: 'claude' } },
         ],
       },
-      { kind: 'heading', text: '上下文与缓存', id: 'context' },
+    ],
+    related: ['quota', 'model-settings', 'conversation'],
+    words:
+      '缓存 过期 压缩 compact 上下文 空闲 1 小时 5 分钟 ttl 提示缓存 自动压缩 窗口 缓存读取 缓存写入 省',
+  },
+  {
+    id: 'unattended',
+    group: 'settings',
+    title: '让任务自己跑完',
+    icon: Moon,
+    lead: '长任务、夜里的任务、定时任务，最怕停在一个问题上干等。几项设置配合起来，任务能自己走到底。',
+    blocks: [
+      { kind: 'heading', text: '任务会停在哪里', id: 'stops' },
       {
-        kind: 'p',
-        text: '缓存过期前自动压缩：空闲多久后压缩、上下文至少多大才值得压缩。为什么要压缩见[上下文与缓存](#context)。',
+        kind: 'table',
+        head: ['停在', '怎么办'],
+        rows: [
+          ['等你审批', '用**自动审批**，再打开[“不等审批，直接拒绝”](#unattended#deny)'],
+          ['Claude 提问', '在任务里写明不要提问，见[下文](#unattended#question)'],
+          ['额度用尽', '[到点发一句“继续”](#unattended#limit)'],
+          ['你的电脑睡了或断了', '客户端开着时电脑不会自动睡眠；离线超过 5 分钟任务才停下'],
+        ],
       },
-      settingsOf('context', '打开上下文与缓存'),
-      { kind: 'heading', text: 'Shell', id: 'shell' },
+      { kind: 'heading', text: '不等审批，直接拒绝', id: 'deny' },
       {
-        kind: 'p',
-        text: 'Claude 在这台 Windows 电脑上写脚本时，优先用 PowerShell 还是 Git Bash。装了 Git for Windows 才有 Git Bash。',
+        kind: 'list',
+        items: [
+          '[CLI 设置](settings:claude)里打开后，要你批准的调用不再等你，立即拒绝；Claude 知道被拒，会换个做法，或者在最后告诉你。',
+          '**和自动审批一起用**：允许规则和自动审批照常先判断，自动审批放行它认为安全的，剩下的才被拒绝。手动审批下几乎什么都做不成。',
+          '**对所有会话生效**，包括 `ccdt`。任务跑完记得关掉，不然你在旁边时它也不会再问你。',
+        ],
       },
-      settingsOf('shell', '打开 Shell'),
-      { kind: 'heading', text: '浏览器访问', id: 'web' },
+      { kind: 'heading', text: 'Claude 提问', id: 'question' },
       {
         kind: 'p',
-        text: '开关、访问地址、HTTPS 证书、两步验证和反向代理。怎么用见[浏览器与手机](#browser)。',
+        text: '图形客户端里的提问卡片会一直等你回答。无人值守的任务，在提示词里说清楚做到哪一步、不要提问：',
       },
-      settingsOf('web', '打开浏览器访问'),
-      { kind: 'heading', text: '账号与额度', id: 'account' },
       {
-        kind: 'p',
-        text: '登录或退出 Claude 账号，看额度、重置时间和调用日志。“运行中每分钟读取一次额度”让额度保持最新。见[额度与用量](#quota)。',
+        kind: 'prompts',
+        items: [
+          {
+            text: '把 docs 目录里过时的说明都改掉，改完再停。中途不要问我，拿不准的按最保守的做法，最后把这些地方列给我。',
+          },
+        ],
       },
-      settingsOf('account', '打开账号与额度'),
-      { kind: 'heading', text: 'CLI 设置', id: 'claude' },
       {
         kind: 'p',
-        text: 'Claude Code 自己的常用设置，和它的 `/config` 是同一份：自动压缩、思考、快速模式、自动记忆、备用模型、回复语言、提交署名等。每项写着默认是什么。',
+        text: '`ccdt` 里还可以用 CLI 设置“提问无人回答时”：过一会儿带着已选的选项自己继续。',
+      },
+      { kind: 'heading', text: '额度用尽', id: 'limit' },
+      {
+        kind: 'p',
+        text: '图形客户端里，额度用尽这一轮就结束了。想让它在额度重置后接着做，直接跟 Claude 说，它会建一个[定时任务](#schedules)：',
+      },
+      {
+        kind: 'prompts',
+        items: [{ text: '额度重置以后，在这个会话里发一句“继续刚才的任务”' }],
+      },
+      {
+        kind: 'p',
+        text: '重置时间在[账号与额度](settings:account)里看。`ccdt` 里不用这样做：CLI 设置“额度用尽后自动继续”默认开，终端会等到重置后接着做。',
+      },
+      { kind: 'heading', text: '一套可靠的搭配', id: 'recipe' },
+      {
+        kind: 'steps',
+        items: [
+          { title: '审批模式选自动审批', text: '在输入框左下角切换。' },
+          {
+            title: '打开“不等审批，直接拒绝”',
+            text: '跑完记得关掉。',
+            action: { label: 'CLI 设置', target: { settings: 'claude' } },
+          },
+          { title: '提示词说清终点', text: '做到哪一步为止，拿不准时怎么办，最后汇报什么。' },
+          {
+            title: '客户端开着',
+            text: '关窗口只是收到托盘；完成和失败的通知开着，回来一眼看到结果。',
+            action: { label: '通知设置', target: { settings: 'notifications' } },
+          },
+        ],
+      },
+    ],
+    related: ['schedules', 'approval', 'background'],
+    words: '无人值守 夜里 长任务 定时 自动 不等审批 直接拒绝 提问 超时 额度用尽 继续 睡眠',
+  },
+  {
+    id: 'model-settings',
+    group: 'settings',
+    title: '思考、速度与备用模型',
+    icon: Brain,
+    lead: '这几项决定 Claude 想多深、跑多快、主模型忙时怎么办。最容易误会的两点：新模型上关掉“思考”没有用；订阅账号的快速模式要另外付费。',
+    blocks: [
+      { kind: 'heading', text: '思考', id: 'thinking' },
+      {
+        kind: 'list',
+        items: [
+          '**思考**：只对老一些的模型有用。Opus 5.5、Sonnet 5.5、Haiku 5.5 和 Fable 系列总会思考，关掉也照样想。',
+          '**想让它少想、快一点**：在输入框左下角的“模型与推理强度”里调低强度，每个会话可以不同。',
+          '**显示思考过程**：只决定你看不看得到思考的摘要，Claude 想多少、用多少额度都不变。想知道它为什么这样做时打开，对话里会多出可以展开的思考。',
+        ],
+      },
+      { kind: 'heading', text: '快速模式', id: 'fast' },
+      {
+        kind: 'list',
+        items: [
+          '输出明显更快，每个 Token 也更贵。只有部分模型支持，比如 Opus 5.5、Fable 5.2。',
+          '**订阅账号不走套餐额度**：快速模式直接从额外用量（usage credits）扣费，套餐额度还有剩也一样；没开通额外用量就用不了。',
+          '中途开关会让下一轮全价重读。要用，就在会话开头打开。',
+          '额外用量用完时，自动退回普通速度继续。',
+        ],
+      },
+      { kind: 'heading', text: '主模型忙或出问题时', id: 'fallback' },
+      {
+        kind: 'list',
+        items: [
+          '**备用模型**：主模型过载或不可用时，按顺序换下一个，把这一轮做完；下一条消息又先试主模型。不填时只重试主模型，还不行就报错。',
+          '最多 3 个，用逗号分开，比如 `sonnet, haiku`。换过去的那一轮没有缓存，会贵一些。',
+          '**触发安全拦截时换模型**：Claude Code 的安全检查偶尔会拦下一条请求，默认换一个模型继续。关掉后，图形客户端里这一轮出错结束；`ccdt` 里会暂停，让你选换模型还是改提示词。',
+        ],
       },
       settingsOf('claude', '打开 CLI 设置'),
-      { kind: 'heading', text: '全局说明', id: 'instructions' },
-      {
-        kind: 'p',
-        text: '服务器上 Claude Code 的用户级 `CLAUDE.md`，每个会话都会读。你电脑上项目里的 `CLAUDE.md`、`AGENTS.md` 不会自动读，需要时让 Claude 去读。',
-      },
-      settingsOf('instructions', '打开全局说明'),
-      { kind: 'heading', text: '关于与更新', id: 'about' },
-      {
-        kind: 'p',
-        text: '两端的版本和升级；反馈问题时用到的连接日志和开发者工具。见[升级](#upgrade)。',
-      },
-      settingsOf('about', '打开关于与更新'),
     ],
-    related: ['first-steps', 'background', 'upgrade'],
-    words: '设置 选项 配置 本机 服务端 Claude Code 常规 外观 连接 通知 快捷键 Shell CLI 全局说明',
+    related: ['context', 'quota'],
+    words:
+      '思考 thinking 推理强度 effort 显示思考 快速模式 fast 额外用量 usage credits 备用模型 fallback 安全拦截 换模型',
+  },
+  {
+    id: 'memory',
+    group: 'settings',
+    title: '记忆与说明',
+    icon: NotebookPen,
+    lead: 'Claude 的每个会话都从空白开始，靠说明文件和自动记忆知道你的习惯。它们放在哪里，决定了 Claude 记得什么。',
+    blocks: [
+      {
+        kind: 'table',
+        head: ['', '在哪里，谁会读'],
+        rows: [
+          [
+            '**全局说明**',
+            '服务器上的用户级 `CLAUDE.md`，每个会话开头都读。在[全局说明](settings:instructions)里编辑',
+          ],
+          [
+            '**项目里的 `CLAUDE.md`、`AGENTS.md`**',
+            '在你电脑的项目文件夹里。Claude Code 在服务器上，**不会自动读**',
+          ],
+          ['**自动记忆**', 'Claude 自己记的笔记，在服务器上按项目保存'],
+        ],
+      },
+      { kind: 'heading', text: '让 Claude 读你项目里的说明', id: 'project' },
+      {
+        kind: 'p',
+        text: '省事的做法是在全局说明里写一句，以后每个会话都会照做：',
+      },
+      {
+        kind: 'code',
+        label: '写进全局说明',
+        text: '进入一个项目后，先读项目根目录的 CLAUDE.md 或 AGENTS.md（如果有），按其中的约定工作。',
+      },
+      { kind: 'heading', text: '自动记忆', id: 'auto' },
+      {
+        kind: 'list',
+        items: [
+          'Claude 在工作中记下你纠正过的做法、偏好和项目情况，下次会话开头读入。',
+          '**按项目分开**：同一台电脑上同一个项目文件夹的会话共用一份；普通会话各有各的。聊过的会话移到别的项目，仍用原来项目的记忆。',
+          '想让它记住什么，直接说“记住：……”；记错了，说“把关于……的记忆删掉”。',
+          '“后台整理记忆”在空闲时归并、整理已有的记忆。关掉“自动记忆”，Claude 既不读也不写这些笔记。',
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'note',
+        title: '改了说明什么时候生效',
+        text: '说明在会话开头读一次。中途改了，正在进行的会话读不到，压缩或新建会话后才用上。',
+      },
+      { kind: 'heading', text: '回复语言与 Git 习惯', id: 'habits' },
+      {
+        kind: 'list',
+        items: [
+          '**回复语言**：原样交给 Claude，作为“总是用这种语言回复”的要求，写 `chinese` 或 `中文` 都行。',
+          '**提交与 PR 的署名**：默认在提交信息和 PR 描述里加上 Claude 的署名，选“不加署名”去掉。',
+          '**内置的提交与 PR 流程说明**：官方附带的提交、开 PR 的做法和仓库状态。有自己的规范时关掉它，把规范写进全局说明。',
+        ],
+      },
+      {
+        kind: 'actions',
+        items: [
+          { label: '打开全局说明', target: { settings: 'instructions' } },
+          { label: '打开 CLI 设置', target: { settings: 'claude' } },
+        ],
+      },
+    ],
+    related: ['conversation', 'sessions'],
+    words:
+      '记忆 memory 自动记忆 CLAUDE.md AGENTS.md 全局说明 说明文件 记住 忘掉 回复语言 中文 署名 git 提交 PR',
+  },
+  {
+    id: 'execution',
+    group: 'settings',
+    title: '在你电脑上执行',
+    icon: SquareTerminal,
+    lead: 'Claude 在你电脑上读文件、改文件、跑构建，都是经执行通道运行命令完成的。Shell、命令输出上限和连接等待时间，决定这条路走得顺不顺。',
+    blocks: [
+      { kind: 'heading', text: 'Shell：PowerShell 还是 Git Bash', id: 'shell' },
+      {
+        kind: 'list',
+        items: [
+          '不指定时 Claude 按任务选。选了也只是优先，任务明显适合另一种时它仍会换。',
+          '**PowerShell**：操作 Windows 本身（服务、注册表、进程）更顺。',
+          '**Git Bash**：熟悉 Linux 命令、项目里多是 shell 脚本时。先装 Git for Windows，重新连接后才能选。',
+          'PowerShell 7 随客户端自带。这一项每台 Windows 电脑分别设置，从每个会话的下一条消息起生效。',
+        ],
+      },
+      settingsOf('shell', '打开 Shell'),
+      { kind: 'heading', text: '命令输出上限', id: 'output' },
+      {
+        kind: 'list',
+        items: [
+          '一条命令的输出超过上限，多出的部分存成文件，Claude 只看到开头和文件位置，要再去读。',
+          '构建日志、测试结果常被截断、Claude 反复去翻文件时调大。上限越大，每次输出占的上下文越多，会话更快变长。',
+          '范围 4K～128K 字符，默认 30K。',
+        ],
+      },
+      { kind: 'heading', text: '工具搜索与 Artifact', id: 'tools' },
+      {
+        kind: 'list',
+        items: [
+          '**工具搜索**：工具的说明不再每次全部发出，用到时再查。接了很多 MCP 工具时能省下大量上下文。官方账号默认开；第三方接口要支持才能开。',
+          '**Artifact 网页**：Claude 可以把文档、方案、图表发布成 claude.ai 上只有你能看的网页，需要时再分享。用不上可以关掉。',
+        ],
+      },
+      { kind: 'heading', text: '连接等待时间', id: 'waits' },
+      {
+        kind: 'list',
+        items: [
+          '连上服务器、启动本机的 SSH 服务、执行通道就绪，三步各有时限，超时就重试。',
+          '**大多数电脑不用改**。公司域账号连不上域控制器，或安全软件扫描很慢时，第二步会久一些；总是超时才调大。',
+          '“执行通道就绪”至少比“本机 SSH 服务启动”多 35 秒。只影响这台电脑。',
+        ],
+      },
+      settingsOf('connection', '打开连接'),
+    ],
+    related: ['remote-ops', 'devices', 'troubleshoot'],
+    words:
+      'shell powershell git bash 命令输出 截断 上限 工具搜索 mcp artifact 连接等待 超时 域控制器 安全软件',
+  },
+  {
+    id: 'permissions',
+    group: 'settings',
+    title: '权限相关的开关',
+    icon: Lock,
+    lead: '问不问你由审批模式决定。下面几个开关各管一小块，容易高估它们的作用。',
+    blocks: [
+      { kind: 'heading', text: '允许绕过权限', id: 'bypass' },
+      {
+        kind: 'p',
+        text: '在[常规](settings:general)里打开后，审批模式里才出现“绕过权限”，只影响这台电脑。选了它，除了 Claude Code 安全拦截，什么都不问，包括删除文件、在你电脑上执行任意命令。只在测试机或虚拟机上用。',
+      },
+      { kind: 'heading', text: '禁止在工作目录外写文件', id: 'writes' },
+      {
+        kind: 'list',
+        items: [
+          '它限制的是 Claude Code 的写文件、编辑工具，这些工具只作用于**服务器上的文件**。',
+          '**它挡不住对你电脑的修改**：Claude 在你电脑上改文件经命令完成，不受这个开关限制。要防误改，靠审批模式。',
+          '开启后，这些工具也不能改 Claude Code 自己的设置文件；Claude 的记忆和计划文件不受影响。',
+        ],
+      },
+      { kind: 'heading', text: '文件检查点', id: 'checkpoints' },
+      {
+        kind: 'p',
+        text: '编辑前留快照，供 `/rewind` 撤回。只在 `ccdt` 里有用，也只覆盖服务器上用编辑工具改的文件。你电脑上的项目用 Git 管理更可靠。',
+      },
+      {
+        kind: 'callout',
+        tone: 'note',
+        title: '还有两条',
+        text: '“不等审批，直接拒绝”见[让任务自己跑完](#unattended#deny)。Claude Code 安全拦截在任何模式下都会问，见[审批模式](#approval)。',
+      },
+      settingsOf('claude', '打开 CLI 设置'),
+    ],
+    related: ['approval', 'safety'],
+    words: '权限 绕过 bypass 工作目录 写文件 检查点 rewind 撤回 拦截',
   },
 
   // 维护与安全

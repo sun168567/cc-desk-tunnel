@@ -145,13 +145,13 @@ export default function Figure({
             <span className="warm" />
             <span className="cold" />
             <i className="fig-cache-mark start" style={{ left: '0%' }} />
-            <i className="fig-cache-mark compact" style={{ left: '62%' }} />
+            <i className="fig-cache-mark compact" style={{ left: '60%' }} />
             <i className="fig-cache-mark expire" style={{ left: '72%' }} />
           </div>
           <div className="fig-cache-labels">
             <span style={{ left: '0%' }}>最后一条消息</span>
-            <span className="compact" style={{ left: '62%' }}>
-              自动压缩
+            <span className="compact" style={{ left: '60%' }}>
+              空闲 50 分钟 · 自动压缩
             </span>
             <span className="expire" style={{ left: '72%' }}>
               约 1 小时 · 缓存过期
