@@ -158,7 +158,7 @@ Install either client or both. Each must be the **same version** as the service.
 | | Good for | Get it |
 | --- | --- | --- |
 | 🖥️ **Desktop client** | Managing sessions on all your computers by project, the process folded into summaries | The table at the top of the [latest release](https://github.com/sun168567/cc-desk-tunnel/releases/latest): Windows `.exe`; macOS `.dmg` and Linux `.deb` (experimental, see [macOS](docs/macos.md) · [Linux](docs/linux.md), in Chinese) |
-| ⌨️ **Terminal client** | `ccdt`: the official Claude Code in your own terminal; also machines without a desktop | Included with the Windows desktop client; install it on its own with the commands below |
+| ⌨️ **Terminal client** | `ccdt`: the official Claude Code in your own terminal; also machines without a desktop | Included with the desktop client; to use only the terminal, install it on its own with the commands below |
 
 The Windows installer bundles PowerShell 7, OpenSSH and `ccdt`; nothing else is needed. Start it, enter the three values from step 1 and connect.
 
