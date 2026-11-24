@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   LoaderCircle,
   MessageSquare,
+  CornerDownRight,
   Pencil,
   Plus,
   Search,
@@ -809,6 +810,9 @@ export default function Conversation({
   findRequest,
   here,
   openInFiles,
+  suggestions,
+  suggest,
+  moreExamples,
 }: {
   session: Session | undefined;
   // This window can open the files of the session's project: a desktop on the computer they are on.
@@ -821,6 +825,10 @@ export default function Conversation({
   busy: boolean;
   newSession: () => void;
   loadEarlier: () => Promise<void>;
+  // What an empty session offers to say first; one picked goes into the input box.
+  suggestions?: string[];
+  suggest?: (text: string) => void;
+  moreExamples?: () => void;
   findRequest: number;
   // Ends one background task of the run, or the run with all of them.
   stopTask: (taskId: string) => void;
@@ -1318,6 +1326,27 @@ export default function Conversation({
                 <MessageSquare />
                 <h2>{session.title}</h2>
                 <span className="empty-project">{session.projectPath}</span>
+                {suggestions && suggest && suggestions.length > 0 && (
+                  <div className="empty-suggestions">
+                    <small>可以这样开始</small>
+                    {suggestions.map((text) => (
+                      <button
+                        type="button"
+                        className="empty-suggestion"
+                        key={text}
+                        onClick={() => suggest(text)}
+                      >
+                        <CornerDownRight />
+                        {text}
+                      </button>
+                    ))}
+                    {moreExamples && (
+                      <button type="button" className="text-link" onClick={moreExamples}>
+                        更多用法
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             <LinkPlace.Provider value={place}>

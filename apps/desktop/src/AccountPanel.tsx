@@ -22,6 +22,7 @@ import type { ProxyClient } from './client.ts';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
 import { setPrefs, usePrefs } from './prefs.ts';
 import { copyText } from './copy.tsx';
+import HelpLink from './HelpLink.tsx';
 
 // What the date a stored claude.ai sign-in ends means for the user. Renewing the access token does not move it; the
 // CLI starts warning ten days before it.
@@ -401,7 +402,10 @@ export default function AccountPanel({
       )}
       {!usageOnly && (
         <div className="page-heading account-section-title">
-          <h2>订阅用量</h2>
+          <h2>
+            订阅用量
+            <HelpLink article="quota" title="额度怎么算、怎么省" />
+          </h2>
           <button type="button" className="button secondary" onClick={() => setLog('today')}>
             <ListOrdered />
             调用日志

@@ -1,6 +1,10 @@
-import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
+import HelpLink from './HelpLink.tsx';
+
+// The help article explaining the pages shown inside it, given by whoever shows them (the settings).
+export const PageHelp = createContext<string | null>(null);
 
 // A settings page: its title, a line on what its settings apply to, and its sections.
 export function Page({
@@ -17,11 +21,19 @@ export function Page({
   actions?: ReactNode;
   children?: ReactNode;
 }) {
-  const heading = <h1 className="page-title">{title}</h1>;
+  const help = useContext(PageHelp);
+  const heading = help ? (
+    <div className="page-title-row">
+      <h1 className="page-title">{title}</h1>
+      <HelpLink article={help} title={`${title}：说明`} />
+    </div>
+  ) : (
+    <h1 className="page-title">{title}</h1>
+  );
   return (
     <section className="page" aria-label={label}>
       <div className="page-body">
-        {actions ? (
+        {actions || help ? (
           <header className="page-header">
             {heading}
             {actions}
@@ -35,24 +47,52 @@ export function Page({
     </section>
   );
 }
-// One setting: what it is and does on the left, its control on the right.
+// One setting: what it is and does on the left, its control on the right. `help` is where the help explains it.
 export function Row({
   title,
   detail,
+  help,
   children,
 }: {
   title: string;
   detail?: ReactNode;
+  help?: string;
   children: ReactNode;
 }) {
   return (
     <div className="setting-row">
-      <span>
-        <strong>{title}</strong>
-        {detail && <small>{detail}</small>}
-      </span>
+      <SettingText title={title} detail={detail} help={help} />
       {children}
     </div>
+  );
+}
+// A setting's name, its "?" when the help says more of it, and its line of detail.
+export function SettingText({
+  title,
+  detail,
+  help,
+}: {
+  title: string;
+  detail?: ReactNode;
+  help?: string;
+}) {
+  return (
+    <span>
+      <strong>
+        {title}
+        {help && <HelpLink article={help} title={`${title}：说明`} className="setting-help" />}
+      </strong>
+      {detail && <small>{detail}</small>}
+    </span>
+  );
+}
+// A heading over a group of settings, with a "?" when the help explains the group.
+export function SettingsHeading({ children, help }: { children: string; help?: string }) {
+  return (
+    <h2 className="page-heading">
+      {children}
+      {help && <HelpLink article={help} title={`${children}：说明`} className="setting-help" />}
+    </h2>
   );
 }
 

@@ -3,7 +3,7 @@ import type { NativeSettings } from '@cc-desk-tunnel/protocol';
 import { cliSettingGroups } from './setting-fields.ts';
 import type { CliField, CliKey, CliValue } from './setting-fields.ts';
 import type { ProxyClient } from './client.ts';
-import { Page } from './ui.tsx';
+import { Page, SettingText } from './ui.tsx';
 
 // Edits the official CLI's user settings on the cloud host. Each change is saved at once; "默认" removes the
 // key so the CLI's own default applies.
@@ -94,7 +94,7 @@ export default function SettingsPanel({ client }: { client: ProxyClient }) {
   return (
     <Page
       title="CLI 设置"
-      intro="写入云端 Claude Code 的用户设置文件，从下一次运行起生效；“默认”表示不写入该项，由 CLI 自行决定。"
+      intro="服务器上 Claude Code 自己的设置，所有会话和 ccdt 共用，从下一次运行起生效。“默认”即不写入，由 CLI 决定。"
     >
       {failure && (
         <p className="error-text" role="alert">
@@ -108,10 +108,7 @@ export default function SettingsPanel({ client }: { client: ProxyClient }) {
             <div className="settings-list card">
               {group.fields.map((field) => (
                 <label key={field.key}>
-                  <span>
-                    <strong>{field.title}</strong>
-                    <small>{field.detail}</small>
-                  </span>
+                  <SettingText title={field.title} detail={field.detail} help={field.help} />
                   {control(field, values[field.key])}
                 </label>
               ))}

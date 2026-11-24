@@ -4,6 +4,8 @@ import { absoluteLinks, alertLabels, releaseSection } from './notes.ts';
 import { project } from './project.tsx';
 import RichText from './RichText.tsx';
 import { Modal } from './ui.tsx';
+import { openHelp } from './help-nav.ts';
+import { hasNews } from './help-content.ts';
 
 // What changed in a version, shown where the user decides about an upgrade. This program carries the notes up
 // to its own version; those of a newer one are read from that release's page on GitHub, and when that cannot
@@ -53,6 +55,18 @@ export default function ReleaseNotes({
         )}
       </div>
       <div className="setting-actions">
+        {hasNews(version) && (
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              onClose();
+              openHelp('whats-new');
+            }}
+          >
+            新功能怎么用
+          </button>
+        )}
         {project.url && (
           <button
             type="button"

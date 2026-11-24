@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { releaseFiles } from './release-manifest.mjs';
+import { helpAnchors } from './help-anchors.mjs';
 
 // Releases the version in apps/desktop/package.json from what the main branch on GitHub holds. Nothing is
 // built on this computer: the `package` workflow on GitHub builds every file from that commit, starts each
@@ -34,6 +35,42 @@ const section = new RegExp(
   .exec(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))?.[1]
   .trim();
 if (!section) throw new Error(`CHANGELOG.md has no section "## ${version}".`);
+// The help marks what a version brought and makes its page of what is new from those marks (help-content.ts).
+if (
+  !readFileSync(join(root, 'apps/desktop/src/help-content.ts'), 'utf8').includes(
+    `since: '${version}'`,
+  )
+)
+  console.log(
+    `Note: the help marks nothing as new in ${version}. If it brings features, write how to use them in apps/desktop/src/help-content.ts and mark them with since: '${version}'.`,
+  );
+// The help's articles that changed parts of the window point to, since the last release: their text may need to follow.
+// Only what changed is named, so a release that touches none of them says nothing.
+try {
+  const last = git('describe', '--tags', '--abbrev=0', '--match', 'v*', 'HEAD');
+  const changed = git('diff', '--name-only', `${last}..HEAD`, '--', 'apps/desktop/src')
+    .split('\n')
+    .filter((file) => file && !file.endsWith('help-content.ts'));
+  const pointed = [
+    ...new Set(
+      changed.flatMap((file) => {
+        try {
+          return helpAnchors(readFileSync(join(root, file), 'utf8'))
+            .map((anchor) => anchor.split('#')[0])
+            .filter((id) => id !== 'whats-new');
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  ];
+  if (pointed.length)
+    console.log(
+      `Note: since ${last}, changed files point to these help articles; check they still match: ${pointed.join(', ')}.`,
+    );
+} catch {
+  // No earlier release to compare with.
+}
 // The section's GitHub alerts (`> [!WARNING]` and the like) are what a reader must see before upgrading: they open
 // the notes, above how to download, in the colours GitHub gives them.
 const alert = /^> \[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n(?:>.*(?:\n|$))*/gm;

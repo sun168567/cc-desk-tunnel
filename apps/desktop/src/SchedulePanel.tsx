@@ -6,6 +6,7 @@ import { describeSchedule, parseTasks, stamp } from './schedules.ts';
 import type { Schedule, Schedules, Task } from './schedules.ts';
 import { IconButton } from './ui.tsx';
 import { modelName } from './modelNames.ts';
+import HelpLink from './HelpLink.tsx';
 
 // The editor's fields: every kind of rule and target keeps its own input, so switching kinds loses nothing.
 type Form = {
@@ -340,6 +341,7 @@ export default function SchedulePanel({
       <aside className="sidebar">
         <div className="sidebar-brand">
           <span className="brand">定时任务</span>
+          <HelpLink article="schedules" title="定时任务怎么用" />
         </div>
         <button type="button" className="side-action" onClick={() => setEditing(null)}>
           <Plus />

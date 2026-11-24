@@ -1,7 +1,7 @@
-import { CalendarClock, Download, MessagesSquare, Settings } from 'lucide-react';
+import { CalendarClock, CircleHelp, Download, MessagesSquare, Settings } from 'lucide-react';
 import type { MenuPosition } from './ui.tsx';
 
-export type Page = 'chat' | 'schedules' | 'settings';
+export type Page = 'chat' | 'schedules' | 'settings' | 'help';
 
 // The narrow column of pages at the window's left edge. The update button is there only when there is
 // something to install.
@@ -59,6 +59,15 @@ export default function Rail({
           <Download />
         </button>
       )}
+      <button
+        type="button"
+        title="帮助"
+        aria-label="帮助"
+        aria-current={page === 'help' ? 'page' : undefined}
+        onClick={() => go('help')}
+      >
+        <CircleHelp />
+      </button>
       <button
         type="button"
         title="设置与账号"

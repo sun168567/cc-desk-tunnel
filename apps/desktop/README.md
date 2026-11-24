@@ -73,7 +73,8 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `src/App.tsx` | 编排：连接与登录、当前会话、所有请求和禁用条件；不含具体界面 |
 | `src/Launcher.tsx`、`LoginPage.tsx` | 登录窗口：选服务、连接、报错与版本升级、本机设置，连上后让位给该服务的窗口 |
 | `src/TitleBar.tsx`、`Rail.tsx`、`Sidebar.tsx`、`QuotaSummary.tsx`、`Conversation.tsx`、`Composer.tsx`、`SessionDialogs.tsx` | 各界面区域，只渲染并上报用户意图：标题栏、图标栏、会话侧栏及额度摘要、会话区、输入区、对话框 |
-| `src/SettingsPage.tsx`、`SettingsPanel.tsx`、`Help.tsx` | 设置页的分类与客户端自身的设置；云端 Claude Code 的设置项；帮助文案 |
+| `src/SettingsPage.tsx`、`SettingsPanel.tsx` | 设置页的分类与客户端自身的设置；云端 Claude Code 的设置项 |
+| `src/HelpCenter.tsx`、`help-content.ts`、`HelpFigures.tsx`、`HelpLink.tsx`、`help-nav.ts` | 帮助：目录、搜索与文章的排版；文章内容；示意插图；界面各处的“?”与打开帮助的入口 |
 | `src/useDrawerSwipe.ts`、`useWebNavigation.ts` | 窄屏抽屉的触摸手势；浏览器前进后退与页面、抽屉状态同步 |
 | `src/WebAccessSettings.tsx`、`WebGate.tsx`、`browser-api.ts`、`host-capabilities.ts` | Web 设置与证书管理；浏览器登录和会话；桌面与浏览器的宿主能力区分 |
 | `src/ReverseProxyHelp.tsx`、`reverse-proxy.ts` | 根据当前访问设置生成可复制的 nginx / Caddy 示例，只生成文本，不改变部署 |
