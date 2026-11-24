@@ -148,8 +148,8 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '显示思考过程',
         detail:
-          '向 Claude 索取思考的摘要并显示在对话里，默认开启；关闭后不再索取，模型照常思考。第三方模型自己输出的思考不受这一项影响',
-        unset: '默认（开启）',
+          '向 Claude 索取思考的摘要并显示在对话里；不开启时不索取，模型照常思考。第三方模型自己输出的思考不受这一项影响',
+        unset: '默认（关闭）',
       },
       {
         key: 'fastMode',
@@ -182,7 +182,7 @@ export const cliSettingGroups = (
         kind: 'toggle',
         title: '触发安全拦截时换模型',
         detail: '消息被拦截时自动改用其他模型继续，关闭则暂停',
-        unset: '默认（自动）',
+        unset: '默认（开启）',
       },
       {
         key: 'promptCacheTtl',

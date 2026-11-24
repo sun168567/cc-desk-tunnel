@@ -31,12 +31,13 @@ export function nativeContext(sessionId: string, info: SDKSessionInfo | undefine
   } satisfies EventPayload;
 }
 
-// Whether reasoning summaries are asked for. A settings file that cannot be read leaves them on.
+// Whether reasoning summaries are asked for: only when the setting is on, as in the interactive CLI, whose
+// default is off. A settings file that cannot be read leaves them off.
 function thinkingShown() {
   try {
-    return readNativeSettings().showThinkingSummaries !== false;
+    return readNativeSettings().showThinkingSummaries === true;
   } catch {
-    return true;
+    return false;
   }
 }
 
