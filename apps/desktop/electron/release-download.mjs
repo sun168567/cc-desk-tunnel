@@ -12,28 +12,41 @@ export const releasePage = 'https://github.com/sun168567/cc-desk-tunnel/releases
 // in a row that added nothing the download fails.
 const defaultPace = { stretch: 20_000, stall: 15_000, attempts: 5 };
 
+// What a download stopped by its caller rejects with.
+export const cancelled = () => Object.assign(new Error('已取消。'), { cancelled: true });
+const megabytes = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
+
 // Downloads the installer of `version` from the release page into `directory` and resolves to its path. It is
 // kept only if its hash is the one the release's manifest states, and, when the service announced an installer
 // of that version too, only if both name the same file. `fetch` is the caller's, so that the system's proxy
-// settings apply.
+// settings apply. `progress` hears the bytes received; `report` hears the steps that bring none, so that a window
+// can tell a connection being tried again, or the file being checked, from one that hangs. `signal` stops it.
 export async function downloadRelease(
   fetch,
   version,
   directory,
-  { announced, progress = () => {}, pace = defaultPace, page = releasePage } = {},
+  {
+    announced,
+    progress = () => {},
+    report = () => {},
+    signal,
+    pace = defaultPace,
+    page = releasePage,
+  } = {},
 ) {
   if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw new Error('版本号不正确。');
   const name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`;
   let manifest;
   try {
     const response = await fetch(`${page}/v${version}/release.json`, {
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     manifest = await response.json();
   } catch (error) {
+    if (signal?.aborted) throw cancelled();
     throw new Error(
-      `读取不到 ${version} 的发布信息（${error.message}）。\n请检查这台电脑能否访问 github.com，或改为从服务端获取安装包。`,
+      `读取不到 ${version} 的发布信息（${error.name === 'TimeoutError' ? '30 秒没有响应' : error.message}）。\n请检查这台电脑能否访问 github.com，或改从服务端获取安装包。`,
     );
   }
   const file = manifest?.files?.find?.((item) => item?.name === name);
@@ -54,12 +67,26 @@ export async function downloadRelease(
     for (let idle = 0; received < file.size;) {
       if (idle >= pace.attempts)
         throw new Error(
-          `安装包下载中断（${last?.message || '连接没有数据'}），已收到 ${received} / ${file.size} 字节。`,
+          `从 GitHub 下载安装包中断（${last ?? '连接没有数据'}），已下载 ${megabytes(received)} / ${megabytes(file.size)}。\n请检查网络后重试，或改从服务端获取安装包。`,
         );
+      if (signal?.aborted) throw cancelled();
       const before = received;
       const controller = new AbortController();
-      const end = setTimeout(() => controller.abort(), pace.stretch);
-      let quiet = setTimeout(() => controller.abort(), pace.stall);
+      // Why the connection was given up: at the end of its stretch, which is no failure, or for its silence.
+      let ended = false;
+      let silent = false;
+      const end = setTimeout(() => {
+        ended = true;
+        controller.abort();
+      }, pace.stretch);
+      const hush = () => {
+        silent = true;
+        controller.abort();
+      };
+      let quiet = setTimeout(hush, pace.stall);
+      const stop = () => controller.abort();
+      signal?.addEventListener('abort', stop);
+      let failed = false;
       try {
         const response = await fetch(`${page}/v${version}/${name}`, {
           headers: received ? { Range: `bytes=${received}-` } : {},
@@ -74,7 +101,7 @@ export async function downloadRelease(
         }
         for await (const chunk of response.body) {
           clearTimeout(quiet);
-          quiet = setTimeout(() => controller.abort(), pace.stall);
+          quiet = setTimeout(hush, pace.stall);
           await output.write(chunk, 0, chunk.length, received);
           received += chunk.length;
           if (received > file.size)
@@ -82,15 +109,21 @@ export async function downloadRelease(
           progress(received, file.size);
         }
       } catch (error) {
+        if (signal?.aborted) throw cancelled();
         if (error?.fatal) throw error;
-        last = error;
+        failed = !ended || silent;
+        last = silent ? `${Math.round(pace.stall / 1000)} 秒没有收到数据` : error.message;
       } finally {
         clearTimeout(end);
         clearTimeout(quiet);
+        signal?.removeEventListener('abort', stop);
       }
       idle = received > before ? 0 : idle + 1;
+      if (failed && received < file.size)
+        report({ phase: 'retrying', attempt: idle, attempts: pace.attempts, reason: last });
     }
     await output.close();
+    report({ phase: 'verifying' });
     const hash = createHash('sha256');
     for await (const chunk of createReadStream(target)) hash.update(chunk);
     if (hash.digest('hex') !== file.sha256) throw new Error('安装包校验失败，已放弃升级。');

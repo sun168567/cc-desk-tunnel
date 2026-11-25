@@ -51,6 +51,7 @@ test('the installer is taken from the release page, across connections that go q
     if (from + 6000 >= installer.length) response.end();
   });
   const seen = [];
+  const steps = [];
   const target = await downloadRelease(
     fetch,
     '9.8.7',
@@ -58,6 +59,7 @@ test('the installer is taken from the release page, across connections that go q
     f.options({
       announced: { version: '9.8.7', sha256 },
       progress: (received, size) => seen.push([received, size]),
+      report: (step) => steps.push(step),
     }),
   );
   assert.equal(target, join(f.directory, name));
@@ -70,6 +72,48 @@ test('the installer is taken from the release page, across connections that go q
     'bytes=18000-',
   ]);
   assert.deepEqual(seen.at(-1), [installer.length, installer.length]);
+  // Each connection that went quiet was told, the one that brought nothing as the first of the attempts allowed;
+  // the check of the file came last.
+  assert.deepEqual(
+    steps.map(({ phase, attempt }) => [phase, attempt]),
+    [
+      ['retrying', 0],
+      ['retrying', 1],
+      ['retrying', 0],
+      ['retrying', 0],
+      ['verifying', undefined],
+    ],
+  );
+  assert.match(steps[0].reason, /秒没有收到数据/);
+});
+
+test('a download stopped by its caller ends at once as cancelled and keeps nothing', async (t) => {
+  const f = await page(t, (_request, response) => {
+    response.writeHead(200);
+    response.write(installer.subarray(0, 6000));
+  });
+  const controller = new AbortController();
+  const stopped = await downloadRelease(
+    fetch,
+    '9.8.7',
+    f.directory,
+    f.options({
+      pace: { stretch: 60_000, stall: 60_000, attempts: 3 },
+      progress: () => controller.abort(),
+      signal: controller.signal,
+    }),
+  ).catch((error) => error);
+  assert.equal(stopped.cancelled, true);
+  assert.deepEqual(readdirSync(f.directory), []);
+  const before = new AbortController();
+  before.abort();
+  const early = await downloadRelease(
+    fetch,
+    '9.8.7',
+    f.directory,
+    f.options({ signal: before.signal }),
+  ).catch((error) => error);
+  assert.equal(early.cancelled, true);
 });
 
 test('a host that sends the whole file again instead of continuing still yields the right file', async (t) => {
@@ -116,7 +160,7 @@ test('nothing is kept of a file that is not the announced one, of a download tha
   const silent = await page(t, (_request, response) => response.flushHeaders());
   await assert.rejects(
     downloadRelease(fetch, '9.8.7', silent.directory, silent.options()),
-    /下载中断.*0 \/ 20000/,
+    /下载安装包中断（0 秒没有收到数据），已下载 0\.0 MB \/ 0\.0 MB。\n请检查网络/,
   );
   assert.equal(silent.ranges.length, 3);
   assert.equal(existsSync(join(silent.directory, name)), false);
