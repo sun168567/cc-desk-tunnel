@@ -1691,7 +1691,9 @@ export function createProxyServer(options: ServerOptions) {
       send(peer, {
         type: 'plugin.done',
         requestId,
-        ...(await plugins.press(id, command.button, command.values)),
+        ...(command.type === 'plugin.press'
+          ? await plugins.press(id, command.button, command.values)
+          : await plugins.attempt(id, command.event)),
       });
   }
   // Resolves to the session ID carried in the response frame; account and usage commands have none.
@@ -1720,6 +1722,7 @@ export function createProxyServer(options: ServerOptions) {
       case 'plugin.enable':
       case 'plugin.configure':
       case 'plugin.press':
+      case 'plugin.try':
       case 'plugin.log':
         await plugin(peer, command);
         return undefined;

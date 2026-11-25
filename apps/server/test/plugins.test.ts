@@ -119,6 +119,10 @@ export const settings = [{ title: '渠道', showWhen: 'on', fields: {
   });
   await plugins.start();
   assert.equal(plugins.list()[0]!.problem, '待配置：Token');
+  assert.deepEqual(await plugins.attempt('t.set', 'RunEnded'), {
+    ok: false,
+    message: '待配置：Token',
+  });
 
   const wrong = await plugins.configure('t.set', { token: 'abcd', lines: 10 });
   assert.deepEqual(wrong, {
@@ -141,19 +145,14 @@ export const settings = [{ title: '渠道', showWhen: 'on', fields: {
 
   // Left empty a secret stays; the command is given it, and the log is not.
   await plugins.configure('t.set', { token: '', lines: 6 });
-  plugins.dispatch({
-    version: EVENTS_VERSION,
-    hook_event_name: 'RunEnded',
-    timestamp: new Date().toISOString(),
-  });
-  const ran = () => plugins.logOf('t.set').includes('RunEnded');
-  for (const deadline = Date.now() + 10_000; !ran() && Date.now() < deadline;)
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.match(plugins.logOf('t.set'), /token: '\*\*\*', lines: 6/);
+  const tried = await plugins.attempt('t.set', 'RunEnded');
+  assert.ok(tried.ok);
+  assert.match(tried.message, /token: '\*\*\*', lines: 6/);
   assert.doesNotMatch(plugins.logOf('t.set'), /secret-token/);
 
   await plugins.enable('t.set', false);
   assert.deepEqual(plugins.list()[0]!.settings, []);
+  assert.equal((await plugins.attempt('t.set', 'RunEnded')).ok, false);
   await plugins.enable('t.set', true);
   assert.deepEqual(plugins.list()[0]!.secrets, ['token']);
 });

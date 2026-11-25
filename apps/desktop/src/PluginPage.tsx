@@ -28,6 +28,17 @@ export function troubleOf({ enabled, problem, failure }: Plugin) {
 }
 
 type Done = { ok: boolean; message: string };
+const eventNames: Record<string, string> = {
+  ApprovalRequested: '等待审批',
+  QuestionAsked: '等待回答',
+  TerminalWaiting: '终端等待确认',
+  WaitResolved: '等待已解除',
+  BackgroundOnly: '只剩后台任务',
+  RunError: '运行出错',
+  RunEnded: '一轮结束',
+  DeviceOnline: '设备上线',
+  DeviceOffline: '设备下线',
+};
 const failed = (error: unknown): Done => ({
   ok: false,
   message: error instanceof Error ? error.message : '操作失败。',
@@ -256,6 +267,20 @@ export default function PluginPage({
         </p>
       )}
       {plugin.settings.map(group)}
+      {plugin.enabled && plugin.events.length > 0 && (
+        <>
+          <SettingsHeading>试跑</SettingsHeading>
+          <div className="settings-list card">
+            <Try
+              events={plugin.events}
+              done={results.try}
+              run={(event) =>
+                void act('try', () => client.fetch({ type: 'plugin.try', id, event }))
+              }
+            />
+          </div>
+        </>
+      )}
       <SettingsHeading>关于</SettingsHeading>
       <div className="settings-list card">
         <Row title="id">
@@ -307,5 +332,50 @@ function Link({ url, children }: { url: string; children: string }) {
     >
       {children}
     </button>
+  );
+}
+
+function Try({
+  events,
+  done,
+  run,
+}: {
+  events: string[];
+  done?: Done | 'running';
+  run: (event: string) => void;
+}) {
+  const [chosen, setChosen] = useState(events[0]!);
+  const event = events.includes(chosen) ? chosen : events[0]!;
+  return (
+    <>
+      <Row title="用示例事件运行" detail="和事件真的来时一样运行插件的命令，它做的事会真的做。">
+        <span className="plugin-try">
+          <select
+            aria-label="试跑的事件"
+            value={event}
+            onChange={({ target }) => setChosen(target.value)}
+          >
+            {events.map((item) => (
+              <option key={item} value={item}>
+                {eventNames[item] ?? item}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="button"
+            disabled={done === 'running'}
+            onClick={() => run(event)}
+          >
+            {done === 'running' ? '正在运行…' : '运行'}
+          </button>
+        </span>
+      </Row>
+      {done && done !== 'running' && (
+        <pre className={done.ok ? 'plugin-result' : 'plugin-result bad'} role="status">
+          {done.message}
+        </pre>
+      )}
+    </>
   );
 }

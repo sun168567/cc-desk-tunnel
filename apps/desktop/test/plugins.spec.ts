@@ -106,6 +106,8 @@ test('a plugin put in place is set on its own page, each change saved at once, t
   await form.getByLabel('模板').blur();
   await form.getByRole('button', { name: '发送' }).click();
   await expect(form.getByRole('status')).toHaveText('已发送到 ***');
+  await form.getByRole('button', { name: '运行', exact: true }).click();
+  await expect(form.locator('pre')).toContainText('收到');
   await page.screenshot({ path: resolve(shots, 'settings.png'), fullPage: true });
 
   // On a phone's width the way back is the title bar's, and nothing is wider than the page.
@@ -123,7 +125,7 @@ test('a plugin put in place is set on its own page, each change saved at once, t
   await page.screenshot({ path: resolve(shots, 'list.png') });
 
   await page.getByRole('button', { name: '通知：日志' }).click();
-  await expect(page.locator('.plugin-log')).toContainText('[测试消息] 成功');
+  await expect(page.locator('.plugin-log')).toContainText('[试跑] RunEnded → 成功');
   await expect(page.locator('.plugin-log')).not.toContainText('example.com');
   await page.screenshot({ path: resolve(shots, 'log.png') });
   await page.getByRole('button', { name: '关闭', exact: true }).click();

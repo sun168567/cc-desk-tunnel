@@ -109,7 +109,8 @@ export const pluginSchema = z.object({
   problem: z.string().optional(),
   // How it last failed, until it next goes well.
   failure: z.object({ at: z.iso.datetime(), message: z.string() }).optional(),
-  // What it may be set to; a disabled plugin is not asked.
+  // The events it has commands for, and what it may be set to; a disabled plugin is not asked.
+  events: z.array(z.string()),
   settings: z.array(pluginGroupSchema),
   values: z.record(key, pluginValueSchema),
   // The sensitive settings that have a value.
@@ -126,6 +127,8 @@ export const pluginCommandSchemas = [
   z.object({ type: z.literal('plugin.configure'), ...request, values }).strict(),
   // Runs a button of the plugin's settings with the values as they are in the form, kept or not.
   z.object({ type: z.literal('plugin.press'), ...request, button: key, values }).strict(),
+  // Runs the plugin's commands for an example of the event.
+  z.object({ type: z.literal('plugin.try'), ...request, event: z.string().max(60) }).strict(),
   z
     .object({ type: z.literal('plugin.log'), ...request, clear: z.literal(true).optional() })
     .strict(),

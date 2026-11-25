@@ -131,7 +131,7 @@ export const sections: {
     name: '插件',
     group: '服务端',
     icon: Plug,
-    words: '插件 通知 推送 事件 hook 日志 启用 停用',
+    words: '插件 通知 推送 事件 hook 试跑 日志 启用 停用',
   },
   {
     id: 'account',

@@ -12,6 +12,7 @@ import type {
   PluginValues,
 } from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
+import { eventExample } from './event-examples.ts';
 import { readPluginConfig, writePluginConfig } from './plugin-config.ts';
 import type { PluginConfig } from './plugin-config.ts';
 import { hooksFileSchema, matches } from './plugin-hooks.ts';
@@ -28,6 +29,7 @@ type Entry = {
   manifest: Partial<PluginManifest>;
   access: PluginAccess;
   declared: Declared;
+  events: string[];
   broken?: string;
 };
 
@@ -117,6 +119,7 @@ export class Plugins {
             ? (entry.broken ?? waiting)
             : undefined,
         failure: this.failures.get(id),
+        events: entry.events,
         settings: entry.declared.settings,
         values: Object.fromEntries(Object.entries(values).filter(([key]) => !secret(key))),
         secrets: Object.keys(values).filter((key) => secret(key) && values[key] !== ''),
@@ -155,6 +158,7 @@ export class Plugins {
       manifest: {},
       access: this.access({}),
       declared: NOTHING,
+      events: [],
     };
     try {
       const manifest = join(root, '.claude-plugin', 'plugin.json');
@@ -163,7 +167,7 @@ export class Plugins {
           .partial()
           .parse(JSON.parse(readFileSync(manifest, 'utf8')));
       entry.access = this.access(entry.manifest);
-      this.hooks(id);
+      entry.events = Object.keys(this.hooks(id)).filter((event) => eventExample(event));
       // A disabled plugin's code does not run, and so it has nothing to be set.
       if (this.enabled(id, entry.access))
         entry.declared = await loadUi({ root, confined: entry.access === 'own' });
@@ -300,6 +304,20 @@ export class Plugins {
       this.pressed.delete(key);
     }
   }
+  // Runs what the plugin has for an example of the event, as the event itself would.
+  async attempt(id: string, event: string) {
+    const problem = this.enabled(id) ? this.problem(id) : '插件没有启用。';
+    if (problem) return { ok: false, message: problem };
+    const example = eventExample(event);
+    if (!example) throw new DomainError('not_found', '没有这个事件。');
+    const hooks = this.hooksFor(id, example);
+    if (!hooks.length) return { ok: false, message: '这个事件没有匹配的命令。' };
+    const results = await Promise.all(hooks.map((hook) => this.run(id, hook, example, '[试跑] ')));
+    return {
+      ok: results.every(({ ok }) => ok),
+      message: results.map(({ text }) => text).join('\n'),
+    };
+  }
   logOf(id: string, clear = false) {
     this.entry(id);
     if (clear) this.log.clear(id);
@@ -310,7 +328,7 @@ export class Plugins {
     for (const id of this.entries.keys()) {
       if (this.closed || !this.enabled(id) || this.problem(id)) continue;
       try {
-        for (const hook of this.hooksFor(id, event)) this.run(id, hook, event);
+        for (const hook of this.hooksFor(id, event)) void this.run(id, hook, event);
       } catch (error) {
         this.failed(id, `${event.hook_event_name} 没有运行：${reason(error)}`);
       }
@@ -325,7 +343,7 @@ export class Plugins {
   private root(id: string) {
     return join(this.directory, 'plugins', id);
   }
-  private run(id: string, hook: Hook, event: ServiceEvent) {
+  private run(id: string, hook: Hook, event: ServiceEvent, mark = '') {
     const root = this.root(id);
     const { before, data, env } = launch(this.where(id));
     const filled = (text: string) =>
@@ -358,25 +376,31 @@ export class Plugins {
       stream.setEncoding('utf8').on('data', (text: string) => {
         printed = (printed + text).slice(-OUTPUT_LIMIT);
       });
-    const ended = (result: string) => {
-      if (!this.running.delete(child)) return;
-      clearTimeout(timer);
-      if (this.closed) return;
-      const of = event.session_id ? ` 会话=${event.session_id} 运行=${event.run_id}` : '';
-      const output = masked(printed.trim(), secrets);
-      const text = `${result} ${Date.now() - started}ms${output && `\n${output.replace(/^/gm, '    ')}`}`;
-      this.log.write(id, `${event.hook_event_name}${of} → ${text}`);
-      this.told(id, result === '成功' ? undefined : `${event.hook_event_name} ${result}`);
-    };
-    child.on('error', (error) => ended(`没有启动（${error.message}）`));
-    child.on('close', (code, signal) =>
-      ended(
-        late ? `超时 ${hook.timeout}s，已结束` : code === 0 ? '成功' : `退出 ${code ?? signal}`,
-      ),
-    );
+    const done = new Promise<{ ok: boolean; text: string }>((resolve) => {
+      const ended = (result: string) => {
+        if (!this.running.delete(child)) return;
+        clearTimeout(timer);
+        const of = event.session_id ? ` 会话=${event.session_id} 运行=${event.run_id}` : '';
+        const ok = result === '成功';
+        const output = masked(printed.trim(), secrets);
+        const text = `${result} ${Date.now() - started}ms${output && `\n${output.replace(/^/gm, '    ')}`}`;
+        if (!this.closed) {
+          this.log.write(id, `${mark}${event.hook_event_name}${mark ? '' : of} → ${text}`);
+          this.told(id, ok ? undefined : `${event.hook_event_name} ${result}`);
+        }
+        resolve({ ok, text });
+      };
+      child.on('error', (error) => ended(`没有启动（${error.message}）`));
+      child.on('close', (code, signal) =>
+        ended(
+          late ? `超时 ${hook.timeout}s，已结束` : code === 0 ? '成功' : `退出 ${code ?? signal}`,
+        ),
+      );
+    });
     // A command that does not read its input may be gone before it is written.
     child.stdin.on('error', () => {});
     child.stdin.end(JSON.stringify({ ...event, config }));
+    return done;
   }
   private failed(id: string, message: string) {
     this.log.write(id, message);

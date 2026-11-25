@@ -77,6 +77,7 @@ type Replies = {
   'web.certificate.reset': 'web.certificate.state';
   'plugin.configure': 'plugin.checked';
   'plugin.press': 'plugin.done';
+  'plugin.try': 'plugin.done';
   'plugin.log': 'plugin.log';
 };
 
