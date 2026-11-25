@@ -4,7 +4,13 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import { checkCcdt, posixService, stageCcdt, stageDesktop } from './package-desktop.mjs';
+import {
+  ccdtResource,
+  checkCcdt,
+  posixService,
+  stageCcdt,
+  stageDesktop,
+} from './package-desktop.mjs';
 
 // Builds the macOS package: a disk image to install from and a ZIP of the same application. It is not signed
 // with a Developer ID and not notarized, so macOS asks the user to allow it on first start (see docs/macos.md),
@@ -57,7 +63,7 @@ const results = await electronBuild({
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
-    extraResources: [{ from: ccdt, to: 'ccdt' }],
+    extraResources: [ccdtResource(ccdt)],
     // Electron ships its notices beside Electron.app. Preserve those for the target architecture
     // before electron-builder renames the bundle and removes the standalone files.
     afterExtract({ appOutDir }) {
