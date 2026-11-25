@@ -2,6 +2,7 @@ import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef
 import type { MouseEvent, ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
 import HelpLink from './HelpLink.tsx';
+import { useT } from './i18n.ts';
 
 // The help article explaining the pages shown inside it, given by whoever shows them (the settings).
 export const PageHelp = createContext<string | null>(null);
@@ -25,7 +26,7 @@ export function Page({
   const heading = help ? (
     <div className="page-title-row">
       <h1 className="page-title">{title}</h1>
-      <HelpLink article={help} title={`${title}：说明`} />
+      <HelpLink article={help} subject={title} />
     </div>
   ) : (
     <h1 className="page-title">{title}</h1>
@@ -80,7 +81,7 @@ export function SettingText({
     <span>
       <strong>
         {title}
-        {help && <HelpLink article={help} title={`${title}：说明`} className="setting-help" />}
+        {help && <HelpLink article={help} subject={title} className="setting-help" />}
       </strong>
       {detail && <small>{detail}</small>}
     </span>
@@ -91,7 +92,7 @@ export function SettingsHeading({ children, help }: { children: string; help?: s
   return (
     <h2 className="page-heading">
       {children}
-      {help && <HelpLink article={help} title={`${children}：说明`} className="setting-help" />}
+      {help && <HelpLink article={help} subject={children} className="setting-help" />}
     </h2>
   );
 }
@@ -156,6 +157,7 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     ref.current?.showModal();
@@ -171,7 +173,7 @@ export function Modal({
     >
       <div className="dialog-heading">
         <h2>{title}</h2>
-        <IconButton title="关闭" onClick={onClose}>
+        <IconButton title={t('common:close')} onClick={onClose}>
           <X />
         </IconButton>
       </div>

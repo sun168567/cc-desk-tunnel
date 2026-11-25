@@ -42,5 +42,8 @@
   "yesterday": "Yesterday",
   "save": "Save",
   "gotIt": "Got it",
-  "failed": "That didn't work."
+  "failed": "That didn't work.",
+  "help": "Help",
+  "helpFor": "Help: {{subject}}",
+  "close": "Close"
 }

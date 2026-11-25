@@ -139,5 +139,12 @@
     "leave": "断开并回到登录页"
   },
   "connectFailed": "连接失败。",
-  "connecting": "正在连接…"
+  "connecting": "正在连接…",
+  "notes": {
+    "title": "{{version}} 的更新内容",
+    "failed": "没能从 GitHub 读到这一版的说明，可以到发布页查看。",
+    "loading": "正在读取…",
+    "help": "新功能怎么用",
+    "release": "在 GitHub 发布页查看"
+  }
 }

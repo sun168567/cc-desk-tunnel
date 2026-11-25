@@ -235,6 +235,9 @@ export type Resources = {
     save: '保存';
     gotIt: '知道了';
     failed: '操作失败。';
+    help: '说明';
+    helpFor: '{{subject}}：说明';
+    close: '关闭';
   };
   connection: {
     interrupted: {
@@ -378,6 +381,13 @@ export type Resources = {
     };
     connectFailed: '连接失败。';
     connecting: '正在连接…';
+    notes: {
+      title: '{{version}} 的更新内容';
+      failed: '没能从 GitHub 读到这一版的说明，可以到发布页查看。';
+      loading: '正在读取…';
+      help: '新功能怎么用';
+      release: '在 GitHub 发布页查看';
+    };
   };
   files: {
     newFolder: '新建文件夹';
@@ -2108,6 +2118,9 @@ export type Messages = {
   'common:save': Record<string, never>;
   'common:gotIt': Record<string, never>;
   'common:failed': Record<string, never>;
+  'common:help': Record<string, never>;
+  'common:helpFor': { subject: Value };
+  'common:close': Record<string, never>;
   'connection:interrupted.read': Record<string, never>;
   'connection:interrupted.request': Record<string, never>;
   'connection:restored.read': Record<string, never>;
@@ -2225,6 +2238,11 @@ export type Messages = {
   'connection:reconnect.leave': Record<string, never>;
   'connection:connectFailed': Record<string, never>;
   'connection:connecting': Record<string, never>;
+  'connection:notes.title': { version: Value };
+  'connection:notes.failed': Record<string, never>;
+  'connection:notes.loading': Record<string, never>;
+  'connection:notes.help': Record<string, never>;
+  'connection:notes.release': Record<string, never>;
   'files:newFolder': Record<string, never>;
   'files:rename': Record<string, never>;
   'files:delete.title': Record<string, never>;

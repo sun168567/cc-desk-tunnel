@@ -29,11 +29,7 @@
     "apps/desktop/src/help-content.ts": 522,
     "apps/desktop/src/HelpCenter.tsx": 58,
     "apps/desktop/src/HelpFigures.tsx": 52,
-    "apps/desktop/src/HelpLink.tsx": 1,
-    "apps/desktop/src/historyCache.ts": 1,
-    "apps/desktop/src/notes.ts": 5,
-    "apps/desktop/src/ReleaseNotes.tsx": 6,
-    "apps/desktop/src/ui.tsx": 4
+    "apps/desktop/src/notes.ts": 5
   },
   "kept": {
     "apps/server/src/simulation.ts": {

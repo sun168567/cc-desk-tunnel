@@ -95,7 +95,7 @@ export class HistoryCache {
   }
   // Writes are best effort: a failed one leaves the service to supply what it would have held.
   private quietly(work: Promise<unknown>) {
-    work.catch((error: unknown) => console.warn('对话缓存写入失败', error));
+    work.catch((error: unknown) => console.warn('Could not write the conversation cache', error));
   }
 
   // The history the service keeps now. Kept history of another one, or of another protocol, goes.
