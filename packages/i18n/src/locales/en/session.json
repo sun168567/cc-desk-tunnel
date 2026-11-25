@@ -2,13 +2,15 @@
   "terminal": {
     "working": "Terminal running",
     "waiting": "Terminal waiting for you",
-    "open": "Terminal open"
+    "open": "Terminal open",
+    "follow": "{{state}} · progress shows here as it goes; once the terminal is closed, carry on here"
   },
   "run": {
     "quiet": "Still running · no new output for {{n}} min",
     "running": "Running",
     "toolCall": "Tool call {{n}} · {{tool}}",
-    "waited": "Waited {{span}}"
+    "waited": "Waited {{span}}",
+    "offline": "Its computer is offline"
   },
   "idle": {
     "before": "The prompt cache expires in about {{minutes}} min. Compacting now reads the cache, far cheaper than compacting after it expires (context about {{size}}).",
@@ -65,7 +67,17 @@
       "doing": "calling tools",
       "did_one": "called {{count}} tool",
       "did_other": "called {{count}} tools"
-    }
+    },
+    "picture": "Image {{n}}",
+    "exitCode": "Exit code {{code}}",
+    "backgroundHint": "The command keeps running and Claude moves on without waiting; Claude gets the result when it ends",
+    "background": "To background",
+    "endHint": "Ends just this one; the turn goes on and Claude carries on",
+    "end": "End",
+    "hasPictures": "Contains images",
+    "copyInput": "Copy tool input",
+    "copyOutput": "Copy tool output",
+    "thinking": "Thinking"
   },
   "toolState": {
     "requested": "Requested",
@@ -146,5 +158,80 @@
     "returned": "Sent back to keep planning",
     "open": "Not decided",
     "waiting": "Awaiting approval"
-  }
+  },
+  "link": {
+    "webHint": "Click to confirm and open · {{key}} + click opens at once · right-click to copy the address",
+    "elsewhereHint": "{{reason}} Right-click to copy the path.",
+    "pathHint": "Click to open · right-click for more",
+    "leaveTitle": "Open an external link",
+    "leaveMail": "Opens in your mail app:",
+    "leaveWeb": "Opens in your browser:",
+    "open": "Open",
+    "showInFiles": "Show in file panel"
+  },
+  "simulated": "Simulated",
+  "delivery": {
+    "submitted": "Submitted",
+    "queued": "Waiting for Claude Code",
+    "received": "Received by Claude Code",
+    "not_sent": "Not delivered to Claude Code",
+    "unconfirmed": "Receipt unconfirmed"
+  },
+  "compact": {
+    "before": "{{tokens}} tokens before",
+    "running": "Compacting the context",
+    "unfinished": "Context compaction didn't finish",
+    "auto": "Context compacted automatically",
+    "done": "Context compacted"
+  },
+  "turn": {
+    "cancelled": "Stopped",
+    "failed": "Failed",
+    "spent": "Took {{span}}",
+    "steps_one": "{{count}} step",
+    "steps_other": "{{count}} steps",
+    "notes_one": "{{count}} note",
+    "notes_other": "{{count}} notes"
+  },
+  "background": {
+    "title": "Background tasks · Claude has answered and carries on once they end",
+    "count_one": "{{count}} background task · Claude has answered and carries on once it ends",
+    "count_other": "{{count}} background tasks · Claude has answered and carries on once they end",
+    "locked": "Until the tasks end, the model, effort and approval mode can't be changed, and the session can't be renamed, forked or edited and resent.",
+    "lockedSend": "Until the tasks end, the model, effort and approval mode can't be changed, and the session can't be renamed, forked or edited and resent; messages can be sent as usual.",
+    "end": "End",
+    "endAll": "End all"
+  },
+  "approval": {
+    "safetyHint": "Claude Code's own safety check, which asks in every approval mode",
+    "safety": "Claude Code safety check",
+    "evenBypassing": "Asks even when bypassing",
+    "deny": "Deny",
+    "allow": "Allow"
+  },
+  "message": {
+    "terminalHint": "Asked in a terminal; recorded in this session as the terminal goes on",
+    "terminal": "Terminal",
+    "edit": "Edit and resend",
+    "editUnsent": "Edit and resend: this message never reached Claude Code, so it goes back into this session's input box, without a fork",
+    "editFork": "Edit and resend: forks a new session from before this message; this one is kept"
+  },
+  "history": {
+    "earlierFailed": "Couldn't load earlier messages, try again",
+    "loading": "Loading",
+    "loadEarlier": "Load earlier messages",
+    "syncing": "Syncing session"
+  },
+  "find": {
+    "open": "Find in conversation",
+    "find": "Find"
+  },
+  "empty": {
+    "title": "New session",
+    "create": "New session",
+    "suggestions": "Try starting with",
+    "more": "More ideas"
+  },
+  "toEnd": "Back to the end",
+  "textMenu": "Conversation text actions"
 }

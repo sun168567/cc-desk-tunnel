@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
 import type { PlanMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
-import { type T, useT } from './i18n.ts';
+import { localeOf, type T, useT } from './i18n.ts';
 import { fileName, pieces } from './attachments.ts';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
@@ -141,6 +141,7 @@ function Fold({
 // it (a note), so that why a path cannot be opened is read where it was clicked.
 type LinkCard = { top: number; left: number; above: boolean; link: Link; note?: string };
 function LinkCardView({ card }: { card: LinkCard }) {
+  const t = useT();
   const { link, note } = card;
   const target =
     link.kind === 'web'
@@ -150,10 +151,10 @@ function LinkCardView({ card }: { card: LinkCard }) {
         : link.path;
   const hint =
     link.kind === 'web'
-      ? `单击确认后打开 · ${commandKey ? '⌘' : 'Ctrl'} + 单击直接打开 · 右键可复制地址`
+      ? t('session:link.webHint', { key: commandKey ? '⌘' : 'Ctrl' })
       : link.kind === 'path'
-        ? '点击打开 · 右键查看更多操作'
-        : `${link.reason}右键可复制路径。`;
+        ? t('session:link.pathHint')
+        : t('session:link.elsewhereHint', { reason: link.reason });
   return (
     <div
       className={`link-card${card.above ? ' above' : ''}`}
@@ -178,15 +179,16 @@ const commandKey =
 // plain click shows the whole address first. The address is as the browser will take it, so a look-alike name shows
 // as the xn-- it really is.
 function LeaveDialog({ url, open, close }: { url: string; open: () => void; close: () => void }) {
+  const t = useT();
   return (
-    <Modal title="打开外部链接" onClose={close}>
+    <Modal title={t('session:link.leaveTitle')} onClose={close}>
       <p className="leave-lead">
-        {url.startsWith('mailto:') ? '将用邮件程序打开：' : '将在浏览器中打开：'}
+        {url.startsWith('mailto:') ? t('session:link.leaveMail') : t('session:link.leaveWeb')}
       </p>
       <p className="leave-url">{url}</p>
       <div className="dialog-actions">
         <button type="button" className="button" onClick={close}>
-          取消
+          {t('common:cancel')}
         </button>
         <button
           type="button"
@@ -196,7 +198,7 @@ function LeaveDialog({ url, open, close }: { url: string; open: () => void; clos
             open();
           }}
         >
-          打开
+          {t('session:link.open')}
         </button>
       </div>
     </Modal>
@@ -213,33 +215,34 @@ function TaskActions({
   control: 'ready' | 'sent';
   live: Live;
 }) {
+  const t = useT();
   return (
     <span className="tool-task-actions">
       <button
         type="button"
         className="button"
         disabled={control === 'sent' || live.busy}
-        title="命令接着运行，Claude 不再等它，先做别的；命令结束后 Claude 会收到结果"
+        title={t('session:tool.backgroundHint')}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
           live.backgroundTool(tool);
         }}
       >
-        转后台
+        {t('session:tool.background')}
       </button>
       <button
         type="button"
         className="button"
         disabled={control === 'sent' || live.busy}
-        title="只结束这一条，这一轮不停止，Claude 会接着处理"
+        title={t('session:tool.endHint')}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
           live.endTool(tool);
         }}
       >
-        终止
+        {t('session:tool.end')}
       </button>
     </span>
   );
@@ -274,7 +277,9 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
           <span className="tool-subject" title={subject}>
             {subject}
           </span>
-          {pictures && <ImageIcon className="tool-picture-mark" aria-label="含图片" />}
+          {pictures && (
+            <ImageIcon className="tool-picture-mark" aria-label={t('session:tool.hasPictures')} />
+          )}
           {(added > 0 || removed > 0) && (
             <span className="tool-diff">
               <ins>+{added}</ins>
@@ -282,7 +287,7 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
             </span>
           )}
           <span className="tool-time">
-            {tool.target === 'Windows (simulation)' && '模拟 · '}
+            {tool.target === 'Windows (simulation)' && `${t('session:simulated')} · `}
             {tool.endedAt
               ? duration(t, tool.at, tool.endedAt)
               : running && duration(t, tool.at, live.now)}
@@ -293,7 +298,7 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
     >
       {() => (
         <div className="tool-detail">
-          <CopyButton text={tool.input} label="复制工具输入" />
+          <CopyButton text={tool.input} label={t('session:tool.copyInput')} />
           <pre className="tool-input" data-search-content>
             {tool.input}
           </pre>
@@ -306,7 +311,7 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
             <>
               {pictures.text && (
                 <>
-                  <CopyButton text={pictures.text} label="复制工具输出" />
+                  <CopyButton text={pictures.text} label={t('session:tool.copyOutput')} />
                   <pre className="tool-output" data-search-content>
                     {pictures.text}
                   </pre>
@@ -314,18 +319,22 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
               )}
               <div className="tool-pictures">
                 {pictures.pictures.map((picture, index) => (
-                  <Picture key={index} src={pictureUrl(picture)} alt={`图片 ${index + 1}`} />
+                  <Picture
+                    key={index}
+                    src={pictureUrl(picture)}
+                    alt={t('session:tool.picture', { n: index + 1 })}
+                  />
                 ))}
               </div>
             </>
           ) : (
             tool.output && (
               <>
-                <CopyButton text={tool.output} label="复制工具输出" />
+                <CopyButton text={tool.output} label={t('session:tool.copyOutput')} />
                 <pre className="tool-output" data-search-content>
                   {tool.exitCode !== null &&
                     tool.exitCode !== undefined &&
-                    `退出码 ${tool.exitCode}\n`}
+                    `${t('session:tool.exitCode', { code: tool.exitCode })}\n`}
                   {tool.output}
                 </pre>
               </>
@@ -335,16 +344,16 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
             <div
               className="approval-reason"
               role="note"
-              title={
-                tool.safetyCheck ? 'Claude Code 自身的安全检查，任何审批模式都会询问' : undefined
-              }
+              title={tool.safetyCheck ? t('session:approval.safetyHint') : undefined}
             >
               <ShieldAlert />
               <span>
                 {tool.safetyCheck && (
                   <b>
-                    Claude Code 安全拦截
-                    {live.bypassing && <i className="approval-tag">绕过时也提醒</i>}
+                    {t('session:approval.safety')}
+                    {live.bypassing && (
+                      <i className="approval-tag">{t('session:approval.evenBypassing')}</i>
+                    )}
                   </b>
                 )}
                 {tool.approvalReason && <small>{tool.approvalReason}</small>}
@@ -360,7 +369,7 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
                 onClick={() => live.reply(tool, false)}
               >
                 <X />
-                拒绝
+                {t('session:approval.deny')}
               </button>
               <button
                 type="button"
@@ -369,7 +378,7 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
                 onClick={() => live.reply(tool, true)}
               >
                 <Check />
-                允许
+                {t('session:approval.allow')}
               </button>
             </div>
           )}
@@ -391,6 +400,7 @@ function WorkItems({
   live: Live;
   preview?: boolean;
 }) {
+  const t = useT();
   return (
     <>
       {work.items.map((item) =>
@@ -403,7 +413,7 @@ function WorkItems({
             summary={
               <span className="tool-heading">
                 <Brain />
-                <span className="tool-verb">思考</span>
+                <span className="tool-verb">{t('session:tool.thinking')}</span>
                 {preview && <span className="thinking-preview">{firstLine(item.text)}</span>}
               </span>
             }
@@ -530,6 +540,7 @@ function Message({
   // A question put in while the run went on.
   joined?: boolean;
 }) {
+  const t = useT();
   const time = messageTime(item.kind === 'assistant' ? (item.doneAt ?? item.at) : item.at);
   const user = item.kind === 'user';
   const stamp = time && (
@@ -542,7 +553,7 @@ function Message({
       {!user && !native && (
         <div className="message-label">
           CC Desk Tunnel
-          <span>模拟</span>
+          <span>{t('session:simulated')}</span>
           {stamp}
           <CopyButton text={item.text} />
         </div>
@@ -553,21 +564,13 @@ function Message({
       {user && (
         <div className="message-footer">
           {item.terminal && (
-            <span className="message-delivery" title="在终端里问的，随终端的进展记入这个会话">
-              终端
+            <span className="message-delivery" title={t('session:message.terminalHint')}>
+              {t('session:message.terminal')}
             </span>
           )}
           {item.delivery && (
             <span className={`message-delivery${item.delivery === 'received' ? '' : ' unsettled'}`}>
-              {
-                {
-                  submitted: '已提交',
-                  queued: '等待原生处理',
-                  received: '原生已接收',
-                  not_sent: '未送达原生',
-                  unconfirmed: '接收未确认',
-                }[item.delivery]
-              }
+              {t(`session:delivery.${item.delivery}`)}
             </span>
           )}
           {stamp}
@@ -575,11 +578,11 @@ function Message({
             <button
               type="button"
               className="message-action"
-              aria-label="编辑重发"
+              aria-label={t('session:message.edit')}
               title={
                 item.delivery === 'not_sent'
-                  ? '编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉'
-                  : '编辑重发：从这条消息之前分叉出新会话，原会话保留'
+                  ? t('session:message.editUnsent')
+                  : t('session:message.editFork')
               }
               onClick={() => edit(item)}
             >
@@ -610,13 +613,14 @@ function CompactMark({ item, active, now }: { item: Compact; active: boolean; no
       <span>
         {running ? <LoaderCircle className="spinning" /> : <FoldVertical />}
         {running
-          ? '正在压缩上下文'
+          ? t('session:compact.running')
           : !item.endedAt
-            ? '上下文压缩未完成'
+            ? t('session:compact.unfinished')
             : item.trigger === 'auto'
-              ? '上下文已自动压缩'
-              : '上下文已压缩'}
-        {item.previousTokens != null && ` · 压缩前 ${item.previousTokens.toLocaleString()} tokens`}
+              ? t('session:compact.auto')
+              : t('session:compact.done')}
+        {item.previousTokens != null &&
+          ` · ${t('session:compact.before', { tokens: item.previousTokens.toLocaleString(localeOf(t)) })}`}
         {timed && ` · ${duration(t, item.at, item.endedAt ?? now)}`}
       </span>
     </div>
@@ -756,11 +760,12 @@ function TurnView({
                 className="turn-process"
                 summary={
                   <span className={turn.outcome}>
-                    {turn.outcome === 'cancelled' && '已停止 · '}
-                    {turn.outcome === 'failed' && '处理失败 · '}
-                    用时 {spent(t, turn)}
-                    {turn.tools > 0 && ` · ${turn.tools} 步`}
-                    {notes > 0 && ` · ${notes} 条说明`}
+                    {[
+                      ...(turn.outcome ? [t(`session:turn.${turn.outcome}`)] : []),
+                      t('session:turn.spent', { span: spent(t, turn) }),
+                      ...(turn.tools > 0 ? [t('session:turn.steps', { count: turn.tools })] : []),
+                      ...(notes > 0 ? [t('session:turn.notes', { count: notes })] : []),
+                    ].join(' · ')}
                   </span>
                 }
               >
@@ -1067,7 +1072,7 @@ export default function Conversation({
     void loadEarlier().catch((error: unknown) => {
       if (shownSession.current !== session.id) return;
       if (error instanceof Error && error.name === 'AbortError') return;
-      setLoadError(error instanceof Error ? error.message : '更早记录加载失败，请重试');
+      setLoadError(error instanceof Error ? error.message : t('session:history.earlierFailed'));
     });
   };
   useLayoutEffect(() => {
@@ -1106,7 +1111,7 @@ export default function Conversation({
       {session && (
         <div className="conversation-tools">
           <span role="status">{copyStatus}</span>
-          <IconButton title="打开对话查找" onClick={openFind}>
+          <IconButton title={t('session:find.open')} onClick={openFind}>
             <Search />
           </IconButton>
         </div>
@@ -1140,18 +1145,25 @@ export default function Conversation({
           const block = target.closest('pre');
           const copy = (text: string) => {
             void copyText(text).then(
-              () => setCopyStatus('已复制'),
-              () => setCopyStatus('复制失败，请重试'),
+              () => setCopyStatus(t('common:copy.done')),
+              () => setCopyStatus(t('common:copy.failed')),
             );
           };
           const items: MenuItem[] = [
-            { label: '复制', disabled: !selection, run: () => copy(selection) },
-            ...(block ? [{ label: '复制代码', run: () => copy(block.textContent ?? '') }] : []),
+            { label: t('common:copy.copy'), disabled: !selection, run: () => copy(selection) },
+            ...(block
+              ? [{ label: t('common:copy.code'), run: () => copy(block.textContent ?? '') }]
+              : []),
             ...(message
-              ? [{ label: '复制消息', run: () => copy(message.dataset.copyText ?? '') }]
+              ? [
+                  {
+                    label: t('common:copy.message'),
+                    run: () => copy(message.dataset.copyText ?? ''),
+                  },
+                ]
               : []),
             {
-              label: '全选',
+              label: t('common:copy.selectAll'),
               run: () => {
                 if (!transcriptRoot.current) return;
                 const range = document.createRange();
@@ -1161,7 +1173,7 @@ export default function Conversation({
                 selected?.addRange(range);
               },
             },
-            { label: '查找', separated: true, run: openFind },
+            { label: t('session:find.find'), separated: true, run: openFind },
           ];
           const { clientX: x, clientY: y } = event;
           const element = target.closest<HTMLElement>('[data-link]');
@@ -1184,7 +1196,7 @@ export default function Conversation({
                   ...(openInFiles && link.kind !== 'web'
                     ? [
                         {
-                          label: '在文件面板显示',
+                          label: t('session:link.showInFiles'),
                           run: () => openInFiles(link.path, link.kind === 'path'),
                         },
                       ]
@@ -1294,7 +1306,7 @@ export default function Conversation({
         {!session ? (
           <div className="empty-state">
             <MessageSquare />
-            <h2>新会话</h2>
+            <h2>{t('session:empty.title')}</h2>
             <button
               type="button"
               className="button primary"
@@ -1302,7 +1314,7 @@ export default function Conversation({
               onClick={newSession}
             >
               <Plus />
-              新建会话
+              {t('session:empty.create')}
             </button>
           </div>
         ) : (
@@ -1320,12 +1332,14 @@ export default function Conversation({
                 onClick={loadMore}
               >
                 <ArrowUpToLine />
-                {history.loadingEarlier ? '加载中' : '加载更早记录'}
+                {history.loadingEarlier
+                  ? t('session:history.loading')
+                  : t('session:history.loadEarlier')}
               </button>
             )}
             {history?.loading && (
               <div className="history-status" role="status">
-                同步会话
+                {t('session:history.syncing')}
               </div>
             )}
             {turns.length === 0 && !history?.loading && (
@@ -1335,7 +1349,7 @@ export default function Conversation({
                 <span className="empty-project">{session.projectPath}</span>
                 {suggestions && suggest && suggestions.length > 0 && (
                   <div className="empty-suggestions">
-                    <small>可以这样开始</small>
+                    <small>{t('session:empty.suggestions')}</small>
                     {suggestions.map((text) => (
                       <button
                         type="button"
@@ -1349,7 +1363,7 @@ export default function Conversation({
                     ))}
                     {moreExamples && (
                       <button type="button" className="text-link" onClick={moreExamples}>
-                        更多用法
+                        {t('session:empty.more')}
                       </button>
                     )}
                   </div>
@@ -1372,14 +1386,14 @@ export default function Conversation({
               <div className="background-tasks">
                 <div className="run-indicator" role="status">
                   <span className={`running-dot${connected ? ' breathing' : ''}`} />
-                  后台任务{tasks.length ? ` ${tasks.length} 个` : ''} · Claude
-                  已答完，任务结束后会接着处理
-                  {!ownsRun && ' · 所在设备不在线'}
+                  {tasks.length
+                    ? t('session:background.count', { count: tasks.length })
+                    : t('session:background.title')}
+                  {!ownsRun && ` · ${t('session:run.offline')}`}
                 </div>
                 {/* The run is still on, so the controls that need it over are greyed out; this says why. */}
                 <p className="background-hint">
-                  任务结束前不能更改模型、思考强度和审批模式，也不能改名、分叉或编辑重发
-                  {ownsRun && '；消息可以照常发送'}。
+                  {t(ownsRun ? 'session:background.lockedSend' : 'session:background.locked')}
                 </p>
                 <ul>
                   {tasks.map((task) => (
@@ -1399,7 +1413,7 @@ export default function Conversation({
                         disabled={!connected || !ownsRun || busy}
                         onClick={() => stopTask(task.id)}
                       >
-                        结束
+                        {t('session:background.end')}
                       </button>
                     </li>
                   ))}
@@ -1411,7 +1425,7 @@ export default function Conversation({
                     disabled={!connected || !ownsRun || busy}
                     onClick={stop}
                   >
-                    全部结束
+                    {t('session:background.endAll')}
                   </button>
                 )}
               </div>
@@ -1422,7 +1436,9 @@ export default function Conversation({
                 <span
                   className={`running-dot${session.activeRun.activity === 'working' && connected ? ' breathing' : ''}`}
                 />
-                {`${terminalState(t, session.activeRun.activity)} · 进展随后显示在这里，关闭终端后可以在这里接着聊`}
+                {t('session:terminal.follow', {
+                  state: terminalState(t, session.activeRun.activity),
+                })}
               </div>
             )}
             {session.activeRun &&
@@ -1437,13 +1453,17 @@ export default function Conversation({
                   )}
                   clock={clock}
                   connected={connected}
-                  suffix={ownsRun ? '' : ' · 所在设备不在线'}
+                  suffix={ownsRun ? '' : ` · ${t('session:run.offline')}`}
                 />
               ) : (
                 <div className="run-indicator" role="status">
                   <span className="running-dot" />
-                  {session.activeRun.waiting === 'question' ? '等待回答' : '等待审批'}
-                  {!ownsRun && ' · 所在设备不在线'}
+                  {t(
+                    session.activeRun.waiting === 'question'
+                      ? 'session:work.waitingAnswer'
+                      : 'session:work.waitingApproval',
+                  )}
+                  {!ownsRun && ` · ${t('session:run.offline')}`}
                 </div>
               ))}
           </div>
@@ -1451,7 +1471,7 @@ export default function Conversation({
         {session && away && (
           <div className="to-end">
             <IconButton
-              title="回到底部"
+              title={t('session:toEnd')}
               className="to-end-button"
               onClick={() => {
                 rejoin();
@@ -1464,7 +1484,7 @@ export default function Conversation({
         )}
       </div>
       {contextMenu && (
-        <Menu label="对话文字操作" {...contextMenu} onClose={() => setContextMenu(null)} />
+        <Menu label={t('session:textMenu')} {...contextMenu} onClose={() => setContextMenu(null)} />
       )}
       {linkCard && !contextMenu && <LinkCardView card={linkCard} />}
       {leaving && (

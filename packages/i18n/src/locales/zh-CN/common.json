@@ -28,5 +28,13 @@
     "whole": "{{h}} 小时",
     "minutes": "{{h}} 小时 {{m}} 分钟"
   },
-  "minutes": "{{m}} 分钟"
+  "minutes": "{{m}} 分钟",
+  "copy": {
+    "done": "已复制",
+    "failed": "复制失败，请重试",
+    "copy": "复制",
+    "code": "复制代码",
+    "message": "复制消息",
+    "selectAll": "全选"
+  }
 }

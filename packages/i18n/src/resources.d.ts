@@ -33,6 +33,14 @@ export type Resources = {
       minutes: '{{h}} 小时 {{m}} 分钟';
     };
     minutes: '{{m}} 分钟';
+    copy: {
+      done: '已复制';
+      failed: '复制失败，请重试';
+      copy: '复制';
+      code: '复制代码';
+      message: '复制消息';
+      selectAll: '全选';
+    };
   };
   connection: {
     interrupted: {
@@ -447,12 +455,14 @@ export type Resources = {
       working: '终端运行中';
       waiting: '终端等你确认';
       open: '终端打开中';
+      follow: '{{state}} · 进展随后显示在这里，关闭终端后可以在这里接着聊';
     };
     run: {
       quiet: '仍在运行 · 已 {{n}} 分钟没有新输出';
       running: '运行中';
       toolCall: '第 {{n}} 次工具调用 · {{tool}}';
       waited: '已等待 {{span}}';
+      offline: '所在设备不在线';
     };
     idle: {
       before: '提示缓存约 {{minutes}} 分钟后过期。现在压缩读取的是缓存，比过期后再压缩便宜得多（上下文约 {{size}}）。';
@@ -503,6 +513,16 @@ export type Resources = {
         doing: '调用工具';
         did_other: '调用了 {{count}} 个工具';
       };
+      picture: '图片 {{n}}';
+      exitCode: '退出码 {{code}}';
+      backgroundHint: '命令接着运行，Claude 不再等它，先做别的；命令结束后 Claude 会收到结果';
+      background: '转后台';
+      endHint: '只结束这一条，这一轮不停止，Claude 会接着处理';
+      end: '终止';
+      hasPictures: '含图片';
+      copyInput: '复制工具输入';
+      copyOutput: '复制工具输出';
+      thinking: '思考';
     };
     toolState: {
       requested: '已请求';
@@ -583,6 +603,78 @@ export type Resources = {
       open: '未处理';
       waiting: '等待批准';
     };
+    link: {
+      webHint: '单击确认后打开 · {{key}} + 单击直接打开 · 右键可复制地址';
+      elsewhereHint: '{{reason}}右键可复制路径。';
+      pathHint: '点击打开 · 右键查看更多操作';
+      leaveTitle: '打开外部链接';
+      leaveMail: '将用邮件程序打开：';
+      leaveWeb: '将在浏览器中打开：';
+      open: '打开';
+      showInFiles: '在文件面板显示';
+    };
+    simulated: '模拟';
+    delivery: {
+      submitted: '已提交';
+      queued: '等待原生处理';
+      received: '原生已接收';
+      not_sent: '未送达原生';
+      unconfirmed: '接收未确认';
+    };
+    compact: {
+      before: '压缩前 {{tokens}} tokens';
+      running: '正在压缩上下文';
+      unfinished: '上下文压缩未完成';
+      auto: '上下文已自动压缩';
+      done: '上下文已压缩';
+    };
+    turn: {
+      cancelled: '已停止';
+      failed: '处理失败';
+      spent: '用时 {{span}}';
+      steps_other: '{{count}} 步';
+      notes_other: '{{count}} 条说明';
+    };
+    background: {
+      title: '后台任务 · Claude 已答完，任务结束后会接着处理';
+      count_other: '后台任务 {{count}} 个 · Claude 已答完，任务结束后会接着处理';
+      locked: '任务结束前不能更改模型、思考强度和审批模式，也不能改名、分叉或编辑重发。';
+      lockedSend: '任务结束前不能更改模型、思考强度和审批模式，也不能改名、分叉或编辑重发；消息可以照常发送。';
+      end: '结束';
+      endAll: '全部结束';
+    };
+    approval: {
+      safetyHint: 'Claude Code 自身的安全检查，任何审批模式都会询问';
+      safety: 'Claude Code 安全拦截';
+      evenBypassing: '绕过时也提醒';
+      deny: '拒绝';
+      allow: '允许';
+    };
+    message: {
+      terminalHint: '在终端里问的，随终端的进展记入这个会话';
+      terminal: '终端';
+      edit: '编辑重发';
+      editUnsent: '编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉';
+      editFork: '编辑重发：从这条消息之前分叉出新会话，原会话保留';
+    };
+    history: {
+      earlierFailed: '更早记录加载失败，请重试';
+      loading: '加载中';
+      loadEarlier: '加载更早记录';
+      syncing: '同步会话';
+    };
+    find: {
+      open: '打开对话查找';
+      find: '查找';
+    };
+    empty: {
+      title: '新会话';
+      create: '新建会话';
+      suggestions: '可以这样开始';
+      more: '更多用法';
+    };
+    toEnd: '回到底部';
+    textMenu: '对话文字操作';
   };
 };
 export type Messages = {
@@ -606,6 +698,12 @@ export type Messages = {
   'common:hours.whole': { h: Value };
   'common:hours.minutes': { h: Value; m: Value };
   'common:minutes': { m: Value };
+  'common:copy.done': Record<string, never>;
+  'common:copy.failed': Record<string, never>;
+  'common:copy.copy': Record<string, never>;
+  'common:copy.code': Record<string, never>;
+  'common:copy.message': Record<string, never>;
+  'common:copy.selectAll': Record<string, never>;
   'connection:interrupted.read': Record<string, never>;
   'connection:interrupted.request': Record<string, never>;
   'connection:restored.read': Record<string, never>;
@@ -935,10 +1033,12 @@ export type Messages = {
   'session:terminal.working': Record<string, never>;
   'session:terminal.waiting': Record<string, never>;
   'session:terminal.open': Record<string, never>;
+  'session:terminal.follow': { state: Value };
   'session:run.quiet': { n: Value };
   'session:run.running': Record<string, never>;
   'session:run.toolCall': { n: Value; tool: Value };
   'session:run.waited': { span: Value };
+  'session:run.offline': Record<string, never>;
   'session:idle.before': { minutes: Value; size: Value };
   'session:idle.after': { span: Value; size: Value };
   'session:idle.compactNow': Record<string, never>;
@@ -971,6 +1071,16 @@ export type Messages = {
   'session:tool.other.done': Record<string, never>;
   'session:tool.other.doing': Record<string, never>;
   'session:tool.other.did': { count: number };
+  'session:tool.picture': { n: Value };
+  'session:tool.exitCode': { code: Value };
+  'session:tool.backgroundHint': Record<string, never>;
+  'session:tool.background': Record<string, never>;
+  'session:tool.endHint': Record<string, never>;
+  'session:tool.end': Record<string, never>;
+  'session:tool.hasPictures': Record<string, never>;
+  'session:tool.copyInput': Record<string, never>;
+  'session:tool.copyOutput': Record<string, never>;
+  'session:tool.thinking': Record<string, never>;
   'session:toolState.requested': Record<string, never>;
   'session:toolState.approval': Record<string, never>;
   'session:toolState.running': Record<string, never>;
@@ -1028,4 +1138,56 @@ export type Messages = {
   'session:plan.returned': Record<string, never>;
   'session:plan.open': Record<string, never>;
   'session:plan.waiting': Record<string, never>;
+  'session:link.webHint': { key: Value };
+  'session:link.elsewhereHint': { reason: Value };
+  'session:link.pathHint': Record<string, never>;
+  'session:link.leaveTitle': Record<string, never>;
+  'session:link.leaveMail': Record<string, never>;
+  'session:link.leaveWeb': Record<string, never>;
+  'session:link.open': Record<string, never>;
+  'session:link.showInFiles': Record<string, never>;
+  'session:simulated': Record<string, never>;
+  'session:delivery.submitted': Record<string, never>;
+  'session:delivery.queued': Record<string, never>;
+  'session:delivery.received': Record<string, never>;
+  'session:delivery.not_sent': Record<string, never>;
+  'session:delivery.unconfirmed': Record<string, never>;
+  'session:compact.before': { tokens: Value };
+  'session:compact.running': Record<string, never>;
+  'session:compact.unfinished': Record<string, never>;
+  'session:compact.auto': Record<string, never>;
+  'session:compact.done': Record<string, never>;
+  'session:turn.cancelled': Record<string, never>;
+  'session:turn.failed': Record<string, never>;
+  'session:turn.spent': { span: Value };
+  'session:turn.steps': { count: number };
+  'session:turn.notes': { count: number };
+  'session:background.title': Record<string, never>;
+  'session:background.count': { count: number };
+  'session:background.locked': Record<string, never>;
+  'session:background.lockedSend': Record<string, never>;
+  'session:background.end': Record<string, never>;
+  'session:background.endAll': Record<string, never>;
+  'session:approval.safetyHint': Record<string, never>;
+  'session:approval.safety': Record<string, never>;
+  'session:approval.evenBypassing': Record<string, never>;
+  'session:approval.deny': Record<string, never>;
+  'session:approval.allow': Record<string, never>;
+  'session:message.terminalHint': Record<string, never>;
+  'session:message.terminal': Record<string, never>;
+  'session:message.edit': Record<string, never>;
+  'session:message.editUnsent': Record<string, never>;
+  'session:message.editFork': Record<string, never>;
+  'session:history.earlierFailed': Record<string, never>;
+  'session:history.loading': Record<string, never>;
+  'session:history.loadEarlier': Record<string, never>;
+  'session:history.syncing': Record<string, never>;
+  'session:find.open': Record<string, never>;
+  'session:find.find': Record<string, never>;
+  'session:empty.title': Record<string, never>;
+  'session:empty.create': Record<string, never>;
+  'session:empty.suggestions': Record<string, never>;
+  'session:empty.more': Record<string, never>;
+  'session:toEnd': Record<string, never>;
+  'session:textMenu': Record<string, never>;
 };

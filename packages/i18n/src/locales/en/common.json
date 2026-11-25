@@ -28,5 +28,13 @@
     "whole": "{{h}} h",
     "minutes": "{{h}} h {{m}} min"
   },
-  "minutes": "{{m}} min"
+  "minutes": "{{m}} min",
+  "copy": {
+    "done": "Copied",
+    "failed": "Couldn't copy, try again",
+    "copy": "Copy",
+    "code": "Copy code",
+    "message": "Copy message",
+    "selectAll": "Select all"
+  }
 }

@@ -31,7 +31,6 @@
     "apps/desktop/src/Composer.tsx": 24,
     "apps/desktop/src/ComposerControls.tsx": 24,
     "apps/desktop/src/ContextMeter.tsx": 33,
-    "apps/desktop/src/Conversation.tsx": 80,
     "apps/desktop/src/ConversationFind.tsx": 7,
     "apps/desktop/src/copy.tsx": 4,
     "apps/desktop/src/exportSession.ts": 11,
