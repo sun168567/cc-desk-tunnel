@@ -17,6 +17,7 @@ import { cancelled } from './release-download.mjs';
 // Loaded by the main process from here, so that the package's bundle of this module holds it.
 export { probeService, upgradeService } from './service-upgrade.mjs';
 export { createFiles, gitChanges } from './files.mjs';
+export { failureText, followLanguage, t } from './words.mjs';
 
 // The SSH service of a connection. The two are started and closed alike and give the same credentials; what
 // is behind them differs with the system: see each module.

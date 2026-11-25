@@ -1,0 +1,64 @@
+{
+  "dialog": {
+    "addProject": "添加项目",
+    "addFiles": "添加文件",
+    "export": "导出",
+    "saveWhere": "选择保存位置",
+    "saveAs": "另存为",
+    "openWith": "选择打开“{{name}}”的应用",
+    "applications": "应用程序",
+    "plainFolder": "普通会话的文件夹"
+  },
+  "error": {
+    "notSignedIn": "还没有登录服务。",
+    "imageTooLarge": "只能粘贴不超过 20 MB 的图片。",
+    "notFolder": "不是文件夹。",
+    "notConnected": "还没有连上服务。",
+    "noToken": "请输入服务凭据。",
+    "windowExited": "连接窗口意外退出，请再试一次。",
+    "connectionGone": "这个连接已不存在。",
+    "connectionInUse": "不能删除正在使用的连接。"
+  },
+  "open": {
+    "missing": "本机找不到这个路径，它可能在服务端或另一台电脑上。",
+    "failed": "没能打开：{{reason}}",
+    "program": "它会运行程序，没有直接打开，已在文件夹中显示。",
+    "tooLarge": "文件超过 1 MB，没有复制。",
+    "notText": "这不是文本文件，没有复制。",
+    "copied": "已复制文件内容",
+    "saved": "已另存"
+  },
+  "upgrade": {
+    "fromSource": "源码运行不支持自升级；请重新打包安装。",
+    "unsupported": "这个系统上的客户端不能在应用内升级，请到发布页下载新版本。",
+    "already": "客户端已经在升级了。",
+    "connectFirst": "请先连接服务。",
+    "othersOpen": "其他连接的窗口没有退出，请先退出它们再升级。",
+    "title": "正在升级 CC Desk Tunnel",
+    "body": "安装完成后会自动重新打开。"
+  },
+  "menu": {
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "selectAll": "全选",
+    "about": "关于 CC Desk Tunnel",
+    "hide": "隐藏 CC Desk Tunnel",
+    "hideOthers": "隐藏其他",
+    "unhide": "全部显示",
+    "quit": "退出 CC Desk Tunnel",
+    "edit": "编辑",
+    "window": "窗口",
+    "develop": "开发"
+  },
+  "tray": {
+    "show": "显示窗口",
+    "newLogin": "新的登录窗口",
+    "stayInBackground": "关闭窗口时留在后台",
+    "quit": "退出",
+    "backgroundTitle": "CC Desk Tunnel 仍在后台运行",
+    "backgroundBody": "点击托盘图标恢复窗口；右键图标选择“退出”才会结束连接。"
+  }
+}

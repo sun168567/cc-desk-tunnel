@@ -14,7 +14,6 @@
     "apps/desktop/electron/connect-errors.mjs": 58,
     "apps/desktop/electron/connections.cjs": 8,
     "apps/desktop/electron/files.mjs": 11,
-    "apps/desktop/electron/main.cjs": 58,
     "apps/desktop/electron/posix-ssh-worker.mjs": 2,
     "apps/desktop/electron/posix-ssh.mjs": 7,
     "apps/desktop/electron/proxy-bridge.mjs": 25,

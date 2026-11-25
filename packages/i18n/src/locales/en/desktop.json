@@ -1,0 +1,64 @@
+{
+  "dialog": {
+    "addProject": "Add project",
+    "addFiles": "Add files",
+    "export": "Export",
+    "saveWhere": "Choose where to save",
+    "saveAs": "Save as",
+    "openWith": "Choose an app to open “{{name}}”",
+    "applications": "Applications",
+    "plainFolder": "Folder for plain sessions"
+  },
+  "error": {
+    "notSignedIn": "Not signed in to a service yet.",
+    "imageTooLarge": "Only images up to 20 MB can be pasted.",
+    "notFolder": "Not a folder.",
+    "notConnected": "Not connected to the service yet.",
+    "noToken": "Enter the service token.",
+    "windowExited": "The connection window quit unexpectedly. Please try again.",
+    "connectionGone": "This connection no longer exists.",
+    "connectionInUse": "A connection in use can’t be removed."
+  },
+  "open": {
+    "missing": "This path isn’t on this computer; it may be on the server or another computer.",
+    "failed": "Couldn’t open it: {{reason}}",
+    "program": "It would run a program, so it wasn’t opened; it’s shown in its folder instead.",
+    "tooLarge": "The file is over 1 MB and wasn’t copied.",
+    "notText": "This isn’t a text file and wasn’t copied.",
+    "copied": "File content copied",
+    "saved": "Saved"
+  },
+  "upgrade": {
+    "fromSource": "A run from source can’t upgrade itself; build and install a package.",
+    "unsupported": "The client on this system can’t upgrade in the app; download the new version from the release page.",
+    "already": "The client is already upgrading.",
+    "connectFirst": "Connect to the service first.",
+    "othersOpen": "Windows of other connections didn’t quit; quit them first, then upgrade.",
+    "title": "Upgrading CC Desk Tunnel",
+    "body": "It opens again once installed."
+  },
+  "menu": {
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "selectAll": "Select All",
+    "about": "About CC Desk Tunnel",
+    "hide": "Hide CC Desk Tunnel",
+    "hideOthers": "Hide Others",
+    "unhide": "Show All",
+    "quit": "Quit CC Desk Tunnel",
+    "edit": "Edit",
+    "window": "Window",
+    "develop": "Develop"
+  },
+  "tray": {
+    "show": "Show window",
+    "newLogin": "New sign-in window",
+    "stayInBackground": "Keep running when the window is closed",
+    "quit": "Quit",
+    "backgroundTitle": "CC Desk Tunnel is still running",
+    "backgroundBody": "Click the tray icon to bring the window back; right-click it and choose “Quit” to end the connection."
+  }
+}

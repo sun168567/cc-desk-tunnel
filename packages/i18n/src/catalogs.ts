@@ -3,6 +3,7 @@
 import zhCommon from './locales/zh-CN/common.json' with { type: 'json' };
 import zhAccount from './locales/zh-CN/account.json' with { type: 'json' };
 import zhConnection from './locales/zh-CN/connection.json' with { type: 'json' };
+import zhDesktop from './locales/zh-CN/desktop.json' with { type: 'json' };
 import zhFiles from './locales/zh-CN/files.json' with { type: 'json' };
 import zhNav from './locales/zh-CN/nav.json' with { type: 'json' };
 import zhSchedules from './locales/zh-CN/schedules.json' with { type: 'json' };
@@ -12,6 +13,7 @@ import zhSettings from './locales/zh-CN/settings.json' with { type: 'json' };
 import enCommon from './locales/en/common.json' with { type: 'json' };
 import enAccount from './locales/en/account.json' with { type: 'json' };
 import enConnection from './locales/en/connection.json' with { type: 'json' };
+import enDesktop from './locales/en/desktop.json' with { type: 'json' };
 import enFiles from './locales/en/files.json' with { type: 'json' };
 import enNav from './locales/en/nav.json' with { type: 'json' };
 import enSchedules from './locales/en/schedules.json' with { type: 'json' };
@@ -22,6 +24,7 @@ import enSettings from './locales/en/settings.json' with { type: 'json' };
 // common: words used all over the window
 // account: the Claude account, its quota and usage, the call log and the run stats
 // connection: connecting and signing in, requests and their failures
+// desktop: the desktop program outside its page: menus, tray, dialogs, and what the main process and the connection bridge say
 // files: the file panel
 // nav: the window frame: sidebar, rail, title bar, notifications
 // schedules: scheduled tasks: their file, editor and runs
@@ -32,6 +35,7 @@ export const namespaces = [
   'common',
   'account',
   'connection',
+  'desktop',
   'files',
   'nav',
   'schedules',
@@ -44,6 +48,7 @@ export const catalogs = {
     common: zhCommon,
     account: zhAccount,
     connection: zhConnection,
+    desktop: zhDesktop,
     files: zhFiles,
     nav: zhNav,
     schedules: zhSchedules,
@@ -55,6 +60,7 @@ export const catalogs = {
     common: enCommon,
     account: enAccount,
     connection: enConnection,
+    desktop: enDesktop,
     files: enFiles,
     nav: enNav,
     schedules: enSchedules,
