@@ -20,6 +20,10 @@
 !apps/desktop/public/
 !apps/desktop/public/**
 !packages/
+!packages/i18n/
+!packages/i18n/package.json
+!packages/i18n/src/
+!packages/i18n/src/**
 !packages/protocol/
 !packages/protocol/package.json
 !packages/protocol/src/

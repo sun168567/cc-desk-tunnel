@@ -36,8 +36,10 @@ FROM build AS web-build
 COPY --chown=ccdesktunnel:ccdesktunnel CHANGELOG.md ./
 COPY --chown=ccdesktunnel:ccdesktunnel apps/desktop apps/desktop
 COPY --chown=ccdesktunnel:ccdesktunnel apps/server apps/server
+# The window's text: the catalogs and i18next, which only the UI uses.
+COPY --chown=ccdesktunnel:ccdesktunnel packages/i18n packages/i18n
 RUN if [ ! -s apps/server/web/index.html ] && [ -f apps/desktop/src/main.tsx ]; then \
-      ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --include=dev --workspace=@cc-desk-tunnel/desktop --workspace=@cc-desk-tunnel/protocol \
+      ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --include=dev --workspace=@cc-desk-tunnel/desktop --workspace=@cc-desk-tunnel/i18n --workspace=@cc-desk-tunnel/protocol \
       && node node_modules/vite/bin/vite.js build --config apps/desktop/vite.config.ts --outDir ../server/web --emptyOutDir; \
     fi && test -s apps/server/web/index.html
 

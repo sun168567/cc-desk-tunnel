@@ -31,6 +31,7 @@ test('server archives contain a fresh Web build without local data or desktop de
     'CHANGELOG.md',
     'apps/server/package.json',
     'apps/desktop/package.json',
+    'packages/i18n/package.json',
     'packages/protocol/package.json',
     'scripts/install-linux.sh',
     'deploy',
@@ -43,6 +44,7 @@ test('server archives contain a fresh Web build without local data or desktop de
     writeFileSync(join(directory, path), content);
   };
   put('apps/server/src/main.ts', 'export {};');
+  put('packages/i18n/src/index.ts', 'export {};');
   put('packages/protocol/src/index.ts', 'export {};');
   put('apps/desktop/dist/index.html', 'desktop build stays unchanged');
   put('apps/desktop/src/private-test.ts', 'not runtime code');
@@ -68,6 +70,7 @@ test('server archives contain a fresh Web build without local data or desktop de
   assert.ok(entries.includes('apps/server/web/assets/current.js'));
   assert.ok(entries.includes('CHANGELOG.md'));
   assert.ok(entries.includes('deploy/install.sh'));
+  assert.ok(entries.includes('packages/i18n/src/index.ts'));
   assert.ok(!entries.some((entry) => /node_modules|\.env|private-test|desktop\/dist/.test(entry)));
   assert.equal(
     readFileSync(join(directory, 'apps/desktop/dist/index.html'), 'utf8'),
