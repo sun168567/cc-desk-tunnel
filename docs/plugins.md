@@ -2,6 +2,41 @@
 
 服务端在需要人或别的系统知道的时候发出事件，交给数据目录里的插件：推送到聊天软件、接家庭自动化、记录到自己的系统，都由插件去做，服务端不认识任何渠道。设备、`ccdt` 终端、跨设备的审批这些状态 Claude Code 里没有，所以事件由服务端发出，而不是用 Claude Code 自带的 hooks。
 
+插件只接收通知，在自己的进程里运行，出错、超时都不影响会话的运行。标准输出留作以后的用途。
+
+## 插件
+
+插件是 `<数据目录>/plugins/<id>/`（Docker 部署在容器里是 `/data/state/plugins/<id>/`）。id 是 `作者.插件名`，由作者定，两段都用小写字母、数字和连字符，作者一段建议用代码托管平台的用户名；设置、数据和日志都按它保存。目录里面的 `hooks/hooks.json` 与 Claude Code 插件的结构相同：
+
+```json
+{
+  "hooks": {
+    "ApprovalRequested": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/notify.mjs"] }
+        ]
+      }
+    ],
+    "RunEnded": [
+      {
+        "matcher": "completed|failed",
+        "hooks": [{ "type": "command", "command": "./notify.sh", "timeout": 20 }]
+      }
+    ]
+  }
+}
+```
+
+- 服务端监听这个目录，新增、修改、删除插件片刻后生效，不用重启。
+- `type` 只支持 `command`。有 `args` 时直接启动 `command`，没有时交给 shell 执行。
+- `matcher` 的写法与 Claude Code 相同：省略、空或 `*` 匹配全部；只含字母、数字、`_`、`-`、空格、`,`、`|` 时是一个或几个名字；其他是正则表达式。对照的字段见下表，没有列出的事件忽略它。
+- `timeout` 是秒数，默认 60，最长 600，到时连同它启动的进程一起结束。默认值比 Claude Code 的 600 短，因为这里只是通知。
+- 命令在插件目录里运行，事件是标准输入上的一个 JSON 对象（UTF-8）。环境变量 `CLAUDE_PLUGIN_ROOT` 是插件目录，`CLAUDE_PLUGIN_DATA` 是它存状态用的目录（`<数据目录>/plugin-data/<id>/`），两者也可以在 `command` 和 `args` 里写成 `${…}`。
+- 匹配的命令同时启动，事件之间也不排队：要分先后时看 `timestamp`。
+
+插件与服务端是同一个 Linux 用户，能做的与会话里的 Claude 一样多，只装信得过的。
+
 ## 事件
 
 这份合约独立于客户端与服务端的协议，只增加，不删除，也不改变已有的含义。

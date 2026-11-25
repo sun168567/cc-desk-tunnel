@@ -2,8 +2,16 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { EventPayload, Session } from '@cc-desk-tunnel/protocol';
+import { matches } from '../src/plugin-hooks.ts';
 import { EVENTS_VERSION, ServiceEvents } from '../src/service-events.ts';
 import type { ServiceEvent } from '../src/service-events.ts';
+
+test('a matcher is names or a regular expression, as in Claude Code', () => {
+  assert.ok(matches(undefined, 'Bash') && matches('*', 'Bash') && matches('Edit | Bash', 'Bash'));
+  assert.ok(!matches('Bash', 'BashOutput'));
+  assert.ok(matches('^mcp__.*', 'mcp__memory__read') && !matches('^mcp__.*', 'Bash'));
+  assert.throws(() => matches('^(\\w+)+!$', 'a'.repeat(60)), /timed out/);
+});
 
 test('every wait is resolved by the end of its run, and a failed run says why and how the quota stands', () => {
   const heard: ServiceEvent[] = [];

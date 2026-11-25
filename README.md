@@ -235,6 +235,7 @@ curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deplo
 | 🛡️ [部署与安全边界](docs/deployment.md) · [安全说明](SECURITY.md) | 端口、证书、凭据、信任边界；威胁模型、已知不足、漏洞报告 |
 | 👤 [账号须知](docs/account.md) | 在 Anthropic 看来这是什么、使用地点、条款、额度、使用边界 |
 | ⌨️ [终端客户端 ccdt](docs/cli.md) | 安装、登录、命令、保持在线、供其他 agent 使用 |
+| 🔌 [插件与事件](docs/plugins.md) | 服务端发出的事件，用插件接到推送、自动化或自己的系统 |
 | 🌐 [浏览器访问](docs/server-web.md) | 可选的 Web 工作台、登录、域名与路径、证书和反向代理 |
 | 🍎 [macOS 客户端](docs/macos.md) · 🐧 [Linux 客户端](docs/linux.md) | 实验性：安装、与 Windows 的不同、验证情况 |
 | 🏗️ [架构](docs/architecture.md) · [原生运行与会话存储](docs/native-runtime.md) | 组成与连接过程；如何驱动官方 CLI、上下文、审批、保留期 |
