@@ -1,3 +1,4 @@
+import type { T } from './i18n.ts';
 import type { TranscriptItem, Work } from './transcript.ts';
 
 type Tool = Extract<TranscriptItem, { kind: 'tool' }>;
@@ -18,23 +19,18 @@ const categories: Record<string, Category> = {
   Agent: 'agent',
   Task: 'agent',
 };
-// [while running, once done, group phrase while running, group phrase once done]
-const words: Record<Category, [string, string, string, (count: number) => string]> = {
-  command: ['运行', '已运行', '运行命令', (count) => `运行了 ${count} 条命令`],
-  edit: ['编辑', '已编辑', '编辑文件', (count) => `编辑了 ${count} 个文件`],
-  read: ['读取', '已读取', '读取文件', (count) => `读取了 ${count} 个文件`],
-  search: ['搜索', '已搜索', '搜索', (count) => `搜索了 ${count} 次`],
-  web: ['检索', '已检索', '检索网页', (count) => `检索了 ${count} 个网页`],
-  agent: ['子任务', '子任务完成', '执行子任务', (count) => `执行了 ${count} 个子任务`],
-  other: ['调用', '已调用', '调用工具', (count) => `调用了 ${count} 个工具`],
-};
-const outcomes: Partial<Record<Tool['state'], string>> = {
-  approval: '等待审批',
-  denied: '已拒绝',
-  cancelled: '已取消',
-  failed: '失败',
-  unknown: '结果未知',
-};
+// The words for a category's calls: one while it runs, one once done, and for a run of them, what is being done
+// and what was (session:tool.<category>).
+const verbs = (t: T, category: Category) => ({
+  running: t(`session:tool.${category}.running`),
+  done: t(`session:tool.${category}.done`),
+  doing: t(`session:tool.${category}.doing`),
+  did: (count: number) => t(`session:tool.${category}.did`, { count }),
+});
+// The states a call's line names instead of its verb.
+const outcomes: Tool['state'][] = ['approval', 'denied', 'cancelled', 'failed', 'unknown'];
+// A line that begins with words of a list starts with a capital where the language has them.
+const sentence = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 function fields(input: string): Record<string, unknown> {
   try {
@@ -53,7 +49,7 @@ export const isRunning = (tool: Tool) =>
   !tool.endedAt && tool.state !== 'denied' && tool.state !== 'approval';
 
 // One line for a tool call: what it did, to what, and for edits how many lines went in and out.
-export function describe(tool: Tool, active: boolean) {
+export function describe(t: T, tool: Tool, active: boolean) {
   const category = categoryOf(tool);
   const input = fields(tool.input);
   let subject = '';
@@ -76,7 +72,9 @@ export function describe(tool: Tool, active: boolean) {
   const running = active && isRunning(tool);
   return {
     category,
-    verb: outcomes[tool.state] ?? words[category][running ? 0 : 1],
+    verb: outcomes.includes(tool.state)
+      ? t(`session:toolState.${tool.state}`)
+      : verbs(t, category)[running ? 'running' : 'done'],
     subject,
     added,
     removed,
@@ -86,7 +84,7 @@ export function describe(tool: Tool, active: boolean) {
 }
 
 // The folded line for a run of tool calls: what is happening now, or what was done.
-export function summarize(work: Work, active: boolean, latest: boolean) {
+export function summarize(t: T, work: Work, active: boolean, latest: boolean) {
   const tools = work.items.filter((item): item is Tool => item.kind === 'tool');
   const waiting = tools.find((tool) => tool.state === 'approval');
   const running = active ? tools.filter(isRunning) : [];
@@ -99,16 +97,27 @@ export function summarize(work: Work, active: boolean, latest: boolean) {
         last.at,
       );
   let label: string;
-  if (waiting) label = waiting.name === 'AskUserQuestion' ? '等待回答' : '等待审批';
-  else if (running.length)
-    label = `正在${[...new Set(running.map((tool) => words[categoryOf(tool)][2]))].slice(0, 2).join('、')}`;
-  else if (!tools.length) label = active && latest ? '正在思考' : '思考';
+  if (waiting)
+    label = t(
+      waiting.name === 'AskUserQuestion'
+        ? 'session:work.waitingAnswer'
+        : 'session:work.waitingApproval',
+    );
+  else if (running.length) {
+    const what = [...new Set(running.map((tool) => verbs(t, categoryOf(tool)).doing))].slice(0, 2);
+    label = sentence(t('session:work.doing', { what }));
+  } else if (!tools.length)
+    label = t(active && latest ? 'session:work.thinking' : 'session:work.thought');
   else {
     const counts = new Map<Category, number>();
     for (const tool of tools) counts.set(categoryOf(tool), (counts.get(categoryOf(tool)) ?? 0) + 1);
-    label = [...counts].map(([category, count]) => words[category][3](count)).join('，');
+    const what = [...counts].map(([category, count]) => verbs(t, category).did(count));
     const failed = tools.filter((tool) => ['failed', 'unknown'].includes(tool.state)).length;
-    if (failed) label += `，${failed} 项未成功`;
+    label = sentence(
+      failed
+        ? t('session:work.didFailed', { what, count: failed })
+        : t('session:work.did', { what }),
+    );
   }
   return {
     label,
@@ -119,11 +128,15 @@ export function summarize(work: Work, active: boolean, latest: boolean) {
   };
 }
 
-export function duration(from: string, to: string | number) {
+export function duration(t: T, from: string, to: string | number) {
   const ms = Math.max(0, (typeof to === 'number' ? to : Date.parse(to)) - Date.parse(from));
   const seconds = Math.floor(ms / 1000);
-  if (seconds < 10) return `${(ms / 1000).toFixed(1)} 秒`;
-  if (seconds < 60) return `${seconds} 秒`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
-  return `${Math.floor(seconds / 3600)} 小时 ${Math.floor((seconds % 3600) / 60)} 分`;
+  if (seconds < 10) return t('common:span.seconds', { s: (ms / 1000).toFixed(1) });
+  if (seconds < 60) return t('common:span.seconds', { s: seconds });
+  if (seconds < 3600)
+    return t('common:span.minutes', { m: Math.floor(seconds / 60), s: seconds % 60 });
+  return t('common:span.hours', {
+    h: Math.floor(seconds / 3600),
+    m: Math.floor((seconds % 3600) / 60),
+  });
 }

@@ -460,6 +460,129 @@ export type Resources = {
       compactNow: '现在压缩';
       close: '关闭提醒';
     };
+    tool: {
+      command: {
+        running: '运行';
+        done: '已运行';
+        doing: '运行命令';
+        did_other: '运行了 {{count}} 条命令';
+      };
+      edit: {
+        running: '编辑';
+        done: '已编辑';
+        doing: '编辑文件';
+        did_other: '编辑了 {{count}} 个文件';
+      };
+      read: {
+        running: '读取';
+        done: '已读取';
+        doing: '读取文件';
+        did_other: '读取了 {{count}} 个文件';
+      };
+      search: {
+        running: '搜索';
+        done: '已搜索';
+        doing: '搜索';
+        did_other: '搜索了 {{count}} 次';
+      };
+      web: {
+        running: '检索';
+        done: '已检索';
+        doing: '检索网页';
+        did_other: '检索了 {{count}} 个网页';
+      };
+      agent: {
+        running: '子任务';
+        done: '子任务完成';
+        doing: '执行子任务';
+        did_other: '执行了 {{count}} 个子任务';
+      };
+      other: {
+        running: '调用';
+        done: '已调用';
+        doing: '调用工具';
+        did_other: '调用了 {{count}} 个工具';
+      };
+    };
+    toolState: {
+      requested: '已请求';
+      approval: '等待审批';
+      running: '运行中';
+      completed: '已完成';
+      cancelled: '已取消';
+      denied: '已拒绝';
+      failed: '失败';
+      unknown: '结果未知';
+    };
+    work: {
+      waitingAnswer: '等待回答';
+      waitingApproval: '等待审批';
+      doing: '正在{{what, series}}';
+      thinking: '正在思考';
+      thought: '思考';
+      did: '{{what, commas}}';
+      didFailed_other: '{{what, commas}}，{{count}} 项未成功';
+    };
+    note: {
+      planMode: 'Claude 进入了计划模式：先调研并写出计划，经你批准后才动手';
+      modeChanged: '审批模式改为{{mode, quoted}}';
+      continued: '继续';
+      stopped: '已停止';
+    };
+    mode: {
+      label: '审批模式';
+      question: 'Claude Code 操作前如何征求同意？';
+      help: '各模式怎么选';
+      auto: {
+        name: '自动审批';
+        detail: '由 Claude Code 判断风险，只在必要时询问';
+      };
+      default: {
+        name: '手动审批';
+        detail: '编辑文件和执行命令前都先询问';
+      };
+      acceptEdits: {
+        name: '接受编辑';
+        detail: '文件编辑直接通过，执行命令仍先询问';
+      };
+      plan: {
+        name: '计划模式';
+        detail: '只调研并写出计划，经你批准后才动手';
+      };
+      bypassPermissions: {
+        name: '绕过权限';
+        detail: '任何操作都不再询问，风险自负';
+      };
+      bypass: {
+        label: '确认绕过权限';
+        question: '确认绕过权限？';
+        warning: '这个会话里 Claude 做任何事都不再征求同意，包括删除文件和在你的电脑上执行任意命令，直到你换回别的审批模式。只在你能承担后果的环境里使用。';
+      };
+    };
+    plan: {
+      label: 'Claude 的计划';
+      title: '计划';
+      copy: '复制计划';
+      read: '全屏阅读';
+      edit: '修改计划';
+      whole: '展开全文';
+      feedbackLabel: '哪里要改';
+      feedbackHint: '说说哪里要改，Claude 会按你的意见接着规划（可以不填）';
+      sendBack: '退回，继续规划';
+      modeLabel: '执行时的审批模式';
+      modes: '执行时';
+      keepPlanning: '继续规划';
+      start: '开始执行';
+      discard: '取消修改';
+      startEdited: '按修改后的计划执行';
+      titleOf: '计划 · {{name}}';
+      feedback: '你的意见：{{feedback}}';
+      approved: '已批准';
+      edited: '已修改';
+      returned: '已退回，继续规划';
+      open: '未处理';
+      waiting: '等待批准';
+    };
   };
 };
 export type Messages = {
@@ -820,4 +943,89 @@ export type Messages = {
   'session:idle.after': { span: Value; size: Value };
   'session:idle.compactNow': Record<string, never>;
   'session:idle.close': Record<string, never>;
+  'session:tool.command.running': Record<string, never>;
+  'session:tool.command.done': Record<string, never>;
+  'session:tool.command.doing': Record<string, never>;
+  'session:tool.command.did': { count: number };
+  'session:tool.edit.running': Record<string, never>;
+  'session:tool.edit.done': Record<string, never>;
+  'session:tool.edit.doing': Record<string, never>;
+  'session:tool.edit.did': { count: number };
+  'session:tool.read.running': Record<string, never>;
+  'session:tool.read.done': Record<string, never>;
+  'session:tool.read.doing': Record<string, never>;
+  'session:tool.read.did': { count: number };
+  'session:tool.search.running': Record<string, never>;
+  'session:tool.search.done': Record<string, never>;
+  'session:tool.search.doing': Record<string, never>;
+  'session:tool.search.did': { count: number };
+  'session:tool.web.running': Record<string, never>;
+  'session:tool.web.done': Record<string, never>;
+  'session:tool.web.doing': Record<string, never>;
+  'session:tool.web.did': { count: number };
+  'session:tool.agent.running': Record<string, never>;
+  'session:tool.agent.done': Record<string, never>;
+  'session:tool.agent.doing': Record<string, never>;
+  'session:tool.agent.did': { count: number };
+  'session:tool.other.running': Record<string, never>;
+  'session:tool.other.done': Record<string, never>;
+  'session:tool.other.doing': Record<string, never>;
+  'session:tool.other.did': { count: number };
+  'session:toolState.requested': Record<string, never>;
+  'session:toolState.approval': Record<string, never>;
+  'session:toolState.running': Record<string, never>;
+  'session:toolState.completed': Record<string, never>;
+  'session:toolState.cancelled': Record<string, never>;
+  'session:toolState.denied': Record<string, never>;
+  'session:toolState.failed': Record<string, never>;
+  'session:toolState.unknown': Record<string, never>;
+  'session:work.waitingAnswer': Record<string, never>;
+  'session:work.waitingApproval': Record<string, never>;
+  'session:work.doing': { what: ListValue };
+  'session:work.thinking': Record<string, never>;
+  'session:work.thought': Record<string, never>;
+  'session:work.did': { what: ListValue };
+  'session:work.didFailed': { count: number; what: ListValue };
+  'session:note.planMode': Record<string, never>;
+  'session:note.modeChanged': { mode: ListValue };
+  'session:note.continued': Record<string, never>;
+  'session:note.stopped': Record<string, never>;
+  'session:mode.label': Record<string, never>;
+  'session:mode.question': Record<string, never>;
+  'session:mode.help': Record<string, never>;
+  'session:mode.auto.name': Record<string, never>;
+  'session:mode.auto.detail': Record<string, never>;
+  'session:mode.default.name': Record<string, never>;
+  'session:mode.default.detail': Record<string, never>;
+  'session:mode.acceptEdits.name': Record<string, never>;
+  'session:mode.acceptEdits.detail': Record<string, never>;
+  'session:mode.plan.name': Record<string, never>;
+  'session:mode.plan.detail': Record<string, never>;
+  'session:mode.bypassPermissions.name': Record<string, never>;
+  'session:mode.bypassPermissions.detail': Record<string, never>;
+  'session:mode.bypass.label': Record<string, never>;
+  'session:mode.bypass.question': Record<string, never>;
+  'session:mode.bypass.warning': Record<string, never>;
+  'session:plan.label': Record<string, never>;
+  'session:plan.title': Record<string, never>;
+  'session:plan.copy': Record<string, never>;
+  'session:plan.read': Record<string, never>;
+  'session:plan.edit': Record<string, never>;
+  'session:plan.whole': Record<string, never>;
+  'session:plan.feedbackLabel': Record<string, never>;
+  'session:plan.feedbackHint': Record<string, never>;
+  'session:plan.sendBack': Record<string, never>;
+  'session:plan.modeLabel': Record<string, never>;
+  'session:plan.modes': Record<string, never>;
+  'session:plan.keepPlanning': Record<string, never>;
+  'session:plan.start': Record<string, never>;
+  'session:plan.discard': Record<string, never>;
+  'session:plan.startEdited': Record<string, never>;
+  'session:plan.titleOf': { name: Value };
+  'session:plan.feedback': { feedback: Value };
+  'session:plan.approved': Record<string, never>;
+  'session:plan.edited': Record<string, never>;
+  'session:plan.returned': Record<string, never>;
+  'session:plan.open': Record<string, never>;
+  'session:plan.waiting': Record<string, never>;
 };

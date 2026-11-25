@@ -24,7 +24,7 @@ function typeOf(value, indent) {
   return `{\n${fields.join('\n')}\n${indent}}`;
 }
 
-const lists = new Set(['quoted', 'clauses', 'parts']);
+const lists = new Set(['quoted', 'clauses', 'parts', 'series', 'commas']);
 function messageTypes(namespace, catalog) {
   const flat = (tree, prefix = '') =>
     Object.entries(tree).flatMap(([key, value]) =>

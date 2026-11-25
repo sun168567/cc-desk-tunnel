@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { ProxyClient, RequestInterruptedError } from '../src/client.ts';
 import { PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import { conversation, transcript } from '../src/transcript.ts';
+import { t } from '../src/i18n.ts';
+import { createI18n } from '@cc-desk-tunnel/i18n';
 import { describe, duration, summarize } from '../src/activity.ts';
 import {
   describeSchedule,
@@ -496,9 +498,9 @@ test('native input receipts update the existing user row without duplicating mes
     sequence: index + 1,
     createdAt: new Date().toISOString(),
   }));
-  assert.equal(transcript(events).length, 1);
-  assert.equal(transcript(events)[0].delivery, 'received');
-  assert.equal(transcript(events.slice(0, 3))[0].delivery, 'queued');
+  assert.equal(transcript(events, t).length, 1);
+  assert.equal(transcript(events, t)[0].delivery, 'received');
+  assert.equal(transcript(events.slice(0, 3), t)[0].delivery, 'queued');
 });
 
 test('account telemetry can refresh without selecting or loading a conversation', (t) => {
@@ -559,16 +561,16 @@ test('conversation folds a finished turn into question, activity and answer', ()
       exitCode: null,
     }),
   ];
-  let [turn] = conversation(events);
+  let [turn] = conversation(events, t);
   assert.equal(turn.endedAt, undefined);
   assert.deepEqual(
     turn.steps.map((step) => step.kind),
     ['assistant', 'work'],
   );
-  assert.equal(summarize(turn.steps[1], true, true).label, '正在编辑文件');
+  assert.equal(summarize(t, turn.steps[1], true, true).label, '正在编辑文件');
   assert.deepEqual(
     (({ verb, subject, added, removed }) => ({ verb, subject, added, removed }))(
-      describe(turn.steps[1].items[1], true),
+      describe(t, turn.steps[1].items[1], true),
     ),
     { verb: '编辑', subject: 'app.py', added: 3, removed: 1 },
   );
@@ -588,13 +590,16 @@ test('conversation folds a finished turn into question, activity and answer', ()
       randomUUID(),
     ),
   );
-  const turns = conversation(events);
+  const turns = conversation(events, t);
   [turn] = turns;
   assert.equal(turns.length, 2);
   assert.equal(turn.answer.text, '改好了。');
   assert.equal(turn.tools, 2);
-  assert.equal(duration(turn.startedAt, turn.endedAt), '1 分 7 秒');
-  assert.equal(summarize(turn.steps[1], false, false).label, '读取了 1 个文件，编辑了 1 个文件');
+  assert.equal(duration(t, turn.startedAt, turn.endedAt), '1 分 7 秒');
+  assert.equal(summarize(t, turn.steps[1], false, false).label, '读取了 1 个文件，编辑了 1 个文件');
+  const en = createI18n('en').t;
+  assert.equal(summarize(en, turn.steps[1], false, false).label, 'Read 1 file, edited 1 file');
+  assert.equal(duration(en, turn.startedAt, turn.endedAt), '1 min 7 s');
   assert.equal(turns[1].endedAt, undefined);
 });
 

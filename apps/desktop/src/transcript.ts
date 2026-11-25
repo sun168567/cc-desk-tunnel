@@ -1,7 +1,7 @@
 import { wordsText } from '@cc-desk-tunnel/i18n';
 import type { PlanMode, SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
-import type { TFunction } from 'i18next';
-import { modeNames } from './modes.ts';
+import type { T } from './i18n.ts';
+import { modeName } from './modes.ts';
 
 export type ToolState =
   | 'requested'
@@ -69,7 +69,7 @@ export type TranscriptItem =
     };
 
 // The items of a session's events, with what the service said in the language of `t`.
-export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem[] {
+export function transcript(events: SessionEvent[], t: T): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const byId = new Map<string, TranscriptItem>();
   const byApproval = new Map<string, Extract<TranscriptItem, { kind: 'tool' }>>();
@@ -87,7 +87,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
         kind: 'user',
         id: payload.messageId,
         runId,
-        text: payload.continued ? '继续' : payload.text,
+        text: payload.continued ? t('session:note.continued') : payload.text,
         ...(payload.continued ? { continued: true } : {}),
         ...(terminals.has(runId) ? { terminal: true } : {}),
         at,
@@ -119,7 +119,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
         input: payload.input,
         target: payload.target,
         resolved: false,
-        status: '已请求',
+        status: t('session:toolState.requested'),
         state: 'requested',
         at,
       });
@@ -129,7 +129,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
         tool.approvalId = payload.approvalId;
         tool.approvalReason = payload.reason;
         tool.safetyCheck = payload.safetyCheck;
-        tool.status = '等待审批';
+        tool.status = t('session:toolState.approval');
         tool.state = 'approval';
         byApproval.set(payload.approvalId, tool);
       }
@@ -146,7 +146,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
       const tool = byApproval.get(payload.approvalId);
       if (tool?.kind === 'tool') {
         tool.resolved = true;
-        tool.status = payload.allowed ? '运行中' : '已拒绝';
+        tool.status = t(`session:toolState.${payload.allowed ? 'running' : 'denied'}`);
         tool.state = payload.allowed ? 'running' : 'denied';
         if (payload.mode) tool.mode = payload.mode;
         if (payload.edited) tool.edited = true;
@@ -160,21 +160,15 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
         runId,
         text:
           payload.permissionMode === 'plan'
-            ? 'Claude 进入了计划模式：先调研并写出计划，经你批准后才动手'
-            : `审批模式改为「${modeNames[payload.permissionMode]}」`,
+            ? t('session:note.planMode')
+            : t('session:note.modeChanged', { mode: modeName(t, payload.permissionMode) }),
         at,
       });
     if (payload.type === 'tool.result') {
       const tool = byId.get(payload.toolId);
       if (tool?.kind === 'tool') {
         tool.resolved = true;
-        tool.status = {
-          completed: '已完成',
-          cancelled: '已取消',
-          denied: '已拒绝',
-          failed: '失败',
-          unknown: '结果未知',
-        }[payload.status];
+        tool.status = t(`session:toolState.${payload.status}`);
         tool.state = payload.status;
         tool.endedAt = at;
         tool.output = payload.phrase
@@ -187,7 +181,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
       const tool = byId.get(payload.toolId);
       if (tool?.kind === 'tool') {
         tool.liveOutput = (tool.liveOutput ?? '') + payload.text;
-        tool.status = '运行中';
+        tool.status = t('session:toolState.running');
         tool.state = 'running';
       }
     }
@@ -199,7 +193,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
       const tool = byId.get(payload.toolId);
       if (tool?.kind === 'tool') {
         tool.elapsedSeconds = payload.elapsedSeconds;
-        tool.status = '运行中';
+        tool.status = t('session:toolState.running');
         tool.state = 'running';
       }
     }
@@ -244,7 +238,7 @@ export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem
         kind: 'notice',
         id: `status-${sequence}`,
         runId,
-        text: payload.reason ? wordsText(t, payload.reason) : '已停止',
+        text: payload.reason ? wordsText(t, payload.reason) : t('session:note.stopped'),
         error: false,
         at,
       });
@@ -300,7 +294,7 @@ export type Turn = {
   outcome?: 'cancelled' | 'failed';
 };
 
-export function conversation(events: SessionEvent[], t: TFunction): Turn[] {
+export function conversation(events: SessionEvent[], t: T): Turn[] {
   // A run that goes on only for its background tasks has finished its turn; the turn a task starts reopens it.
   const ended = new Map<string, string>();
   const endedHow = new Map<string, string>();

@@ -15,5 +15,136 @@
     "after": "{{span}} since the last turn, so the prompt cache has expired: the next message rereads about {{size}} of context at full price. For a new task, start a new session (like /clear); to go on more cheaply, switch to a cheaper model to compact, then switch back.",
     "compactNow": "Compact now",
     "close": "Dismiss"
+  },
+  "tool": {
+    "command": {
+      "running": "Running",
+      "done": "Ran",
+      "doing": "running commands",
+      "did_one": "ran {{count}} command",
+      "did_other": "ran {{count}} commands"
+    },
+    "edit": {
+      "running": "Editing",
+      "done": "Edited",
+      "doing": "editing files",
+      "did_one": "edited {{count}} file",
+      "did_other": "edited {{count}} files"
+    },
+    "read": {
+      "running": "Reading",
+      "done": "Read",
+      "doing": "reading files",
+      "did_one": "read {{count}} file",
+      "did_other": "read {{count}} files"
+    },
+    "search": {
+      "running": "Searching",
+      "done": "Searched",
+      "doing": "searching",
+      "did_one": "searched once",
+      "did_other": "searched {{count}} times"
+    },
+    "web": {
+      "running": "Browsing",
+      "done": "Browsed",
+      "doing": "browsing the web",
+      "did_one": "browsed {{count}} page",
+      "did_other": "browsed {{count}} pages"
+    },
+    "agent": {
+      "running": "Subtask",
+      "done": "Subtask done",
+      "doing": "running subtasks",
+      "did_one": "ran {{count}} subtask",
+      "did_other": "ran {{count}} subtasks"
+    },
+    "other": {
+      "running": "Calling",
+      "done": "Called",
+      "doing": "calling tools",
+      "did_one": "called {{count}} tool",
+      "did_other": "called {{count}} tools"
+    }
+  },
+  "toolState": {
+    "requested": "Requested",
+    "approval": "Awaiting approval",
+    "running": "Running",
+    "completed": "Done",
+    "cancelled": "Cancelled",
+    "denied": "Denied",
+    "failed": "Failed",
+    "unknown": "Result unknown"
+  },
+  "work": {
+    "waitingAnswer": "Awaiting your answer",
+    "waitingApproval": "Awaiting approval",
+    "doing": "{{what, series}}",
+    "thinking": "Thinking",
+    "thought": "Thought",
+    "did": "{{what, commas}}",
+    "didFailed_one": "{{what, commas}}, {{count}} failed",
+    "didFailed_other": "{{what, commas}}, {{count}} failed"
+  },
+  "note": {
+    "planMode": "Claude entered plan mode: it researches and writes a plan, and acts only once you approve",
+    "modeChanged": "Approval mode changed to {{mode, quoted}}",
+    "continued": "Continue",
+    "stopped": "Stopped"
+  },
+  "mode": {
+    "label": "Approval mode",
+    "question": "How should Claude Code ask before acting?",
+    "help": "Choosing a mode",
+    "auto": {
+      "name": "Auto approval",
+      "detail": "Claude Code judges the risk and asks only when needed"
+    },
+    "default": {
+      "name": "Manual approval",
+      "detail": "Asks before editing files and running commands"
+    },
+    "acceptEdits": {
+      "name": "Accept edits",
+      "detail": "File edits go through; commands still ask first"
+    },
+    "plan": {
+      "name": "Plan mode",
+      "detail": "Only researches and writes a plan; acts once you approve"
+    },
+    "bypassPermissions": {
+      "name": "Bypass permissions",
+      "detail": "Never asks about anything, at your own risk"
+    },
+    "bypass": {
+      "label": "Confirm bypassing permissions",
+      "question": "Bypass permissions?",
+      "warning": "In this session Claude will do anything without asking, including deleting files and running any command on your computer, until you switch back to another approval mode. Use it only where you can bear the consequences."
+    }
+  },
+  "plan": {
+    "label": "Claude's plan",
+    "title": "Plan",
+    "copy": "Copy plan",
+    "read": "Read full screen",
+    "edit": "Edit plan",
+    "whole": "Show all",
+    "feedbackLabel": "What to change",
+    "feedbackHint": "Say what to change and Claude will keep planning with it (optional)",
+    "sendBack": "Send back to keep planning",
+    "modeLabel": "Approval mode for carrying it out",
+    "modes": "Carry out in",
+    "keepPlanning": "Keep planning",
+    "start": "Start",
+    "discard": "Discard edits",
+    "startEdited": "Carry out the edited plan",
+    "titleOf": "Plan · {{name}}",
+    "feedback": "Your feedback: {{feedback}}",
+    "approved": "Approved",
+    "edited": "Edited",
+    "returned": "Sent back to keep planning",
+    "open": "Not decided",
+    "waiting": "Awaiting approval"
   }
 }

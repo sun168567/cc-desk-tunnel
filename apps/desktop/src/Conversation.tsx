@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
 import type { PlanMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
-import { useT } from './i18n.ts';
+import { type T, useT } from './i18n.ts';
 import { fileName, pieces } from './attachments.ts';
 import { describe, duration, summarize } from './activity.ts';
 import type { Category } from './activity.ts';
@@ -246,7 +246,8 @@ function TaskActions({
 }
 
 function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Live }) {
-  const { category, verb, subject, added, removed, running, failed } = describe(tool, active);
+  const t = useT();
+  const { category, verb, subject, added, removed, running, failed } = describe(t, tool, active);
   const Icon = icons[category];
   const pictures = useMemo(() => (tool.output ? toolPictures(tool.output) : null), [tool.output]);
   const approval = live.canApprove(tool);
@@ -283,8 +284,8 @@ function ToolRow({ tool, active, live }: { tool: Tool; active: boolean; live: Li
           <span className="tool-time">
             {tool.target === 'Windows (simulation)' && '模拟 · '}
             {tool.endedAt
-              ? duration(tool.at, tool.endedAt)
-              : running && duration(tool.at, live.now)}
+              ? duration(t, tool.at, tool.endedAt)
+              : running && duration(t, tool.at, live.now)}
           </span>
           {control && <TaskActions tool={tool} control={control} live={live} />}
         </span>
@@ -430,7 +431,8 @@ function WorkGroup({
   latest: boolean;
   live: Live;
 }) {
-  const { label, waiting, running, started, ended } = summarize(work, active, latest);
+  const t = useT();
+  const { label, waiting, running, started, ended } = summarize(t, work, active, latest);
   // The one call of the group waited on in the foreground can be acted on without opening it; several are acted on
   // in their own lines.
   const controlled = work.items.filter(
@@ -445,7 +447,7 @@ function WorkGroup({
         <span className="work-heading">
           {running && <LoaderCircle className="spinning" />}
           <span>{label}</span>
-          {!waiting && <small>{duration(started, ended && !running ? ended : live.now)}</small>}
+          {!waiting && <small>{duration(t, started, ended && !running ? ended : live.now)}</small>}
           {control && !shown && <TaskActions tool={controlled[0]} control={control} live={live} />}
         </span>
       )}
@@ -600,6 +602,7 @@ function Message({
 
 // A compaction of the context, in its place among the steps: under way with its timer, then what it compacted.
 function CompactMark({ item, active, now }: { item: Compact; active: boolean; now: number }) {
+  const t = useT();
   const running = active && !item.endedAt;
   const timed = running || (item.endedAt && item.endedAt !== item.at);
   return (
@@ -614,7 +617,7 @@ function CompactMark({ item, active, now }: { item: Compact; active: boolean; no
               ? '上下文已自动压缩'
               : '上下文已压缩'}
         {item.previousTokens != null && ` · 压缩前 ${item.previousTokens.toLocaleString()} tokens`}
-        {timed && ` · ${duration(item.at, item.endedAt ?? now)}`}
+        {timed && ` · ${duration(t, item.at, item.endedAt ?? now)}`}
       </span>
     </div>
   );
@@ -634,7 +637,8 @@ function NoticeLine({ item }: { item: Notice }) {
 }
 
 // How long a turn took, without the time it stood stopped before it was taken up again.
-const spent = (turn: Turn) => duration(turn.startedAt, Date.parse(turn.endedAt!) - turn.pausedMs);
+const spent = (t: T, turn: Turn) =>
+  duration(t, turn.startedAt, Date.parse(turn.endedAt!) - turn.pausedMs);
 
 // A question put in while the run goes on closes the turn before it, but the run has not finished: that turn and the
 // ones joined to it stay as they were until it has.
@@ -699,6 +703,7 @@ function TurnView({
   latest: boolean;
   held: boolean;
 }) {
+  const t = useT();
   const active = !turn.endedAt;
   const expanded = usePrefs().view.mode === 'expanded';
   const notes = turn.steps.filter((step) => step.kind === 'assistant').length;
@@ -753,7 +758,7 @@ function TurnView({
                   <span className={turn.outcome}>
                     {turn.outcome === 'cancelled' && '已停止 · '}
                     {turn.outcome === 'failed' && '处理失败 · '}
-                    用时 {spent(turn)}
+                    用时 {spent(t, turn)}
                     {turn.tools > 0 && ` · ${turn.tools} 步`}
                     {notes > 0 && ` · ${notes} 条说明`}
                   </span>

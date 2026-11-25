@@ -7,5 +7,10 @@ declare module 'i18next' {
     defaultNS: 'common';
     resources: Resources;
     returnNull: false;
+    // The formats of lists (createI18n) take a list, or one item alone.
+    interpolationFormatTypeMap: Record<
+      'quoted' | 'clauses' | 'parts' | 'series' | 'commas',
+      string | readonly string[]
+    >;
   }
 }

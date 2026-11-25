@@ -15,8 +15,10 @@ import {
   SquareTerminal,
   X,
 } from 'lucide-react';
+import { useT } from './i18n.ts';
 import type { Figure as Name } from './help-content.ts';
 import { modes } from './PermissionMenu.tsx';
+import { modeDetail, modeName } from './modes.ts';
 
 // Pictures for the help, drawn with the window's own colours and shapes so that they look like what the user will
 // meet: the computers around the service, an approval card, the mode menu, a terminal. Names are the user's own
@@ -32,6 +34,7 @@ export default function Figure({
   others: string[];
   browser?: boolean;
 }) {
+  const t = useT();
   const other = others[0] ?? '另一台电脑';
   switch (name) {
     case 'map':
@@ -58,15 +61,15 @@ export default function Figure({
       return (
         <div className="fig fig-modes" aria-hidden="true">
           <p className="fig-menu-heading">Claude Code 操作前如何征求同意？</p>
-          {modes.map(({ value, name: label, detail, icon: Icon }, index) => (
+          {modes.map(({ value, icon: Icon }, index) => (
             <div className={`fig-mode${index === 0 ? ' current' : ''}`} key={value}>
               <Icon />
               <span>
                 <strong>
-                  {label}
+                  {modeName(t, value)}
                   {index === 0 && <em>默认</em>}
                 </strong>
-                <small>{detail}</small>
+                <small>{modeDetail(t, value)}</small>
               </span>
               {index === 0 && <Check className="fig-mode-check" />}
             </div>
