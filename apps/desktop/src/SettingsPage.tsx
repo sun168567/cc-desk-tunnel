@@ -178,6 +178,7 @@ const pageHelp: Partial<Record<Section, string>> = {
   context: 'context',
   shell: 'execution#shell',
   web: 'browser',
+  plugins: 'plugins',
   account: 'quota',
   claude: 'settings#cli',
   instructions: 'memory',
@@ -1053,7 +1054,12 @@ export default function SettingsPage({
         )}
       </aside>
       <main className="workspace">
-        <PageHelp.Provider value={back ? null : (pageHelp[section] ?? 'settings')}>
+        {/* A plugin's own page has no article. */}
+        <PageHelp.Provider
+          value={
+            back || (section === 'plugins' && plugin) ? null : (pageHelp[section] ?? 'settings')
+          }
+        >
           {indexOnly ? null : section === 'account' ? (
             account
           ) : section === 'claude' ? (

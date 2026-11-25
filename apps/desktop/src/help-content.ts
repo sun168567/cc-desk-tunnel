@@ -4,6 +4,7 @@ import {
   Brain,
   CalendarClock,
   CircleHelp,
+  CodeXml,
   Compass,
   Download,
   FolderTree,
@@ -99,6 +100,7 @@ export const groups = [
   { id: 'agents', name: '终端与 agent', icon: SquareTerminal },
   { id: 'account', name: '额度与账号', icon: Gauge },
   { id: 'settings', name: '设置', icon: Settings },
+  { id: 'plugins', name: '插件', icon: Plug },
   { id: 'care', name: '维护与安全', icon: ShieldCheck },
   { id: 'faq', name: '遇到问题', icon: CircleHelp },
 ] as const;
@@ -1186,6 +1188,337 @@ export const articles: Article[] = [
     ],
     related: ['approval', 'safety'],
     words: '权限 绕过 bypass 工作目录 写文件 检查点 rewind 撤回 拦截',
+  },
+
+  // 插件（完整的规范在 docs/plugins.md，两边要一致）
+  {
+    id: 'plugins',
+    group: 'plugins',
+    title: '使用插件',
+    icon: Plug,
+    since: '0.3.21',
+    lead: '插件装在服务端，在一轮结束、等待审批、设备上线这些时候，运行别人或你自己写的代码。',
+    blocks: [
+      {
+        kind: 'steps',
+        items: [
+          {
+            title: '安装',
+            text: '在桌面客户端的插件页点“安装插件”，选插件的 zip。先列出它的来历、权限和会运行的命令，你同意后才装上。',
+            action: { label: '打开插件页', target: { settings: 'plugins' } },
+          },
+          {
+            title: '设置',
+            text: '点插件的名字进它的设置页，改了就存。必填的没填时它不运行，列表里会写明缺哪一项。',
+          },
+        ],
+      },
+      {
+        kind: 'list',
+        items: [
+          '**输入框旁的按钮**：有的插件会加一个，每个会话各自记状态，各端一致。最多两个插件同时有按钮。',
+          '**试跑**：会响应事件的插件，设置页里可以用示例事件运行一次。它做的事会真的做。',
+          '**出了问题**：列表里标出原因；日志里有每次运行的结果和它打印的内容。',
+          '**更新**：打开插件页时，会看发布在 GitHub 的插件有没有新版本，有就出现更新按钮，看过内容再换上。也可以安装 id 相同的新压缩包。设置、数据和日志保留。',
+          '**停用与删除**：停用后不运行它的任何代码，设置保留；删除时连同设置、数据和日志。',
+          '**浏览器和手机**：除了安装和删除，都能做。',
+        ],
+      },
+      {
+        kind: 'callout',
+        tone: 'warn',
+        title: '只装信得过的',
+        text: '插件默认只能读写自己的文件、联网，读不到凭据和会话，但会收到会话标题、项目路径等事件内容。标着“完整权限”的没有限制，能读到服务端上的凭据，也能在你的电脑上执行命令，要你确认才启用。',
+      },
+    ],
+    related: ['plugin-dev', 'safety'],
+    words: '插件 扩展 安装 更新 启用 停用 删除 试跑 日志 自动化 通知 推送',
+  },
+  {
+    id: 'plugin-dev',
+    group: 'plugins',
+    title: '开发插件',
+    icon: CodeXml,
+    since: '0.3.21',
+    lead: '插件是一个文件夹：事件来了运行你的命令，还可以有自己的设置页和输入框旁的按钮。',
+    blocks: [
+      {
+        kind: 'table',
+        head: ['文件', '用途'],
+        rows: [
+          [
+            '`.claude-plugin/plugin.json`',
+            'id（`作者.插件名`，用小写字母、数字和连字符）、名字、版本、作者',
+          ],
+          ['`hooks/hooks.json`', '响应哪些事件、运行什么命令'],
+          ['`ui.ts`', '设置页和输入框旁的按钮；不需要就不写，也可以是 `ui.js`、`ui.mjs`'],
+          ['其他', '你的代码、图标'],
+        ],
+      },
+      {
+        kind: 'p',
+        text: '前两个照 Claude Code 插件的写法。命令用什么语言都行，服务端的 Docker 镜像里有 Node 24、Python 3、bash、curl 和 jq。',
+      },
+      { kind: 'heading', text: '从一个例子开始', id: 'first' },
+      {
+        kind: 'p',
+        text: '等待审批或一轮结束时，把一句话发到你填的地址。建一个文件夹 `my-notify`，放进五个文件：',
+      },
+      {
+        kind: 'code',
+        label: '.claude-plugin/plugin.json',
+        text: `{
+  "id": "yourname.my-notify",
+  "displayName": "我的通知",
+  "version": "0.1.0",
+  "description": "等待审批、一轮结束时发到自己的地址。",
+  "author": { "name": "你的名字" }
+}`,
+      },
+      {
+        kind: 'code',
+        label: 'hooks/hooks.json',
+        text: `{
+  "hooks": {
+    "ApprovalRequested": [
+      { "hooks": [{ "type": "command", "command": "node", "args": ["notify.mjs"] }] }
+    ],
+    "RunEnded": [
+      {
+        "matcher": "completed|failed",
+        "hooks": [{ "type": "command", "command": "node", "args": ["notify.mjs"], "timeout": 20 }]
+      }
+    ]
+  }
+}`,
+      },
+      {
+        kind: 'code',
+        label: 'notify.mjs',
+        text: `import { readFileSync } from 'node:fs';
+import { send } from './send.mjs';
+
+// 事件从标准输入来，config 是设置页里的值。
+const event = JSON.parse(readFileSync(0, 'utf8'));
+const what = event.hook_event_name === 'RunEnded' ? '一轮结束' : '等待审批';
+await send(event.config.url, what + '：' + event.session_title);
+console.error('已发送');`,
+      },
+      {
+        kind: 'code',
+        label: 'send.mjs',
+        text: `export async function send(url, text) {
+  const reply = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!reply.ok) throw new Error('对方返回 ' + reply.status);
+}`,
+      },
+      {
+        kind: 'code',
+        label: 'ui.ts',
+        text: `import { send } from './send.mjs';
+
+export const settings = [
+  {
+    title: '推送',
+    fields: {
+      url: {
+        type: 'string', title: '地址', description: '收到的是 JSON：{ "text": "…" }。',
+        sensitive: true, required: true,
+        validate: (value: string) => ({
+          valid: /^https?:/.test(value),
+          message: '应以 http:// 或 https:// 开头',
+        }),
+      },
+      test: {
+        type: 'button', title: '测试消息', label: '发送',
+        run: async (all: { url: string }) => {
+          await send(all.url, '这是一条测试消息');
+          return { ok: true, message: '已发送' };
+        },
+      },
+    },
+  },
+];`,
+      },
+      {
+        kind: 'p',
+        text: '把文件夹压成 zip（不超过 5 MB），在[插件页](settings:plugins)点“安装插件”，装好后进它的设置页填地址，“试跑”一次。改完重新打包安装，直接替换。',
+      },
+      { kind: 'heading', text: '事件', id: 'events' },
+      {
+        kind: 'table',
+        head: ['事件', '何时，以及自己的字段'],
+        rows: [
+          ['`ApprovalRequested`', '等待审批，包括批准计划。`wait_id`、`tool_name`'],
+          ['`QuestionAsked`', 'Claude 提问，等待回答。`wait_id`、`tool_name`'],
+          ['`TerminalWaiting`', '`ccdt` 终端里等待确认。`wait_id`'],
+          [
+            '`WaitResolved`',
+            '上面三种等待已解除，`wait_id` 相同。`waiting`（`approval`、`question`、`terminal`）、`allowed`',
+          ],
+          ['`BackgroundOnly`', '这一轮已回答完，只剩后台任务'],
+          ['`RunError`', '运行出错。`code`、`message`'],
+          [
+            '`RunEnded`',
+            '一轮结束，包括它的后台任务。`status`（`completed`、`failed`、`cancelled`）、`duration_ms`，失败时有 `error`',
+          ],
+          ['`DeviceOnline`、`DeviceOffline`', '一台设备连上、离开。只有 `device`'],
+        ],
+      },
+      {
+        kind: 'p',
+        text: '`matcher` 筛选 `ApprovalRequested` 的 `tool_name`、`WaitResolved` 的 `waiting`、`RunError` 的 `code` 和 `RunEnded` 的 `status`，其他事件不用写。',
+      },
+      {
+        kind: 'code',
+        label: '命令收到的 JSON',
+        text: `{
+  "version": 1,
+  "hook_event_name": "RunEnded",
+  "timestamp": "2026-11-24T12:00:00.000Z",
+  "session_id": "0f4d1c9e-…", "session_title": "整理设置页",
+  "project_path": "D:\\\\work\\\\demo",
+  "device": { "id": "5b1f0a52-…", "name": "书房电脑", "platform": "win32" },
+  "run_id": "c2a7c1de-…",
+  "model": "…", "effort": "high", "permission_mode": "auto",
+  "context": { "used_tokens": 84000, "window_tokens": 200000 },
+  "quota": [{ "name": "five_hour", "utilization": 42, "resets_at": "2026-11-24T15:00:00.000Z" }],
+  "status": "completed", "duration_ms": 84210,
+  "config": { "url": "https://…" },
+  "slots": { "composer": "on" }
+}`,
+      },
+      {
+        kind: 'list',
+        items: [
+          '没有值的字段不出现。不含对话，也不含工具的输入和输出。',
+          '`ccdt` 终端只有等待和解除，没有一轮结束；服务停止或重启打断的那一轮也没有。',
+        ],
+      },
+      { kind: 'heading', text: '命令', id: 'commands' },
+      {
+        kind: 'list',
+        items: [
+          '在插件的文件夹里运行。有 `args` 时直接启动 `command`，没有时交给 shell；要直接执行的脚本以 `#!` 开头。',
+          '`timeout` 是秒数，默认 60，最长 600，到时连同它启动的进程一起结束。',
+          '同时来的事件同时运行，要分先后看 `timestamp`。',
+          '要留下的东西写到环境变量 `CLAUDE_PLUGIN_DATA` 指的文件夹；插件自己的文件夹更新时会整个换掉。',
+          '退出码不是 0 算失败。要记进日志的写到标准错误，标准输出留给以后。不要打印密钥。',
+          '不会替你装依赖，用到的包一起打进 zip（最多 500 个文件，解开后 20 MB）。',
+          '能读自己的文件夹和系统程序，能写 `CLAUDE_PLUGIN_DATA`，能联网，其他文件和 unix socket 都够不着；留下的后台进程在命令结束后一并结束；环境变量只有 `PATH`、语言、时区和代理。`ui.ts` 也一样。确实需要更多时，在 `plugin.json` 写 `"permissions": ["full"]`，装好后由用户确认启用。',
+        ],
+      },
+      { kind: 'heading', text: '设置页', id: 'settings' },
+      {
+        kind: 'table',
+        head: ['字段的 type', '可以加'],
+        rows: [
+          [
+            '`string` 文本',
+            '`multiline` 多行，`options` 下拉（值，或 `{ value, label }`），`sensitive` 密钥，`required`、`default`',
+          ],
+          ['`number` 数字', '`min`、`max`、`required`、`default`'],
+          ['`boolean` 开关', '`default`'],
+          [
+            '`button` 按钮',
+            '`run`，`label` 按钮上的字，`confirm` 运行前要问的话，`timeout` 最长 60 秒',
+          ],
+        ],
+      },
+      {
+        kind: 'list',
+        items: [
+          '字段和分组都有 `title`，可以加一行 `description`。字段名在整个插件里不重复。',
+          '`validate(值, 全部值)` 返回 `{ valid, message }`，不合规的不存。可以是异步的，限 2 秒。',
+          '按钮的 `run(全部值)` 返回 `{ ok, message }`，可以是异步的；它所在的那一组合规才运行。',
+          '没填的文字是空串，开关是 `false`，数字没有值。',
+          '`sensitive` 的值填了就读不回，日志和消息里原样出现的换成 `***`。',
+          '分组加 `showWhen: "开关的字段名"`，开关关着时其余字段不显示也不检查；写几个名字，开着任一个就显示。',
+          '`ui.ts` 由 Node 直接运行，只去掉类型，不能用 `enum`。',
+        ],
+      },
+      { kind: 'heading', text: '输入框旁的按钮', id: 'composer' },
+      {
+        kind: 'p',
+        text: '写出有哪几个状态、什么动作切到哪个。状态由服务端按会话保存，命令在事件的 `slots.composer` 里看到它。给上面的例子加一个，点了的会话才通知：',
+      },
+      {
+        kind: 'code',
+        label: 'ui.ts 里加',
+        text: `export const slots = {
+  composer: {
+    title: '通知',
+    initial: 'off',
+    states: {
+      off: { icon: 'bell.svg', title: '不通知', tip: '这个会话不再通知' },
+      on: { icon: 'bell.svg', title: '通知', tip: '这个会话会通知', active: true },
+    },
+    on: { click: { off: 'on', on: 'off' } },
+  },
+};`,
+      },
+      {
+        kind: 'code',
+        label: 'bell.svg',
+        text: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
+  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+  <path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" />
+</svg>`,
+      },
+      {
+        kind: 'code',
+        label: 'notify.mjs 里读出 event 之后加',
+        text: `if (event.slots?.composer === 'off') process.exit(0);`,
+      },
+      {
+        kind: 'list',
+        items: [
+          '**切换**：`on` 里写 `click`、`doubleClick`、`longPress` 或任何会话事件切到哪个状态。按当前状态分别写，没写的不动；只写一个状态，就不管现在是哪个都切到它。',
+          '**初始状态**：`initial` 是一个状态，或 `{ setting: "字段名" }`，由设置决定。',
+          '**图标**：插件文件夹里的 SVG，只取形状。`active` 的状态用强调色；加 `mark: true`，这时会话列表里也显示。',
+          '**长按**：`hold: { ms: 800, ring: true, effect: "tremble" }` 是多久算数、有没有进度圈和抖动。',
+          '**动效**：状态的 `effect` 有 `shake`、`pulse`，绕 `pivot`（`center`、`top`）动。',
+          '**显示条件**：`showWhen` 与设置的分组相同。',
+        ],
+      },
+      { kind: 'heading', text: '更新与兼容', id: 'compatibility' },
+      {
+        kind: 'list',
+        items: [
+          '服务端升级只增加事件、字段和写法，已有的不删、不改含义。不认识的事件和字段，忽略即可。',
+          '用到较新的功能时，在 `plugin.json` 写 `"minVersion": "0.4.0"` 这样的最低服务端版本，更旧的服务端会拒绝安装并说明。',
+          '你的插件更新时，`id`、字段名和状态名不要改：设置、数据和会话的状态按它们保存。新的必填项给 `default`，否则已经装了的会停下来等人填。',
+          '给别人用时，`repository` 写 GitHub 仓库地址，每个版本发一个 Release，附上 zip，标签和 `version` 一致（如 `v0.2.0`），用户那边就能检查到并更新。一个仓库只发布一个插件。',
+        ],
+      },
+      { kind: 'heading', text: '查问题', id: 'debug' },
+      {
+        kind: 'table',
+        head: ['看到', '原因'],
+        rows: [
+          ['未运行：待配置', '有必填的没填，或存着的值已不在可选项里'],
+          ['未运行：加载失败', '`plugin.json`、`hooks.json` 或 `ui.ts` 有误，后面是原因'],
+          ['未启用：输入框插槽已被占用', '一共两个，停用占着的一个再启用'],
+          ['上次失败：退出 1', '命令自己出错，看日志'],
+          ['上次失败：退出 127', '找不到 `command`'],
+          ['EACCES、Permission denied', '碰了够不着的文件；脚本没有以 `#!` 开头，不能直接执行'],
+          ['试跑：没有匹配的命令', '`matcher` 没对上示例：工具是 `Bash`，一轮结束是 `completed`'],
+          ['事件来了没有反应', '事件名写错会被忽略；试跑里列出的是认得的'],
+        ],
+      },
+      {
+        kind: 'p',
+        text: '每个字段的限制等细节，见[插件与事件](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/plugins.md)。',
+      },
+    ],
+    related: ['plugins', 'safety'],
+    words:
+      '插件 开发 编写 hook 事件 hooks.json plugin.json ui.ts settings validate 设置页 按钮 插槽 slots composer 打包 zip 调试 minVersion 兼容',
   },
 
   // 维护与安全
