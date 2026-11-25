@@ -209,8 +209,9 @@ function gitBash() {
 }
 
 // The check of a packaged ccdt: it starts, says its version, and fails a sign-in to nowhere with a message instead
-// of an error of its own; that loads the bundled connection. On Windows it is started from Git Bash too, where
-// there is one, by the name alone.
+// of an error of its own; that loads the bundled connection. Its separately loaded POSIX SSH worker must
+// also load, even when no connection has yet asked it to start. On Windows it is started from Git Bash too,
+// where there is one, by the name alone.
 export function checkCcdt(launcher, version) {
   const windows = process.platform === 'win32';
   const run = (args, input) =>
@@ -222,6 +223,25 @@ export function checkCcdt(launcher, version) {
     });
   const reported = run(['--version']).trim();
   if (reported !== `ccdt ${version}`) throw new Error(`The package's ccdt reports "${reported}".`);
+  if (!windows) {
+    // Outside the checkout, a missing dependency cannot be borrowed from its node_modules.
+    const directory = mkdtempSync(join(tmpdir(), 'ccdt-worker-check-'));
+    try {
+      cpSync(dirname(dirname(launcher)), directory, { recursive: true });
+      execFileSync(join(directory, 'node'), [join(directory, 'posix-ssh-worker.mjs')], {
+        encoding: 'utf8',
+        timeout: 15000,
+        env: { ...process.env, NODE_PATH: '' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      throw new Error(
+        `The packaged ccdt SSH worker could not load:\n${error.stderr ?? error.message}`,
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
   const bash = windows && gitBash();
   if (bash) {
     const folder = execFileSync(bash, ['-c', 'cygpath -u "$1"', '_', dirname(launcher)], {

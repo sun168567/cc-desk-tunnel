@@ -4,6 +4,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
+import { ccdtResource } from './ccdt-resources.mjs';
 import { checkCcdt, posixService, stageCcdt, stageDesktop } from './package-desktop.mjs';
 
 // Builds the macOS package: a disk image to install from and a ZIP of the same application. It is not signed
@@ -64,7 +65,7 @@ const results = await electronBuild({
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
-    extraResources: [{ from: ccdt, to: 'ccdt' }],
+    extraResources: [ccdtResource(ccdt)],
     mac: {
       category: 'public.app-category.developer-tools',
       minimumSystemVersion: '13.0',

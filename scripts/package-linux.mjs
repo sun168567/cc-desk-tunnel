@@ -4,6 +4,7 @@ import { readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
+import { ccdtResource } from './ccdt-resources.mjs';
 import { checkCcdt, posixService, stageCcdt, stageDesktop } from './package-desktop.mjs';
 
 // Builds the Linux package: a .deb for x64, made for and tried on the current Ubuntu LTS. Like the macOS
@@ -40,7 +41,7 @@ const results = await electronBuild({
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
-    extraResources: [{ from: ccdt, to: 'ccdt' }],
+    extraResources: [ccdtResource(ccdt)],
     linux: {
       target: 'deb',
       executableName: 'cc-desk-tunnel',
