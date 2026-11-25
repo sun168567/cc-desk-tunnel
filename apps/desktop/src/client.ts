@@ -50,6 +50,8 @@ type DataMessage = Extract<
       | 'web.settings.state'
       | 'web.totp.setup'
       | 'web.certificate.state'
+      | 'plugin.checked'
+      | 'plugin.done'
       | 'plugin.log';
   }
 >;
@@ -73,6 +75,8 @@ type Replies = {
   'web.certificate.get': 'web.certificate.state';
   'web.certificate.set': 'web.certificate.state';
   'web.certificate.reset': 'web.certificate.state';
+  'plugin.configure': 'plugin.checked';
+  'plugin.press': 'plugin.done';
   'plugin.log': 'plugin.log';
 };
 
@@ -585,6 +589,8 @@ export class ProxyClient {
         message.type === 'web.settings.state' ||
         message.type === 'web.totp.setup' ||
         message.type === 'web.certificate.state' ||
+        message.type === 'plugin.checked' ||
+        message.type === 'plugin.done' ||
         message.type === 'plugin.log'
       ) {
         if (this.pending.has(message.requestId)) this.results.set(message.requestId, message);
@@ -1069,7 +1075,10 @@ export class ProxyClient {
         command.type.startsWith('account.') ||
         command.type.startsWith('service.')
           ? 30000
-          : 10000;
+          : // A plugin's button takes up to a minute.
+            command.type.startsWith('plugin.')
+            ? 70000
+            : 10000;
       const request = {
         resolve,
         reject,

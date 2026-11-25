@@ -4657,7 +4657,7 @@ dialog:has(.ccdt-dialog) {
   overflow-wrap: anywhere;
 }
 
-/* The settings' list of the plugins, and the page of one. */
+/* The settings' list of the plugins, and the page of one with the fields it declares. */
 .plugin-row {
   flex-wrap: nowrap;
 }
@@ -4699,6 +4699,10 @@ dialog:has(.ccdt-dialog) {
 .plugin-notice {
   color: var(--warn-text);
 }
+.plugin-error {
+  display: block;
+  color: var(--danger-text);
+}
 .plugin-link {
   overflow-wrap: anywhere;
   text-align: right;
@@ -4708,7 +4712,8 @@ dialog:has(.ccdt-dialog) {
   font-size: 13px;
 }
 .plugin-controls,
-.plugin-foot {
+.plugin-foot,
+.settings-list label > .plugin-input {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -4739,6 +4744,37 @@ dialog:has(.ccdt-dialog) {
 .plugin-empty {
   margin: 0;
   padding: 16px 0;
+}
+.settings-list.plugin-fields input,
+.settings-list.plugin-fields select {
+  width: 260px;
+}
+.plugin-input input {
+  min-width: 0;
+}
+.settings-list label.plugin-text {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-list .plugin-text textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  resize: vertical;
+}
+.settings-list [aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.plugin-result {
+  color: var(--ok-text);
+  overflow-wrap: anywhere;
+}
+.plugin-result.bad {
+  color: var(--danger-text);
 }
 .plugin-log {
   margin: 0 0 12px;
@@ -4777,5 +4813,18 @@ dialog:has(> .plugin-log) {
   }
   .plugin-controls {
     gap: 2px;
+  }
+  /* A switch, or a button, stays beside what is said of it. */
+  .plugin-fields .setting-row {
+    flex-wrap: nowrap;
+  }
+  .plugin-fields label {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .settings-list.plugin-fields select,
+  .settings-list.plugin-fields input {
+    width: 100%;
   }
 }

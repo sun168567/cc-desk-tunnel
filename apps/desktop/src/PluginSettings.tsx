@@ -39,6 +39,7 @@ export default function PluginSettings({
     return (
       <PluginPage
         key={plugin.id}
+        client={client}
         plugin={plugin}
         enable={(enabled) => enable(plugin, enabled)}
         failure={failure?.id === plugin.id ? failure.message : undefined}

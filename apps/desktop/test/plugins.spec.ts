@@ -7,6 +7,17 @@ import { login, screenshots } from './helpers.ts';
 const shots = resolve(screenshots, 'plugins');
 mkdirSync(shots, { recursive: true });
 const plugins = resolve('.local/ui-test/sessions/plugins');
+const ui = `
+export const settings = [
+  { title: '钉钉', showWhen: 'on', fields: {
+    on: { type: 'boolean', title: '启用钉钉' },
+    url: { type: 'string', title: '机器人地址', sensitive: true, required: true,
+      validate: (value: string) => ({ valid: value.startsWith('https://'), message: '要以 https:// 开头' }) },
+    format: { type: 'string', title: '格式', description: '消息的样式', options: [{ value: 'card', label: '卡片' }, { value: 'text', label: '文本' }], default: 'card' },
+    body: { type: 'string', title: '模板', multiline: true, default: '{session}' },
+    test: { type: 'button', title: '测试消息', label: '发送', run: async (all: { url: string }) => ({ ok: true, message: '已发送到 ' + all.url }) },
+  } },
+];`;
 function add(id: string) {
   const root = resolve(plugins, id);
   // Enabled by the user, as one is where the system cannot confine it.
@@ -35,6 +46,7 @@ function add(id: string) {
       },
     }),
   );
+  writeFileSync(resolve(root, 'ui.ts'), ui);
 }
 // The service watches the directory itself, which stays; Windows keeps a plugin's while a command of it ends.
 async function clean() {
@@ -61,7 +73,7 @@ async function openPlugins(page: Page) {
   await page.getByRole('button', { name: '插件', exact: true }).click();
 }
 
-test('a plugin put in place is listed, has a page of its own and is switched off and on', async ({
+test('a plugin put in place is set on its own page, each change saved at once, tried and switched off', async ({
   page,
 }) => {
   await openPlugins(page);
@@ -75,6 +87,25 @@ test('a plugin put in place is listed, has a page of its own and is switched off
   const form = page.locator('.workspace');
   await expect(form.getByRole('heading', { level: 1 })).toHaveText('通知');
   await expect(form).toContainText('作者甲');
+  const url = form.getByLabel('机器人地址');
+  await expect(url).toHaveCount(0);
+  await form.getByRole('switch', { name: '启用钉钉' }).click();
+  await expect(form.getByRole('alert')).toHaveText('未运行：待配置：机器人地址');
+  // Each change is saved when its box is left; one that does not hold stays there, told of.
+  await url.fill('http://x');
+  await url.blur();
+  await expect(form).toContainText('要以 https:// 开头');
+  await expect(url).toHaveValue('http://x');
+  await url.fill('https://example.com/robot');
+  await url.press('Enter');
+  await expect(url).toHaveAttribute('placeholder', '已设置，留空沿用');
+  await expect(url).toHaveValue('');
+  await expect(form.getByRole('alert')).toHaveCount(0);
+  await form.getByLabel('格式').selectOption({ label: '文本' });
+  await form.getByLabel('模板').fill('{session} {project}');
+  await form.getByLabel('模板').blur();
+  await form.getByRole('button', { name: '发送' }).click();
+  await expect(form.getByRole('status')).toHaveText('已发送到 ***');
   await page.screenshot({ path: resolve(shots, 'settings.png'), fullPage: true });
 
   // On a phone's width the way back is the title bar's, and nothing is wider than the page.
@@ -91,12 +122,15 @@ test('a plugin put in place is listed, has a page of its own and is switched off
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: resolve(shots, 'list.png') });
 
-  await page.getByRole('switch', { name: '启用 通知' }).click();
-  await expect(page.getByRole('switch', { name: '启用 通知' })).not.toBeChecked();
   await page.getByRole('button', { name: '通知：日志' }).click();
-  await expect(page.locator('.plugin-log')).toContainText('停用');
+  await expect(page.locator('.plugin-log')).toContainText('[测试消息] 成功');
+  await expect(page.locator('.plugin-log')).not.toContainText('example.com');
   await page.screenshot({ path: resolve(shots, 'log.png') });
   await page.getByRole('button', { name: '关闭', exact: true }).click();
   await page.getByRole('switch', { name: '启用 通知' }).click();
-  await expect(page.getByRole('switch', { name: '启用 通知' })).toBeChecked();
+  await row.click();
+  await expect(form.getByLabel('启用钉钉')).toHaveCount(0);
+  await form.getByRole('switch', { name: '启用 通知' }).click();
+  await expect(form.getByLabel('格式')).toHaveValue('text');
+  await expect(form.getByLabel('模板')).toHaveValue('{session} {project}');
 });
