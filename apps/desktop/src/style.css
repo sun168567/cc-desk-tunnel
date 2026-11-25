@@ -4656,3 +4656,95 @@ dialog:has(.ccdt-dialog) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* The settings' list of the plugins, and the page of one. */
+.plugin-row {
+  flex-wrap: nowrap;
+}
+.plugin-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.plugin-open > strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-open svg {
+  flex-shrink: 0;
+  width: 15px;
+  color: var(--faint);
+}
+.plugin-open:hover svg {
+  color: var(--text);
+}
+.plugin-badge {
+  font-style: normal;
+  color: var(--warn-text);
+  background: var(--warn-soft);
+  border-color: var(--warn-line);
+}
+.settings-list .plugin-trouble,
+.plugin-notice {
+  color: var(--warn-text);
+}
+.plugin-link {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.plugin-notice {
+  margin: 10px 2px 0;
+  font-size: 13px;
+}
+.plugin-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-controls {
+  flex-shrink: 0;
+}
+.plugin-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 10px -4px;
+  padding: 4px 8px 4px 2px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.plugin-back:hover {
+  background: var(--hover);
+}
+.plugin-back > svg {
+  width: 16px;
+}
+.plugin-empty {
+  margin: 0;
+  padding: 16px 0;
+}
+@media (max-width: 700px) {
+  /* The title bar has the way back. */
+  .plugin-back {
+    display: none;
+  }
+  .plugin-controls {
+    gap: 2px;
+  }
+}

@@ -9,6 +9,8 @@ export type Place = {
   settingsIndex?: boolean;
   // The help's article; none is its front page.
   article?: string;
+  // The plugin whose settings are shown; none is the list of them.
+  plugin?: string;
 };
 type Entry = { place: Place; index: number; drawer?: boolean; furthest?: number };
 const same = (a: Place, b: Place) =>
@@ -16,7 +18,8 @@ const same = (a: Place, b: Place) =>
   a.section === b.section &&
   a.sessionId === b.sessionId &&
   !!a.settingsIndex === !!b.settingsIndex &&
-  a.article === b.article;
+  a.article === b.article &&
+  a.plugin === b.plugin;
 
 // Only navigation metadata goes in history; content and credentials stay out of it.
 export function useWebNavigation(

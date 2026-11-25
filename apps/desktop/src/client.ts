@@ -14,6 +14,7 @@ import type {
   Device,
   IdleCompaction,
   NativeCapabilities,
+  Plugin,
   AccountQuota,
   ServerMessage,
   Project,
@@ -135,6 +136,7 @@ export type ClientState = {
   // The user's computers connected to the service now, and whether commands reach each yet. Another
   // computer's sessions can be worked on from here while it is listed and ready.
   devices: ConnectedDevice[];
+  plugins: Plugin[];
   sessions: Session[];
   // The projects of all the user's computers, as the service keeps them.
   projects: Project[];
@@ -185,6 +187,7 @@ export class ProxyClient {
     browser: null,
     files: null,
     devices: [],
+    plugins: [],
     sessions: [],
     projects: [],
     events: {},
@@ -605,6 +608,8 @@ export class ProxyClient {
         this.update({ quota });
       } else if (message.type === 'devices') {
         this.update({ devices: message.devices });
+      } else if (message.type === 'plugins') {
+        this.update({ plugins: message.plugins });
       } else if (message.type === 'projects') {
         this.update({ projects: message.projects });
       } else if (message.type === 'session.updated') {
