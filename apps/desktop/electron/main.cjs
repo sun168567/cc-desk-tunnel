@@ -612,7 +612,7 @@ handle('service:upgrade', async (event, config) => {
     },
   ).then(
     (version) => ({ version }),
-    (error) => ({ error: error.message, code: error.code }),
+    (error) => ({ error: error.message, phrase: error.phrase, code: error.code }),
   );
 });
 // The ccdt this client's package carries.

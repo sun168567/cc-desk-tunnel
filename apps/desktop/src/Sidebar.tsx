@@ -16,6 +16,7 @@ import {
 import { projectOf } from '@cc-desk-tunnel/protocol';
 import type { Project, Session } from '@cc-desk-tunnel/protocol';
 import type { ConnectedDevice } from './client.ts';
+import { deviceName } from './device.ts';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
 import { ago, pathKey, projectName } from './paths.ts';
@@ -53,6 +54,7 @@ export default function Sidebar({
   sessions,
   elsewhere,
   devices,
+  serverDeviceId,
   selectedId,
   projects,
   connected,
@@ -75,6 +77,7 @@ export default function Sidebar({
   // project here.
   elsewhere: Session[];
   devices: ConnectedDevice[];
+  serverDeviceId: string | null;
   selectedId: string | undefined;
   // The projects of all the user's computers, as the service keeps them. A session in none is a plain one.
   projects: Project[];
@@ -146,7 +149,7 @@ export default function Sidebar({
     const groups = new Map<string, Elsewhere>();
     const entryOf = (device: { id: string; name: string }) => {
       const entry: Elsewhere = groups.get(device.id) ?? {
-        name: device.name,
+        name: deviceName(device, serverDeviceId),
         online: devices.some((item) => item.id === device.id && item.ready),
         projects: new Map(),
         plain: [],
@@ -176,7 +179,7 @@ export default function Sidebar({
       entry.projects.set(key, group);
     }
     return [...groups.entries()];
-  }, [elsewhere, devices, projects, search, hereId]);
+  }, [elsewhere, devices, serverDeviceId, projects, search, hereId]);
   const othersCount = others.reduce(
     (count, [, device]) =>
       count +

@@ -1,4 +1,6 @@
+import { wordsText } from '@cc-desk-tunnel/i18n';
 import type { PlanMode, SessionEvent, TurnStats } from '@cc-desk-tunnel/protocol';
+import type { TFunction } from 'i18next';
 import { modeNames } from './modes.ts';
 
 export type ToolState =
@@ -66,7 +68,8 @@ export type TranscriptItem =
       edited?: boolean;
     };
 
-export function transcript(events: SessionEvent[]): TranscriptItem[] {
+// The items of a session's events, with what the service said in the language of `t`.
+export function transcript(events: SessionEvent[], t: TFunction): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const byId = new Map<string, TranscriptItem>();
   const byApproval = new Map<string, Extract<TranscriptItem, { kind: 'tool' }>>();
@@ -174,7 +177,9 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
         }[payload.status];
         tool.state = payload.status;
         tool.endedAt = at;
-        tool.output = payload.output;
+        tool.output = payload.phrase
+          ? wordsText(t, payload.phrase, payload.output)
+          : payload.output;
         tool.exitCode = payload.exitCode;
       }
     }
@@ -202,13 +207,17 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
     // mark from the first to the boundary. A status that is no longer compacting says nothing; sessions recorded
     // earlier hold it as the word "status".
     if (payload.type === 'native.notice') {
-      if (payload.text === 'compacting') {
+      const said = payload.text;
+      if (said === 'compacting') {
         if (compacting?.runId !== runId) {
           compacting = { kind: 'compact', id: `compact-${sequence}`, runId, at };
           add(compacting);
         }
-      } else if (!['null', 'status', 'requesting', 'idle'].includes(payload.text))
-        add({ kind: 'note', id: `native-${sequence}`, runId, text: payload.text, at });
+      } else if (
+        typeof said !== 'string' ||
+        !['null', 'status', 'requesting', 'idle'].includes(said)
+      )
+        add({ kind: 'note', id: `native-${sequence}`, runId, text: wordsText(t, said), at });
     }
     if (payload.type === 'native.compact') {
       let mark = compacting?.runId === runId ? compacting : undefined;
@@ -226,7 +235,7 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
         kind: 'notice',
         id: `error-${sequence}`,
         runId,
-        text: payload.message,
+        text: payload.phrase ? wordsText(t, payload.phrase, payload.message) : payload.message,
         error: true,
         at,
       });
@@ -235,7 +244,7 @@ export function transcript(events: SessionEvent[]): TranscriptItem[] {
         kind: 'notice',
         id: `status-${sequence}`,
         runId,
-        text: payload.reason ?? '已停止',
+        text: payload.reason ? wordsText(t, payload.reason) : '已停止',
         error: false,
         at,
       });
@@ -291,7 +300,7 @@ export type Turn = {
   outcome?: 'cancelled' | 'failed';
 };
 
-export function conversation(events: SessionEvent[]): Turn[] {
+export function conversation(events: SessionEvent[], t: TFunction): Turn[] {
   // A run that goes on only for its background tasks has finished its turn; the turn a task starts reopens it.
   const ended = new Map<string, string>();
   const endedHow = new Map<string, string>();
@@ -326,7 +335,7 @@ export function conversation(events: SessionEvent[]): Turn[] {
     turn.endedAt = turn.question?.terminal ? (seen.get(turn) ?? at) : at;
   };
   let runId = '';
-  for (const item of transcript(events)) {
+  for (const item of transcript(events, t)) {
     let turn = turns.at(-1);
     // What the turn was told on stopping stays where it was said, and the work goes on under it.
     if (turn && item.kind === 'user' && item.continued) {

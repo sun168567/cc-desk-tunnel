@@ -89,10 +89,23 @@ export function upgradeService(
   const remote = options.open?.() ?? open(address, fingerprint, options.resolveProxy);
   const send = (message) => remote.send(JSON.stringify({ requestId: randomUUID(), ...message }));
   return new Promise((resolve, reject) => {
-    const end = (error, version, code) => {
+    // A failure is said in the service's words: a text, or a phrase the window says in its language, with the
+    // text the service sent beside it, if any.
+    const fail = (words, code, sent) => {
       remote.close();
-      if (error) reject(Object.assign(new Error(error), code ? { code } : {}));
-      else resolve(version);
+      const text = typeof words === 'string' ? words : (sent ?? words.key);
+      reject(
+        Object.assign(
+          new Error(text),
+          typeof words === 'string' ? {} : { phrase: words },
+          code ? { code } : {},
+        ),
+      );
+    };
+    const end = (error, version, code) => {
+      if (error) return fail(error, code);
+      remote.close();
+      resolve(version);
     };
     remote.on('open', () => {
       if (
@@ -106,10 +119,10 @@ export function upgradeService(
     remote.on('message', (raw) => {
       const message = JSON.parse(raw.toString('utf8'));
       if (message.type === 'connection.error' || (message.type === 'response' && !message.ok))
-        end(
-          message.message ?? '服务端拒绝了升级。',
-          undefined,
+        fail(
+          message.phrase ?? message.message ?? '服务端拒绝了升级。',
           message.code === 'native_busy' ? 'busy' : undefined,
+          message.message,
         );
       // An upgrade already under way is only followed.
       else if (message.type === 'ready' && message.update?.state !== 'installing')
@@ -129,7 +142,7 @@ export function upgradeService(
             (error) => end(error.message, undefined, 'declined'),
           );
         else if (message.state === 'restarting') end(null, message.latest);
-        else if (message.state === 'failed') end(message.detail ?? '服务端升级失败。');
+        else if (message.state === 'failed') fail(message.detail ?? '服务端升级失败。');
         else if (message.state === 'manual')
           end(
             `服务端 ${message.latest} 需要更新镜像，请在服务器上执行 sudo cc-desk-tunnel upgrade；没有这个命令的旧部署重新运行安装命令即可。`,

@@ -106,6 +106,7 @@ async function open(page: Page, historyFailure = '') {
         send({
           type: 'ready',
           protocolVersion: PROTOCOL_VERSION,
+          serverDeviceId: '00000000-0000-4000-8000-000000000001',
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',

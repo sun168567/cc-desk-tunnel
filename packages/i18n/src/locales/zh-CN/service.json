@@ -1,0 +1,216 @@
+{
+  "failed": "服务处理失败。",
+  "request": {
+    "conflict": "请求 ID 已被其他内容使用。",
+    "browserUnsupported": "浏览器不支持这项操作，请使用桌面客户端。"
+  },
+  "connection": {
+    "unauthorized": "服务凭据不正确。\n请核对安装时给出的服务凭据，注意不要带上首尾空格；在服务器上更换过凭据后要用新的。连续失败多次会被暂时拒绝。",
+    "versionMismatch": "客户端与服务端（{{version}}）的版本不一致，需要升级其中一方。",
+    "tunnelFailed": "服务端没能准备好执行通道。\n请查看服务日志；数据目录不可写或服务器资源耗尽时会出现这种情况。",
+    "sshFailed": "隧道已建立，但本机 SSH 服务没有执行探测命令。",
+    "sshFailedSaid": "隧道已建立，但本机 SSH 服务没有执行探测命令。\n本机答复：{{said}}",
+    "invalidJson": "消息必须是 JSON 文本。",
+    "invalidCommand": "请求格式无效。"
+  },
+  "probe": {
+    "noAnswer": "20 秒内没有应答。",
+    "noOutput": "没有输出。",
+    "noOutputCode": "没有输出（退出代码 {{code}}）。"
+  },
+  "device": {
+    "offline": "那台电脑不在线。",
+    "unknownProject": "那台电脑上没有这个项目。",
+    "unknown": "客户端没有报告设备标识。",
+    "onWindows": "此会话在一台 Windows 电脑上。要在本机接着做，请先为它选择本机的项目目录，或把它分叉到本机。",
+    "notReady": "本机的执行通道尚未就绪，请稍候；客户端正在建立或重新建立连接。",
+    "notReadyShort": "本机的执行通道尚未就绪。",
+    "otherOffline": "设备“{{name}}”不在线。它连上服务后才能在这里操作它的会话；也可以把会话接到本机或分叉到本机。",
+    "otherNotReady": "设备“{{name}}”的执行通道尚未就绪，请稍候再试。"
+  },
+  "capacity_other": "服务端同时最多进行 {{count}} 个运行或终端（按服务器内存估算，可用 PROXY_MAX_RUNS 调整）。请等其他任务结束后再试。",
+  "simulation": {
+    "noAccount": "离线模拟没有原生账号。",
+    "noAccountState": "离线模拟没有原生账号状态。",
+    "noTerminal": "离线模拟不启动终端。",
+    "noCompaction": "离线模拟不提供原生上下文压缩。",
+    "noSettings": "离线模拟没有原生设置。",
+    "noInstructions": "离线模拟没有全局说明。",
+    "toolSkipped": "模拟工具未执行。"
+  },
+  "account": {
+    "busy": "请先结束原生运行或终端，再管理账号。",
+    "loginEnded": "登录流程已结束，请重新获取链接。",
+    "cancelLoginFirst": "请先取消正在进行的浏览器登录。",
+    "tokenSaveFailed": "无法保存 setup token：{{detail}}",
+    "logoutFailed": "退出登录失败：{{detail}}",
+    "statusAfterRun": "运行结束后再刷新原生状态。",
+    "logoutExit": "claude auth logout 退出码：{{code}}",
+    "authTimeout": "等待官方授权超时，请重新获取链接。",
+    "tokenUnread": "官方 setup-token 已成功退出，但未能从输出读取令牌，请核对 CLI 版本和输出格式。",
+    "loginExit": "官方登录命令异常退出（退出码 {{code}}），未提供错误输出。",
+    "noLink": "官方登录命令在给出授权链接前已结束。",
+    "noToken_other": "{{count}} 秒未拿到令牌，请重新生成链接。",
+    "noTokenSaid_other": "{{count}} 秒未拿到令牌，请重新生成链接。（官方命令：{{said}}）",
+    "tokenNotSaved": "令牌已生成但无法保存：{{detail}}"
+  },
+  "terminal": {
+    "ended": "终端已结束。",
+    "notOwner": "终端属于另一连接。",
+    "endedOrNotOwner": "终端已结束或属于另一连接。",
+    "busy": "请先结束这个会话的运行或会话管理，再打开终端。",
+    "startFailed": "终端启动失败，请检查 Linux PTY 组件与 CLI。"
+  },
+  "session": {
+    "manageRunActive": "请先结束当前运行再管理会话。",
+    "updateFailed": "原生会话更新失败，代理记录保留。请检查原生存储与权限。",
+    "forkRunActive": "请先结束当前运行再分叉会话。",
+    "forkFailed": "原生会话分叉失败，未创建新会话。该位置可能不在原生记录中。",
+    "moveRunActive": "请先结束当前运行再把会话移到另一台电脑。",
+    "compactNoContext": "先建立原生会话再压缩上下文。",
+    "updating": "会话正在更新，请稍后重试。",
+    "inCcdt": "这个会话在 ccdt 里开着，请先退出终端再操作它。",
+    "notFound": "会话不存在。",
+    "deleteRunActive": "请先停止运行再删除会话。",
+    "modeRunActive": "请先结束当前运行再修改审批模式。",
+    "projectRunActive": "请先结束当前运行再更换项目。",
+    "renameRunActive": "请先结束当前运行再改名。"
+  },
+  "run": {
+    "active": "当前会话正在运行。",
+    "stopping": "原生运行正在停止，请稍后发送。",
+    "statusReading": "原生状态正在读取，请稍后发送。",
+    "ended": "运行已结束，操作未生效。",
+    "adapterFailed": "原生进程适配失败；请检查服务配置和 CLI 版本。",
+    "contextMissing": "Claude Code 原生上下文不存在；不会用界面记录伪造恢复或另开会话。请检查原生存储与备份。",
+    "finishing": "原生运行正在收尾，请待结束后发送。",
+    "inputBusy": "已有较多补充消息等待原生处理，请稍后发送。"
+  },
+  "approval": {
+    "answered": "这一项已经处理过了，可能是在另一台设备上。",
+    "planOnly": "只有 Claude 的计划可以选择执行方式。",
+    "inactive": "审批已失效。"
+  },
+  "settings": {
+    "failed": "原生设置文件无法读取或写入；请在 ccdt 里用 /config 检查。"
+  },
+  "instructions": {
+    "failed": "全局说明文件无法读取或写入。",
+    "tooLong_other": "全局说明超过 {{count}} 字，请在 ccdt 里用 /memory 编辑。",
+    "changed": "全局说明已在别处修改，请重新载入后再改。"
+  },
+  "stopped": {
+    "user": "用户停止",
+    "userNative": "用户停止；已发出的 SSH 命令可能继续执行，副作用未撤销，不能自动重试。",
+    "disconnected": "连接断开，运行未重放。",
+    "disconnectedNative": "连接断开，运行未重放；在途命令结果可能未知。",
+    "offline_other": "设备离线超过 {{count}} 秒，运行已停止；在途命令结果可能未知。",
+    "serviceStopped": "服务停止，运行未重放。",
+    "serviceRestarted": "服务重启，运行未重放。"
+  },
+  "notice": {
+    "cacheExpiring_other": "上一轮结束已 {{count}} 分钟，提示缓存即将过期：按设置自动压缩上下文，压缩读取的是缓存。",
+    "terminalRewound": "终端里回退了对话，上面有些内容已不在上下文中。",
+    "terminalSwitched": "终端里换到了另一段对话（/clear 或 /resume），那之后的内容不在这个会话中。",
+    "backgroundOff": "未能转到后台：这台电脑的 Claude Code 关闭了后台任务。",
+    "metricsFailed": "本轮原生状态未能读取；任务结果不受影响。",
+    "loginExpiring_other": "Claude Code 的登录约 {{count}} 天后到期（{{date}}），到期后要在“账号与额度”里重新登录。",
+    "loginExpired": "Claude Code 的登录可能已经到期（{{date}}）；如果请求开始失败，请在“账号与额度”里重新登录。",
+    "modeMismatch": "请求审批模式 {{requested}}；原生进程实际报告 {{reported}}。",
+    "modeUnknown": "未知",
+    "writesLost": "{{disk}}，Claude Code 有内容没能保存：{{lost, parts}}。请清理服务器磁盘。",
+    "diskQuota": "服务器的磁盘配额已用完",
+    "diskFull": "服务器的磁盘已满",
+    "lostTranscript": "会话记录缺了一部分，之后继续这个会话时 Claude 可能看不到这段对话",
+    "lostConfig": "它自己的配置（~/.claude.json）的改动",
+    "terminalCommand": "在终端里执行了 {{command}}",
+    "terminalCommandOutput": "在终端里执行了 {{command}}：{{output}}"
+  },
+  "update": {
+    "untracked": "此服务未启用版本跟踪。",
+    "upgrading": "服务端正在升级，重启完成后再发送。",
+    "held": "{{reasons, clauses}}。升级会重启服务端并中断它们：等结束后再升级，或选择强行升级。",
+    "running_other": "{{titles, quoted}}正在运行",
+    "runningMany_other": "{{titles, quoted}} 等 {{count}} 个会话正在运行",
+    "mutating": "有会话正在移动或修改",
+    "signingIn": "Claude 账号正在登录",
+    "releasesUnreachable": "发布页无法访问（{{status}}）；跟踪私有仓库时需要在服务端配置只读令牌。",
+    "releasesFailed": "发布页请求失败（{{status}}）。",
+    "noManifest": "该发布没有 release.json。",
+    "badManifest": "release.json 格式不符。",
+    "missingFile": "发布中缺少 {{name}}。",
+    "downloadBroken": "{{name}} 下载中断：{{reason}}。",
+    "noData": "连接没有数据",
+    "stopping": "服务正在停止。",
+    "tooLarge": "{{name}} 比发布清单里的大。",
+    "checksum": "{{name}} 校验失败。",
+    "notAvailable": "没有可安装的这一版本，请先检查更新。",
+    "downloading": "下载服务端程序",
+    "unsafePath": "程序包内含不安全的路径。",
+    "installingDependencies": "安装依赖",
+    "installingClaude": "安装 Claude Code {{version}}",
+    "notFinished": "升级没有完成，仍在运行 {{version}}：{{reason}}"
+  },
+  "project": {
+    "notFound": "项目不存在。",
+    "moveRunActive": "这个项目里有会话正在运行，结束后再更改文件夹。"
+  },
+  "message": {
+    "notFound": "消息不存在。"
+  },
+  "fork": {
+    "midRun": "运行途中追加的消息不能作为分叉点。"
+  },
+  "history": {
+    "resumeCursor": "恢复游标超出历史范围。",
+    "cursor": "历史游标超出范围。",
+    "stalled": "历史传输连续 30 秒没有收到接收确认，请重试。",
+    "cancelled": "历史读取已取消。"
+  },
+  "tool": {
+    "restartedUnknown": "服务重启；工具最终执行结果未确认，不能自动重放。",
+    "restartedSimulated": "服务重启；模拟工具未执行。",
+    "endedUnknown": "运行结束；该工具最终执行结果未确认。已发出的 SSH 命令可能继续执行，副作用未撤销，不能自动重放。"
+  },
+  "status": {
+    "readFailed": "原生接口读取失败",
+    "readTimeout": "原生接口读取超时"
+  },
+  "web": {
+    "rateLimited": "尝试过于频繁，请稍后重试。",
+    "wrongProof": "密码或动态码不正确，或动态码已被使用。",
+    "signedOut": "登录已失效，请重新登录。",
+    "certificateDesktopOnly": "请在桌面客户端管理证书。",
+    "settingDesktopOnly": "此设置需要在桌面客户端修改。",
+    "proxyAddress": "请填写可信反向代理的 IP 地址。",
+    "publicNeedsHttps": "公网 Web 访问需要 HTTPS。",
+    "domainNeedsHttps": "域名访问需要 HTTPS。",
+    "totpEnabled": "请先关闭现有二次验证。",
+    "totpInvalid": "动态码不正确或设置已过期，请重新设置。",
+    "jsonOnly": "请使用 JSON 请求。",
+    "tooLong": "请求内容过长。",
+    "badLogin": "登录请求格式无效。",
+    "sessionLimit": "登录会话数量已达上限，请先撤销不用的会话。",
+    "loginUnavailable": "登录暂时不可用。"
+  },
+  "certificate": {
+    "noDomain": "请先填写访问域名。",
+    "tooLong": "证书链或私钥过长。",
+    "chainFormat": "请提供 PEM 格式的证书链。",
+    "keyFormat": "请提供未加密的 PEM 私钥。",
+    "notValidNow": "证书尚未生效或已过期。",
+    "leafFirst": "请将域名证书放在证书链第一项。",
+    "wrongDomain": "证书不包含当前访问域名。",
+    "keyMismatch": "证书与私钥不匹配。",
+    "notForServer": "证书不允许用于 HTTPS 服务端。",
+    "duplicate": "证书链包含重复证书。",
+    "chainOrder": "证书链顺序或签名不正确。",
+    "signature": "证书签名不正确。",
+    "invalid": "证书或私钥格式无效。",
+    "savedInvalid": "已保存的域名证书无效，请重新导入或恢复默认证书。",
+    "restoreFirst": "请先恢复默认证书，再修改访问域名。",
+    "byProxy": "当前由反向代理管理 HTTPS 证书。",
+    "noHttps": "当前服务未配置 HTTPS。",
+    "saveFailed": "保存证书失败，当前服务证书未改变。"
+  }
+}

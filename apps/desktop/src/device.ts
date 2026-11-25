@@ -13,6 +13,9 @@ export async function thisDevice(): Promise<Device> {
   localStorage.setItem('proxy-device', id);
   return { id, name: '浏览器' };
 }
+// A computer as the window names it: the service's own by what it is, any other by the name it gave itself.
+export const deviceName = (device: { id: string; name: string }, serverDeviceId: string | null) =>
+  device.id === serverDeviceId ? '服务端' : device.name;
 // A session is on this computer when its project directory is; one from before computers were told apart
 // is on whichever uses it first. Until then it is taken to be here, unless its folder was looked for on this
 // computer and not found: `absent` holds those folders by pathKey().

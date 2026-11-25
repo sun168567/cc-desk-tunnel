@@ -1,4 +1,5 @@
-import { createI18n, pseudoLanguage, resolveLanguage } from '@cc-desk-tunnel/i18n';
+import { createI18n, pseudoLanguage, resolveLanguage, wordsText } from '@cc-desk-tunnel/i18n';
+import type { Words } from '@cc-desk-tunnel/i18n';
 import { getPrefs, onPrefs } from './prefs.ts';
 
 // The window's language: the one chosen in the settings, or the system's. The desktop's main process says which
@@ -24,3 +25,6 @@ function follow() {
 }
 follow();
 onPrefs(follow);
+
+// What the service said, in the window's language at the moment it is said (see `Say` in client.ts).
+export const say = (words: Words, fallback?: string) => wordsText(t, words, fallback);

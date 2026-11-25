@@ -88,6 +88,7 @@ async function browserFixture(page: Page, authenticated = false, withHistory = f
           JSON.stringify({
             type: 'ready',
             protocolVersion: PROTOCOL_VERSION,
+            serverDeviceId: '00000000-0000-4000-8000-000000000001',
             version: '0.3.4',
             connectionId: randomUUID(),
             adapter: 'claude-code',
@@ -295,7 +296,10 @@ test('mainline themes and browser access settings coexist and retain the chosen 
     'rgb(30, 31, 35)',
   );
   await theme();
-  await page.getByRole('radio', { name: '跟随系统', exact: true }).click();
+  await page
+    .getByRole('radiogroup', { name: '主题' })
+    .getByRole('radio', { name: '跟随系统', exact: true })
+    .click();
   await web();
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('.web-access-settings')).toHaveCSS(

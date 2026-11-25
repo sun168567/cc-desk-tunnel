@@ -1,5 +1,6 @@
 import type { SDKUserMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
+import { phrase } from '@cc-desk-tunnel/i18n';
 import { DomainError } from './errors.ts';
 
 // This is only the SDK's input transport. Claude Code owns scheduling and merging turns.
@@ -17,10 +18,9 @@ export class NativeInput {
   }
 
   assertWritable() {
-    if (!this.accepting)
-      throw new DomainError('run_finishing', '原生运行正在收尾，请待结束后发送。');
+    if (!this.accepting) throw new DomainError('run_finishing', phrase('service:run.finishing'));
     if (this.outstanding.size >= 32)
-      throw new DomainError('input_busy', '已有较多补充消息等待原生处理，请稍后发送。');
+      throw new DomainError('input_busy', phrase('service:run.inputBusy'));
   }
   submit(id: string, text: string) {
     this.assertWritable();

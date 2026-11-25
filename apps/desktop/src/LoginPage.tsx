@@ -4,6 +4,7 @@ import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import type { ClientUpgrade } from './client-upgrade.ts';
 import UpgradeProgress from './UpgradeProgress.tsx';
 import { thisDevice } from './device.ts';
+import { say } from './i18n.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import { serviceKey } from './shared.ts';
 import type { Account } from './shared.ts';
@@ -148,7 +149,7 @@ export default function LoginPage({
     const stop = window.desktop!.onServiceUpgrade(
       (update) =>
         update.detail &&
-        setServiceUpgrade({ phase: 'running', text: `正在升级服务端：${update.detail}` }),
+        setServiceUpgrade({ phase: 'running', text: `正在升级服务端：${say(update.detail)}` }),
     );
     void thisDevice()
       .then((device) =>
@@ -161,14 +162,14 @@ export default function LoginPage({
           ...(force ? { force } : {}),
         }),
       )
-      .then(({ version, error, code }) => {
+      .then(({ version, error, phrase, code }) => {
         if (version) serviceUpgraded(service);
         setServiceUpgrade(
           version
             ? { phase: 'done', text: `服务端已升级到 ${version}，正在重启，好了就自动连接…` }
             : {
                 phase: 'failed',
-                text: error ?? '服务端升级失败。',
+                text: phrase ? say(phrase, error) : (error ?? '服务端升级失败。'),
                 forcible:
                   code === 'busy' &&
                   service.localeCompare(FORCED_UPGRADE_SINCE, undefined, { numeric: true }) >= 0,

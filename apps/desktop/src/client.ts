@@ -4,7 +4,7 @@ import {
   PROTOCOL_VERSION,
   serverMessageSchema,
 } from '@cc-desk-tunnel/protocol';
-import type { EventPayload, HistoryPage } from '@cc-desk-tunnel/protocol';
+import type { EventPayload, HistoryPage, Words } from '@cc-desk-tunnel/protocol';
 import { HistoryCache } from './historyCache.ts';
 import type { Range } from './historyCache.ts';
 import type {
@@ -130,6 +130,8 @@ export type ClientState = {
   // The computer this client signed in as; a session's commands run on the one it is on.
   device: Device | null;
   browser: Extract<ServerMessage, { type: 'ready' }>['browser'] | null;
+  // The service's own computer, which the window names itself (see `deviceName`).
+  serverDeviceId: string | null;
   // The service's files as the file panel reaches them, where it offers them (see FilePanel.tsx).
   files: NonNullable<Extract<ServerMessage, { type: 'ready' }>['files']> | null;
   // The user's computers connected to the service now, and whether commands reach each yet. Another
@@ -177,12 +179,23 @@ export type ConnectedDevice = Extract<ServerMessage, { type: 'devices' }>['devic
 // The renderer's single connection and its state store: components read `state` through subscribe / getSnapshot
 // and send commands with request(). A connection that breaks is made again, for as long as it takes, and what
 // was missed is read from the service's record; nothing is resent automatically.
+// What the service said, as text in the window's language; `fallback` is the text it sent with a phrase.
+export type Say = (words: Words, fallback?: string) => string;
+const asSent: Say = (words, fallback) =>
+  typeof words === 'string' ? words : (fallback ?? words.key);
+
 export class ProxyClient {
+  private say: Say;
+  // `say` puts the service's phrases in the window's language; without it the text the service sent is shown.
+  constructor(say: Say = asSent) {
+    this.say = say;
+  }
   state: ClientState = {
     status: 'disconnected',
     connectionId: null,
     device: null,
     browser: null,
+    serverDeviceId: null,
     files: null,
     devices: [],
     sessions: [],
@@ -512,6 +525,7 @@ export class ProxyClient {
           status: 'connected',
           connectionId: message.connectionId,
           browser: message.browser ?? null,
+          serverDeviceId: message.serverDeviceId,
           files: message.files ?? null,
           sessions: message.sessions,
           projects: message.projects,
@@ -537,10 +551,18 @@ export class ProxyClient {
         if (message.ok) request.resolve(message);
         else {
           this.results.delete(message.requestId);
-          request.reject(new Error(message.message ?? '请求失败。'));
+          request.reject(
+            new Error(
+              message.phrase
+                ? this.say(message.phrase, message.message)
+                : (message.message ?? '请求失败。'),
+            ),
+          );
         }
       } else if (message.type === 'connection.error') {
-        this.update({ error: message.message });
+        this.update({
+          error: message.phrase ? this.say(message.phrase, message.message) : message.message,
+        });
         if (message.code === 'unauthorized' && credentials.browser) credentials.browser();
         if (message.code === 'version_mismatch')
           this.update({

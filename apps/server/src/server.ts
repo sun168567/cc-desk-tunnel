@@ -65,7 +65,8 @@ import {
 } from './claude.ts';
 import type { ClaudeOptions, PlanDecision, Unanswered } from './claude.ts';
 import { ClientReleases } from './client-release.ts';
-import { DomainError } from './errors.ts';
+import { phrase, type Words } from '@cc-desk-tunnel/i18n';
+import { DomainError, said, textOf, wordsOf } from './errors.ts';
 import { HistoryDelivery } from './history-delivery.ts';
 import type { NativeLogin } from './native-account.ts';
 import { IdleCompactions } from './idle-compaction.ts';
@@ -134,19 +135,17 @@ type Peer = {
 // sign-in under way. Null when nothing does. Open terminals at rest and background tasks only end with the restart.
 export function upgradeHeld(sessions: Session[], mutating: boolean, signingIn: boolean) {
   const working = sessions.filter((session) => runWorking(session.activeRun));
-  const named =
-    working
-      .slice(0, 3)
-      .map((session) => `「${session.title}」`)
-      .join('') + (working.length > 3 ? ` 等 ${working.length} 个会话` : '');
-  const parts = [
-    ...(working.length ? [`${named}正在运行`] : []),
-    ...(mutating ? ['有会话正在移动或修改'] : []),
-    ...(signingIn ? ['Claude 账号正在登录'] : []),
+  const titles = working.slice(0, 3).map((session) => session.title);
+  const reasons = [
+    ...(working.length > 3
+      ? [phrase('service:update.runningMany', { titles, count: working.length })]
+      : working.length
+        ? [phrase('service:update.running', { titles, count: working.length })]
+        : []),
+    ...(mutating ? [phrase('service:update.mutating')] : []),
+    ...(signingIn ? [phrase('service:update.signingIn')] : []),
   ];
-  return parts.length
-    ? `${parts.join('，')}。升级会重启服务端并中断它们：等结束后再升级，或选择强行升级。`
-    : null;
+  return reasons.length ? phrase('service:update.held', { reasons }) : null;
 }
 export type Run = {
   id: string;
@@ -176,7 +175,7 @@ export type Run = {
   plans: Set<string>;
   // Approvals and questions answered already: a second answer, from another window or computer, came late.
   answered: Set<string>;
-  cancelReason?: string;
+  cancelReason?: Words;
   // Output still arriving in pieces: sent on as it comes, recorded once it is whole.
   open?: Fragment;
   input?: NativeInput;
@@ -351,7 +350,8 @@ export function createProxyServer(options: ServerOptions) {
     reverseProxy: options.reverseProxy,
     host: options.host ?? '127.0.0.1',
   });
-  const serverDevice: Device = { id: web.serverDeviceId, name: '服务端', platform: 'linux' };
+  // The service's own computer. Clients name it by its ID, in their language; the name is for the record.
+  const serverDevice: Device = { id: web.serverDeviceId, name: 'server', platform: 'linux' };
   const originOf = (request: IncomingMessage) =>
     `${options.tls || options.reverseProxy ? 'https' : 'http'}://${request.headers.host}`;
   // Behind the reverse proxy every socket comes from the proxy itself; it passes the client on in X-Real-IP.
@@ -478,9 +478,9 @@ export function createProxyServer(options: ServerOptions) {
     if (!command.deviceId || command.deviceId === peer.device?.id) return deviceOf(peer);
     const seat = seats.get(command.deviceId);
     const device = seat && [...seat.peers].findLast((other) => other.device)?.device;
-    if (!device) throw new DomainError('device_offline', '那台电脑不在线。');
+    if (!device) throw new DomainError('device_offline', phrase('service:device.offline'));
     if (!store.isProject(device.id, command.projectPath))
-      throw new DomainError('unknown_project', '那台电脑上没有这个项目。');
+      throw new DomainError('unknown_project', phrase('service:device.unknownProject'));
     return device;
   }
   // Tells every window the projects when they changed.
@@ -493,7 +493,7 @@ export function createProxyServer(options: ServerOptions) {
     broadcast({ type: 'projects', projects });
   }
   function deviceOf(peer: Peer) {
-    if (!peer.device) throw new DomainError('device_unknown', '客户端没有报告设备标识。');
+    if (!peer.device) throw new DomainError('device_unknown', phrase('service:device.unknown'));
     return peer.device;
   }
   // A session's commands run on the computer its project directory is on, whichever of the user's computers
@@ -505,10 +505,7 @@ export function createProxyServer(options: ServerOptions) {
     if (!session.device) {
       // Before computers were told apart they were all Windows ones, and so is the session's project path.
       if (!device || platformOf(device) !== 'win32')
-        throw new DomainError(
-          'other_device',
-          '此会话在一台 Windows 电脑上。要在本机接着做，请先为它选择本机的项目目录，或把它分叉到本机。',
-        );
+        throw new DomainError('other_device', phrase('service:device.onWindows'));
       updated(store.claim(session.id, device).id);
       announceProjects();
     }
@@ -517,19 +514,16 @@ export function createProxyServer(options: ServerOptions) {
     if (place.id === device?.id) {
       // Any connection of this computer may carry its commands: `ccdt online` does for a terminal of ccdt.
       if (options.claude && !(seat?.door?.ready && seat.door.ssh))
-        throw new DomainError(
-          'execution_offline',
-          '本机的执行通道尚未就绪，请稍候；客户端正在建立或重新建立连接。',
-        );
+        throw new DomainError('execution_offline', phrase('service:device.notReady'));
     } else if (!seat?.peers.size)
       throw new DomainError(
         'device_offline',
-        `设备“${place.name}”不在线。它连上服务后才能在这里操作它的会话；也可以把会话接到本机或分叉到本机。`,
+        phrase('service:device.otherOffline', { name: place.name }),
       );
     else if (options.claude && !seat.door?.ready)
       throw new DomainError(
         'execution_offline',
-        `设备“${place.name}”的执行通道尚未就绪，请稍候再试。`,
+        phrase('service:device.otherNotReady', { name: place.name }),
       );
     return place.id;
   }
@@ -591,10 +585,7 @@ export function createProxyServer(options: ServerOptions) {
   }
   function room() {
     if (options.claude && runs.size + terminals.size >= capacity)
-      throw new DomainError(
-        'capacity',
-        `服务端同时最多进行 ${capacity} 个运行或终端（按服务器内存估算，可用 PROXY_MAX_RUNS 调整）。请等其他任务结束后再试。`,
-      );
+      throw new DomainError('capacity', phrase('service:capacity', { count: capacity }));
   }
   function track(task: Promise<unknown>, group = tasks) {
     group.add(task);
@@ -638,7 +629,9 @@ export function createProxyServer(options: ServerOptions) {
       if (run)
         emit(run, {
           type: 'native.notice',
-          text: `上一轮结束已 ${compactions.settings.afterMinutes} 分钟，提示缓存即将过期：按设置自动压缩上下文，压缩读取的是缓存。`,
+          text: phrase('service:notice.cacheExpiring', {
+            count: compactions.settings.afterMinutes,
+          }),
         });
     } catch {
       // As many runs as the service holds are going, or the session's native record is gone: left as it is.
@@ -720,7 +713,7 @@ export function createProxyServer(options: ServerOptions) {
         partial: turn.background || !complete(stats),
       });
   }
-  function finish(run: Run, status: 'completed' | 'cancelled' | 'failed', reason?: string) {
+  function finish(run: Run, status: 'completed' | 'cancelled' | 'failed', reason?: Words) {
     if (runs.get(run.sessionId) !== run) return;
     run.input?.close();
     if (run.toolId && !run.toolFinished) {
@@ -728,7 +721,7 @@ export function createProxyServer(options: ServerOptions) {
         type: 'tool.result',
         toolId: run.toolId,
         status: 'cancelled',
-        output: '模拟工具未执行。',
+        output: textOf(phrase('service:simulation.toolSkipped')),
         exitCode: null,
       });
     }
@@ -740,7 +733,7 @@ export function createProxyServer(options: ServerOptions) {
     run.approvals.clear();
   }
   // A native run ends through its own adapter, which reports what is known about in-flight tools first.
-  function cancel(run: Run, reason: string) {
+  function cancel(run: Run, reason: Words) {
     if (!options.claude) {
       finish(run, 'cancelled', reason);
       return;
@@ -825,13 +818,13 @@ export function createProxyServer(options: ServerOptions) {
       emit(run, {
         type: 'run.error',
         code: 'native_adapter_failed',
-        message: '原生进程适配失败；请检查服务配置和 CLI 版本。',
+        ...said(phrase('service:run.adapterFailed')),
       });
       finish(run, run.controller.signal.aborted ? 'cancelled' : 'failed', run.cancelReason);
     }
   }
 
-  async function publishAccount(target?: Peer, notice?: string) {
+  async function publishAccount(target?: Peer, notice?: Words) {
     const { accountStatus } = await import('./native-account.ts');
     const state: AccountState = {
       ...(await accountStatus(options.claude!.executable)),
@@ -842,13 +835,15 @@ export function createProxyServer(options: ServerOptions) {
     else broadcast({ type: 'account.state', ...state });
   }
   async function account(peer: Peer, command: CommandOf<`account.${string}` & Command['type']>) {
-    if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有原生账号。');
+    if (!options.claude)
+      throw new DomainError('native_unavailable', phrase('service:simulation.noAccount'));
     if (command.type === 'account.status') {
       await publishAccount(peer);
       return;
     }
     if (command.type === 'account.code') {
-      if (!login?.url) throw new DomainError('login_inactive', '登录流程已结束，请重新获取链接。');
+      if (!login?.url)
+        throw new DomainError('login_inactive', phrase('service:account.loginEnded'));
       login.process.submit(command.code);
       return;
     }
@@ -857,16 +852,16 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     if (terminals.size || runs.size || mutations.size)
-      throw new DomainError('native_busy', '请先结束原生运行或终端，再管理账号。');
+      throw new DomainError('native_busy', phrase('service:account.busy'));
     const { NativeLogin, accountLogout, configureSetupToken } = await import('./native-account.ts');
     if (command.type === 'account.token') {
-      if (login) throw new DomainError('login_active', '请先取消正在进行的浏览器登录。');
+      if (login) throw new DomainError('login_active', phrase('service:account.cancelLoginFirst'));
       try {
         configureSetupToken(command.token);
       } catch (error) {
         throw new DomainError(
           'token_save_failed',
-          `无法保存 setup token：${error instanceof Error ? error.message : String(error)}`,
+          phrase('service:account.tokenSaveFailed', { detail: wordsOf(error) }),
         );
       }
       quotas.clear();
@@ -880,7 +875,7 @@ export function createProxyServer(options: ServerOptions) {
       } catch (error) {
         throw new DomainError(
           'logout_failed',
-          `退出登录失败：${error instanceof Error ? error.message : String(error)}`,
+          phrase('service:account.logoutFailed', { detail: wordsOf(error) }),
         );
       }
       quotas.clear();
@@ -902,7 +897,7 @@ export function createProxyServer(options: ServerOptions) {
                 quotas.clear();
               } catch (error) {
                 succeeded = false;
-                notice = `令牌已生成但无法保存：${error instanceof Error ? error.message : String(error)}`;
+                notice = phrase('service:account.tokenNotSaved', { detail: wordsOf(error) });
               }
               send(current.owner, {
                 type: 'account.token.created',
@@ -925,10 +920,7 @@ export function createProxyServer(options: ServerOptions) {
       try {
         current.url = await current.process.url;
       } catch (error) {
-        throw new DomainError(
-          'login_failed',
-          error instanceof Error ? error.message : String(error),
-        );
+        throw new DomainError('login_failed', wordsOf(error));
       }
     }
     await publishAccount();
@@ -936,7 +928,8 @@ export function createProxyServer(options: ServerOptions) {
 
   // Starts the CLI without a prompt to read its account, model and quota state.
   async function readStatus(peer: Peer, command: CommandOf<'session.status'>) {
-    if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有原生账号状态。');
+    if (!options.claude)
+      throw new DomainError('native_unavailable', phrase('service:simulation.noAccountState'));
     // During a run its own CLI answers, so quota can be reread without waiting for the turn to end.
     const active =
       runs.get(command.sessionId) ?? [...runs.values()].find((run) => run.controls.refresh);
@@ -946,7 +939,7 @@ export function createProxyServer(options: ServerOptions) {
     }
     // A terminal's session is read by a CLI of its own that does not take it up (its figures stay as they were).
     if (runs.size || mutations.size)
-      throw new DomainError('native_busy', '运行结束后再刷新原生状态。');
+      throw new DomainError('native_busy', phrase('service:account.statusAfterRun'));
     const resume = !terminals.has(command.sessionId);
     const last = resume ? null : store.lastMetrics(command.sessionId);
     mutations.set(command.sessionId, 'status');
@@ -980,23 +973,25 @@ export function createProxyServer(options: ServerOptions) {
   async function closeTerminal(peer: Peer, command: CommandOf<'terminal.close'>) {
     const terminal = terminals.get(command.sessionId);
     if (!terminal || terminal.id !== command.terminalId)
-      throw new DomainError('terminal_inactive', '终端已结束。');
-    if (terminal.owner !== peer) throw new DomainError('not_owner', '终端属于另一连接。');
+      throw new DomainError('terminal_inactive', phrase('service:terminal.ended'));
+    if (terminal.owner !== peer)
+      throw new DomainError('not_owner', phrase('service:terminal.notOwner'));
     await terminal.process?.close();
   }
   // The terminal occupies its session like a run does, so other connections see it as busy.
   async function openTerminal(peer: Peer, command: CommandOf<'terminal.open'>, session: Session) {
-    if (!options.claude) throw new DomainError('native_unavailable', '离线模拟不启动终端。');
+    if (!options.claude)
+      throw new DomainError('native_unavailable', phrase('service:simulation.noTerminal'));
     const running = terminals.get(command.sessionId);
     if (running?.process) return attachTerminal(peer, running, command);
     // The terminal's own CLI takes care of the session while it is held.
     compactions.cancel(command.sessionId);
     if (terminals.has(command.sessionId) || runs.has(command.sessionId) || mutations.size)
-      throw new DomainError('native_busy', '请先结束这个会话的运行或会话管理，再打开终端。');
+      throw new DomainError('native_busy', phrase('service:terminal.busy'));
     const device = target(peer, session);
     const ssh = seats.get(device)?.door?.ssh;
     if (!ssh && device !== serverDevice.id)
-      throw new DomainError('execution_offline', '本机的执行通道尚未就绪。');
+      throw new DomainError('execution_offline', phrase('service:device.notReadyShort'));
     room();
     const id = randomUUID();
     const directory = join(store.directory, 'terminals');
@@ -1147,7 +1142,7 @@ export function createProxyServer(options: ServerOptions) {
         rmSync(current.continued.statusPath, { force: true });
       }
       if (terminals.get(current.sessionId) === current) terminals.delete(current.sessionId);
-      throw new DomainError('terminal_failed', '终端启动失败，请检查 Linux PTY 组件与 CLI。');
+      throw new DomainError('terminal_failed', phrase('service:terminal.startFailed'));
     }
   }
   // Another look at a terminal that keeps running. The connection that showed it is told it no longer does.
@@ -1353,7 +1348,7 @@ export function createProxyServer(options: ServerOptions) {
       !compacted &&
       !messages.some((message) => message.uuid === continued.last)
     )
-      emit({ type: 'native.notice', text: '终端里回退了对话，上面有些内容已不在上下文中。' });
+      emit({ type: 'native.notice', text: phrase('service:notice.terminalRewound') });
     continued.transcript.accept(messages, known);
     continued.transcript.settle();
     continued.transcript.compactedSince();
@@ -1363,7 +1358,7 @@ export function createProxyServer(options: ServerOptions) {
       continued.toldElsewhere = true;
       emit({
         type: 'native.notice',
-        text: '终端里换到了另一段对话（/clear 或 /resume），那之后的内容不在这个会话中。',
+        text: phrase('service:notice.terminalSwitched'),
       });
     }
   }
@@ -1372,7 +1367,8 @@ export function createProxyServer(options: ServerOptions) {
     command: CommandOf<'session.delete' | 'session.rename'>,
     session: Session,
   ) {
-    if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再管理会话。');
+    if (session.activeRun)
+      throw new DomainError('run_active', phrase('service:session.manageRunActive'));
     mutations.set(command.sessionId, 'session');
     try {
       if (options.claude && store.hasNativeContext(command.sessionId)) {
@@ -1399,10 +1395,7 @@ export function createProxyServer(options: ServerOptions) {
       }
     } catch (error) {
       if (error instanceof DomainError) throw error;
-      throw new DomainError(
-        'native_mutation_failed',
-        '原生会话更新失败，代理记录保留。请检查原生存储与权限。',
-      );
+      throw new DomainError('native_mutation_failed', phrase('service:session.updateFailed'));
     } finally {
       mutations.delete(command.sessionId);
     }
@@ -1411,14 +1404,15 @@ export function createProxyServer(options: ServerOptions) {
   // a copy after a message and only knows the source's message IDs, so stopping before a message takes two
   // copies: one through that message, then one of it up to the entry before its last.
   async function fork(peer: Peer, command: CommandOf<'session.fork'>, session: Session) {
-    if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再分叉会话。');
+    if (session.activeRun)
+      throw new DomainError('run_active', phrase('service:session.forkRunActive'));
     const place = { device: deviceOf(peer), projectPath: command.projectPath };
     const existing = store.created(command.requestId);
     if (existing) return existing.id;
     const before = command.beforeMessageId
       ? store.forkPoint(command.sessionId, command.beforeMessageId)
       : undefined;
-    const title = `${session.title.slice(0, 116)}（分叉）`;
+    const { title } = command;
     let id: string = randomUUID();
     let resumable = false;
     mutations.set(command.sessionId, 'session');
@@ -1460,10 +1454,7 @@ export function createProxyServer(options: ServerOptions) {
       return created.id;
     } catch (error) {
       if (error instanceof DomainError) throw error;
-      throw new DomainError(
-        'native_mutation_failed',
-        '原生会话分叉失败，未创建新会话。该位置可能不在原生记录中。',
-      );
+      throw new DomainError('native_mutation_failed', phrase('service:session.forkFailed'));
     } finally {
       mutations.delete(command.sessionId);
     }
@@ -1477,11 +1468,12 @@ export function createProxyServer(options: ServerOptions) {
     session: Session,
   ) {
     if (command.type === 'session.compact' && !options.claude)
-      throw new DomainError('native_unavailable', '离线模拟不提供原生上下文压缩。');
+      throw new DomainError('native_unavailable', phrase('service:simulation.noCompaction'));
     if (command.type === 'session.compact' && !store.hasNativeContext(command.sessionId))
-      throw new DomainError('native_context_missing', '先建立原生会话再压缩上下文。');
+      throw new DomainError('native_context_missing', phrase('service:session.compactNoContext'));
     const continued = command.type === 'run.continue';
-    if (continued && session.activeRun) throw new DomainError('run_active', '当前会话正在运行。');
+    if (continued && session.activeRun)
+      throw new DomainError('run_active', phrase('service:run.active'));
     const text =
       command.type === 'session.compact' ? '/compact' : continued ? CONTINUE : command.text;
     const scenario = command.type === 'message.send' ? command.scenario : 'chat';
@@ -1489,15 +1481,15 @@ export function createProxyServer(options: ServerOptions) {
     const existing = store.userMessage(command.sessionId, command.requestId);
     if (existing?.payload.type === 'message.user') {
       if (existing.payload.text !== text || existing.payload.scenario !== scenario)
-        throw new DomainError('request_conflict', '请求 ID 已被其他内容使用。');
+        throw new DomainError('request_conflict', phrase('service:request.conflict'));
       return;
     }
     if (session.activeRun) {
       const active = runs.get(command.sessionId);
       if (!options.claude || command.type !== 'message.send' || !active?.input)
-        throw new DomainError('run_active', '当前会话正在运行。');
+        throw new DomainError('run_active', phrase('service:run.active'));
       if (active.controller.signal.aborted)
-        throw new DomainError('run_finishing', '原生运行正在停止，请稍后发送。');
+        throw new DomainError('run_finishing', phrase('service:run.stopping'));
       active.input.assertWritable();
       peer?.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
@@ -1508,7 +1500,7 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     if (options.claude && mutations.size)
-      throw new DomainError('native_busy', '原生状态正在读取，请稍后发送。');
+      throw new DomainError('native_busy', phrase('service:run.statusReading'));
     const device = peer ? target(peer, session) : session.device!.id;
     room();
     peer?.subscriptions.add(command.sessionId);
@@ -1564,10 +1556,10 @@ export function createProxyServer(options: ServerOptions) {
     const run = runs.get(command.sessionId);
     if (!run || run.id !== command.runId) {
       if (command.type !== 'approval.reply') return;
-      throw new DomainError('run_inactive', '运行已结束，操作未生效。');
+      throw new DomainError('run_inactive', phrase('service:run.ended'));
     }
     if (command.type === 'approval.reply' && run.answered.has(command.approvalId))
-      throw new DomainError('approval_answered', '这一项已经处理过了，可能是在另一台设备上。');
+      throw new DomainError('approval_answered', phrase('service:approval.answered'));
     // A mode, a changed plan or feedback is an answer to Claude's plan only: an approval of anything else does not
     // change the mode by it.
     if (
@@ -1577,7 +1569,7 @@ export function createProxyServer(options: ServerOptions) {
         ? run.plans.has(command.approvalId)
         : run.planApproval === command.approvalId)
     )
-      throw new DomainError('approval_invalid', '只有 Claude 的计划可以选择执行方式。');
+      throw new DomainError('approval_invalid', phrase('service:approval.planOnly'));
     if (command.type === 'run.task.stop') {
       if (!run.controls.stopTask) return;
       // The CLI reports the task gone through its task list; a task already over is not an error.
@@ -1591,18 +1583,13 @@ export function createProxyServer(options: ServerOptions) {
         if (runs.get(run.sessionId) === run)
           emit(run, {
             type: 'native.notice',
-            text: '未能转到后台：这台电脑的 Claude Code 关闭了后台任务。',
+            text: phrase('service:notice.backgroundOff'),
           });
       });
       return;
     }
     if (command.type === 'run.cancel') {
-      cancel(
-        run,
-        options.claude
-          ? '用户停止；已发出的 SSH 命令可能继续执行，副作用未撤销，不能自动重试。'
-          : '用户停止',
-      );
+      cancel(run, phrase(options.claude ? 'service:stopped.userNative' : 'service:stopped.user'));
       return;
     }
     if (options.claude) {
@@ -1619,11 +1606,11 @@ export function createProxyServer(options: ServerOptions) {
           command.plan,
         )
       )
-        throw new DomainError('approval_inactive', '审批已失效。');
+        throw new DomainError('approval_inactive', phrase('service:approval.inactive'));
       return;
     }
     if (!run.decide || run.approvalId !== command.approvalId)
-      throw new DomainError('approval_inactive', '审批已失效。');
+      throw new DomainError('approval_inactive', phrase('service:approval.inactive'));
     const decide = run.decide;
     run.decide = undefined;
     run.answered.add(command.approvalId);
@@ -1669,7 +1656,12 @@ export function createProxyServer(options: ServerOptions) {
     }
     switch (command.type) {
       case 'server.session.create': {
-        const session = store.createOnServer(command.requestId, command.title, serverDevice);
+        const session = store.createOnServer(
+          command.requestId,
+          command.title,
+          serverDevice,
+          command.autoTitle,
+        );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
         broadcast({ type: 'session.updated', session });
@@ -1686,7 +1678,8 @@ export function createProxyServer(options: ServerOptions) {
         return undefined;
       case 'settings.get':
       case 'settings.update': {
-        if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有原生设置。');
+        if (!options.claude)
+          throw new DomainError('native_unavailable', phrase('service:simulation.noSettings'));
         try {
           const values =
             command.type === 'settings.get'
@@ -1694,10 +1687,7 @@ export function createProxyServer(options: ServerOptions) {
               : updateNativeSettings(command.values);
           send(peer, { type: 'settings.state', requestId: command.requestId, values });
         } catch {
-          throw new DomainError(
-            'settings_failed',
-            '原生设置文件无法读取或写入；请在 ccdt 里用 /config 检查。',
-          );
+          throw new DomainError('settings_failed', phrase('service:settings.failed'));
         }
         return undefined;
       }
@@ -1721,7 +1711,8 @@ export function createProxyServer(options: ServerOptions) {
         return undefined;
       case 'instructions.get':
       case 'instructions.update': {
-        if (!options.claude) throw new DomainError('native_unavailable', '离线模拟没有全局说明。');
+        if (!options.claude)
+          throw new DomainError('native_unavailable', phrase('service:simulation.noInstructions'));
         try {
           const state =
             command.type === 'instructions.get'
@@ -1730,7 +1721,7 @@ export function createProxyServer(options: ServerOptions) {
           send(peer, { type: 'instructions.state', requestId: command.requestId, ...state });
         } catch (error) {
           if (error instanceof DomainError) throw error;
-          throw new DomainError('instructions_failed', '全局说明文件无法读取或写入。');
+          throw new DomainError('instructions_failed', phrase('service:instructions.failed'));
         }
         return undefined;
       }
@@ -1750,11 +1741,13 @@ export function createProxyServer(options: ServerOptions) {
         });
         return undefined;
       case 'service.update.check':
-        if (!updates) throw new DomainError('updates_unavailable', '此服务未启用版本跟踪。');
+        if (!updates)
+          throw new DomainError('updates_unavailable', phrase('service:update.untracked'));
         await updates.check();
         return undefined;
       case 'service.update.install': {
-        if (!updates) throw new DomainError('updates_unavailable', '此服务未启用版本跟踪。');
+        if (!updates)
+          throw new DomainError('updates_unavailable', phrase('service:update.untracked'));
         // The restart at the end cuts off whatever goes on. What is at work holds it back unless the user forces it;
         // an open terminal at rest, and background tasks a finished turn left, only end.
         const held = upgradeHeld(store.list(), mutations.size > 0, !!login);
@@ -1762,7 +1755,7 @@ export function createProxyServer(options: ServerOptions) {
         try {
           updates.install(command.version);
         } catch (error) {
-          throw new DomainError('update_unavailable', (error as Error).message);
+          throw new DomainError('update_unavailable', wordsOf(error));
         }
         return undefined;
       }
@@ -1782,7 +1775,7 @@ export function createProxyServer(options: ServerOptions) {
             .list()
             .some((session) => mutations.has(session.id) && pathKey(session.projectPath) === from)
         )
-          throw new DomainError('session_busy', '会话正在更新，请稍后重试。');
+          throw new DomainError('session_busy', phrase('service:session.updating'));
         for (const session of store.moveProject(command.from, command.to, deviceOf(peer)))
           broadcast({ type: 'session.updated', session });
         announceProjects();
@@ -1808,6 +1801,7 @@ export function createProxyServer(options: ServerOptions) {
           command.projectPath,
           device,
           command.plain && device === peer.device,
+          command.autoTitle,
         );
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
@@ -1824,7 +1818,7 @@ export function createProxyServer(options: ServerOptions) {
       mutations.has(command.sessionId) &&
       !(readingHistory && mutations.get(command.sessionId) === 'status')
     )
-      throw new DomainError('session_busy', '会话正在更新，请稍后重试。');
+      throw new DomainError('session_busy', phrase('service:session.updating'));
     switch (command.type) {
       case 'session.status':
         await readStatus(peer, command);
@@ -1891,12 +1885,12 @@ export function createProxyServer(options: ServerOptions) {
         return command.sessionId;
     }
     if (terminals.has(command.sessionId))
-      throw new DomainError('native_busy', '这个会话在 ccdt 里开着，请先退出终端再操作它。');
+      throw new DomainError('native_busy', phrase('service:session.inCcdt'));
     if (
       updates?.installing &&
       (command.type === 'message.send' || command.type === 'session.compact')
     )
-      throw new DomainError('service_upgrading', '服务端正在升级，重启完成后再发送。');
+      throw new DomainError('service_upgrading', phrase('service:update.upgrading'));
     switch (command.type) {
       case 'session.configure':
         broadcast({
@@ -1912,7 +1906,7 @@ export function createProxyServer(options: ServerOptions) {
       case 'session.move': {
         const device = destination(peer, command);
         if (session.activeRun && session.device?.id !== device.id)
-          throw new DomainError('run_active', '请先结束当前运行再把会话移到另一台电脑。');
+          throw new DomainError('run_active', phrase('service:session.moveRunActive'));
         broadcast({
           type: 'session.updated',
           session: store.move(command.sessionId, command.projectPath, device),
@@ -1962,6 +1956,7 @@ export function createProxyServer(options: ServerOptions) {
         sessions: store.list(),
         projects: store.projects(),
         historyId: store.historyId,
+        serverDeviceId: serverDevice.id,
         quota: quotas.current(),
         browser: {
           sessionId: peer.browser,
@@ -1981,8 +1976,7 @@ export function createProxyServer(options: ServerOptions) {
       send(peer, {
         type: 'connection.error',
         code: 'unauthorized',
-        message:
-          '服务凭据不正确。\n请核对安装时给出的服务凭据，注意不要带上首尾空格；在服务器上更换过凭据后要用新的。连续失败多次会被暂时拒绝。',
+        ...said(phrase('service:connection.unauthorized')),
       });
       peer.socket.close(4001, 'Unauthorized');
       return false;
@@ -1996,7 +1990,7 @@ export function createProxyServer(options: ServerOptions) {
       send(peer, {
         type: 'connection.error',
         code: 'version_mismatch',
-        message: `客户端与服务端（${version}）的版本不一致，需要升级其中一方。`,
+        ...said(phrase('service:connection.versionMismatch', { version })),
         service: version,
         client: held,
         ...(held?.version !== version && updates?.preparing
@@ -2020,6 +2014,7 @@ export function createProxyServer(options: ServerOptions) {
       sessions: store.list(),
       projects: store.projects(),
       historyId: store.historyId,
+      serverDeviceId: serverDevice.id,
       quota: quotas.current(),
       ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
@@ -2045,8 +2040,7 @@ export function createProxyServer(options: ServerOptions) {
             send(peer, {
               type: 'connection.error',
               code: 'tunnel_failed',
-              message:
-                '服务端没能准备好执行通道。\n请查看服务日志；数据目录不可写或服务器资源耗尽时会出现这种情况。',
+              ...said(phrase('service:connection.tunnelFailed')),
             });
             peer.socket.close(4003, 'Tunnel failed');
           }),
@@ -2136,11 +2130,15 @@ export function createProxyServer(options: ServerOptions) {
         })
         .catch((error: unknown) => {
           // What the device or ssh answered, which tells why: the user is shown it rather than a guess.
-          const said = error instanceof ProbeFailure ? error.message : '';
+          const answer = error instanceof ProbeFailure ? error.words : '';
           send(peer, {
             type: 'connection.error',
             code: 'ssh_failed',
-            message: `隧道已建立，但本机 SSH 服务没有执行探测命令。${said ? `\n本机答复：${said}` : ''}`,
+            ...said(
+              answer
+                ? phrase('service:connection.sshFailedSaid', { said: answer })
+                : phrase('service:connection.sshFailed'),
+            ),
           });
           peer.socket.close(4003, 'SSH probe failed');
         }),
@@ -2154,7 +2152,7 @@ export function createProxyServer(options: ServerOptions) {
       send(peer, {
         type: 'connection.error',
         code: 'terminal_inactive',
-        message: '终端已结束或属于另一连接。',
+        ...said(phrase('service:terminal.endedOrNotOwner')),
       });
       return;
     }
@@ -2186,7 +2184,7 @@ export function createProxyServer(options: ServerOptions) {
           requestId: command.requestId,
           ok: false,
           code: 'request_conflict',
-          message: '请求 ID 已被其他内容使用。',
+          ...said(phrase('service:request.conflict')),
         });
       return;
     }
@@ -2202,7 +2200,9 @@ export function createProxyServer(options: ServerOptions) {
         requestId: command.requestId,
         ok: false,
         code: error instanceof DomainError ? error.code : 'internal_error',
-        message: error instanceof DomainError ? error.message : '服务处理失败。',
+        ...(error instanceof DomainError
+          ? { message: error.message, ...(error.phrase && { phrase: error.phrase }) }
+          : said(phrase('service:failed'))),
       }),
     );
     peer.responses.set(command.requestId, { command: serialized, response });
@@ -2239,7 +2239,7 @@ export function createProxyServer(options: ServerOptions) {
     announce();
   }
   // Nothing more is kept for a computer: its runs end and its door closes.
-  function vacate(seat: Seat, reason: string) {
+  function vacate(seat: Seat, reason: Words) {
     clearTimeout(seat.away);
     if (seats.get(seat.device) !== seat) return;
     seats.delete(seat.device);
@@ -2275,16 +2275,16 @@ export function createProxyServer(options: ServerOptions) {
         const waiting =
           [...runs.values()].some((run) => run.device === seat.device) ||
           [...terminals.values()].some((terminal) => terminal.device === seat.device);
-        const gone = options.claude
-          ? '连接断开，运行未重放；在途命令结果可能未知。'
-          : '连接断开，运行未重放。';
+        const gone = phrase(
+          options.claude ? 'service:stopped.disconnectedNative' : 'service:stopped.disconnected',
+        );
         if (peer.left || !waiting || !graceMs) vacate(seat, gone);
         else
           seat.away = setTimeout(
             () =>
               vacate(
                 seat,
-                `设备离线超过 ${Math.round(graceMs / 1000)} 秒，运行已停止；在途命令结果可能未知。`,
+                phrase('service:stopped.offline', { count: Math.round(graceMs / 1000) }),
               ),
             graceMs,
           );
@@ -2358,7 +2358,7 @@ export function createProxyServer(options: ServerOptions) {
           send(peer, {
             type: 'connection.error',
             code: 'invalid_json',
-            message: '消息必须是 JSON 文本。',
+            ...said(phrase('service:connection.invalidJson')),
           });
           socket.close(4002, 'Invalid frame');
           return;
@@ -2452,7 +2452,7 @@ export function createProxyServer(options: ServerOptions) {
           send(peer, {
             type: 'connection.error',
             code: 'invalid_command',
-            message: '请求格式无效。',
+            ...said(phrase('service:connection.invalidCommand')),
           });
           return;
         }
@@ -2463,7 +2463,7 @@ export function createProxyServer(options: ServerOptions) {
               requestId: command.data.requestId,
               ok: false,
               code: 'web_forbidden',
-              message: '浏览器不支持这项操作，请使用桌面客户端。',
+              ...said(phrase('service:request.browserUnsupported')),
             });
             return;
           }
@@ -2516,7 +2516,7 @@ export function createProxyServer(options: ServerOptions) {
       const terminalCleanup = Promise.all(
         [...terminals.values()].map((terminal) => terminal.process?.close()),
       );
-      for (const run of runs.values()) cancel(run, '服务停止，运行未重放。');
+      for (const run of runs.values()) cancel(run, phrase('service:stopped.serviceStopped'));
       for (const seat of seats.values()) clearTimeout(seat.away);
       compactions.clear();
       const cleanup = [

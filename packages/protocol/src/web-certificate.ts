@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { wordsSchema } from './phrase.ts';
 
 export const webCertificateStateSchema = z.object({
   mode: z.enum(['default', 'custom', 'external', 'unavailable']),
@@ -13,7 +14,7 @@ export const webCertificateStateSchema = z.object({
       selfSigned: z.boolean(),
     })
     .optional(),
-  error: z.string().optional(),
+  error: wordsSchema.optional(),
 });
 export type WebCertificateState = z.infer<typeof webCertificateStateSchema>;
 

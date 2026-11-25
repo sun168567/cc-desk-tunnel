@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { webCommandSchemas, webSettingsStateSchema, webTotpSetupSchema } from './web.ts';
 import { webCertificateStateSchema } from './web-certificate.ts';
+import { phraseSchema, wordsSchema } from './phrase.ts';
+export * from './phrase.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 
-export const PROTOCOL_VERSION = 29;
+export const PROTOCOL_VERSION = 30;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -28,6 +30,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.16': 27,
   '0.3.17': 28,
   '0.3.18': 29,
+  '0.3.21': 30,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -96,13 +99,14 @@ export const accountStateSchema = z.object({
   login: z
     .object({ url: z.url(), method: z.enum(['browser', 'setup-token']).optional() })
     .nullable(),
-  notice: z.string().optional(),
+  // Why the last sign-in failed, or what the official command last said.
+  notice: wordsSchema.optional(),
 });
 export type AccountState = z.infer<typeof accountStateSchema>;
 const setupTokenResultSchema = z.object({
   token: z.string(),
   saved: z.boolean(),
-  error: z.string().optional(),
+  error: wordsSchema.optional(),
 });
 export type SetupTokenResult = z.infer<typeof setupTokenResultSchema>;
 // The part of the official CLI's user settings the GUI edits. null means unset: the CLI's own default applies.
@@ -194,7 +198,7 @@ export const rateLimitsSchema = z.object({
 // account's, not a session's. `error` says why the service's last read of it failed; the reading kept says how old it is.
 export const accountQuotaSchema = z.object({
   rateLimits: rateLimitsSchema.nullable(),
-  error: z.string().optional(),
+  error: wordsSchema.optional(),
 });
 export type AccountQuota = z.infer<typeof accountQuotaSchema>;
 const usageTotals = {
@@ -307,7 +311,7 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     surface: z.enum(['chat', 'terminal']).optional(),
     waiting: waitingSchema.optional(),
     activity: terminalActivitySchema.optional(),
-    reason: z.string().optional(),
+    reason: wordsSchema.optional(),
   }),
   z.object({ type: z.literal('text.delta'), messageId: id, text: z.string() }),
   z.object({ type: z.literal('thinking.delta'), messageId: id, text: z.string() }),
@@ -327,7 +331,8 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     persisted: z.boolean(),
     updatedAt: timestamp.optional(),
   }),
-  z.object({ type: z.literal('native.notice'), text: z.string() }),
+  // Words of the service, or a status of the CLI's own (`compacting`) that the client knows by its word.
+  z.object({ type: z.literal('native.notice'), text: wordsSchema }),
   // The mode the CLI works in changed during the run: Claude entered plan mode by itself, or a plan was approved
   // and the mode chosen for it took over. The session keeps it for the turns that follow.
   z.object({ type: z.literal('native.mode'), permissionMode: permissionModeSchema }),
@@ -360,7 +365,7 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     // How long the prompt cache the turn wrote lasts, as its requests were billed; only on a turn's end, and only when
     // it wrote one.
     cacheTtl: z.enum(['5m', '1h']).optional(),
-    errors: z.object({ context: z.string().optional() }).optional(),
+    errors: z.object({ context: wordsSchema.optional() }).optional(),
   }),
   z.object({ type: z.literal('native.title'), title: z.string().min(1).max(120) }),
   z.object({
@@ -433,6 +438,9 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     toolId: z.string().min(1),
     status: z.enum(['completed', 'denied', 'cancelled', 'failed', 'unknown']),
     output: z.string(),
+    // A result the service gave in the tool's stead says so in `phrase` too; `output` holds it in the source
+    // language, as the record of the run.
+    phrase: phraseSchema.optional(),
     exitCode: z.number().int().nullable(),
   }),
   z.object({
@@ -441,7 +449,12 @@ export const eventPayloadSchema = z.discriminatedUnion('type', [
     stream: z.enum(['stdout', 'stderr']),
     text: z.string(),
   }),
-  z.object({ type: z.literal('run.error'), code: z.string(), message: z.string() }),
+  z.object({
+    type: z.literal('run.error'),
+    code: z.string(),
+    message: z.string(),
+    phrase: phraseSchema.optional(),
+  }),
 ]);
 export type EventPayload = z.infer<typeof eventPayloadSchema>;
 type Payload<T extends EventPayload['type']> = Extract<EventPayload, { type: T }>;
@@ -606,7 +619,7 @@ const installerSchema = z.object({
 export const serviceUpdateSchema = z.object({
   state: z.enum(['idle', 'checking', 'available', 'manual', 'installing', 'restarting', 'failed']),
   latest: versionSchema.optional(),
-  detail: z.string().optional(),
+  detail: wordsSchema.optional(),
   checkedAt: z.number().int().nonnegative().optional(),
 });
 export type ServiceUpdate = z.infer<typeof serviceUpdateSchema>;
@@ -618,6 +631,7 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('server.session.create'),
       ...request,
       title: z.string().trim().min(1).max(120),
+      autoTitle: z.literal(true).optional(),
     })
     .strict(),
   // On the computer of this connection, whose folder becomes a project unless the session is `plain`, or on
@@ -627,6 +641,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('session.create'),
       ...request,
       title: z.string().trim().min(1).max(120),
+      // The title is the client's word for a new session, which Claude's name for it replaces.
+      autoTitle: z.literal(true).optional(),
       projectPath: z.string().trim().min(1).max(2048),
       deviceId: id.optional(),
       // A session of no project, in a folder made for it alone.
@@ -803,6 +819,8 @@ export const commandSchema = z.discriminatedUnion('type', [
       type: z.literal('session.fork'),
       ...request,
       sessionId: id,
+      // The copy's title, in the client's words (it marks it as a fork of the source's).
+      title: z.string().trim().min(1).max(120),
       beforeMessageId: id.optional(),
       projectPath: z.string().trim().min(1).max(2048).optional(),
     })
@@ -1001,6 +1019,9 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     // Names the stored history: it changes when history is rewritten, and what a client kept of the old goes.
     // Without it a client keeps nothing.
     historyId: id.optional(),
+    // The service's own computer, where sessions of the browser are: the client names it in its language, and
+    // shows it so in a session's place whatever name the record holds.
+    serverDeviceId: id,
     browser: z.object({ sessionId: id, serverDeviceId: id, selfSigned: z.boolean() }).optional(),
     // The service's files, where the file panel can reach them (see `files.attach`): the data directory, whose
     // `native/<root>` are the sessions' working directories, the home directory, and whether its secrets are kept
@@ -1022,7 +1043,9 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     ok: z.boolean(),
     sessionId: id.optional(),
     code: z.string().optional(),
+    // A failure in the source language, for logs and clients from before phrases; `phrase` says it for the user.
     message: z.string().optional(),
+    phrase: phraseSchema.optional(),
   }),
   z.object({ type: z.literal('session.snapshot'), ...historyPageSchema.shape }),
   z.object({ type: z.literal('session.updated'), session: sessionSchema }),
@@ -1101,7 +1124,9 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('connection.error'),
     code: z.string(),
+    // In the source language: clients of every version read it. Those with phrases say `phrase` instead.
     message: z.string(),
+    phrase: phraseSchema.optional(),
     service: versionSchema.optional(),
     // The installer of the service's version, while the service is still fetching it.
     preparing: z

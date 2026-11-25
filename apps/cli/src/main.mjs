@@ -16,6 +16,7 @@ import { markOnline, onlineAt, stayOnline } from './online.mjs';
 import { FIRST_UPGRADABLE, download, install } from './upgrade.mjs';
 import { EXIT } from './agent.mjs';
 import { serveAcp } from './acp.mjs';
+import { wordsOf } from './i18n.mjs';
 import {
   answer,
   approve,
@@ -488,7 +489,8 @@ async function check(config, values) {
     await service.close();
   }
   const { update } = service;
-  if (update?.state === 'failed') return (say(`检查新版本失败：${update.detail ?? '原因不明'}`), 1);
+  if (update?.state === 'failed')
+    return (say(`检查新版本失败：${update.detail ? wordsOf(update.detail) : '原因不明'}`), 1);
   const found = newer(update);
   say(
     found

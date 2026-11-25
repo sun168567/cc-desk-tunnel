@@ -12,6 +12,7 @@ import { nativeContext } from '../src/claude.ts';
 import { SessionStore } from '../src/store.ts';
 import { NativeLogin, parseAccountStatus } from '../src/native-account.ts';
 import { loginExpiryWarnings } from '../src/login-expiry.ts';
+import { textOf } from '../src/errors.ts';
 import type { TerminalSpawner } from '../src/native-terminal.ts';
 import type { Session, TerminalActivity } from '@cc-desk-tunnel/protocol';
 import { randomUUID } from 'node:crypto';
@@ -390,9 +391,17 @@ test('a sign-in about to end is told in the conversation once a day, from ten da
   const now = Date.parse('2026-11-10T08:00:00Z');
   assert.equal(warn('2026-12-01T00:00:00Z', now), null);
   assert.equal(warn(undefined, now), null);
-  assert.match(warn('2026-11-15T00:00:00Z', now) ?? '', /约 5 天后到期（2026-11-15）/);
+  const soon = warn('2026-11-15T00:00:00Z', now);
+  assert.equal(
+    soon && textOf(soon),
+    'Claude Code 的登录约 5 天后到期（2026-11-15），到期后要在“账号与额度”里重新登录。',
+  );
   assert.equal(warn('2026-11-15T00:00:00Z', now + 3_600_000), null, 'once a day');
-  assert.match(warn('2026-11-09T00:00:00Z', now + 86_400_000) ?? '', /可能已经到期/);
+  const ended = warn('2026-11-09T00:00:00Z', now + 86_400_000);
+  assert.equal(
+    ended && textOf(ended),
+    'Claude Code 的登录可能已经到期（2026-11-09）；如果请求开始失败，请在“账号与额度”里重新登录。',
+  );
 });
 
 // A long terminal fills the page of history a client opens the session with, leaving out what a chat run said of

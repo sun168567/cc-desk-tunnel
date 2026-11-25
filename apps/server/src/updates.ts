@@ -4,10 +4,14 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync } fr
 import { open, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { phrase, type Words } from '@cc-desk-tunnel/i18n';
 import type { ServiceUpdate } from '@cc-desk-tunnel/protocol';
+import { DomainError, wordsOf } from './errors.ts';
 
 const run = promisify(execFile);
 const versionPattern = /^\d+\.\d+\.\d+$/;
+// Why a check or an upgrade failed, in words for the user.
+const failure = (words: Words) => new DomainError('update_failed', words);
 type Manifest = {
   version: string;
   runtime: number;
@@ -154,10 +158,10 @@ export class ServiceUpdates {
     });
     if (!response.ok || !response.body) {
       await response.body?.cancel();
-      throw new Error(
+      throw failure(
         response.status === 404 || response.status === 401 || response.status === 403
-          ? `发布页无法访问（${response.status}）；跟踪私有仓库时需要在服务端配置只读令牌。`
-          : `发布页请求失败（${response.status}）。`,
+          ? phrase('service:update.releasesUnreachable', { status: response.status })
+          : phrase('service:update.releasesFailed', { status: response.status }),
       );
     }
     return response;
@@ -172,7 +176,7 @@ export class ServiceUpdates {
     ).json()) as { assets?: { name: string; url: string }[] };
     const assets = new Map((release.assets ?? []).map((asset) => [asset.name, asset.url]));
     const url = assets.get('release.json');
-    if (!url) throw new Error('该发布没有 release.json。');
+    if (!url) throw failure(phrase('service:update.noManifest'));
     const manifest = (await (await this.get(url, 'application/octet-stream')).json()) as Manifest;
     if (
       !versionPattern.test(manifest.version) ||
@@ -181,7 +185,7 @@ export class ServiceUpdates {
         (file) => !/^[\w.-]+$/.test(file.name) || !/^[0-9a-f]{64}$/.test(file.sha256),
       )
     )
-      throw new Error('release.json 格式不符。');
+      throw failure(phrase('service:update.badManifest'));
     return { ...manifest, runtime: Number(manifest.runtime) || 1, assets };
   }
   // Downloads one file of the release, in stretches (see `downloadPace`), and keeps it only if its hash is the
@@ -194,7 +198,7 @@ export class ServiceUpdates {
   ) {
     const file = manifest.files.find((item) => item.name === name);
     const url = manifest.assets.get(name);
-    if (!file || !url) throw new Error(`发布中缺少 ${name}。`);
+    if (!file || !url) throw failure(phrase('service:update.missingFile', { name }));
     const partial = `${target}.part`;
     const { stretch, stall, attempts } = this.pace;
     const output = await open(partial, 'w');
@@ -203,8 +207,13 @@ export class ServiceUpdates {
       let last: unknown;
       for (let idle = 0; received < file.size;) {
         if (idle >= attempts)
-          throw new Error(`${name} 下载中断：${(last as Error)?.message || '连接没有数据'}。`);
-        if (this.stopped) throw new Error('服务正在停止。');
+          throw failure(
+            phrase('service:update.downloadBroken', {
+              name,
+              reason: (last as Error)?.message || phrase('service:update.noData'),
+            }),
+          );
+        if (this.stopped) throw failure(phrase('service:update.stopping'));
         const before = received;
         const controller = new AbortController();
         const end = setTimeout(() => controller.abort(), stretch);
@@ -226,7 +235,7 @@ export class ServiceUpdates {
             quiet = setTimeout(() => controller.abort(), stall);
             await output.write(chunk, 0, chunk.length, received);
             received += chunk.length;
-            if (received > file.size) throw new Error(`${name} 比发布清单里的大。`);
+            if (received > file.size) throw failure(phrase('service:update.tooLarge', { name }));
             progress(received);
           }
         } catch (error) {
@@ -250,7 +259,7 @@ export class ServiceUpdates {
     for await (const chunk of createReadStream(partial)) hash.update(chunk);
     if (hash.digest('hex') !== file.sha256) {
       await rm(partial, { force: true });
-      throw new Error(`${name} 校验失败。`);
+      throw failure(phrase('service:update.checksum', { name }));
     }
     await rename(partial, target);
   }
@@ -295,7 +304,7 @@ export class ServiceUpdates {
         }
       } catch (error) {
         this.manifest = undefined;
-        this.set({ state: 'failed', detail: (error as Error).message, checkedAt: Date.now() });
+        this.set({ state: 'failed', detail: wordsOf(error), checkedAt: Date.now() });
       }
     })().finally(() => {
       this.pending = undefined;
@@ -306,12 +315,12 @@ export class ServiceUpdates {
   install(version: string) {
     const manifest = this.manifest;
     if (this.state.state !== 'available' || !manifest || manifest.version !== version)
-      throw new Error('没有可安装的这一版本，请先检查更新。');
+      throw failure(phrase('service:update.notAvailable'));
     const root = this.options.programDir!;
     const target = join(root, version);
     const work = join(root, `${version}.new`);
-    const step = (detail: string) => this.set({ state: 'installing', latest: version, detail });
-    step('下载服务端程序');
+    const step = (detail: Words) => this.set({ state: 'installing', latest: version, detail });
+    step(phrase('service:update.downloading'));
     void (async () => {
       try {
         // Only the running program is kept beside the new one.
@@ -323,10 +332,10 @@ export class ServiceUpdates {
         if (
           stdout.split('\n').some((path) => path.startsWith('/') || /(^|\/)\.\.(\/|$)/.test(path))
         )
-          throw new Error('程序包内含不安全的路径。');
+          throw failure(phrase('service:update.unsafePath'));
         await run('tar', ['-xzf', archive, '-C', work, '--no-same-owner']);
         await rm(archive, { force: true });
-        step('安装依赖');
+        step(phrase('service:update.installingDependencies'));
         const options = { cwd: work, timeout: 900_000, maxBuffer: 16 << 20 };
         await run(
           'npm',
@@ -346,7 +355,7 @@ export class ServiceUpdates {
           .then((result) => result.stdout.split(' ')[0].trim())
           .catch(() => '');
         if (wanted && wanted !== bundled) {
-          step(`安装 Claude Code ${wanted}`);
+          step(phrase('service:update.installingClaude', { version: wanted }));
           await run(
             'npm',
             [
@@ -373,7 +382,10 @@ export class ServiceUpdates {
         this.set({
           state: 'failed',
           latest: version,
-          detail: `升级没有完成，仍在运行 ${this.version}：${reason || (error as Error).message}`,
+          detail: phrase('service:update.notFinished', {
+            version: this.version,
+            reason: reason || wordsOf(error),
+          }),
         });
       }
     })();

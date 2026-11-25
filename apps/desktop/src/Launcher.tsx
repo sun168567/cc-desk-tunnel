@@ -4,6 +4,7 @@ import type { ConnectionForm } from './LoginPage.tsx';
 import SettingsPage from './SettingsPage.tsx';
 import type { Section } from './SettingsPage.tsx';
 import { ProxyClient } from './client.ts';
+import { say } from './i18n.ts';
 import { messageOf, useClientUpgrade } from './client-upgrade.ts';
 import { thisDevice } from './device.ts';
 import { isNewer } from './paths.ts';
@@ -67,7 +68,7 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
   const [workspaceRoots, setWorkspaceRoots] = useState<string[]>([]);
   const upgrading = useClientUpgrade(setError);
   // The settings page takes a client; this one never connects.
-  const [client] = useState(() => new ProxyClient());
+  const [client] = useState(() => new ProxyClient(say));
   useEffect(() => {
     void window.desktop?.version().then(setVersion);
   }, []);

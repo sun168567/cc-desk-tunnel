@@ -1,4 +1,5 @@
 import type { ServerMessage } from '@cc-desk-tunnel/protocol';
+import { phrase } from '@cc-desk-tunnel/i18n';
 import { DomainError } from './errors.ts';
 
 // One page at a time per window. Pulling each part keeps a slow history from filling the
@@ -61,9 +62,7 @@ export class HistoryDelivery {
     }
     current.timer = setTimeout(() => {
       this.current = undefined;
-      current.reject(
-        new DomainError('history_stalled', '历史传输连续 30 秒没有收到接收确认，请重试。'),
-      );
+      current.reject(new DomainError('history_stalled', phrase('service:history.stalled')));
     }, IDLE_MS);
     while (current.outstanding < IN_FLIGHT_PARTS && current.offset < current.text.length) {
       const data = current.text.slice(current.offset, current.offset + PART_CHARACTERS);
@@ -84,6 +83,6 @@ export class HistoryDelivery {
     if (!current || (requestId && current.requestId !== requestId)) return;
     this.current = undefined;
     clearTimeout(current.timer);
-    current.reject(new DomainError('history_cancelled', '历史读取已取消。'));
+    current.reject(new DomainError('history_cancelled', phrase('service:history.cancelled')));
   }
 }

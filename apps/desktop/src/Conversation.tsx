@@ -33,6 +33,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
+import { useTranslation } from 'react-i18next';
 import type { PlanMode, Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { fileName, pieces } from './attachments.ts';
 import { describe, duration, summarize } from './activity.ts';
@@ -850,7 +851,8 @@ export default function Conversation({
   // Shows a path in the file panel: one on this computer (`here`), or on the computer the session is on.
   openInFiles?: (path: string, here: boolean) => void;
 }) {
-  const turns = useMemo(() => conversation(events), [events]);
+  const { t } = useTranslation();
+  const turns = useMemo(() => conversation(events, t), [events, t]);
   const shownSession = useRef(session?.id);
   shownSession.current = session?.id;
   // A compaction under way counts its time in its own line, as a tool does.

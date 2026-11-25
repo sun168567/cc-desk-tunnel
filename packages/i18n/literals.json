@@ -26,7 +26,7 @@
     "apps/desktop/electron/windows-ssh.mjs": 8,
     "apps/desktop/src/AccountPanel.tsx": 81,
     "apps/desktop/src/activity.ts": 55,
-    "apps/desktop/src/App.tsx": 137,
+    "apps/desktop/src/App.tsx": 138,
     "apps/desktop/src/browser-api.ts": 2,
     "apps/desktop/src/CcdtDialog.tsx": 13,
     "apps/desktop/src/client-upgrade.ts": 14,
@@ -38,7 +38,7 @@
     "apps/desktop/src/Conversation.tsx": 80,
     "apps/desktop/src/ConversationFind.tsx": 7,
     "apps/desktop/src/copy.tsx": 4,
-    "apps/desktop/src/device.ts": 1,
+    "apps/desktop/src/device.ts": 2,
     "apps/desktop/src/exportSession.ts": 11,
     "apps/desktop/src/FilePanel.tsx": 91,
     "apps/desktop/src/files.ts": 2,
@@ -98,25 +98,21 @@
     "apps/desktop/src/UpgradeProgress.tsx": 1,
     "apps/desktop/src/UsageCharts.tsx": 15,
     "apps/desktop/src/UsagePanel.tsx": 73,
-    "apps/desktop/src/WebAccessSettings.tsx": 88,
-    "apps/desktop/src/WebGate.tsx": 13,
-    "apps/server/src/claude-stream.ts": 11,
-    "apps/server/src/claude.ts": 4,
-    "apps/server/src/history-delivery.ts": 2,
-    "apps/server/src/login-expiry.ts": 5,
-    "apps/server/src/native-account.ts": 14,
-    "apps/server/src/native-controls.ts": 2,
-    "apps/server/src/native-input.ts": 2,
-    "apps/server/src/native-instructions.ts": 3,
-    "apps/server/src/server.ts": 90,
-    "apps/server/src/simulation.ts": 36,
-    "apps/server/src/store.ts": 22,
-    "apps/server/src/terminal-transcript.ts": 2,
-    "apps/server/src/tunnel.ts": 5,
-    "apps/server/src/updates.ts": 21,
-    "apps/server/src/web-access.ts": 19,
-    "apps/server/src/web-certificate.ts": 18,
-    "packages/protocol/src/web.ts": 2
+    "apps/desktop/src/WebAccessSettings.tsx": 90,
+    "apps/desktop/src/WebGate.tsx": 13
   },
-  "kept": {}
+  "kept": {
+    "apps/server/src/claude.ts": {
+      "count": 1,
+      "reason": "Model-facing prompt in English; 说明 names a field of the schedules file the desktop writes."
+    },
+    "apps/server/src/simulation.ts": {
+      "count": 36,
+      "reason": "The offline simulation stands in for Claude: its replies and tool output are sample content the UI tests read, not the program’s text."
+    },
+    "apps/server/src/store.ts": {
+      "count": 3,
+      "reason": "The note beside the pre-upgrade history backup, a file for whoever runs the server; it is written in Chinese and English both."
+    }
+  }
 }

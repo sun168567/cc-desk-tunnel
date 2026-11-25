@@ -15,6 +15,7 @@ import { quotas } from '../src/claude.ts';
 import { createProxyServer, upgradeHeld } from '../src/server.ts';
 import { SessionStore } from '../src/store.ts';
 import { serviceVersion } from '../src/updates.ts';
+import { textOf } from '../src/errors.ts';
 
 const token = 'offline-test-' + randomUUID();
 // One computer unless a test is about several.
@@ -429,7 +430,10 @@ test('a computer that stays away longer than the grace has its run stopped; one 
   assert.equal(after.session.activeRun, null);
   const stop = after.events.findLast((event) => event.payload.type === 'run.status')?.payload;
   assert.ok(stop?.type === 'run.status' && stop.status === 'cancelled');
-  assert.match(stop.reason ?? '', /设备离线/);
+  assert.equal(
+    stop.reason && textOf(stop.reason),
+    '设备离线超过 0 秒，运行已停止；在途命令结果可能未知。',
+  );
 
   const patient = await fixture(t, 2, 60_000);
   const left = await cutOff(patient, true);
@@ -492,6 +496,7 @@ test('a session runs on its own computer whichever sends to it; another one take
   const forked = await away.request({
     type: 'session.fork',
     sessionId,
+    title: '分叉',
     projectPath: 'E:\\笔记本\\项目',
   });
   assert.ok(forked.type === 'response' && forked.ok && forked.sessionId);
@@ -985,7 +990,8 @@ test('forking copies a session whole or up to a message, and leaves the original
         event.payload.type === 'message.user' ? [event.payload.text] : [],
       );
   const original = f.server.store.get(sessionId).events.length;
-  const command = { type: 'session.fork', requestId: randomUUID(), sessionId };
+  // The client names the copy.
+  const command = { type: 'session.fork', requestId: randomUUID(), sessionId, title: '副本' };
   client.send(command);
   client.send(command);
   const copies = new Set<string>();
@@ -1001,16 +1007,17 @@ test('forking copies a session whole or up to a message, and leaves the original
   assert.notEqual(whole, sessionId);
   assert.deepEqual(questions(whole!), texts);
   const copy = f.server.store.get(whole!);
-  assert.equal(copy.session.title, `${f.server.store.get(sessionId).session.title}（分叉）`);
+  assert.equal(copy.session.title, '副本');
   assert.equal(copy.session.projectPath, f.server.store.get(sessionId).session.projectPath);
   assert.ok(
     copy.events.every((event, index) => event.sessionId === whole && event.sequence === index + 1),
   );
-  const cut = await client.request({ type: 'session.fork', sessionId, beforeMessageId: ids[2] });
+  const fork = { type: 'session.fork', sessionId, title: '分叉' } as const;
+  const cut = await client.request({ ...fork, beforeMessageId: ids[2] });
   assert.ok(cut.type === 'response' && cut.ok && cut.sessionId);
   assert.deepEqual(questions(cut.sessionId), texts.slice(0, 2));
   assert.equal(f.server.store.get(cut.sessionId).session.activeRun, null);
-  const first = await client.request({ type: 'session.fork', sessionId, beforeMessageId: ids[0] });
+  const first = await client.request({ ...fork, beforeMessageId: ids[0] });
   assert.ok(first.type === 'response' && first.ok && first.sessionId);
   assert.equal(f.server.store.get(first.sessionId).events.length, 0);
   // The fork continues on its own.
@@ -1023,15 +1030,11 @@ test('forking copies a session whole or up to a message, and leaves the original
   await completed(cut.sessionId);
   assert.deepEqual(questions(cut.sessionId), [...texts.slice(0, 2), '另一条路']);
   assert.equal(f.server.store.get(sessionId).events.length, original);
-  const missing = await client.request({
-    type: 'session.fork',
-    sessionId,
-    beforeMessageId: randomUUID(),
-  });
+  const missing = await client.request({ ...fork, beforeMessageId: randomUUID() });
   assert.ok(missing.type === 'response' && !missing.ok && missing.code === 'not_found');
   await client.request({ type: 'message.send', sessionId, text: '等待审批', scenario: 'tool' });
   await client.event('approval.requested');
-  const busy = await client.request({ type: 'session.fork', sessionId });
+  const busy = await client.request(fork);
   assert.ok(busy.type === 'response' && !busy.ok && busy.code === 'run_active');
 });
 
@@ -1092,10 +1095,14 @@ test('restart marks pending native sends unconfirmed and never queues them again
 test('native titles update only automatic names; a user rename remains authoritative', async (t) => {
   const f = await fixture(t);
   const requestId = randomUUID();
-  const automatic = f.server.store.create(requestId, '新会话', 'D:\\项目', device);
+  const automatic = f.server.store.create(requestId, '新会话', 'D:\\项目', device, false, true);
   assert.equal(automatic.autoTitle, true);
   f.server.store.renameNative(automatic.id, '原生标题');
-  assert.equal(f.server.store.create(requestId, '新会话', 'D:\\项目', device).id, automatic.id);
+  // A request sent again is the same one, though its placeholder may be another language's by then.
+  assert.equal(
+    f.server.store.create(requestId, 'New session', 'D:\\项目', device, false, true).id,
+    automatic.id,
+  );
   assert.throws(() => f.server.store.create(requestId, '不同请求', 'D:\\项目', device), {
     code: 'request_conflict',
   });
@@ -1237,14 +1244,20 @@ test('an upgrade is held back only by what is at work, and says what that is', (
     false,
     false,
   );
-  assert.match(held ?? '', /「在回答」「终端在跑」正在运行.*强行升级/);
-  assert.doesNotMatch(held ?? '', /终端开着|等后台任务/);
-  const many = Array.from({ length: 5 }, (_, index) => session(`会话${index}`, run));
-  assert.match(
-    upgradeHeld(many, false, false) ?? '',
-    /「会话0」「会话1」「会话2」 等 5 个会话正在运行/,
+  const text = (words: ReturnType<typeof upgradeHeld>) => (words ? textOf(words) : '');
+  assert.equal(
+    text(held),
+    '「在回答」「终端在跑」正在运行。升级会重启服务端并中断它们：等结束后再升级，或选择强行升级。',
   );
-  assert.match(upgradeHeld([], true, true) ?? '', /有会话正在移动或修改，Claude 账号正在登录/);
+  const many = Array.from({ length: 5 }, (_, index) => session(`会话${index}`, run));
+  assert.equal(
+    text(upgradeHeld(many, false, false)),
+    '「会话0」「会话1」「会话2」 等 5 个会话正在运行。升级会重启服务端并中断它们：等结束后再升级，或选择强行升级。',
+  );
+  assert.equal(
+    text(upgradeHeld([], true, true)),
+    '有会话正在移动或修改，Claude 账号正在登录。升级会重启服务端并中断它们：等结束后再升级，或选择强行升级。',
+  );
 });
 
 test('the projects are kept by the service, told to every window, and named or removed from any', async (t) => {

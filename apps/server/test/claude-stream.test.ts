@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { EventPayload } from '@cc-desk-tunnel/protocol';
 import { ClaudeStream, shownToday } from '../src/claude-stream.ts';
+import { textOf } from '../src/errors.ts';
 
 test('native partial text/thinking are not duplicated by complete assistant events', () => {
   const events: EventPayload[] = [];
@@ -155,7 +156,10 @@ test('identical concurrent native calls keep their IDs and progress uses real SD
   });
   const lost = events.at(-1);
   assert.equal(lost?.type, 'native.notice');
-  assert.match(lost?.type === 'native.notice' ? lost.text : '', /磁盘已满.*会话记录缺了一部分/);
+  assert.equal(
+    lost?.type === 'native.notice' ? textOf(lost.text) : '',
+    '服务器的磁盘已满，Claude Code 有内容没能保存：会话记录缺了一部分，之后继续这个会话时 Claude 可能看不到这段对话。请清理服务器磁盘。',
+  );
 });
 test("a call waiting on a foreground task names it; a background task or another agent's call does not", () => {
   const events: EventPayload[] = [];
@@ -187,7 +191,11 @@ test('requested and effective native approval modes remain distinct', () => {
   assert.equal(init.requestedPermissionMode, 'auto');
   assert.equal(init.permissionMode, 'default');
   assert.ok(
-    events.some((event) => event.type === 'native.notice' && event.text.includes('default')),
+    events.some(
+      (event) =>
+        event.type === 'native.notice' &&
+        textOf(event.text) === '请求审批模式 auto；原生进程实际报告 default。',
+    ),
   );
 });
 

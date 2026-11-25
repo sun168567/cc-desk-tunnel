@@ -49,6 +49,7 @@ for (const delivery of ['not_sent', 'unconfirmed', 'received'] as const) {
           reply({
             type: 'ready',
             protocolVersion: PROTOCOL_VERSION,
+            serverDeviceId: '00000000-0000-4000-8000-000000000001',
             version: '0.3.15',
             connectionId,
             adapter: 'claude-code',

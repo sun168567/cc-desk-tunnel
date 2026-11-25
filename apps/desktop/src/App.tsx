@@ -10,6 +10,8 @@ import {
 } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { flushSync } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import { wordsText } from '@cc-desk-tunnel/i18n';
 import {
   CircleHelp,
   Download,
@@ -50,9 +52,10 @@ import { hostCapabilities } from './host-capabilities.ts';
 import AccountPanel from './AccountPanel.tsx';
 import { QuotaSummary } from './QuotaSummary.tsx';
 import { ProxyClient, RequestInterruptedError } from './client.ts';
+import { say } from './i18n.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
-import { isHere, thisDevice } from './device.ts';
+import { deviceName, isHere, thisDevice } from './device.ts';
 import { selfUpdating } from './platform.ts';
 import { useClientUpgrade } from './client-upgrade.ts';
 import { useDrafts } from './drafts.ts';
@@ -138,8 +141,9 @@ export function App({
   report?: (report: SignInReport) => void;
   leave?: (error: string | null) => void;
 } = {}) {
+  const { t } = useTranslation();
   const host = hostCapabilities(!!browser);
-  const [client] = useState(() => new ProxyClient());
+  const [client] = useState(() => new ProxyClient(say));
   useEffect(() => {
     if (!browser) return;
     client.connectBrowser(
@@ -521,7 +525,7 @@ export function App({
   const live = state.update;
   const asked = useRef(false);
   useEffect(() => {
-    if (live?.state === 'failed' && live.detail && asked.current) setError(live.detail);
+    if (live?.state === 'failed' && live.detail && asked.current) setError(say(live.detail));
     if (live && !['checking', 'installing'].includes(live.state)) asked.current = false;
   }, [live]);
   // While the service looks again, the release it found last stays offered.
@@ -603,7 +607,7 @@ export function App({
           }
         : update?.state === 'installing' || update?.state === 'restarting'
           ? {
-              label: `服务端升级中：${update.detail ?? '重启'}`,
+              label: `服务端升级中：${update.detail ? wordsText(t, update.detail) : '重启'}`,
               icon: <RefreshCw />,
               disabled: true,
               run: () => undefined,
@@ -1004,6 +1008,7 @@ export function App({
     const response = await client.request({
       type: 'session.create',
       title: '新会话',
+      autoTitle: true,
       projectPath,
       ...(plain ? { plain } : {}),
     });
@@ -1021,6 +1026,7 @@ export function App({
       const response = await client.request({
         type: 'session.create',
         title: '新会话',
+        autoTitle: true,
         projectPath,
         deviceId,
       });
@@ -1042,7 +1048,11 @@ export function App({
     let made: string | undefined;
     if (browser) {
       await act(async () => {
-        const response = await client.request({ type: 'server.session.create', title: '新会话' });
+        const response = await client.request({
+          type: 'server.session.create',
+          title: '新会话',
+          autoTitle: true,
+        });
         made = response.sessionId;
         if (made) show(made);
       });
@@ -1155,6 +1165,7 @@ export function App({
       const response = await client.request({
         type: 'session.fork',
         sessionId: session.id,
+        title: `${session.title.slice(0, 116)}（分叉）`,
         ...(before ? { beforeMessageId: before.id } : {}),
         ...(projectPath ? { projectPath } : {}),
       });
@@ -1876,6 +1887,7 @@ export function App({
             sessions={sessions}
             elsewhere={elsewhere}
             devices={state.devices}
+            serverDeviceId={state.serverDeviceId}
             selectedId={selected?.id}
             projects={state.projects}
             localProjects={host.localProjects}
@@ -2047,14 +2059,18 @@ export function App({
                 <Laptop />
                 {remote ? (
                   <p>
-                    这个会话在设备“{selected.device?.name}”上，项目目录是{' '}
-                    <code>{selected.projectPath}</code>
+                    这个会话在设备“
+                    {selected.device && deviceName(selected.device, state.serverDeviceId)}
+                    ”上，项目目录是 <code>{selected.projectPath}</code>
                     。在这里的对话、审批和停止都作用于那台电脑，命令也在那里执行。
                   </p>
                 ) : (
                   <p>
-                    这个会话在设备“{selected.device?.name ?? '未知设备'}”上，项目目录是{' '}
-                    <code>{selected.projectPath}</code>
+                    这个会话在设备“
+                    {selected.device
+                      ? deviceName(selected.device, state.serverDeviceId)
+                      : '未知设备'}
+                    ”上，项目目录是 <code>{selected.projectPath}</code>
                     。那台电脑不在线，这里只能查看，它上线后可以直接操作。
                   </p>
                 )}
@@ -2092,7 +2108,11 @@ export function App({
             {browser && selected && away && !remote && (
               <div className="elsewhere-bar" role="status">
                 <Laptop />
-                <p>设备“{selected.device?.name ?? '未知设备'}”未连接，当前只能查看会话。</p>
+                <p>
+                  设备“
+                  {selected.device ? deviceName(selected.device, state.serverDeviceId) : '未知设备'}
+                  ”未连接，当前只能查看会话。
+                </p>
               </div>
             )}
             {nativeMode && selected && !selected.activeRun && (!away || remote) && (

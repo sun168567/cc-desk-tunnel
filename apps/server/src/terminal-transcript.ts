@@ -7,6 +7,7 @@ import type {
   NativeMetrics,
   TerminalActivity,
 } from '@cc-desk-tunnel/protocol';
+import { phrase } from '@cc-desk-tunnel/i18n';
 import { ClaudeStream, printed } from './claude-stream.ts';
 import { cacheTtl } from './idle-compaction.ts';
 import { settingsPath as userSettingsPath } from './native-settings.ts';
@@ -97,7 +98,9 @@ export class TerminalTranscript {
         else if (command && !LEAVING.has(command.split(' ')[0]))
           this.emit({
             type: 'native.notice',
-            text: `在终端里执行了 ${command}${plain(output) ? `：${plain(output)}` : ''}`,
+            text: plain(output)
+              ? phrase('service:notice.terminalCommandOutput', { command, output: plain(output) })
+              : phrase('service:notice.terminalCommand', { command }),
           });
         continue;
       }

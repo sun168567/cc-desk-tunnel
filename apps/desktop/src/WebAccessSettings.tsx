@@ -7,6 +7,8 @@ import type {
   WebSettingsState,
   WebTotpSetup,
 } from '@cc-desk-tunnel/protocol';
+import { wordsText } from '@cc-desk-tunnel/i18n';
+import { useTranslation } from 'react-i18next';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Modal, Row, Switch } from './ui.tsx';
 import { CopyButton } from './copy.tsx';
@@ -141,6 +143,7 @@ export default function WebAccessSettings({
   browser: boolean;
   connectionUrl?: string;
 }) {
+  const { t } = useTranslation();
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [values, setValues] = useState<WebSettingsState | null>(null);
   const [certificate, setCertificate] = useState<WebCertificateState | null>(null);
@@ -292,11 +295,12 @@ export default function WebAccessSettings({
                     <p className="muted">暂无已登录浏览器</p>
                   ) : (
                     <ul>
-                      {values.sessions.map((session) => (
+                      {values.sessions.map(({ name, ...session }) => (
+                        // A browser that did not say what it is is called one.
                         <li key={session.id}>
                           <span>
                             <strong>
-                              {session.name}
+                              {name || '浏览器'}
                               {session.id === own ? '（当前浏览器）' : ''}
                             </strong>
                             <small>
@@ -304,7 +308,7 @@ export default function WebAccessSettings({
                             </small>
                           </span>
                           <IconButton
-                            title={`退出 ${session.name}`}
+                            title={`退出 ${name || '浏览器'}`}
                             disabled={busy}
                             onClick={() => setDialog({ revoke: session.id })}
                           >
@@ -323,7 +327,7 @@ export default function WebAccessSettings({
                 <Row
                   title="HTTPS 证书"
                   detail={
-                    certificate.error ??
+                    (certificate.error && wordsText(t, certificate.error)) ??
                     (certificate.mode === 'custom'
                       ? `自定义证书 · ${certificate.details?.domain ?? ''}`
                       : certificate.mode === 'external'

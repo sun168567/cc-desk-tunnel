@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
+import { textOf } from '../src/errors.ts';
 import {
   appendFileSync,
   mkdtempSync,
@@ -197,13 +198,13 @@ test('the record is read as the CLI writes it, and a turn shows part by part as 
     return events
       .splice(0)
       .map((event) =>
-        event.type === 'message.user' ||
-        event.type === 'text.delta' ||
-        event.type === 'native.notice'
+        event.type === 'message.user' || event.type === 'text.delta'
           ? `${event.type} ${event.text}`
-          : event.type === 'native.compact'
-            ? `${event.type} ${event.trigger} ${event.previousTokens}`
-            : event.type,
+          : event.type === 'native.notice'
+            ? `${event.type} ${textOf(event.text)}`
+            : event.type === 'native.compact'
+              ? `${event.type} ${event.trigger} ${event.previousTokens}`
+              : event.type,
       );
   };
   assert.deepEqual(terminalRecord(join(directory, 'none.jsonl'), 0), { messages: [], offset: 0 });

@@ -17,6 +17,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import type { ServiceUpdate } from '@cc-desk-tunnel/protocol';
 import { ServiceUpdates, isNewer, serviceVersion } from '../src/updates.ts';
+import { textOf } from '../src/errors.ts';
 
 // A stand-in for the GitHub releases API: one latest release with a manifest and an installer.
 async function feed(t: TestContext, version: string, runtime = 1) {
@@ -111,7 +112,10 @@ test('the same or an older release, or an unreachable page, offers nothing', asy
   const missing = f.updates({ repository: 'owner/absent' });
   await missing.check();
   assert.equal(missing.state.state, 'failed');
-  assert.match(missing.state.detail!, /404/);
+  assert.equal(
+    textOf(missing.state.detail!),
+    '发布页无法访问（404）；跟踪私有仓库时需要在服务端配置只读令牌。',
+  );
 });
 
 test('the installer of the running version is fetched for clients and checked against the manifest', async (t) => {

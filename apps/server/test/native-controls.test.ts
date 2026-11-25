@@ -136,9 +136,12 @@ test('unavailable native telemetry stays unavailable rather than fabricating quo
     type: 'native.metrics',
     context: null,
     usage: null,
-    errors: { context: '原生接口读取失败' },
+    errors: { context: { key: 'service:status.readFailed' } },
   });
-  assert.deepEqual(quotas.current(), { rateLimits: null, error: '原生接口读取失败' });
+  assert.deepEqual(quotas.current(), {
+    rateLimits: null,
+    error: { key: 'service:status.readFailed' },
+  });
   assert.equal(resultUsage({} as SDKResultMessage), null);
 });
 
@@ -160,7 +163,7 @@ test('optional native telemetry has a bounded wait and cannot hold a completed t
   assert.equal(metrics.context, null);
   assert.equal(quotas.current().rateLimits?.available, false);
   assert.deepEqual(quotas.current().rateLimits?.windows, []);
-  assert.equal(metrics.errors?.context, '原生接口读取超时');
+  assert.deepEqual(metrics.errors?.context, { key: 'service:status.readTimeout' });
 });
 
 test('native additive quota arrays cannot hide all account and context metrics', async () => {
@@ -667,7 +670,7 @@ test('the service is told of the quota each time it stands otherwise, and only t
       windows: window(6),
       measuredAt: new Date(now + 1000).toISOString(),
     },
-    error: '原生接口读取失败',
+    error: { key: 'service:status.readFailed' },
   });
   // Signing out leaves nothing to show.
   quotas.clear();

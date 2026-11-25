@@ -9,6 +9,7 @@
     "ccdt": "bin/ccdt.mjs"
   },
   "dependencies": {
+    "@cc-desk-tunnel/i18n": "0.0.0",
     "@cc-desk-tunnel/protocol": "0.0.0",
     "ws": "8.22.0"
   }

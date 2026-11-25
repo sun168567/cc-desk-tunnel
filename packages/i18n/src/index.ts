@@ -3,6 +3,8 @@ import type { i18n as I18n } from 'i18next';
 import { catalogs, namespaces } from './catalogs.ts';
 
 export { namespaces };
+export { phrase, wordsText } from './phrase.ts';
+export type { ListValue, MessageKey, Phrase, PhraseValue, Value, Words } from './phrase.ts';
 export type { I18n };
 export type Namespace = (typeof namespaces)[number];
 
@@ -64,6 +66,29 @@ export const resources = {
   [pseudoLanguage]: mapTree(catalogs.en as unknown as Tree, pseudo),
 };
 
+// How each language writes lists in a sentence, for the formats of `{{value, format}}`: `quoted` names,
+// `clauses` that begin a sentence, and `parts` of a longer list. The made-up language writes as English.
+type Marks = Record<'quoted' | 'clauses' | 'parts', (items: string[]) => string>;
+const marks: Record<Language, Marks> = {
+  'zh-CN': {
+    quoted: (items) => items.map((item) => `「${item}」`).join(''),
+    clauses: (items) => items.join('，'),
+    parts: (items) => items.join('；'),
+  },
+  en: {
+    quoted: (items) =>
+      new Intl.ListFormat('en', { type: 'conjunction' }).format(items.map((item) => `“${item}”`)),
+    clauses: (items) => {
+      const text = items.join('; ');
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    },
+    parts: (items) => new Intl.ListFormat('en', { type: 'conjunction' }).format(items),
+  },
+};
+const marksOf = (language: string | undefined) =>
+  marks[languages.find((item) => item === language) ?? 'en'];
+const items = (value: unknown) => (Array.isArray(value) ? value.map(String) : [String(value)]);
+
 // An instance of i18next in one language, ready at once: the catalogs are part of the program, nothing is
 // fetched. A missing message shows as its key rather than as another language's text, so that it is seen; the
 // tests keep every language complete.
@@ -81,5 +106,9 @@ export function createI18n(language: Language | typeof pseudoLanguage): I18n {
     // What a message is filled in with is shown as text by whoever shows it: React, a terminal, a notification.
     interpolation: { escapeValue: false },
   });
+  for (const format of ['quoted', 'clauses', 'parts'] as const)
+    instance.services.formatter?.add(format, (value, language) =>
+      marksOf(language)[format](items(value)),
+    );
   return instance;
 }

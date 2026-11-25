@@ -1,5 +1,6 @@
 import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import { t } from './i18n.ts';
 import { conversation, planOf } from './transcript.ts';
 import type { Step } from './transcript.ts';
 import { pictureNote, toolPictures } from './pictures.ts';
@@ -48,7 +49,7 @@ export function markdown(session: Session, events: SessionEvent[]) {
         : `<details>\n<summary>思考</summary>\n\n${work.text}\n</details>`,
     );
   };
-  for (const turn of conversation(events)) {
+  for (const turn of conversation(events, t)) {
     if (turn.question && !turn.question.continued)
       parts.push(
         `## 你 · ${new Date(turn.question.at).toLocaleString('zh-CN')}`,

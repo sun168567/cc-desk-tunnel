@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
+import { wordsText } from '@cc-desk-tunnel/i18n';
+import { useTranslation } from 'react-i18next';
 import { usePopover } from './usePopover.ts';
 
 // The native summary names its categories in English, and a newer CLI gives each a stable id as well; the common ones
@@ -69,6 +71,7 @@ export default function ContextMeter({
   metrics: NativeMetrics | null;
   withPercent?: boolean;
 }) {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const popover = usePopover();
@@ -142,7 +145,9 @@ export default function ContextMeter({
                 <p>{new Date(context.measuredAt).toLocaleTimeString('zh-CN')} · 原生摘要</p>
               </>
             ) : (
-              <p>{metrics?.errors?.context ?? '等待原生状态'}</p>
+              <p>
+                {metrics?.errors?.context ? wordsText(t, metrics.errors.context) : '等待原生状态'}
+              </p>
             )}
           </div>
         )}
@@ -183,7 +188,9 @@ export default function ContextMeter({
               <small>{new Date(context.measuredAt).toLocaleTimeString('zh-CN')} · 原生摘要</small>
             </>
           ) : (
-            <span>{metrics?.errors?.context ?? '等待原生状态'}</span>
+            <span>
+              {metrics?.errors?.context ? wordsText(t, metrics.errors.context) : '等待原生状态'}
+            </span>
           )}
         </div>
       )}

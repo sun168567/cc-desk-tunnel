@@ -14,7 +14,8 @@ import {
 } from '@cc-desk-tunnel/protocol';
 import { deviceTerms, systemShell } from './device-terms.ts';
 import type { Execution } from './device-terms.ts';
-import { DomainError } from './errors.ts';
+import { phrase } from '@cc-desk-tunnel/i18n';
+import { DomainError, said } from './errors.ts';
 import type {
   Device,
   DevicePlatform,
@@ -157,13 +158,15 @@ export class SessionStore {
             )
           )
             continue;
+          const { message: output, phrase: note } = said(
+            phrase(native ? 'service:tool.restartedUnknown' : 'service:tool.restartedSimulated'),
+          );
           this.append(session.id, runId, {
             type: 'tool.result',
             toolId,
             status: native ? 'unknown' : 'cancelled',
-            output: native
-              ? '服务重启；工具最终执行结果未确认，不能自动重放。'
-              : '服务重启；模拟工具未执行。',
+            output,
+            phrase: note,
             exitCode: null,
           });
         }
@@ -171,7 +174,7 @@ export class SessionStore {
           type: 'run.status',
           status: 'cancelled',
           connectionId,
-          reason: '服务重启，运行未重放。',
+          reason: phrase('service:stopped.serviceRestarted'),
         });
       }
     } catch (error) {
@@ -390,13 +393,13 @@ export class SessionStore {
     const removed = this.database
       .prepare('DELETE FROM projects WHERE device_id = ? AND path_key = ?')
       .run(deviceId, pathKey(path));
-    if (!removed.changes) throw new DomainError('not_found', '项目不存在。');
+    if (!removed.changes) throw new DomainError('not_found', phrase('service:project.notFound'));
   }
   renameProject(deviceId: string, path: string, name: string) {
     const renamed = this.database
       .prepare('UPDATE projects SET name = ? WHERE device_id = ? AND path_key = ?')
       .run(name || null, deviceId, pathKey(path));
-    if (!renamed.changes) throw new DomainError('not_found', '项目不存在。');
+    if (!renamed.changes) throw new DomainError('not_found', phrase('service:project.notFound'));
   }
 
   list(): Session[] {
@@ -413,7 +416,7 @@ export class SessionStore {
       const row = this.database
         .prepare('SELECT metadata, create_request_id FROM sessions WHERE id = ?')
         .get(sessionId);
-      if (!row) throw new DomainError('not_found', '会话不存在。');
+      if (!row) throw new DomainError('not_found', phrase('service:session.notFound'));
       entry = {
         record: JSON.stringify(sessionSchema.parse(JSON.parse(String(row.metadata)))),
         createRequestId: String(row.create_request_id),
@@ -521,6 +524,7 @@ export class SessionStore {
     projectPath: string,
     device: Device,
     plain = false,
+    autoTitle = false,
   ): Session {
     const row = this.database
       .prepare('SELECT metadata FROM sessions WHERE create_request_id = ?')
@@ -528,17 +532,17 @@ export class SessionStore {
     if (row) {
       const session = sessionSchema.parse(JSON.parse(String(row.metadata)));
       if (
-        ((!session.autoTitle || title !== '新会话') && session.title !== title) ||
+        ((!session.autoTitle || !autoTitle) && session.title !== title) ||
         session.projectPath !== projectPath
       )
-        throw new DomainError('request_conflict', '请求 ID 已被其他内容使用。');
+        throw new DomainError('request_conflict', phrase('service:request.conflict'));
       return session;
     }
     const now = new Date().toISOString();
     const session: Session = {
       id: randomUUID(),
       title,
-      autoTitle: title === '新会话',
+      autoTitle,
       projectPath,
       device,
       nativeRoot: this.rootFor(device, projectPath),
@@ -557,12 +561,12 @@ export class SessionStore {
   }
 
   // A plain session on this server has one directory that is both its project and its native root.
-  createOnServer(requestId: string, title: string, device: Device): Session {
+  createOnServer(requestId: string, title: string, device: Device, autoTitle = false): Session {
     const existing = this.created(requestId);
     if (existing) {
       if (existing.device?.id !== device.id)
-        throw new DomainError('request_conflict', '请求 ID 已被其他内容使用。');
-      return this.create(requestId, title, existing.projectPath, device, true);
+        throw new DomainError('request_conflict', phrase('service:request.conflict'));
+      return this.create(requestId, title, existing.projectPath, device, true, autoTitle);
     }
     const root = randomUUID();
     const projectPath = join(this.directory, 'native', root);
@@ -571,7 +575,7 @@ export class SessionStore {
       this.database
         .prepare('INSERT INTO native_roots VALUES (?, ?, ?)')
         .run(device.id, pathKey(projectPath), root);
-      const session = this.create(requestId, title, projectPath, device, true);
+      const session = this.create(requestId, title, projectPath, device, true, autoTitle);
       this.database.exec('COMMIT');
       return session;
     } catch (error) {
@@ -590,9 +594,9 @@ export class SessionStore {
   // qualifies: cutting at one added mid-run would leave half a run behind.
   forkPoint(sessionId: string, messageId: string) {
     const event = this.userMessage(sessionId, messageId);
-    if (!event) throw new DomainError('not_found', '消息不存在。');
+    if (!event) throw new DomainError('not_found', phrase('service:message.notFound'));
     if (this.runEvents(sessionId, event.runId)[0]!.sequence !== event.sequence)
-      throw new DomainError('fork_point', '运行途中追加的消息不能作为分叉点。');
+      throw new DomainError('fork_point', phrase('service:fork.midRun'));
     return event.sequence;
   }
   // Copies a session and its events before `beforeSequence` under `id`, onto the computer that asked and
@@ -655,7 +659,7 @@ export class SessionStore {
   snapshot(sessionId: string, afterSequence = 0): SessionSnapshot {
     const { session } = this.get(sessionId);
     if (afterSequence > this.lastSequence(sessionId))
-      throw new DomainError('invalid_cursor', '恢复游标超出历史范围。');
+      throw new DomainError('invalid_cursor', phrase('service:history.resumeCursor'));
     return { session, events: this.events(sessionId, afterSequence) };
   }
 
@@ -670,7 +674,7 @@ export class SessionStore {
     const { session } = this.get(sessionId);
     const last = this.lastSequence(sessionId);
     if (afterSequence > last || (beforeSequence !== undefined && beforeSequence > last + 1))
-      throw new DomainError('invalid_cursor', '历史游标超出范围。');
+      throw new DomainError('invalid_cursor', phrase('service:history.cursor'));
     if (afterSequence > 0) {
       const size = this.database
         .prepare(
@@ -781,7 +785,8 @@ export class SessionStore {
 
   delete(sessionId: string): void {
     const { session } = this.get(sessionId);
-    if (session.activeRun) throw new DomainError('run_active', '请先停止运行再删除会话。');
+    if (session.activeRun)
+      throw new DomainError('run_active', phrase('service:session.deleteRunActive'));
     this.database.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
     this.known.delete(sessionId);
   }
@@ -792,7 +797,8 @@ export class SessionStore {
     effort?: Effort | null,
   ) {
     const { session } = this.get(sessionId);
-    if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再修改审批模式。');
+    if (session.activeRun)
+      throw new DomainError('run_active', phrase('service:session.modeRunActive'));
     setMode(session, permissionMode);
     if (model !== undefined) session.model = model;
     if (effort !== undefined) session.effort = effort;
@@ -813,7 +819,8 @@ export class SessionStore {
   // directory a project there. What Claude knows of either changes with the next message: `notice`.
   move(sessionId: string, projectPath: string, device: Device) {
     const { session } = this.get(sessionId);
-    if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再更换项目。');
+    if (session.activeRun)
+      throw new DomainError('run_active', phrase('service:session.projectRunActive'));
     this.register(device, projectPath);
     if (session.projectPath === projectPath && session.device?.id === device.id) return session;
     session.projectPath = projectPath;
@@ -835,7 +842,7 @@ export class SessionStore {
         (session.device ? session.device.id === device.id : platformOf(device) === 'win32'),
     );
     if (members.some((session) => session.activeRun))
-      throw new DomainError('run_active', '这个项目里有会话正在运行，结束后再更改文件夹。');
+      throw new DomainError('run_active', phrase('service:project.moveRunActive'));
     this.database
       .prepare(
         'UPDATE OR IGNORE native_roots SET path_key = ? WHERE device_id = ? AND path_key = ?',
@@ -1016,7 +1023,8 @@ export class SessionStore {
   }
   rename(sessionId: string, title: string) {
     const { session } = this.get(sessionId);
-    if (session.activeRun) throw new DomainError('run_active', '请先结束当前运行再改名。');
+    if (session.activeRun)
+      throw new DomainError('run_active', phrase('service:session.renameRunActive'));
     session.title = title;
     session.autoTitle = false;
     session.updatedAt = new Date().toISOString();

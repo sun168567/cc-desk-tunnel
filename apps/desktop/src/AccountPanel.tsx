@@ -17,6 +17,8 @@ import type {
   NativeCapabilities,
   UsageSummary,
 } from '@cc-desk-tunnel/protocol';
+import { wordsText } from '@cc-desk-tunnel/i18n';
+import { useTranslation } from 'react-i18next';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
@@ -57,6 +59,7 @@ export default function AccountPanel({
   usageOnly?: boolean;
   quotaUnavailable?: string;
 }) {
+  const { t } = useTranslation();
   const account = capabilities?.account;
   const { quotaReads } = usePrefs();
   const [working, setWorking] = useState(false);
@@ -181,7 +184,7 @@ export default function AccountPanel({
           </div>
           {(failure ?? state?.notice) && (
             <p className="error-text" role="alert">
-              {failure ?? state?.notice}
+              {failure ?? (state?.notice && wordsText(t, state.notice))}
             </p>
           )}
           {signedOut && !state.login && !tokenOpen && (
@@ -471,7 +474,7 @@ export default function AccountPanel({
           </div>
         ) : (
           <p className="muted">
-            {quota?.error ??
+            {(quota?.error && wordsText(t, quota.error)) ??
               quotaUnavailable ??
               (quota?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
           </p>
