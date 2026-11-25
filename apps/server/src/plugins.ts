@@ -4,26 +4,33 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, watch } from 'node:fs
 import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { pluginManifestSchema, pluginIdSchema } from '@cc-desk-tunnel/protocol';
-import type { Plugin, PluginManifest } from '@cc-desk-tunnel/protocol';
+import type { Plugin, PluginAccess, PluginManifest } from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
 import { readPluginConfig, writePluginConfig } from './plugin-config.ts';
 import type { PluginConfig } from './plugin-config.ts';
 import { hooksFileSchema, matches } from './plugin-hooks.ts';
 import type { Hook } from './plugin-hooks.ts';
 import { PluginLog } from './plugin-log.ts';
-import { launch, stop } from './plugin-process.ts';
+import { confinable, launch, stop } from './plugin-process.ts';
 import { matcherFields } from './service-events.ts';
 import type { ServiceEvent } from './service-events.ts';
 
 // What is known of a plugin, read anew whenever its directory changes.
 type Entry = {
   manifest: Partial<PluginManifest>;
+  access: PluginAccess;
   broken?: string;
 };
 
 // How much of what a command printed is kept, and how long changes in the directory are gathered.
 const OUTPUT_LIMIT = 8192;
 const SETTLE_MS = 300;
+
+// Why a plugin that is not confined does not run until the user enables it.
+const unconfined = {
+  full: '它要完整权限，由你启用。',
+  unlimited: '这个服务端限制不了插件，由你启用。',
+};
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -44,6 +51,7 @@ export class Plugins {
   private stale = new Set<string>();
   private loading: Promise<void> = Promise.resolve();
   private closed = false;
+  private confinable = false;
   constructor(directory: string, changed: () => void = () => {}) {
     this.directory = directory;
     this.changed = changed;
@@ -52,6 +60,7 @@ export class Plugins {
   async start() {
     const plugins = join(this.directory, 'plugins');
     mkdirSync(plugins, { recursive: true, mode: 0o700 });
+    this.confinable = await confinable();
     this.watcher = watch(plugins, { recursive: true }, (_event, file) => {
       if (file) this.stale.add(String(file).split(/[\\/]/)[0]!);
       clearTimeout(this.settle);
@@ -73,7 +82,9 @@ export class Plugins {
   }
   list(): Plugin[] {
     return [...this.entries].map(([id, entry]) => {
-      const { enabled } = this.config(id);
+      const config = this.config(id);
+      const enabled = this.enabled(id, entry.access);
+      const waiting = entry.access === 'own' ? undefined : unconfined[entry.access];
       return {
         id,
         title: entry.manifest.displayName,
@@ -82,8 +93,9 @@ export class Plugins {
         author: entry.manifest.author,
         homepage: entry.manifest.homepage,
         repository: entry.manifest.repository,
+        access: entry.access,
         enabled,
-        problem: enabled ? entry.broken : undefined,
+        problem: enabled ? entry.broken : config.enabled ? (entry.broken ?? waiting) : undefined,
         failure: this.failures.get(id),
       };
     });
@@ -116,13 +128,17 @@ export class Plugins {
   }
   private load(id: string): Entry {
     const root = join(this.directory, 'plugins', id);
-    const entry: Entry = { manifest: {} };
+    const entry: Entry = {
+      manifest: {},
+      access: this.access({}),
+    };
     try {
       const manifest = join(root, '.claude-plugin', 'plugin.json');
       if (existsSync(manifest))
         entry.manifest = pluginManifestSchema
           .partial()
           .parse(JSON.parse(readFileSync(manifest, 'utf8')));
+      entry.access = this.access(entry.manifest);
       this.hooks(id);
     } catch (error) {
       entry.broken = `加载失败：${reason(error)}`;
@@ -139,6 +155,19 @@ export class Plugins {
     if (!config) this.configs.set(id, (config = readPluginConfig(this.directory, id)));
     return config;
   }
+  private access({ permissions }: Partial<PluginManifest>): PluginAccess {
+    if (permissions?.includes('full')) return 'full';
+    return this.confinable ? 'own' : 'unlimited';
+  }
+  // One that is not confined is enabled once the user said so of it as it is: an update of a confined one may ask for
+  // more.
+  private enabled(id: string, access = this.entry(id).access) {
+    const { enabled, agreed } = this.config(id);
+    return enabled && (access === 'own' || agreed);
+  }
+  private where(id: string) {
+    return { root: this.root(id), confined: this.entry(id).access === 'own' };
+  }
   private entry(id: string) {
     const entry = this.entries.get(id);
     if (!entry) throw new DomainError('not_found', '插件不存在。');
@@ -151,15 +180,15 @@ export class Plugins {
   }
 
   async enable(id: string, enabled: boolean) {
-    this.entry(id);
-    this.write(id, { enabled });
+    const { access } = this.entry(id);
+    this.write(id, { ...this.config(id), enabled, agreed: enabled && access !== 'own' });
     this.stale.add(id);
     await this.refresh();
     this.log.write(id, enabled ? '启用' : '停用');
   }
   dispatch(event: ServiceEvent) {
     for (const id of this.entries.keys()) {
-      if (this.closed || !this.config(id).enabled || this.entry(id).broken) continue;
+      if (this.closed || !this.enabled(id) || this.entry(id).broken) continue;
       try {
         for (const hook of this.hooksFor(id, event)) this.run(id, hook, event);
       } catch (error) {
@@ -178,16 +207,20 @@ export class Plugins {
   }
   private run(id: string, hook: Hook, event: ServiceEvent) {
     const root = this.root(id);
-    const { data, env } = launch(root);
+    const { before, data, env } = launch(this.where(id));
     const filled = (text: string) =>
       text
         .replaceAll('${CLAUDE_PLUGIN_ROOT}', () => root)
         .replaceAll('${CLAUDE_PLUGIN_DATA}', () => data);
+    const words = [hook.command, ...(hook.args ?? [])].map(filled);
+    const shell = !hook.args && !before.length;
+    const command = hook.args || shell ? words : ['/bin/sh', '-c', ...words];
+    const [file, ...args] = [...before, ...command];
     const started = Date.now();
-    const child = spawn(filled(hook.command), hook.args?.map(filled) ?? [], {
+    const child = spawn(file!, args, {
       cwd: root,
       env,
-      shell: !hook.args,
+      shell,
       // A group of its own, so that what the command started ends with it.
       detached: process.platform !== 'win32',
       windowsHide: true,

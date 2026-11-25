@@ -15,6 +15,8 @@ export const pluginManifestSchema = z.object({
   displayName: label.optional(),
   description: z.string().max(1000).optional(),
   version: z.string().max(60).optional(),
+  // What it needs beyond its own files and the network; only `full` is known.
+  permissions: z.array(z.string().max(60)).max(20).optional(),
   author: z
     .union([
       label.transform((name): { name: string; url?: string } => ({ name })),
@@ -26,8 +28,13 @@ export const pluginManifestSchema = z.object({
   repository: link.optional(),
 });
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
+// What a plugin reaches: its own files and the network, or all that the service does, which it asked for or the
+// service's system cannot keep it from.
+export const pluginAccessSchema = z.enum(['own', 'full', 'unlimited']);
+export type PluginAccess = z.infer<typeof pluginAccessSchema>;
 export const pluginSchema = z.object({
   id: pluginIdSchema,
+  access: pluginAccessSchema,
   title: label.optional(),
   ...pluginManifestSchema.pick({
     description: true,

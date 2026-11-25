@@ -6,6 +6,8 @@ import { z } from 'zod';
 // that cannot be read is a plugin's that was never set.
 const configSchema = z.object({
   enabled: z.boolean().default(true),
+  // The user enabled it knowing that it is not confined.
+  agreed: z.boolean().default(false),
 });
 export type PluginConfig = z.infer<typeof configSchema>;
 

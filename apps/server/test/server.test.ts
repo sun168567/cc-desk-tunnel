@@ -106,11 +106,18 @@ async function fixture(t: TestContext, stepMs = 2, graceMs?: number) {
   return { directory, server, url, clients, connect, create };
 }
 
+// Enabled by the user, as one is where the system cannot confine it.
+function agree(directory: string, id: string) {
+  mkdirSync(join(directory, 'plugin-config'), { recursive: true });
+  writeFileSync(join(directory, 'plugin-config', `${id}.json`), '{"agreed":true}');
+}
+
 test('a plugin added while the service runs hears of a wait, its end and the end of the run', async (t) => {
   const f = await fixture(t);
   const client = await f.connect();
   const sessionId = await f.create(client);
   const root = join(f.directory, 'plugins', 't.log');
+  agree(f.directory, 't.log');
   mkdirSync(join(root, 'hooks'), { recursive: true });
   writeFileSync(
     join(root, 'log.mjs'),
