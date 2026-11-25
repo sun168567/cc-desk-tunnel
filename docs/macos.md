@@ -8,7 +8,7 @@ macOS 上的客户端与 Windows 上的是同一套界面和同一条连接，�
 
 安装包没有 Apple 开发者签名，也没有公证，系统第一次打开时会拦下它：
 
-1. 打开 `CC-Desk-Tunnel-<版本>-mac-<arm64|x64>.dmg`，把应用拖进“应用程序”。
+1. 从苹果菜单打开“关于本机”。芯片为 Apple M 系列时选 `mac-arm64.dmg`，处理器为 Intel 时选 `mac-x64.dmg`。打开对应的 `CC-Desk-Tunnel-<版本>-mac-<架构>.dmg`，把 CC Desk Tunnel 拖进“应用程序”。
 2. 打开应用，系统提示无法验证开发者；到“系统设置 → 隐私与安全性”，在页面下方点“仍要打开”。
 3. 如果提示的是“已损坏，无法打开”，在终端执行 `xattr -cr "/Applications/CC Desk Tunnel.app"` 后再打开。
 
@@ -37,7 +37,7 @@ macOS 上的客户端与 Windows 上的是同一套界面和同一条连接，�
 | 命令的环境 | 客户端进程的环境 | 连接时以登录加交互方式运行一次你的 shell，记下环境，之后的命令都用它：终端里能用的 Homebrew、nvm 等在这里也能用 |
 | 命令结束时 | 它启动的后台进程不一定结束 | 它启动的进程全部结束，包括放到后台的。提示词对两者说的是同一句话：不指望进程比命令活得久，也不指望结束命令就能停掉进程 |
 | SFTP / scp | 随包的 `sftp-server.exe` | 系统的 `/usr/libexec/sftp-server` |
-| 快捷键 | Ctrl | Command；后退、前进是 ⌘[ 和 ⌘] |
+| 快捷键 | Ctrl | Command。⌘[ 后退，⌘] 前进，⇧⌘E 打开或关闭文件面板 |
 | 升级 | 应用内 | 手动下载安装 |
 
 shell 的启动脚本（`.zprofile`、`.zshrc` 等）在连接时执行一次。它等待输入或很久不结束时，连接会在“设置 → 连接”里的 SSH 等待时间之后失败并说明原因。改了启动脚本后重新连接才生效。
@@ -50,17 +50,17 @@ macOS 对“桌面”“文稿”“下载”、外接磁盘和网络磁盘里�
 
 ## 从源码运行与打包
 
-需要 Node.js 24。
+在 Mac 上安装 Node.js 24，进入仓库根目录。要生成可安装的 DMG，运行以下命令。
 
 ```sh
 npm ci
 npm run setup:desktop
-npm run build
-npm run desktop           # 从源码运行
-npm run package:macos     # 打出本机架构的 dmg 与 zip，在 artifacts/macos/
+npm run package:macos
 ```
 
-打包只能在 macOS 上进行，可用 `--arm64` / `--x64` 指定架构、`--dir` 只生成应用目录。本机架构的包打好后会被离线启动一次：主进程、界面和本机 SSH 服务都要起得来，并按服务端发脚本的方式执行一段脚本。
+默认在 `artifacts/macos/` 生成当前芯片的 DMG 和 ZIP。可以用 `npm run package:macos -- --arm64` 或 `npm run package:macos -- --x64` 指定架构，也可以加 `--dir` 只生成应用目录。打包脚本会启动本机架构的应用，检查登录窗口，并通过应用内的 SSH 服务执行一段脚本。
+
+开发时，在依赖和 Electron 安装完成后运行 `npm run build`，再用 `npm run desktop` 打开源码版客户端。
 
 没有 Mac 时由 GitHub 代为构建：`package` 工作流在两种架构的机器上各打一个包并启动检查，产物和一张窗口截图随该次运行保留 3 天；发布时由同一个工作流把安装包挂到发布页（见[开发约定](development.md#发布)）。
 
@@ -76,6 +76,8 @@ npm run package:macos     # 打出本机架构的 dmg 与 zip，在 artifacts/ma
 同一套执行端也用于 [Linux 客户端](linux.md)。各系统的安装包只带自己的那一套：打包时连接桥按目标系统裁剪，Windows 的包里没有这里的任何一个模块和 ssh2，macOS 与 Linux 的包里没有 Windows 的 SSH 宿主脚本。
 
 ## 已验证与未验证
+
+0.3.17 的两份 DMG 已在 Apple 芯片 Mac 上挂载并校验。Apple 芯片版原生运行，Intel 版通过 Rosetta 运行，两者均能从镜像启动到登录页，并通过包内 SSH 服务执行 zsh 脚本。
 
 在 GitHub 的 macOS 15 机器（Apple 芯片与 Intel）上自动验证的：
 
