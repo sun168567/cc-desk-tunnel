@@ -77,8 +77,6 @@ npm run package:macos
 
 ## 已验证与未验证
 
-0.3.17 的两份 DMG 已在 Apple 芯片 Mac 上挂载并校验。Apple 芯片版原生运行，Intel 版通过 Rosetta 运行，两者均能从镜像启动到登录页，并通过包内 SSH 服务执行 zsh 脚本。
-
 在 GitHub 的 macOS 15 机器（Apple 芯片与 Intel）上自动验证的：
 
 - 用系统的 `ssh`、`scp` 走通命令、标准输入输出、退出码、并发与大输出、Unicode 路径的文件传输。
