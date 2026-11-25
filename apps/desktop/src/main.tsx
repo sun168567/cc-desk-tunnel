@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { I18nextProvider } from 'react-i18next';
-import { i18n } from './i18n.ts';
+import './i18n.ts';
 // Before any other part of the window: its text is in the chosen language from the first.
 import './language.ts';
 import WebGate from './WebGate.tsx';
@@ -72,16 +71,14 @@ function BrowserSignIn() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <I18nextProvider i18n={i18n}>
-      {window.desktop?.boot?.launcher ? (
-        <Launcher signIns={desktopSignIns} />
-      ) : window.desktop ? (
-        <App />
-      ) : import.meta.env.DEV ? (
-        <BrowserSignIn />
-      ) : (
-        <WebGate />
-      )}
-    </I18nextProvider>
+    {window.desktop?.boot?.launcher ? (
+      <Launcher signIns={desktopSignIns} />
+    ) : window.desktop ? (
+      <App />
+    ) : import.meta.env.DEV ? (
+      <BrowserSignIn />
+    ) : (
+      <WebGate />
+    )}
   </React.StrictMode>,
 );

@@ -1,11 +1,14 @@
 import { createI18n, namespaces, sourceLanguage, wordsText } from '@cc-desk-tunnel/i18n';
 import type { Words } from '@cc-desk-tunnel/i18n';
-import { useTranslation } from 'react-i18next';
+import { setI18n, useTranslation } from 'react-i18next';
 
 // The window's text, from the catalogs of packages/i18n. It starts in the source language; language.ts, which the
 // window loads first, puts it in the language the settings or the system choose and follows them. Code that runs
 // without a window, as the unit tests run it, reads Chinese.
 export const i18n = createI18n(sourceLanguage);
+// The one instance of the window, which every component's useTranslation and <Trans> use: no provider is needed
+// around what is drawn, whether by main.tsx or a test that mounts a component alone.
+setI18n(i18n);
 // Text outside what React draws, such as a notification or an error, in the language at the moment it is made.
 // What a component draws takes its text from `useTranslation`, which draws it again when the language changes.
 export const t = i18n.t;
