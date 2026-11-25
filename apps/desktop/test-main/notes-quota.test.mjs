@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { absoluteLinks, alertLabels, releaseSection } from '../src/notes.ts';
 import { quotaFigures } from '../src/quota.ts';
+import { t } from '../src/i18n.ts';
 
 test('a version’s notes are its section of the changelog, without the heading', () => {
   const text =
@@ -41,10 +42,10 @@ test('links into the repository point at the version’s files on GitHub', () =>
 
 test('the quota beside the message box is the five hours and the fullest week', () => {
   const window = (name, utilization) => ({ name, utilization, resetsAt: null });
-  assert.deepEqual(quotaFigures(null), []);
-  assert.deepEqual(quotaFigures({ available: false, windows: [window('five_hour', 10)] }), []);
+  assert.deepEqual(quotaFigures(t, null), []);
+  assert.deepEqual(quotaFigures(t, { available: false, windows: [window('five_hour', 10)] }), []);
   assert.deepEqual(
-    quotaFigures({
+    quotaFigures(t, {
       available: true,
       windows: [
         window('five_hour', 7.4),
@@ -59,7 +60,7 @@ test('the quota beside the message box is the five hours and the fullest week', 
       { label: '每周', used: 79, resetsAt: null },
     ],
   );
-  assert.deepEqual(quotaFigures({ available: true, windows: [window('seven_day', 0)] }), [
+  assert.deepEqual(quotaFigures(t, { available: true, windows: [window('seven_day', 0)] }), [
     { label: '每周', used: 0, resetsAt: null },
   ]);
 });
