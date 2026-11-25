@@ -93,6 +93,10 @@ test('a plugin put in place is listed, has a page of its own and is switched off
 
   await page.getByRole('switch', { name: '启用 通知' }).click();
   await expect(page.getByRole('switch', { name: '启用 通知' })).not.toBeChecked();
+  await page.getByRole('button', { name: '通知：日志' }).click();
+  await expect(page.locator('.plugin-log')).toContainText('停用');
+  await page.screenshot({ path: resolve(shots, 'log.png') });
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
   await page.getByRole('switch', { name: '启用 通知' }).click();
   await expect(page.getByRole('switch', { name: '启用 通知' })).toBeChecked();
 });

@@ -4707,7 +4707,8 @@ dialog:has(.ccdt-dialog) {
   margin: 10px 2px 0;
   font-size: 13px;
 }
-.plugin-controls {
+.plugin-controls,
+.plugin-foot {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -4738,6 +4739,36 @@ dialog:has(.ccdt-dialog) {
 .plugin-empty {
   margin: 0;
   padding: 16px 0;
+}
+.plugin-log {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.plugin-log {
+  max-height: 55vh;
+}
+dialog:has(> .plugin-log) {
+  width: min(760px, calc(100vw - 32px));
+}
+.plugin-foot {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 12px 0 0;
+}
+.plugin-only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  margin-right: auto;
+  font-size: 13px;
 }
 @media (max-width: 700px) {
   /* The title bar has the way back. */

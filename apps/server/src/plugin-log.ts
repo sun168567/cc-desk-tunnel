@@ -1,8 +1,17 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
-// How large a plugin's log grows before it is put aside.
+// How large a plugin's log grows before it is put aside, and how many of its lines are shown.
 const LIMIT = 1024 * 1024;
+const LINES = 200;
 
 export class PluginLog {
   private directory: string;
@@ -21,5 +30,15 @@ export class PluginLog {
     } catch {
       // A log that cannot be written is gone without.
     }
+  }
+  read(id: string) {
+    const lines = ['.1', '']
+      .map((old) => this.file(id, old))
+      .filter((file) => existsSync(file))
+      .flatMap((file) => readFileSync(file, 'utf8').trimEnd().split('\n'));
+    return lines.slice(-LINES).join('\n');
+  }
+  clear(id: string) {
+    for (const old of ['.1', '']) rmSync(this.file(id, old), { force: true });
   }
 }

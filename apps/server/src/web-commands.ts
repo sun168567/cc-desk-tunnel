@@ -24,6 +24,7 @@ export const browserCommands = new Set<Command['type']>([
   'compaction.get',
   // As on the desktop: whoever holds a browser's login can have commands run on the user's computers already.
   'plugin.enable',
+  'plugin.log',
   'web.settings.get',
   'web.settings.update',
   'web.sessions.revoke',

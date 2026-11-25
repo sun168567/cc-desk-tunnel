@@ -54,8 +54,12 @@ export type Plugin = z.infer<typeof pluginSchema>;
 const request = { requestId: z.uuid(), id: pluginIdSchema };
 export const pluginCommandSchemas = [
   z.object({ type: z.literal('plugin.enable'), ...request, enabled: z.boolean() }).strict(),
+  z
+    .object({ type: z.literal('plugin.log'), ...request, clear: z.literal(true).optional() })
+    .strict(),
 ] as const;
 export const pluginMessageSchemas = [
   // Every plugin, sent on signing in and to every connection whenever it changes.
   z.object({ type: z.literal('plugins'), plugins: z.array(pluginSchema) }),
+  z.object({ type: z.literal('plugin.log'), requestId: z.uuid(), text: z.string() }),
 ] as const;

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ScrollText } from 'lucide-react';
 import type { Plugin } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import PluginLog from './PluginLog.tsx';
 import PluginPage, { reach, titleOf, troubleOf } from './PluginPage.tsx';
-import { Page, Switch } from './ui.tsx';
+import { IconButton, Page, Switch } from './ui.tsx';
 
 // The service's plugins, each opening a page of its own.
 export default function PluginSettings({
@@ -18,6 +19,7 @@ export default function PluginSettings({
   open: (id: string | undefined) => void;
 }) {
   const [failure, setFailure] = useState<{ id: string; message: string }>();
+  const [logging, setLogging] = useState<Plugin>();
   const plugin = plugins.find(({ id }) => id === shown);
   const act = async (id: string, work: Promise<unknown>) => {
     setFailure(undefined);
@@ -72,6 +74,9 @@ export default function PluginSettings({
                 {trouble && <small className="plugin-trouble">{trouble.text}</small>}
               </button>
               <span className="plugin-controls">
+                <IconButton title={`${title}：日志`} onClick={() => setLogging(item)}>
+                  <ScrollText />
+                </IconButton>
                 <Switch
                   label={`启用 ${title}`}
                   checked={item.enabled}
@@ -82,6 +87,14 @@ export default function PluginSettings({
           );
         })}
       </div>
+      {logging && (
+        <PluginLog
+          client={client}
+          id={logging.id}
+          title={titleOf(logging)}
+          close={() => setLogging(undefined)}
+        />
+      )}
     </Page>
   );
 }

@@ -186,6 +186,12 @@ export class Plugins {
     await this.refresh();
     this.log.write(id, enabled ? '启用' : '停用');
   }
+  logOf(id: string, clear = false) {
+    this.entry(id);
+    if (clear) this.log.clear(id);
+    return this.log.read(id);
+  }
+
   dispatch(event: ServiceEvent) {
     for (const id of this.entries.keys()) {
       if (this.closed || !this.enabled(id) || this.entry(id).broken) continue;

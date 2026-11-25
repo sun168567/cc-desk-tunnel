@@ -49,7 +49,8 @@ type DataMessage = Extract<
       | 'instructions.state'
       | 'web.settings.state'
       | 'web.totp.setup'
-      | 'web.certificate.state';
+      | 'web.certificate.state'
+      | 'plugin.log';
   }
 >;
 // Commands answered with a data frame, and the frame each one gets.
@@ -72,6 +73,7 @@ type Replies = {
   'web.certificate.get': 'web.certificate.state';
   'web.certificate.set': 'web.certificate.state';
   'web.certificate.reset': 'web.certificate.state';
+  'plugin.log': 'plugin.log';
 };
 
 type NewCommand = Command extends infer C
@@ -582,7 +584,8 @@ export class ProxyClient {
         message.type === 'instructions.state' ||
         message.type === 'web.settings.state' ||
         message.type === 'web.totp.setup' ||
-        message.type === 'web.certificate.state'
+        message.type === 'web.certificate.state' ||
+        message.type === 'plugin.log'
       ) {
         if (this.pending.has(message.requestId)) this.results.set(message.requestId, message);
       } else if (message.type === 'compaction.state') {
