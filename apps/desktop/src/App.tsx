@@ -361,8 +361,8 @@ export function App({
   };
   const serverDevice = state.devices.find((device) => device.server)?.id;
   const filesPlaces = useMemo(
-    () => filePlaces(state.device, state.devices, state.files),
-    [state.device, state.devices, state.files],
+    () => filePlaces(t, state.device, state.devices, state.files),
+    [t, state.device, state.devices, state.files],
   );
   const selectedForFiles = selected;
   const filesStart = useCallback(

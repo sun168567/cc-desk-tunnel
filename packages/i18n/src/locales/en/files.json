@@ -1,0 +1,88 @@
+{
+  "newFolder": "New folder",
+  "rename": "Rename",
+  "delete": {
+    "title": "Delete",
+    "confirm": "Delete",
+    "one": "Delete “{{name}}”?",
+    "oneRemote": "Delete “{{name}}”? Files deleted on the server and remote computers can't be recovered.",
+    "many_one": "Delete this {{count}} item?",
+    "many_other": "Delete these {{count}} items?"
+  },
+  "preview": "Preview",
+  "openEditor": "Open in editor",
+  "reveal": "Show in folder",
+  "download": "Download…",
+  "copy": "Copy",
+  "paste": "Paste",
+  "copyPath": "Copy path",
+  "upload": "Upload…",
+  "refresh": "Refresh",
+  "filterHint": "Filter expanded files…",
+  "filter": "Filter files",
+  "reading": "Reading…",
+  "empty": "This folder is empty",
+  "col": {
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified"
+  },
+  "previewLabel": "File preview",
+  "backToFolder": "Back to the folder",
+  "rendered": "Rendered",
+  "source": "Source",
+  "downloadHere": "Download to this computer…",
+  "readFull": "Read full screen",
+  "truncated": "The file is large; only its start is shown.",
+  "choosePreview": "Choose a file to preview",
+  "noPreview": "Can't preview",
+  "place": {
+    "label": "Location",
+    "local": "This computer"
+  },
+  "help": "How to use the file panel",
+  "uploadFiles": "Upload files…",
+  "toSide": "Back to the side",
+  "toPage": "Expand to full page",
+  "close": "Close the file panel",
+  "current": "Current location",
+  "up": "Up one level",
+  "landlock": {
+    "detail": "The kernel doesn't support Landlock: sign-in credentials, setup tokens and the like can be read and changed",
+    "title": "Sensitive files unprotected",
+    "dismiss": "Don't show again"
+  },
+  "closeNotice": "Close",
+  "oldImage": {
+    "title": "The server image is old",
+    "detail": "sftp-server is missing; upgrade with deploy/manage.sh on the server",
+    "action": "Upgrade the image to browse"
+  },
+  "transfer": {
+    "list": "Transfers",
+    "preparing": "Preparing",
+    "done": "Done",
+    "cancelled": "Cancelled",
+    "failed": "Failed",
+    "resume": "Resume",
+    "remove": "Remove",
+    "label": "{{what}}: {{from}} → {{to}}",
+    "failedWith": "{{label}}: {{error}}"
+  },
+  "title": "Files",
+  "conflict": {
+    "title": "An item of that name already exists there",
+    "skip": "Skip",
+    "replace": "Replace",
+    "one": "“{{name}}” already exists",
+    "many_one": "{{names, series}} ({{count}} item) already exist",
+    "many_other": "{{names, series}} ({{count}} items) already exist"
+  },
+  "ok": "OK",
+  "items_one": "{{count}} item",
+  "items_other": "{{count}} items",
+  "changes": "Changed files",
+  "changed": "changed",
+  "moreLines_one": "{{count}} more line not shown",
+  "moreLines_other": "{{count}} more lines not shown"
+}

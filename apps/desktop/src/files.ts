@@ -1,6 +1,7 @@
 import { platformOf } from '@cc-desk-tunnel/protocol';
 import type { Device, Project, Session } from '@cc-desk-tunnel/protocol';
 import type { ConnectedDevice } from './client.ts';
+import type { T } from './i18n.ts';
 import { projectName } from './paths.ts';
 
 // What the file panel shows and where (see FilePanel.tsx): an entry of a directory as the desktop's main process
@@ -86,16 +87,24 @@ export const sftpPath = (path: string, platform: string) =>
 // The places the panel can look from this window: this computer, the service where it offers its files, and the
 // user's other computers that are connected and reachable.
 export function filePlaces(
+  t: T,
   here: Device | null,
   devices: ConnectedDevice[],
   files: FilesInfo | null,
 ): FilePlace[] {
   const local = platformOf(here) === 'win32' ? 'windows' : 'posix';
   return [
-    { id: 'local', label: '本机', kind: 'local', style: local },
+    { id: 'local', label: t('files:place.local'), kind: 'local', style: local },
     // Shown without an SFTP server too, where the panel says what the service lacks.
     ...(files
-      ? [{ id: 'server', label: '服务端', kind: 'server' as const, style: 'posix' as const }]
+      ? [
+          {
+            id: 'server',
+            label: t('common:device.server'),
+            kind: 'server' as const,
+            style: 'posix' as const,
+          },
+        ]
       : []),
     // Other computers are reached through the service, which offers files at all only with `files`.
     ...devices
