@@ -305,7 +305,9 @@ export function createProxyServer(options: ServerOptions) {
     options.files === false ? undefined : new FileService(options.dataDir, options.files);
   // The file panel's connections of each control connection, which end with it.
   const fileConnections = new Map<string, Set<WebSocket>>();
-  const plugins = new Plugins(store.directory);
+  const plugins = new Plugins(store.directory, () => {
+    if (!closing) broadcast({ type: 'plugins', plugins: plugins.list() });
+  });
   const events = new ServiceEvents(
     (sessionId) => ({
       session: store.get(sessionId).session,
@@ -1697,6 +1699,9 @@ export function createProxyServer(options: ServerOptions) {
         announce();
         return session.id;
       }
+      case 'plugin.enable':
+        await plugins.enable(command.id, command.enabled);
+        return undefined;
       case 'account.status':
       case 'account.login':
       case 'account.token':
@@ -1991,6 +1996,7 @@ export function createProxyServer(options: ServerOptions) {
         },
       });
       send(peer, devices());
+      send(peer, { type: 'plugins', plugins: plugins.list() });
       return true;
     }
     const auth = authSchema.safeParse(value);
@@ -2045,6 +2051,7 @@ export function createProxyServer(options: ServerOptions) {
       ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
     send(peer, devices());
+    send(peer, { type: 'plugins', plugins: plugins.list() });
     // Every connection that asks has an execution channel of its own, to the computer it comes from.
     if (auth.data.tunnel && options.tunnel) {
       peer.tunnel = new Tunnel(

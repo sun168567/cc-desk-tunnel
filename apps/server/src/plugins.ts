@@ -3,6 +3,11 @@ import type { ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch } from 'node:fs';
 import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
+import { pluginManifestSchema, pluginIdSchema } from '@cc-desk-tunnel/protocol';
+import type { Plugin, PluginManifest } from '@cc-desk-tunnel/protocol';
+import { DomainError } from './errors.ts';
+import { readPluginConfig, writePluginConfig } from './plugin-config.ts';
+import type { PluginConfig } from './plugin-config.ts';
 import { hooksFileSchema, matches } from './plugin-hooks.ts';
 import type { Hook } from './plugin-hooks.ts';
 import { PluginLog } from './plugin-log.ts';
@@ -12,11 +17,10 @@ import type { ServiceEvent } from './service-events.ts';
 
 // What is known of a plugin, read anew whenever its directory changes.
 type Entry = {
+  manifest: Partial<PluginManifest>;
   broken?: string;
 };
 
-// `author.plugin`, as its author names it.
-const ID = /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/;
 // How much of what a command printed is kept, and how long changes in the directory are gathered.
 const OUTPUT_LIMIT = 8192;
 const SETTLE_MS = 300;
@@ -28,16 +32,21 @@ const reason = (error: unknown) => (error instanceof Error ? error.message : Str
 // of its own, and how they went goes to its log.
 export class Plugins {
   private directory: string;
+  private changed: () => void;
   private log: PluginLog;
   private entries = new Map<string, Entry>();
+  // Apart from what is read anew, which may be while a plugin runs.
+  private configs = new Map<string, PluginConfig>();
+  private failures = new Map<string, { at: string; message: string }>();
   private running = new Set<ChildProcess>();
   private watcher?: FSWatcher;
   private settle?: NodeJS.Timeout;
   private stale = new Set<string>();
   private loading: Promise<void> = Promise.resolve();
   private closed = false;
-  constructor(directory: string) {
+  constructor(directory: string, changed: () => void = () => {}) {
     this.directory = directory;
+    this.changed = changed;
     this.log = new PluginLog(directory);
   }
   async start() {
@@ -62,12 +71,32 @@ export class Plugins {
   any() {
     return this.entries.size > 0;
   }
+  list(): Plugin[] {
+    return [...this.entries].map(([id, entry]) => {
+      const { enabled } = this.config(id);
+      return {
+        id,
+        title: entry.manifest.displayName,
+        description: entry.manifest.description,
+        version: entry.manifest.version,
+        author: entry.manifest.author,
+        homepage: entry.manifest.homepage,
+        repository: entry.manifest.repository,
+        enabled,
+        problem: enabled ? entry.broken : undefined,
+        failure: this.failures.get(id),
+      };
+    });
+  }
+
   // Reads the plugins whose files changed, one read after another.
   private refresh() {
     const read = async () => {
       const plugins = join(this.directory, 'plugins');
       const names = readdirSync(plugins).filter(
-        (id) => ID.test(id) && existsSync(join(plugins, id, 'hooks', 'hooks.json')),
+        (id) =>
+          pluginIdSchema.safeParse(id).success &&
+          existsSync(join(plugins, id, 'hooks', 'hooks.json')),
       );
       const stale = new Set(this.stale);
       this.stale.clear();
@@ -78,6 +107,7 @@ export class Plugins {
       }
       if (this.closed) return;
       this.entries = entries;
+      this.changed();
     };
     this.loading = this.loading
       .then(read)
@@ -85,8 +115,14 @@ export class Plugins {
     return this.loading;
   }
   private load(id: string): Entry {
-    const entry: Entry = {};
+    const root = join(this.directory, 'plugins', id);
+    const entry: Entry = { manifest: {} };
     try {
+      const manifest = join(root, '.claude-plugin', 'plugin.json');
+      if (existsSync(manifest))
+        entry.manifest = pluginManifestSchema
+          .partial()
+          .parse(JSON.parse(readFileSync(manifest, 'utf8')));
       this.hooks(id);
     } catch (error) {
       entry.broken = `加载失败：${reason(error)}`;
@@ -98,13 +134,36 @@ export class Plugins {
     const path = join(this.directory, 'plugins', id, 'hooks', 'hooks.json');
     return hooksFileSchema.parse(JSON.parse(readFileSync(path, 'utf8'))).hooks;
   }
+  private config(id: string) {
+    let config = this.configs.get(id);
+    if (!config) this.configs.set(id, (config = readPluginConfig(this.directory, id)));
+    return config;
+  }
+  private entry(id: string) {
+    const entry = this.entries.get(id);
+    if (!entry) throw new DomainError('not_found', '插件不存在。');
+    return entry;
+  }
+  private write(id: string, config: PluginConfig) {
+    writePluginConfig(this.directory, id, config);
+    this.configs.set(id, config);
+    this.changed();
+  }
+
+  async enable(id: string, enabled: boolean) {
+    this.entry(id);
+    this.write(id, { enabled });
+    this.stale.add(id);
+    await this.refresh();
+    this.log.write(id, enabled ? '启用' : '停用');
+  }
   dispatch(event: ServiceEvent) {
-    for (const [id, { broken }] of this.entries) {
-      if (this.closed || broken) continue;
+    for (const id of this.entries.keys()) {
+      if (this.closed || !this.config(id).enabled || this.entry(id).broken) continue;
       try {
         for (const hook of this.hooksFor(id, event)) this.run(id, hook, event);
       } catch (error) {
-        this.log.write(id, `${event.hook_event_name} 没有运行：${reason(error)}`);
+        this.failed(id, `${event.hook_event_name} 没有运行：${reason(error)}`);
       }
     }
   }
@@ -152,6 +211,7 @@ export class Plugins {
       const output = printed.trim();
       const text = `${result} ${Date.now() - started}ms${output && `\n${output.replace(/^/gm, '    ')}`}`;
       this.log.write(id, `${event.hook_event_name}${of} → ${text}`);
+      this.told(id, result === '成功' ? undefined : `${event.hook_event_name} ${result}`);
     };
     child.on('error', (error) => ended(`没有启动（${error.message}）`));
     child.on('close', (code, signal) =>
@@ -162,5 +222,16 @@ export class Plugins {
     // A command that does not read its input may be gone before it is written.
     child.stdin.on('error', () => {});
     child.stdin.end(JSON.stringify(event));
+  }
+  private failed(id: string, message: string) {
+    this.log.write(id, message);
+    this.told(id, message);
+  }
+  // Every window hears of a first failure and of the first time it went well after it.
+  private told(id: string, failure: string | undefined) {
+    const before = this.failures.get(id)?.message;
+    if (failure) this.failures.set(id, { at: new Date().toISOString(), message: failure });
+    else this.failures.delete(id);
+    if (before !== failure) this.changed();
   }
 }

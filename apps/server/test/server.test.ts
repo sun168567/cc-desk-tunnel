@@ -129,8 +129,7 @@ test('a plugin added while the service runs hears of a wait, its end and the end
     join(root, 'hooks', 'hooks.json'),
     JSON.stringify({ hooks: { ApprovalRequested: log, WaitResolved: log, RunEnded: log } }),
   );
-  // The directory is read once its changes have settled.
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await client.wait((message) => message.type === 'plugins' && message.plugins.length === 1);
   const heard = async (name: string) => {
     for (const deadline = Date.now() + 10_000; Date.now() < deadline;) {
       try {
