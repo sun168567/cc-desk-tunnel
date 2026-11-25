@@ -8,6 +8,12 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await login(page);
+  // The prompts to try start a session in a project of this computer: one of its own, not one an earlier test
+  // left in the service.
+  await page.getByRole('button', { name: '添加项目', exact: true }).click();
+  await page.getByLabel('本机项目目录').fill('D:\\工作\\中文项目');
+  await page.getByRole('button', { name: '添加', exact: true }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
   // The "?" beside a heading is styled before the help has ever been opened.
   await expect(page.getByRole('button', { name: '项目和会话是什么', exact: true })).toHaveCSS(
     'width',
