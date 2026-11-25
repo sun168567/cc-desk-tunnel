@@ -13,6 +13,7 @@ export type Resources = {
     device: {
       browser: '浏览器';
       server: '服务端';
+      here: '这台电脑';
     };
     collapse: '收起';
     expand: '展开';
@@ -45,6 +46,7 @@ export type Resources = {
     yesterday: '昨天';
     save: '保存';
     gotIt: '知道了';
+    failed: '操作失败。';
   };
   connection: {
     interrupted: {
@@ -151,9 +153,43 @@ export type Resources = {
       totpAdvice: '建议开启验证器两步验证。';
       signingIn: '正在登录…';
       signIn: '登录';
+      workbench: '连接服务端工作台';
     };
     browserRequestFailed: '请求失败，请重试。';
     browserTimeout: '连接超时，请重试。';
+    update: {
+      titles: '{{titles, quoted}}';
+      titlesMore_other: '{{titles, quoted}} 等 {{count}} 个会话';
+      server: '升级服务端到 {{version}}';
+      serverWorking_other: '升级服务端到 {{version}}（{{count}} 个会话正在运行）';
+      serverResting: '升级服务端到 {{version}}（先关闭终端、等后台任务结束）';
+      forceQuestion_other: '{{titles}}正在运行。\n\n升级会重启服务端：正在进行的回答、命令和等你确认的审批会被中断，可能需要重新开始。\n\n仍然强行升级到 {{version}}？';
+      question: '服务端将升级到 {{version}} 并重启，需要几分钟，期间不能发送消息；重启后需重新连接。';
+      restingEnd_other: '{{titles}}开着终端或在等后台任务，它们会被结束；会话本身保留，升级后可以继续。';
+      continue: '继续？';
+      manual: '服务端 {{version}} 需在服务器上升级';
+      installing: '服务端升级中：{{step}}';
+      restarting: '重启';
+      checking: '正在检查更新…';
+      latest: '已是最新 {{version}} · 再次检查';
+      check: '检查更新';
+      cancelClient: '取消客户端升级';
+      client: '升级客户端到 {{version}}';
+      clientWorking_other: '升级客户端到 {{version}}（{{count}} 个会话正在运行）';
+      github: '从 GitHub 下载并升级到 {{version}}';
+      githubWorking_other: '从 GitHub 下载并升级到 {{version}}（{{count}} 个会话正在运行）';
+      notes: '查看 {{version}} 的更新内容';
+      clientAvailable: '客户端可升级到 {{version}}';
+    };
+    reconnect: {
+      body: '与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。';
+      bodyWithReason: '与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。原因：{{reason}}';
+      button: '重新连接';
+      waiting: '连接中断，等待恢复';
+      leave: '断开并回到登录页';
+    };
+    connectFailed: '连接失败。';
+    connecting: '正在连接…';
   };
   nav: {
     activity: {
@@ -236,6 +272,41 @@ export type Resources = {
       approval: '等待审批';
       taskFailed: '任务失败';
       failedBody: '{{title}}：{{error}}';
+      disconnected: '连接中断';
+      scheduleNotSent: '定时任务未发出';
+      scheduleOutcome: '{{name}}：{{text}}';
+    };
+    bar: {
+      account: '账号 · {{name}}';
+      signIn: '点击登录 Claude 账号';
+      accountQuota: '账号与额度';
+      settings: '设置';
+      signOut: '退出登录';
+      disconnect: '断开连接';
+      file: '文件';
+      addProject: '添加项目…';
+      export: '导出会话…';
+      quit: '退出';
+      view: '视图';
+      find: '查找';
+      expandSidebar: '展开侧栏';
+      zoomIn: '放大';
+      zoomOut: '缩小';
+      zoomReset: '实际大小';
+      guide: '使用说明';
+      shortcuts: '快捷键';
+      homepage: '项目主页';
+      signedOut: '未登录';
+      accountUnnamed: '账号';
+      simulation: '离线模拟';
+    };
+    sessionActionsOf: '会话操作 · {{title}}';
+    quota: {
+      signedOut: '尚未登录 Claude';
+      afterSession: '开始会话后可读取额度';
+    };
+    title: {
+      usage: '订阅用量';
     };
   };
   service: {
@@ -683,6 +754,7 @@ export type Resources = {
       edit: '编辑重发';
       editUnsent: '编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉';
       editFork: '编辑重发：从这条消息之前分叉出新会话，原会话保留';
+      draftFirst: '输入框里还有草稿，请先发送或清空，再编辑这条未送达的消息。';
     };
     history: {
       earlierFailed: '更早记录加载失败，请重试';
@@ -744,6 +816,15 @@ export type Resources = {
       addTitle: '添加项目';
       add: '添加';
       renameHint: '只改名字，不改动文件夹 <code>{{path}}</code>；留空恢复文件夹名。';
+      pathHere: '这台电脑上的项目目录';
+      rename: '修改显示名称';
+      changeFolder: '更改文件夹…';
+      openFolder: '打开文件夹';
+      remove: '移除项目';
+      otherFolder: '其他文件夹…';
+      moveHint: '下一条消息会告诉 Claude 换了项目或电脑；聊过的会话仍沿用原项目的记忆';
+      changeFolderTitle: '更改项目文件夹';
+      change: '更改';
     };
     delete: {
       title: '删除会话';
@@ -853,6 +934,39 @@ export type Resources = {
       percent: '上下文 {{percent}}%';
       usedLeft: '{{used}}% 已用（剩余 {{left}}%）';
     };
+    elsewhere: {
+      beside: '连接{{names, series}}里也有会话在这个文件夹运行，两边同时改动文件可能互相覆盖。';
+      remote: '这个会话在设备“{{device}}”上，项目目录是 <code>{{path}}</code>。在这里的对话、审批和停止都作用于那台电脑，命令也在那里执行。';
+      offline: '这个会话在设备“{{device}}”上，项目目录是 <code>{{path}}</code>。那台电脑不在线，这里只能查看，它上线后可以直接操作。';
+      notConnected: '设备“{{device}}”未连接，当前只能查看会话。';
+      takeOver: '在本机继续…';
+      forkHere: '分叉到本机…';
+    };
+    files: {
+      offline: '这个路径所在的电脑现在不在线，文件面板打不开它。';
+      title: '文件';
+      resize: '调整文件面板宽度';
+    };
+    statusFailed: '原生状态读取失败';
+    newTitle: '新会话';
+    schedule: {
+      targetGone: '目标会话已不存在';
+      createFailed: '新会话创建失败';
+    };
+    fork: {
+      title: '{{title}}（分叉）';
+    };
+    action: {
+      rename: '重命名';
+      fork: '分叉';
+      export: '导出 Markdown';
+      resync: '重新同步';
+      move: '移到项目…';
+      ccdt: '用 ccdt 打开';
+      refresh: '刷新状态';
+      delete: '删除';
+    };
+    closeError: '关闭错误提示';
   };
 };
 export type Messages = {
@@ -863,6 +977,7 @@ export type Messages = {
   'common:retry': Record<string, never>;
   'common:device.browser': Record<string, never>;
   'common:device.server': Record<string, never>;
+  'common:device.here': Record<string, never>;
   'common:collapse': Record<string, never>;
   'common:expand': Record<string, never>;
   'common:locale': Record<string, never>;
@@ -886,6 +1001,7 @@ export type Messages = {
   'common:yesterday': Record<string, never>;
   'common:save': Record<string, never>;
   'common:gotIt': Record<string, never>;
+  'common:failed': Record<string, never>;
   'connection:interrupted.read': Record<string, never>;
   'connection:interrupted.request': Record<string, never>;
   'connection:restored.read': Record<string, never>;
@@ -971,8 +1087,38 @@ export type Messages = {
   'connection:web.totpAdvice': Record<string, never>;
   'connection:web.signingIn': Record<string, never>;
   'connection:web.signIn': Record<string, never>;
+  'connection:web.workbench': Record<string, never>;
   'connection:browserRequestFailed': Record<string, never>;
   'connection:browserTimeout': Record<string, never>;
+  'connection:update.titles': { titles: ListValue };
+  'connection:update.titlesMore': { count: number; titles: ListValue };
+  'connection:update.server': { version: Value };
+  'connection:update.serverWorking': { count: number; version: Value };
+  'connection:update.serverResting': { version: Value };
+  'connection:update.forceQuestion': { count: number; titles: Value; version: Value };
+  'connection:update.question': { version: Value };
+  'connection:update.restingEnd': { count: number; titles: Value };
+  'connection:update.continue': Record<string, never>;
+  'connection:update.manual': { version: Value };
+  'connection:update.installing': { step: Value };
+  'connection:update.restarting': Record<string, never>;
+  'connection:update.checking': Record<string, never>;
+  'connection:update.latest': { version: Value };
+  'connection:update.check': Record<string, never>;
+  'connection:update.cancelClient': Record<string, never>;
+  'connection:update.client': { version: Value };
+  'connection:update.clientWorking': { count: number; version: Value };
+  'connection:update.github': { version: Value };
+  'connection:update.githubWorking': { count: number; version: Value };
+  'connection:update.notes': { version: Value };
+  'connection:update.clientAvailable': { version: Value };
+  'connection:reconnect.body': Record<string, never>;
+  'connection:reconnect.bodyWithReason': { reason: Value };
+  'connection:reconnect.button': Record<string, never>;
+  'connection:reconnect.waiting': Record<string, never>;
+  'connection:reconnect.leave': Record<string, never>;
+  'connection:connectFailed': Record<string, never>;
+  'connection:connecting': Record<string, never>;
   'nav:activity.background': Record<string, never>;
   'nav:activity.running': Record<string, never>;
   'nav:activity.question': Record<string, never>;
@@ -1044,6 +1190,35 @@ export type Messages = {
   'nav:notice.approval': Record<string, never>;
   'nav:notice.taskFailed': Record<string, never>;
   'nav:notice.failedBody': { title: Value; error: Value };
+  'nav:notice.disconnected': Record<string, never>;
+  'nav:notice.scheduleNotSent': Record<string, never>;
+  'nav:notice.scheduleOutcome': { name: Value; text: Value };
+  'nav:bar.account': { name: Value };
+  'nav:bar.signIn': Record<string, never>;
+  'nav:bar.accountQuota': Record<string, never>;
+  'nav:bar.settings': Record<string, never>;
+  'nav:bar.signOut': Record<string, never>;
+  'nav:bar.disconnect': Record<string, never>;
+  'nav:bar.file': Record<string, never>;
+  'nav:bar.addProject': Record<string, never>;
+  'nav:bar.export': Record<string, never>;
+  'nav:bar.quit': Record<string, never>;
+  'nav:bar.view': Record<string, never>;
+  'nav:bar.find': Record<string, never>;
+  'nav:bar.expandSidebar': Record<string, never>;
+  'nav:bar.zoomIn': Record<string, never>;
+  'nav:bar.zoomOut': Record<string, never>;
+  'nav:bar.zoomReset': Record<string, never>;
+  'nav:bar.guide': Record<string, never>;
+  'nav:bar.shortcuts': Record<string, never>;
+  'nav:bar.homepage': Record<string, never>;
+  'nav:bar.signedOut': Record<string, never>;
+  'nav:bar.accountUnnamed': Record<string, never>;
+  'nav:bar.simulation': Record<string, never>;
+  'nav:sessionActionsOf': { title: Value };
+  'nav:quota.signedOut': Record<string, never>;
+  'nav:quota.afterSession': Record<string, never>;
+  'nav:title.usage': Record<string, never>;
   'service:failed': Record<string, never>;
   'service:request.conflict': Record<string, never>;
   'service:request.browserUnsupported': Record<string, never>;
@@ -1381,6 +1556,7 @@ export type Messages = {
   'session:message.edit': Record<string, never>;
   'session:message.editUnsent': Record<string, never>;
   'session:message.editFork': Record<string, never>;
+  'session:message.draftFirst': Record<string, never>;
   'session:history.earlierFailed': Record<string, never>;
   'session:history.loading': Record<string, never>;
   'session:history.loadEarlier': Record<string, never>;
@@ -1428,6 +1604,15 @@ export type Messages = {
   'session:project.addTitle': Record<string, never>;
   'session:project.add': Record<string, never>;
   'session:project.renameHint': { path: Value };
+  'session:project.pathHere': Record<string, never>;
+  'session:project.rename': Record<string, never>;
+  'session:project.changeFolder': Record<string, never>;
+  'session:project.openFolder': Record<string, never>;
+  'session:project.remove': Record<string, never>;
+  'session:project.otherFolder': Record<string, never>;
+  'session:project.moveHint': Record<string, never>;
+  'session:project.changeFolderTitle': Record<string, never>;
+  'session:project.change': Record<string, never>;
   'session:delete.title': Record<string, never>;
   'session:delete.native': Record<string, never>;
   'session:delete.plain': Record<string, never>;
@@ -1510,4 +1695,27 @@ export type Messages = {
   'session:context.measured': { time: Value };
   'session:context.percent': { percent: Value };
   'session:context.usedLeft': { used: Value; left: Value };
+  'session:elsewhere.beside': { names: ListValue };
+  'session:elsewhere.remote': { device: Value; path: Value };
+  'session:elsewhere.offline': { device: Value; path: Value };
+  'session:elsewhere.notConnected': { device: Value };
+  'session:elsewhere.takeOver': Record<string, never>;
+  'session:elsewhere.forkHere': Record<string, never>;
+  'session:files.offline': Record<string, never>;
+  'session:files.title': Record<string, never>;
+  'session:files.resize': Record<string, never>;
+  'session:statusFailed': Record<string, never>;
+  'session:newTitle': Record<string, never>;
+  'session:schedule.targetGone': Record<string, never>;
+  'session:schedule.createFailed': Record<string, never>;
+  'session:fork.title': { title: Value };
+  'session:action.rename': Record<string, never>;
+  'session:action.fork': Record<string, never>;
+  'session:action.export': Record<string, never>;
+  'session:action.resync': Record<string, never>;
+  'session:action.move': Record<string, never>;
+  'session:action.ccdt': Record<string, never>;
+  'session:action.refresh': Record<string, never>;
+  'session:action.delete': Record<string, never>;
+  'session:closeError': Record<string, never>;
 };

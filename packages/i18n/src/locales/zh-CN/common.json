@@ -8,7 +8,8 @@
   "retry": "重试",
   "device": {
     "browser": "浏览器",
-    "server": "服务端"
+    "server": "服务端",
+    "here": "这台电脑"
   },
   "collapse": "收起",
   "expand": "展开",
@@ -40,5 +41,6 @@
   "today": "今天",
   "yesterday": "昨天",
   "save": "保存",
-  "gotIt": "知道了"
+  "gotIt": "知道了",
+  "failed": "操作失败。"
 }

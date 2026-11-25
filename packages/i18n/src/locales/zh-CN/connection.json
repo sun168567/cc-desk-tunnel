@@ -102,8 +102,42 @@
     "totp": "验证器动态码",
     "totpAdvice": "建议开启验证器两步验证。",
     "signingIn": "正在登录…",
-    "signIn": "登录"
+    "signIn": "登录",
+    "workbench": "连接服务端工作台"
   },
   "browserRequestFailed": "请求失败，请重试。",
-  "browserTimeout": "连接超时，请重试。"
+  "browserTimeout": "连接超时，请重试。",
+  "update": {
+    "titles": "{{titles, quoted}}",
+    "titlesMore_other": "{{titles, quoted}} 等 {{count}} 个会话",
+    "server": "升级服务端到 {{version}}",
+    "serverWorking_other": "升级服务端到 {{version}}（{{count}} 个会话正在运行）",
+    "serverResting": "升级服务端到 {{version}}（先关闭终端、等后台任务结束）",
+    "forceQuestion_other": "{{titles}}正在运行。\n\n升级会重启服务端：正在进行的回答、命令和等你确认的审批会被中断，可能需要重新开始。\n\n仍然强行升级到 {{version}}？",
+    "question": "服务端将升级到 {{version}} 并重启，需要几分钟，期间不能发送消息；重启后需重新连接。",
+    "restingEnd_other": "{{titles}}开着终端或在等后台任务，它们会被结束；会话本身保留，升级后可以继续。",
+    "continue": "继续？",
+    "manual": "服务端 {{version}} 需在服务器上升级",
+    "installing": "服务端升级中：{{step}}",
+    "restarting": "重启",
+    "checking": "正在检查更新…",
+    "latest": "已是最新 {{version}} · 再次检查",
+    "check": "检查更新",
+    "cancelClient": "取消客户端升级",
+    "client": "升级客户端到 {{version}}",
+    "clientWorking_other": "升级客户端到 {{version}}（{{count}} 个会话正在运行）",
+    "github": "从 GitHub 下载并升级到 {{version}}",
+    "githubWorking_other": "从 GitHub 下载并升级到 {{version}}（{{count}} 个会话正在运行）",
+    "notes": "查看 {{version}} 的更新内容",
+    "clientAvailable": "客户端可升级到 {{version}}"
+  },
+  "reconnect": {
+    "body": "与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。",
+    "bodyWithReason": "与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。原因：{{reason}}",
+    "button": "重新连接",
+    "waiting": "连接中断，等待恢复",
+    "leave": "断开并回到登录页"
+  },
+  "connectFailed": "连接失败。",
+  "connecting": "正在连接…"
 }

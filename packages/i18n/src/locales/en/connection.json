@@ -106,8 +106,48 @@
     "totp": "Authenticator code",
     "totpAdvice": "Two-step verification with an authenticator is recommended.",
     "signingIn": "Signing in…",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "workbench": "Connect to the server workbench"
   },
   "browserRequestFailed": "The request failed. Try again.",
-  "browserTimeout": "The connection timed out. Try again."
+  "browserTimeout": "The connection timed out. Try again.",
+  "update": {
+    "titles": "{{titles, quoted}}",
+    "titlesMore_one": "{{count}} session, including {{titles, quoted}}",
+    "titlesMore_other": "{{count}} sessions, including {{titles, quoted}}",
+    "server": "Upgrade the server to {{version}}",
+    "serverWorking_one": "Upgrade the server to {{version}} ({{count}} session running)",
+    "serverWorking_other": "Upgrade the server to {{version}} ({{count}} sessions running)",
+    "serverResting": "Upgrade the server to {{version}} (close terminals and let background tasks end first)",
+    "forceQuestion_one": "{{titles}} is running.\n\nUpgrading restarts the server: answers, commands and approvals waiting for you are cut off and may have to start over.\n\nUpgrade to {{version}} anyway?",
+    "forceQuestion_other": "{{titles}} are running.\n\nUpgrading restarts the server: answers, commands and approvals waiting for you are cut off and may have to start over.\n\nUpgrade to {{version}} anyway?",
+    "question": "The server will upgrade to {{version}} and restart. It takes a few minutes, during which no messages can be sent; reconnect after the restart.",
+    "restingEnd_one": "{{titles}} has a terminal open or is waiting for background tasks; they will be ended. The session itself is kept and can go on after the upgrade.",
+    "restingEnd_other": "{{titles}} have terminals open or are waiting for background tasks; they will be ended. The sessions themselves are kept and can go on after the upgrade.",
+    "continue": "Continue?",
+    "manual": "Server {{version}} has to be upgraded on the server",
+    "installing": "Upgrading the server: {{step}}",
+    "restarting": "restarting",
+    "checking": "Checking for updates…",
+    "latest": "Up to date at {{version}} · check again",
+    "check": "Check for updates",
+    "cancelClient": "Cancel the client upgrade",
+    "client": "Upgrade the client to {{version}}",
+    "clientWorking_one": "Upgrade the client to {{version}} ({{count}} session running)",
+    "clientWorking_other": "Upgrade the client to {{version}} ({{count}} sessions running)",
+    "github": "Download from GitHub and upgrade to {{version}}",
+    "githubWorking_one": "Download from GitHub and upgrade to {{version}} ({{count}} session running)",
+    "githubWorking_other": "Download from GitHub and upgrade to {{version}} ({{count}} sessions running)",
+    "notes": "What's new in {{version}}",
+    "clientAvailable": "Client upgrade to {{version}} available"
+  },
+  "reconnect": {
+    "body": "The connection to the server dropped and is being restored. Tasks on the server go on, and what happened meanwhile fills in once connected.",
+    "bodyWithReason": "The connection to the server dropped and is being restored. Tasks on the server go on, and what happened meanwhile fills in once connected. Reason: {{reason}}",
+    "button": "Reconnect",
+    "waiting": "Connection lost, waiting for it to come back",
+    "leave": "Disconnect and return to sign-in"
+  },
+  "connectFailed": "Couldn't connect.",
+  "connecting": "Connecting…"
 }

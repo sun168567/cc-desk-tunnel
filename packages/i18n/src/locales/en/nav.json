@@ -80,6 +80,41 @@
     "question": "Claude has a question for you",
     "approval": "Waiting for approval",
     "taskFailed": "Task failed",
-    "failedBody": "{{title}}: {{error}}"
+    "failedBody": "{{title}}: {{error}}",
+    "disconnected": "Connection lost",
+    "scheduleNotSent": "Scheduled task not sent",
+    "scheduleOutcome": "{{name}}: {{text}}"
+  },
+  "bar": {
+    "account": "Account · {{name}}",
+    "signIn": "Click to sign in to Claude",
+    "accountQuota": "Account and quota",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "disconnect": "Disconnect",
+    "file": "File",
+    "addProject": "Add project…",
+    "export": "Export session…",
+    "quit": "Quit",
+    "view": "View",
+    "find": "Find",
+    "expandSidebar": "Show sidebar",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Actual size",
+    "guide": "User guide",
+    "shortcuts": "Shortcuts",
+    "homepage": "Project homepage",
+    "signedOut": "Not signed in",
+    "accountUnnamed": "Account",
+    "simulation": "Offline simulation"
+  },
+  "sessionActionsOf": "Session actions · {{title}}",
+  "quota": {
+    "signedOut": "Not signed in to Claude",
+    "afterSession": "Quota can be read once a session has started"
+  },
+  "title": {
+    "usage": "Plan usage"
   }
 }

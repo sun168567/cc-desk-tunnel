@@ -8,7 +8,8 @@
   "retry": "Retry",
   "device": {
     "browser": "Browser",
-    "server": "Server"
+    "server": "Server",
+    "here": "This computer"
   },
   "collapse": "Collapse",
   "expand": "Expand",
@@ -40,5 +41,6 @@
   "today": "Today",
   "yesterday": "Yesterday",
   "save": "Save",
-  "gotIt": "Got it"
+  "gotIt": "Got it",
+  "failed": "That didn't work."
 }

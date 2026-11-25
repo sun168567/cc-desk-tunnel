@@ -237,7 +237,8 @@
     "terminal": "Terminal",
     "edit": "Edit and resend",
     "editUnsent": "Edit and resend: this message never reached Claude Code, so it goes back into this session's input box, without a fork",
-    "editFork": "Edit and resend: forks a new session from before this message; this one is kept"
+    "editFork": "Edit and resend: forks a new session from before this message; this one is kept",
+    "draftFirst": "There's a draft in the input box; send or clear it before editing this undelivered message."
   },
   "history": {
     "earlierFailed": "Couldn't load earlier messages, try again",
@@ -298,7 +299,16 @@
     "displayName": "Display name",
     "addTitle": "Add project",
     "add": "Add",
-    "renameHint": "Changes only the name, not the folder <code>{{path}}</code>; leave it empty for the folder's name."
+    "renameHint": "Changes only the name, not the folder <code>{{path}}</code>; leave it empty for the folder's name.",
+    "pathHere": "Project folder on this computer",
+    "rename": "Change display name",
+    "changeFolder": "Change folder…",
+    "openFolder": "Open folder",
+    "remove": "Remove project",
+    "otherFolder": "Other folder…",
+    "moveHint": "The next message tells Claude the project or computer changed; a session already talked in keeps the old project's memory",
+    "changeFolderTitle": "Change project folder",
+    "change": "Change"
   },
   "delete": {
     "title": "Delete session",
@@ -407,5 +417,38 @@
     "measured": "{{time}} · Claude Code's summary",
     "percent": "Context {{percent}}%",
     "usedLeft": "{{used}}% used ({{left}}% left)"
-  }
+  },
+  "elsewhere": {
+    "beside": "Sessions in this folder are also running in the connections {{names, series}}; changing files from both sides at once may overwrite each other's changes.",
+    "remote": "This session is on the device “{{device}}”, in the project folder <code>{{path}}</code>. The conversation, approvals and stopping here act on that computer, and commands run there.",
+    "offline": "This session is on the device “{{device}}”, in the project folder <code>{{path}}</code>. That computer is offline, so it can only be read here; once it is online it can be worked on directly.",
+    "notConnected": "The device “{{device}}” isn't connected; the session can only be read for now.",
+    "takeOver": "Continue on this computer…",
+    "forkHere": "Fork to this computer…"
+  },
+  "files": {
+    "offline": "The computer this path is on is offline, so the file panel can't open it.",
+    "title": "Files",
+    "resize": "Resize the file panel"
+  },
+  "statusFailed": "Couldn't read Claude Code's status",
+  "newTitle": "New session",
+  "schedule": {
+    "targetGone": "The target session no longer exists",
+    "createFailed": "Couldn't create the new session"
+  },
+  "fork": {
+    "title": "{{title}} (fork)"
+  },
+  "action": {
+    "rename": "Rename",
+    "fork": "Fork",
+    "export": "Export Markdown",
+    "resync": "Sync again",
+    "move": "Move to project…",
+    "ccdt": "Open in ccdt",
+    "refresh": "Refresh status",
+    "delete": "Delete"
+  },
+  "closeError": "Dismiss error"
 }

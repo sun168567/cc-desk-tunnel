@@ -226,7 +226,8 @@
     "terminal": "终端",
     "edit": "编辑重发",
     "editUnsent": "编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉",
-    "editFork": "编辑重发：从这条消息之前分叉出新会话，原会话保留"
+    "editFork": "编辑重发：从这条消息之前分叉出新会话，原会话保留",
+    "draftFirst": "输入框里还有草稿，请先发送或清空，再编辑这条未送达的消息。"
   },
   "history": {
     "earlierFailed": "更早记录加载失败，请重试",
@@ -287,7 +288,16 @@
     "displayName": "显示名称",
     "addTitle": "添加项目",
     "add": "添加",
-    "renameHint": "只改名字，不改动文件夹 <code>{{path}}</code>；留空恢复文件夹名。"
+    "renameHint": "只改名字，不改动文件夹 <code>{{path}}</code>；留空恢复文件夹名。",
+    "pathHere": "这台电脑上的项目目录",
+    "rename": "修改显示名称",
+    "changeFolder": "更改文件夹…",
+    "openFolder": "打开文件夹",
+    "remove": "移除项目",
+    "otherFolder": "其他文件夹…",
+    "moveHint": "下一条消息会告诉 Claude 换了项目或电脑；聊过的会话仍沿用原项目的记忆",
+    "changeFolderTitle": "更改项目文件夹",
+    "change": "更改"
   },
   "delete": {
     "title": "删除会话",
@@ -396,5 +406,38 @@
     "measured": "{{time}} · 原生摘要",
     "percent": "上下文 {{percent}}%",
     "usedLeft": "{{used}}% 已用（剩余 {{left}}%）"
-  }
+  },
+  "elsewhere": {
+    "beside": "连接{{names, series}}里也有会话在这个文件夹运行，两边同时改动文件可能互相覆盖。",
+    "remote": "这个会话在设备“{{device}}”上，项目目录是 <code>{{path}}</code>。在这里的对话、审批和停止都作用于那台电脑，命令也在那里执行。",
+    "offline": "这个会话在设备“{{device}}”上，项目目录是 <code>{{path}}</code>。那台电脑不在线，这里只能查看，它上线后可以直接操作。",
+    "notConnected": "设备“{{device}}”未连接，当前只能查看会话。",
+    "takeOver": "在本机继续…",
+    "forkHere": "分叉到本机…"
+  },
+  "files": {
+    "offline": "这个路径所在的电脑现在不在线，文件面板打不开它。",
+    "title": "文件",
+    "resize": "调整文件面板宽度"
+  },
+  "statusFailed": "原生状态读取失败",
+  "newTitle": "新会话",
+  "schedule": {
+    "targetGone": "目标会话已不存在",
+    "createFailed": "新会话创建失败"
+  },
+  "fork": {
+    "title": "{{title}}（分叉）"
+  },
+  "action": {
+    "rename": "重命名",
+    "fork": "分叉",
+    "export": "导出 Markdown",
+    "resync": "重新同步",
+    "move": "移到项目…",
+    "ccdt": "用 ccdt 打开",
+    "refresh": "刷新状态",
+    "delete": "删除"
+  },
+  "closeError": "关闭错误提示"
 }

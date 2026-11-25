@@ -78,6 +78,41 @@
     "question": "Claude 有问题要问你",
     "approval": "等待审批",
     "taskFailed": "任务失败",
-    "failedBody": "{{title}}：{{error}}"
+    "failedBody": "{{title}}：{{error}}",
+    "disconnected": "连接中断",
+    "scheduleNotSent": "定时任务未发出",
+    "scheduleOutcome": "{{name}}：{{text}}"
+  },
+  "bar": {
+    "account": "账号 · {{name}}",
+    "signIn": "点击登录 Claude 账号",
+    "accountQuota": "账号与额度",
+    "settings": "设置",
+    "signOut": "退出登录",
+    "disconnect": "断开连接",
+    "file": "文件",
+    "addProject": "添加项目…",
+    "export": "导出会话…",
+    "quit": "退出",
+    "view": "视图",
+    "find": "查找",
+    "expandSidebar": "展开侧栏",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "zoomReset": "实际大小",
+    "guide": "使用说明",
+    "shortcuts": "快捷键",
+    "homepage": "项目主页",
+    "signedOut": "未登录",
+    "accountUnnamed": "账号",
+    "simulation": "离线模拟"
+  },
+  "sessionActionsOf": "会话操作 · {{title}}",
+  "quota": {
+    "signedOut": "尚未登录 Claude",
+    "afterSession": "开始会话后可读取额度"
+  },
+  "title": {
+    "usage": "订阅用量"
   }
 }

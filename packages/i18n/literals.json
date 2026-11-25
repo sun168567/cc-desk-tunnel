@@ -25,7 +25,6 @@
     "apps/desktop/electron/tunnel-channels.mjs": 1,
     "apps/desktop/electron/windows-ssh.mjs": 8,
     "apps/desktop/src/AccountPanel.tsx": 81,
-    "apps/desktop/src/App.tsx": 138,
     "apps/desktop/src/CcdtDialog.tsx": 1,
     "apps/desktop/src/FilePanel.tsx": 91,
     "apps/desktop/src/files.ts": 2,
