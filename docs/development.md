@@ -15,7 +15,9 @@
 
 代码组织：一个文件一个职责，入口文件（`server.ts`、`App.tsx`）只做编排和分发，具体处理放具名函数或所属模块；同一段逻辑出现第二次就提取，但不为只有一处使用的代码预留抽象。协议里的事件类型从 `@cc-desk-tunnel/protocol` 引用具名类型。注释写约束和原因，不复述代码；模块结构见各模块 README，改动结构时同步更新。
 
-三个 npm workspace 共享根目录的 `package-lock.json`，用 `npm ci` 复现依赖，不引入第二种包管理器。Node 24 直接运行可擦除的 TypeScript，`npm run typecheck` 仍是必须的静态检查。第三方二进制的下载来源、版本和校验值写在使用它的脚本里。不提交依赖目录、构建产物或凭据。
+各 npm workspace 共享根目录的 `package-lock.json`，用 `npm ci` 复现依赖，不引入第二种包管理器。Node 24 直接运行可擦除的 TypeScript，`npm run typecheck` 仍是必须的静态检查。第三方二进制的下载来源、版本和校验值写在使用它的脚本里。不提交依赖目录、构建产物或凭据。
+
+用户看到的文字写在 `packages/i18n` 的文案里，代码只写键；服务端发给客户端的是代码和参数。写法、检查与术语表见[界面语言与文案](i18n.md)。
 
 Windows 上的 shell 命令与脚本使用 `pwsh.exe`（PowerShell 7）。终端、管道、子进程和文本文件一律 UTF-8。
 
