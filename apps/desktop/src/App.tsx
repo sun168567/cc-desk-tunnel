@@ -63,7 +63,7 @@ import { useDrawerSwipe } from './useDrawerSwipe.ts';
 import { useWebNavigation } from './useWebNavigation.ts';
 import type { Place } from './useWebNavigation.ts';
 import SchedulePanel from './SchedulePanel.tsx';
-import { taskMessage, useSchedules } from './schedules.ts';
+import { outcomeText, taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
 import FilePanel from './FilePanel.tsx';
@@ -1143,7 +1143,7 @@ export function App({
       await client.request({
         type: 'message.send',
         sessionId: session.id,
-        text: taskMessage(task, due),
+        text: taskMessage(t, task, due),
         scenario: 'chat',
       });
       return true;
@@ -1152,7 +1152,7 @@ export function App({
       notifications.push({
         kind: 'schedule',
         title: t('nav:notice.scheduleNotSent'),
-        body: t('nav:notice.scheduleOutcome', { name: task.name, text: outcome.text }),
+        body: t('nav:notice.scheduleOutcome', { name: task.name, text: outcomeText(t, outcome) }),
       }),
     host.schedules,
   );

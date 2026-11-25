@@ -10,6 +10,7 @@ import { describe, duration, summarize } from '../src/activity.ts';
 import {
   describeSchedule,
   formatTasks,
+  outcomeText,
   nextRun,
   parseTasks,
   taskMessage,
@@ -614,11 +615,16 @@ test('scheduled tasks: the file round-trips, bad tasks are named, and rules find
     model: null,
     effort: 'high',
   };
-  const text = formatTasks([task]);
+  const text = formatTasks(t, [task]);
   assert.ok(JSON.parse(text).说明.length > 0);
-  assert.deepEqual(parseTasks(text), { tasks: [task], problems: [] });
+  assert.deepEqual(parseTasks(t, text), { tasks: [task], problems: [] });
+  // The file explains itself in the window's language, and is read the same in any.
+  const en = createI18n('en').t;
+  assert.ok(JSON.parse(formatTasks(en, [task])).about.length > 0);
+  assert.deepEqual(parseTasks(en, text), { tasks: [task], problems: [] });
   // What Claude or an editor may leave behind: missing optional fields, a bad task beside a good one.
   const mixed = parseTasks(
+    t,
     JSON.stringify({
       tasks: [
         { ...task, model: undefined, effort: undefined, enabled: undefined },
@@ -634,9 +640,9 @@ test('scheduled tasks: the file round-trips, bad tasks are named, and rules find
     mixed.problems.map((problem) => problem.split('：')[0]),
     ['“坏时间”', '“重复”', '“太频繁”', '第 5 个任务'],
   );
-  assert.ok(parseTasks('{ not json').broken);
-  assert.ok(parseTasks('{}').broken);
-  assert.deepEqual(parseTasks(''), { tasks: [], problems: [] });
+  assert.ok(parseTasks(t, '{ not json').broken);
+  assert.ok(parseTasks(t, '{}').broken);
+  assert.deepEqual(parseTasks(t, ''), { tasks: [], problems: [] });
 
   const local = (...parts) => new Date(...parts).getTime();
   // 2026-10-07 is a Wednesday.
@@ -658,11 +664,21 @@ test('scheduled tasks: the file round-trips, bad tasks are named, and rules find
     local(2026, 9, 7, 10, 1),
   );
   assert.equal(nextRun({ type: 'once', at: '2026-10-07T10:00' }, wednesday), null);
-  assert.equal(describeSchedule(task.schedule), '每周一、五 09:30');
-  assert.equal(describeSchedule({ type: 'interval', minutes: 120 }), '每 2 小时');
+  assert.equal(describeSchedule(t, task.schedule), '每周一、五 09:30');
+  assert.equal(describeSchedule(t, { type: 'interval', minutes: 120 }), '每 2 小时');
+  assert.equal(describeSchedule(en, task.schedule), 'Every Mon and Fri at 09:30');
+  assert.equal(describeSchedule(en, { type: 'interval', minutes: 60 }), 'Every hour');
   assert.equal(
-    taskMessage(task, wednesday),
+    taskMessage(t, task, wednesday),
     '[定时任务「日报」· 计划时间 2026-10-07 10:00]\n\n整理今天的提交',
+  );
+  assert.equal(
+    outcomeText(t, { at: wednesday, status: 'missed', due: wednesday }),
+    '错过了 2026-10-07 10:00 的一次',
+  );
+  assert.equal(
+    outcomeText(en, { at: wednesday, status: 'blocked' }).startsWith('can’t send now'),
+    true,
   );
 });
 

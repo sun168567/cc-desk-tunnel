@@ -1,12 +1,21 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 import { CalendarClock, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import type { Effort, NativeCapabilities, Session } from '@cc-desk-tunnel/protocol';
 import { folderName } from './paths.ts';
-import { describeSchedule, parseTasks, stamp } from './schedules.ts';
+import {
+  describeSchedule,
+  outcomeText,
+  parseTasks,
+  stamp,
+  weekdayName,
+  weekdays,
+} from './schedules.ts';
 import type { Schedule, Schedules, Task } from './schedules.ts';
 import { IconButton } from './ui.tsx';
 import { modelName } from './modelNames.ts';
 import HelpLink from './HelpLink.tsx';
+import { useT } from './i18n.ts';
 
 // The editor's fields: every kind of rule and target keeps its own input, so switching kinds loses nothing.
 type Form = {
@@ -26,7 +35,7 @@ type Form = {
   effort: string;
 };
 const efforts: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
-const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+const kinds = ['once', 'daily', 'weekly', 'interval'] as const;
 // Where Anthropic says what a subscription sign-in is meant for.
 const usagePolicy = 'https://code.claude.com/docs/en/legal-and-compliance';
 
@@ -91,6 +100,7 @@ function Editor({
   save: (task: Task) => Promise<void>;
   cancel: () => void;
 }) {
+  const t = useT();
   const [form, setForm] = useState(() => formOf(task, sessions, projects));
   const [failure, setFailure] = useState<string | null>(null);
   const change = (values: Partial<Form>) => {
@@ -107,24 +117,25 @@ function Editor({
       onSubmit={(event) => {
         event.preventDefault();
         // The same check the file goes through, so the window cannot write a task it would then refuse.
-        const checked = parseTasks(JSON.stringify({ tasks: [taskOf(form)] }));
-        if (!checked.tasks[0]) return setFailure(checked.problems[0] ?? '任务内容不完整。');
+        const checked = parseTasks(t, JSON.stringify({ tasks: [taskOf(form)] }));
+        if (!checked.tasks[0])
+          return setFailure(checked.problems[0] ?? t('schedules:problem.incomplete'));
         save(checked.tasks[0]).catch((error: Error) => setFailure(error.message));
       }}
     >
       <label>
-        名称
+        {t('schedules:form.name')}
         <input
-          aria-label="任务名称"
+          aria-label={t('schedules:form.nameLabel')}
           value={form.name}
           maxLength={80}
           onChange={(event) => change({ name: event.target.value })}
         />
       </label>
       <label>
-        提示词
+        {t('schedules:form.prompt')}
         <textarea
-          aria-label="提示词"
+          aria-label={t('schedules:form.prompt')}
           rows={6}
           value={form.prompt}
           maxLength={15000}
@@ -133,23 +144,24 @@ function Editor({
       </label>
       <div className="schedule-fields">
         <label>
-          重复
+          {t('schedules:form.repeat')}
           <select
-            aria-label="重复规则"
+            aria-label={t('schedules:form.repeatLabel')}
             value={form.kind}
             onChange={(event) => change({ kind: event.target.value as Form['kind'] })}
           >
-            <option value="once">仅一次</option>
-            <option value="daily">每天</option>
-            <option value="weekly">每周</option>
-            <option value="interval">按间隔</option>
+            {kinds.map((kind) => (
+              <option key={kind} value={kind}>
+                {t(`schedules:form.kind.${kind}`)}
+              </option>
+            ))}
           </select>
         </label>
         {form.kind === 'once' && (
           <label>
-            时间
+            {t('schedules:form.time')}
             <input
-              aria-label="运行时间"
+              aria-label={t('schedules:form.timeLabel')}
               type="datetime-local"
               value={form.at}
               onChange={(event) => change({ at: event.target.value })}
@@ -158,9 +170,9 @@ function Editor({
         )}
         {(form.kind === 'daily' || form.kind === 'weekly') && (
           <label>
-            时间
+            {t('schedules:form.time')}
             <input
-              aria-label="运行时间"
+              aria-label={t('schedules:form.timeLabel')}
               type="time"
               value={form.time}
               onChange={(event) => change({ time: event.target.value })}
@@ -169,9 +181,9 @@ function Editor({
         )}
         {form.kind === 'interval' && (
           <label>
-            间隔（分钟）
+            {t('schedules:form.interval')}
             <input
-              aria-label="间隔分钟"
+              aria-label={t('schedules:form.intervalLabel')}
               type="number"
               min={5}
               value={form.minutes}
@@ -181,46 +193,48 @@ function Editor({
         )}
       </div>
       {form.kind === 'weekly' && (
-        <div className="schedule-days" role="group" aria-label="星期">
-          {weekdays.map((name, index) => (
-            <label key={name}>
+        <div className="schedule-days" role="group" aria-label={t('schedules:form.days')}>
+          {weekdays.map((day) => (
+            <label key={day}>
               <input
                 type="checkbox"
-                checked={form.days.includes(index + 1)}
+                checked={form.days.includes(day)}
                 onChange={(event) =>
                   change({
                     days: event.target.checked
-                      ? [...form.days, index + 1]
-                      : form.days.filter((day) => day !== index + 1),
+                      ? [...form.days, day]
+                      : form.days.filter((other) => other !== day),
                   })
                 }
               />
-              周{name}
+              {t('schedules:dayBox', { day: weekdayName(t, day) })}
             </label>
           ))}
         </div>
       )}
       <div className="schedule-fields">
         <label>
-          发送到
+          {t('schedules:form.target')}
           <select
-            aria-label="发送到"
+            aria-label={t('schedules:form.target')}
             value={form.target}
             onChange={(event) => change({ target: event.target.value as Form['target'] })}
           >
-            <option value="session">接续已有会话</option>
-            <option value="new">每次新开会话</option>
+            <option value="session">{t('schedules:form.targetKind.session')}</option>
+            <option value="new">{t('schedules:form.targetKind.new')}</option>
           </select>
         </label>
         {form.target === 'session' ? (
           <label>
-            会话
+            {t('schedules:form.session')}
             <select
-              aria-label="目标会话"
+              aria-label={t('schedules:form.sessionLabel')}
               value={form.sessionId}
               onChange={(event) => change({ sessionId: event.target.value })}
             >
-              {!session && <option value={form.sessionId}>（会话已不存在）</option>}
+              {!session && (
+                <option value={form.sessionId}>{t('schedules:form.sessionGone')}</option>
+              )}
               {sessions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.title} · {folderName(item.projectPath)}
@@ -230,9 +244,9 @@ function Editor({
           </label>
         ) : (
           <label>
-            项目目录
+            {t('schedules:form.project')}
             <input
-              aria-label="项目目录"
+              aria-label={t('schedules:form.project')}
               list="schedule-projects"
               value={form.projectPath}
               onChange={(event) => change({ projectPath: event.target.value })}
@@ -249,13 +263,13 @@ function Editor({
       </div>
       <div className="schedule-fields">
         <label>
-          模型
+          {t('schedules:form.model')}
           <select
-            aria-label="任务模型"
+            aria-label={t('schedules:form.modelLabel')}
             value={form.model}
             onChange={(event) => change({ model: event.target.value })}
           >
-            <option value="">不改动</option>
+            <option value="">{t('schedules:form.keep')}</option>
             {models.map((model) => (
               <option key={model} value={model}>
                 {(() => {
@@ -267,13 +281,13 @@ function Editor({
           </select>
         </label>
         <label>
-          推理强度
+          {t('schedules:form.effort')}
           <select
-            aria-label="任务推理强度"
+            aria-label={t('schedules:form.effortLabel')}
             value={form.effort}
             onChange={(event) => change({ effort: event.target.value })}
           >
-            <option value="">不改动</option>
+            <option value="">{t('schedules:form.keep')}</option>
             {efforts.map((effort) => (
               <option key={effort} value={effort}>
                 {effort}
@@ -287,12 +301,12 @@ function Editor({
         session.permissionMode !== 'auto' &&
         session.permissionMode !== 'bypassPermissions' && (
           <p className="schedule-warning" role="status">
-            这个会话不是自动审批：无人值守时任务会停在审批处，直到有人处理。
+            {t('schedules:form.notAuto')}
           </p>
         )}
       {form.target === 'session' && session?.permissionMode === 'bypassPermissions' && (
         <p className="schedule-warning" role="status">
-          这个会话绕过权限：无人值守时任务做任何事都不会询问。
+          {t('schedules:form.bypass')}
         </p>
       )}
       {failure && (
@@ -302,10 +316,10 @@ function Editor({
       )}
       <div className="schedule-actions">
         <button type="button" className="button" onClick={cancel}>
-          取消
+          {t('common:cancel')}
         </button>
         <button type="submit" className="button primary">
-          保存任务
+          {t('schedules:form.save')}
         </button>
       </div>
     </form>
@@ -324,6 +338,7 @@ export default function SchedulePanel({
   projects: string[];
   capabilities: NativeCapabilities | null;
 }) {
+  const t = useT();
   // `null` is a new task; `undefined` shows the overview.
   const [editing, setEditing] = useState<Task | null | undefined>(undefined);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -332,24 +347,25 @@ export default function SchedulePanel({
   const store = (next: Task[]) =>
     schedules.save(next).catch((error: Error) => setFailure(error.message));
   const where = (task: Task) => {
-    if (task.target.type === 'new') return `新会话 · ${folderName(task.target.projectPath)}`;
+    if (task.target.type === 'new')
+      return t('schedules:where.new', { folder: folderName(task.target.projectPath) });
     const { sessionId } = task.target;
-    return sessions.find((session) => session.id === sessionId)?.title ?? '会话已不存在';
+    return sessions.find((session) => session.id === sessionId)?.title ?? t('schedules:where.gone');
   };
   return (
     <>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand">定时任务</span>
-          <HelpLink article="schedules" title="定时任务怎么用" />
+          <span className="brand">{t('schedules:title')}</span>
+          <HelpLink article="schedules" title={t('schedules:help')} />
         </div>
         <button type="button" className="side-action" onClick={() => setEditing(null)}>
           <Plus />
-          新建任务
+          {t('schedules:new')}
         </button>
-        <nav className="session-list" aria-label="任务列表">
-          <div className="list-heading">任务</div>
-          {tasks.length === 0 && <p className="project-empty">暂无已安排的任务</p>}
+        <nav className="session-list" aria-label={t('schedules:list')}>
+          <div className="list-heading">{t('schedules:heading')}</div>
+          {tasks.length === 0 && <p className="project-empty">{t('schedules:empty')}</p>}
           {tasks.map((task) => {
             const next = schedules.next(task);
             const last = schedules.last(task);
@@ -360,7 +376,7 @@ export default function SchedulePanel({
               >
                 <input
                   type="checkbox"
-                  aria-label={`启用 ${task.name}`}
+                  aria-label={t('schedules:row.enable', { name: task.name })}
                   checked={task.enabled}
                   onChange={(event) =>
                     void store(
@@ -373,20 +389,28 @@ export default function SchedulePanel({
                 <span>
                   <strong>{task.name}</strong>
                   <small>
-                    {describeSchedule(task.schedule)} · {where(task)}
+                    {describeSchedule(t, task.schedule)} · {where(task)}
                   </small>
                   <small>
-                    {task.enabled ? (next ? `下次 ${stamp(next)}` : '不会再运行') : '已停用'}
-                    {last && ` · 上次 ${stamp(last.at)} ${last.text}`}
+                    {task.enabled
+                      ? next
+                        ? t('schedules:row.next', { time: stamp(next) })
+                        : t('schedules:row.never')
+                      : t('schedules:row.disabled')}
+                    {last &&
+                      ` · ${t('schedules:row.last', { time: stamp(last.at), outcome: outcomeText(t, last) })}`}
                   </small>
                   <span className="schedule-row-actions">
                     <IconButton
-                      title={`立即运行 ${task.name}`}
+                      title={t('schedules:row.run', { name: task.name })}
                       onClick={() => void schedules.runNow(task)}
                     >
                       <Play />
                     </IconButton>
-                    <IconButton title={`编辑 ${task.name}`} onClick={() => setEditing(task)}>
+                    <IconButton
+                      title={t('schedules:row.edit', { name: task.name })}
+                      onClick={() => setEditing(task)}
+                    >
                       <Pencil />
                     </IconButton>
                     {removing === task.id ? (
@@ -399,10 +423,13 @@ export default function SchedulePanel({
                           void store(tasks.filter((item) => item.id !== task.id));
                         }}
                       >
-                        确认删除
+                        {t('schedules:row.confirmDelete')}
                       </button>
                     ) : (
-                      <IconButton title={`删除 ${task.name}`} onClick={() => setRemoving(task.id)}>
+                      <IconButton
+                        title={t('schedules:row.delete', { name: task.name })}
+                        onClick={() => setRemoving(task.id)}
+                      >
                         <Trash2 />
                       </IconButton>
                     )}
@@ -414,10 +441,10 @@ export default function SchedulePanel({
         </nav>
       </aside>
       <main className="workspace">
-        <section className="page" aria-label="定时任务">
+        <section className="page" aria-label={t('schedules:title')}>
           {editing !== undefined ? (
             <div className="page-body">
-              <h1 className="page-title">{editing ? '编辑任务' : '新建任务'}</h1>
+              <h1 className="page-title">{editing ? t('schedules:edit') : t('schedules:new')}</h1>
               <div className="card">
                 <Editor
                   key={editing?.id ?? 'new'}
@@ -441,37 +468,42 @@ export default function SchedulePanel({
             <div className="page-body page-center">
               <div className="empty-state">
                 <CalendarClock />
-                <h2>安排任务</h2>
-                <p className="muted">
-                  到点时由这台电脑上的客户端向会话发送一条带“定时任务”标签的消息，让 Claude Code
-                  替你处理重复的事。
-                </p>
+                <h2>{t('schedules:intro.title')}</h2>
+                <p className="muted">{t('schedules:intro.text')}</p>
                 <button type="button" className="button primary" onClick={() => setEditing(null)}>
-                  新建任务
+                  {t('schedules:new')}
                 </button>
               </div>
               <ul className="page-notes muted">
-                <li>只在客户端运行并已连接时触发；晚于计划 10 分钟仍发不出的那一次会跳过。</li>
-                <li>无人值守时请让目标会话使用自动审批，否则会停在审批处。</li>
+                <li>{t('schedules:intro.when')}</li>
+                <li>{t('schedules:intro.approval')}</li>
                 <li>
-                  任务由程序自动发送。用订阅账号登录时，官方的额度按普通的个人使用设定，自动发送是否合适请对照
-                  <button
-                    type="button"
-                    className="text-link"
-                    onClick={() =>
-                      window.desktop
-                        ? void window.desktop.openExternal(usagePolicy)
-                        : void window.open(usagePolicy)
-                    }
-                  >
-                    官方的使用说明
-                  </button>
-                  自行判断。
+                  <Trans
+                    t={t}
+                    i18nKey="schedules:intro.policy"
+                    components={{
+                      link: (
+                        <button
+                          type="button"
+                          className="text-link"
+                          onClick={() =>
+                            window.desktop
+                              ? void window.desktop.openExternal(usagePolicy)
+                              : void window.open(usagePolicy)
+                          }
+                        />
+                      ),
+                    }}
+                  />
                 </li>
                 {schedules.path && (
                   <li>
-                    配置文件 <code>{schedules.path}</code>
-                    ：可以直接编辑，也可以让 Claude 代为设置，几秒内生效。
+                    <Trans
+                      t={t}
+                      i18nKey="schedules:intro.file"
+                      values={{ path: schedules.path }}
+                      components={{ code: <code /> }}
+                    />
                   </li>
                 )}
               </ul>

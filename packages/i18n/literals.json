@@ -33,17 +33,9 @@
     "apps/desktop/src/historyCache.ts": 1,
     "apps/desktop/src/notes.ts": 5,
     "apps/desktop/src/ReleaseNotes.tsx": 6,
-    "apps/desktop/src/SchedulePanel.tsx": 75,
-    "apps/desktop/src/schedules.ts": 48,
-    "apps/desktop/src/setting-fields.ts": 1,
-    "apps/desktop/src/SettingsPage.tsx": 1,
     "apps/desktop/src/ui.tsx": 4
   },
   "kept": {
-    "apps/server/src/claude.ts": {
-      "count": 1,
-      "reason": "Model-facing prompt in English; 说明 names a field of the schedules file the desktop writes."
-    },
     "apps/server/src/simulation.ts": {
       "count": 36,
       "reason": "The offline simulation stands in for Claude: its replies and tool output are sample content the UI tests read, not the program’s text."
@@ -51,6 +43,14 @@
     "apps/server/src/store.ts": {
       "count": 3,
       "reason": "The note beside the pre-upgrade history backup, a file for whoever runs the server; it is written in Chinese and English both."
+    },
+    "apps/desktop/src/SettingsPage.tsx": {
+      "count": 1,
+      "reason": "Two ideographic spaces part the figures of the session bar preview: spacing, not text."
+    },
+    "apps/desktop/src/setting-fields.ts": {
+      "count": 1,
+      "reason": "A list typed into a field may be parted by a full-width comma: input parsing, not text."
     }
   }
 }
