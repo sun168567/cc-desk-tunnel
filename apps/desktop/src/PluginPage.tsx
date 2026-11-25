@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { shownWhen } from '@cc-desk-tunnel/protocol';
+import { releasesOf, shownWhen } from '@cc-desk-tunnel/protocol';
 import type {
   Plugin,
   PluginField,
@@ -51,13 +52,20 @@ export default function PluginPage({
   plugin,
   enable,
   failure,
+  update,
+  updating,
   back,
+  children,
 }: {
   client: ProxyClient;
   plugin: Plugin;
   enable: (enabled: boolean) => void;
   failure?: string;
+  // Offers the newer version; not where plugins are not installed.
+  update?: () => void;
+  updating: boolean;
   back: () => void;
+  children?: ReactNode;
 }) {
   // What was changed and is not saved yet, or could not be.
   const [draft, setDraft] = useState<PluginValues>({});
@@ -282,7 +290,7 @@ export default function PluginPage({
         </>
       )}
       <SettingsHeading>关于</SettingsHeading>
-      <div className="settings-list card">
+      <div className="settings-list card plugin-fields">
         <Row title="id">
           <span className="setting-value">{plugin.id}</span>
         </Row>
@@ -290,8 +298,31 @@ export default function PluginPage({
           <span className="setting-value">{reach[plugin.access]}</span>
         </Row>
         {version && (
-          <Row title="版本">
-            <span className="setting-value">{version}</span>
+          <Row
+            title="版本"
+            detail={<VersionNote plugin={plugin} done={results.check} update={!!update} />}
+          >
+            <span className="plugin-version">
+              <span className="setting-value">{version}</span>
+              {plugin.newer && update ? (
+                <button type="button" className="button" disabled={updating} onClick={update}>
+                  {updating ? '正在下载…' : `更新到 ${plugin.newer}`}
+                </button>
+              ) : (
+                releasesOf(repository) && (
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={results.check === 'running'}
+                    onClick={() =>
+                      void act('check', () => client.fetch({ type: 'plugin.check', id }))
+                    }
+                  >
+                    {results.check === 'running' ? '正在检查…' : '检查更新'}
+                  </button>
+                )
+              )}
+            </span>
           </Row>
         )}
         {author && (
@@ -314,8 +345,30 @@ export default function PluginPage({
           </Row>
         )}
       </div>
+      {children}
     </Page>
   );
+}
+
+// What was found when a newer version was last asked for, and when that was.
+function VersionNote({
+  plugin: { newer, checkedAt },
+  done,
+  update,
+}: {
+  plugin: Plugin;
+  done?: Done | 'running';
+  update: boolean;
+}) {
+  if (done && done !== 'running' && !done.ok)
+    return (
+      <span className="plugin-result bad" role="status">
+        {done.message}
+      </span>
+    );
+  if (!checkedAt) return null;
+  const found = newer && !update ? `有新版本 ${newer}，在桌面客户端里更新。` : '';
+  return `${found}上次检查 ${new Date(checkedAt).toLocaleString('zh-CN')}`;
 }
 
 function Link({ url, children }: { url: string; children: string }) {

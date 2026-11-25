@@ -29,6 +29,8 @@ export const browserCommands = new Set<Command['type']>([
   'plugin.press',
   'plugin.try',
   'plugin.log',
+  'plugin.checkAll',
+  'plugin.check',
   'plugin.composerSlot',
   'web.settings.get',
   'web.settings.update',

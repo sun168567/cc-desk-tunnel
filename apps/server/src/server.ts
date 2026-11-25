@@ -1708,8 +1708,11 @@ export function createProxyServer(options: ServerOptions) {
     upload.parts.push(part);
     if (!last) return;
     peer.upload = undefined;
-    const archive = readArchive(Buffer.concat(upload.parts));
-    peer.upload = { ...upload, parts: [], archive };
+    offerPlugin(peer, requestId, uploadId, readArchive(Buffer.concat(upload.parts)));
+  }
+  // Says what is in an archive, for the user to agree to.
+  function offerPlugin(peer: Peer, requestId: string, id: string, archive: PluginArchive) {
+    peer.upload = { id, parts: [], size: 0, archive };
     send(peer, {
       type: 'plugin.archive',
       requestId,
@@ -1723,6 +1726,7 @@ export function createProxyServer(options: ServerOptions) {
   }
   async function plugin(peer: Peer, command: CommandOf<`plugin.${string}` & Command['type']>) {
     if (command.type === 'plugin.upload') return uploadPlugin(peer, command);
+    if (command.type === 'plugin.checkAll') return void plugins.checkAll();
     if (command.type === 'plugin.install') {
       const archive = peer.upload?.id === command.uploadId ? peer.upload.archive : undefined;
       peer.upload = undefined;
@@ -1733,6 +1737,8 @@ export function createProxyServer(options: ServerOptions) {
     const { id, requestId } = command;
     if (command.type === 'plugin.composerSlot')
       return plugins.move(id, command.sessionId, command.gesture, command.from);
+    if (command.type === 'plugin.download')
+      return offerPlugin(peer, requestId, command.uploadId, await plugins.download(id));
     if (command.type === 'plugin.remove') await plugins.remove(id);
     else if (command.type === 'plugin.enable') await plugins.enable(id, command.enabled);
     else if (command.type === 'plugin.configure')
@@ -1749,7 +1755,9 @@ export function createProxyServer(options: ServerOptions) {
         requestId,
         ...(command.type === 'plugin.press'
           ? await plugins.press(id, command.button, command.values)
-          : await plugins.attempt(id, command.event)),
+          : command.type === 'plugin.check'
+            ? await plugins.check(id)
+            : await plugins.attempt(id, command.event)),
       });
   }
   // Resolves to the session ID carried in the response frame; account and usage commands have none.
@@ -1782,6 +1790,9 @@ export function createProxyServer(options: ServerOptions) {
       case 'plugin.log':
       case 'plugin.remove':
       case 'plugin.composerSlot':
+      case 'plugin.checkAll':
+      case 'plugin.check':
+      case 'plugin.download':
       case 'plugin.upload':
       case 'plugin.install':
         await plugin(peer, command);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -9,7 +9,9 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -246,6 +248,54 @@ test('an archive is checked before any of it is run, and takes the place of the 
   );
   await plugins.remove('t.notify');
   assert.deepEqual(plugins.list(), []);
+});
+
+test('a newer release is found, its archive taken when it is what was released, and a repository that moved is not followed', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
+  const pack = (id: string, version: string) =>
+    zipSync({
+      '.claude-plugin/plugin.json': strToU8(
+        JSON.stringify({ id, version, repository: 'https://github.com/me/notify' }),
+      ),
+      'hooks/hooks.json': strToU8('{"hooks":{}}'),
+    });
+  let archive = pack('t.notify', '1.1.0');
+  let moved = false;
+  const digest = createHash('sha256').update(archive).digest('hex');
+  const github = createHttpServer((request, response) => {
+    if (request.url === '/archive') return response.end(archive);
+    if (moved) return response.writeHead(301, { location: '/elsewhere' }).end();
+    assert.equal(request.url, '/repos/me/notify/releases/latest');
+    const url = `${api}/archive`;
+    const assets = [
+      { name: 't.notify.zip', browser_download_url: url, digest: `sha256:${digest}` },
+    ];
+    response.end(JSON.stringify({ tag_name: 'v1.1.0', zipball_url: url, assets }));
+  });
+  await new Promise<void>((done) => github.listen(0, '127.0.0.1', done));
+  const api = `http://127.0.0.1:${(github.address() as AddressInfo).port}`;
+  const plugins = new Plugins(directory, undefined, undefined, api);
+  t.after(() => {
+    github.closeAllConnections();
+    github.close();
+    plugins.close();
+    rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  await plugins.start();
+  await plugins.install(readArchive(pack('t.notify', '1.0.0')));
+  await plugins.checkAll();
+  assert.equal(plugins.list()[0]!.newer, '1.1.0');
+  archive = pack('t.notify', '1.2.0');
+  await assert.rejects(plugins.download('t.notify'), /校验失败/);
+  archive = pack('t.notify', '1.1.0');
+  await plugins.install(await plugins.download('t.notify'));
+  assert.equal(plugins.list()[0]!.newer, undefined);
+  await plugins.check('t.notify');
+  assert.equal(plugins.list()[0]!.newer, undefined);
+  moved = true;
+  await assert.rejects(plugins.check('t.notify'), /改名或转手/);
+  await plugins.checkAll(Date.now() + 3600_000);
+  assert.match(plugins.logOf('t.notify'), /检查更新：.*改名或转手/);
 });
 
 test('a third plugin that wants a button is not enabled while two have one', async (t) => {

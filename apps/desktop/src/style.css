@@ -4678,8 +4678,9 @@ dialog:has(.ccdt-dialog) {
 }
 .plugin-open > strong {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
 }
 .plugin-open svg {
   flex-shrink: 0;
@@ -4694,6 +4695,12 @@ dialog:has(.ccdt-dialog) {
   color: var(--warn-text);
   background: var(--warn-soft);
   border-color: var(--warn-line);
+}
+.plugin-newer {
+  font-style: normal;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
 }
 .settings-list .plugin-trouble,
 .plugin-notice {
@@ -4712,6 +4719,7 @@ dialog:has(.ccdt-dialog) {
   font-size: 13px;
 }
 .plugin-controls,
+.plugin-version,
 .plugin-try,
 .plugin-foot,
 .settings-list label > .plugin-input {
@@ -4720,7 +4728,8 @@ dialog:has(.ccdt-dialog) {
   align-items: center;
   gap: 8px;
 }
-.plugin-controls {
+.plugin-controls,
+.plugin-version {
   flex-shrink: 0;
 }
 .plugin-back {

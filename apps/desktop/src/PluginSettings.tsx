@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { ChevronRight, ScrollText, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronRight, CircleArrowUp, ScrollText, Trash2 } from 'lucide-react';
 import { COMPOSER_SLOTS } from '@cc-desk-tunnel/protocol';
 import type { Plugin } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import PluginArchive from './PluginArchive.tsx';
+import type { Offered } from './PluginArchive.tsx';
 import PluginInstall from './PluginInstall.tsx';
 import PluginLog from './PluginLog.tsx';
 import PluginPage, { reach, titleOf, troubleOf } from './PluginPage.tsx';
@@ -25,7 +27,12 @@ export default function PluginSettings({
 }) {
   const [failure, setFailure] = useState<{ id: string; message: string }>();
   const [logging, setLogging] = useState<Plugin>();
+  const [found, setFound] = useState<Offered>();
+  const [updating, setUpdating] = useState<string>();
   const plugin = plugins.find(({ id }) => id === shown);
+  useEffect(() => {
+    client.request({ type: 'plugin.checkAll' }).catch(() => {});
+  }, [client]);
   const act = async (id: string, work: Promise<unknown>) => {
     setFailure(undefined);
     try {
@@ -40,6 +47,25 @@ export default function PluginSettings({
     if (enabled && access !== 'own' && !window.confirm(asked)) return;
     void act(id, client.request({ type: 'plugin.enable', id, enabled }));
   };
+  const update = ({ id }: Plugin) => {
+    const uploadId = crypto.randomUUID();
+    setUpdating(id);
+    const download = client.fetch({ type: 'plugin.download', id, uploadId });
+    void act(
+      id,
+      download
+        .then((archive) => setFound({ ...archive, uploadId }))
+        .finally(() => setUpdating(undefined)),
+    );
+  };
+  const archive = found && (
+    <PluginArchive
+      client={client}
+      found={found}
+      failed={(message) => setFailure({ id: found.replaces ? found.manifest.id : '', message })}
+      close={() => setFound(undefined)}
+    />
+  );
   if (plugin)
     return (
       <PluginPage
@@ -48,8 +74,12 @@ export default function PluginSettings({
         plugin={plugin}
         enable={(enabled) => enable(plugin, enabled)}
         failure={failure?.id === plugin.id ? failure.message : undefined}
+        update={browser ? undefined : () => update(plugin)}
+        updating={!!updating}
         back={() => open(undefined)}
-      />
+      >
+        {archive}
+      </PluginPage>
     );
   return (
     <Page
@@ -69,6 +99,7 @@ export default function PluginSettings({
         !browser && (
           <PluginInstall
             client={client}
+            offer={setFound}
             failed={(message) => setFailure(message ? { id: '', message } : undefined)}
           />
         )
@@ -95,12 +126,26 @@ export default function PluginSettings({
                 <strong>
                   {title}
                   {trouble && <i className="badge plugin-badge">{trouble.word}</i>}
+                  {item.newer && (
+                    <i className="badge plugin-newer" title={item.newer}>
+                      新版本
+                    </i>
+                  )}
                   <ChevronRight />
                 </strong>
                 {item.description && <small>{item.description}</small>}
                 {trouble && <small className="plugin-trouble">{trouble.text}</small>}
               </button>
               <span className="plugin-controls">
+                {item.newer && !browser && (
+                  <IconButton
+                    title={`更新 ${title}`}
+                    disabled={!!updating}
+                    onClick={() => update(item)}
+                  >
+                    <CircleArrowUp />
+                  </IconButton>
+                )}
                 <IconButton title={`${title}：日志`} onClick={() => setLogging(item)}>
                   <ScrollText />
                 </IconButton>
@@ -125,6 +170,7 @@ export default function PluginSettings({
           );
         })}
       </div>
+      {archive}
       {logging && (
         <PluginLog
           client={client}

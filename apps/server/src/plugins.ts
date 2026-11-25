@@ -7,6 +7,7 @@ import {
   COMPOSER_SLOTS,
   pluginManifestSchema,
   pluginIdSchema,
+  releasesOf,
   slotMove,
   slotState,
 } from '@cc-desk-tunnel/protocol';
@@ -27,10 +28,13 @@ import { checkVersion, installArchive } from './plugin-install.ts';
 import type { PluginArchive } from './plugin-install.ts';
 import { masked, PluginLog } from './plugin-log.ts';
 import { confinable, launch, stop } from './plugin-process.ts';
+import { GITHUB, downloadRelease, latestRelease } from './plugin-update.ts';
+import type { PluginRelease } from './plugin-update.ts';
 import { askButton, askCheck, checkValues, fieldsOf, loadUi, NOTHING } from './plugin-ui.ts';
 import type { Declared } from './plugin-ui.ts';
 import { matcherFields } from './service-events.ts';
 import type { ServiceEvent } from './service-events.ts';
+import { isNewer } from './updates.ts';
 
 // What is known of a plugin, read anew whenever its directory changes.
 type Entry = {
@@ -52,6 +56,8 @@ type ComposerSlots = {
 // How much of what a command printed is kept, and how long changes in the directory are gathered.
 const OUTPUT_LIMIT = 8192;
 const SETTLE_MS = 300;
+// Opening their list does not ask the plugins' repositories for newer versions again within this long.
+const CHECK_MS = 5 * 60_000;
 
 // Why a plugin that is not confined does not run until the user enables it.
 const unconfined = {
@@ -68,6 +74,7 @@ export class Plugins {
   private directory: string;
   private changed: () => void;
   private composerSlots: ComposerSlots;
+  private api: string;
   private log: PluginLog;
   private entries = new Map<string, Entry>();
   // Apart from what is read anew, which may be while a plugin is set or runs.
@@ -75,6 +82,8 @@ export class Plugins {
   private failures = new Map<string, { at: string; message: string }>();
   private running = new Set<ChildProcess>();
   private pressed = new Set<string>();
+  private releases = new Map<string, PluginRelease & { checkedAt: string }>();
+  private checkedAt = 0;
   private watcher?: FSWatcher;
   private settle?: NodeJS.Timeout;
   private stale = new Set<string>();
@@ -85,10 +94,12 @@ export class Plugins {
     directory: string,
     changed: () => void = () => {},
     composerSlots: ComposerSlots = { of: () => undefined, set: () => {} },
+    api = GITHUB,
   ) {
     this.directory = directory;
     this.changed = changed;
     this.composerSlots = composerSlots;
+    this.api = api;
     this.log = new PluginLog(directory);
   }
   async start() {
@@ -134,6 +145,8 @@ export class Plugins {
         homepage: entry.manifest.homepage,
         repository: entry.manifest.repository,
         access: entry.access,
+        newer: this.newer(id)?.version,
+        checkedAt: this.releases.get(id)?.checkedAt,
         enabled,
         problem: enabled
           ? this.problem(id)
@@ -369,6 +382,37 @@ export class Plugins {
       message: results.map(({ text }) => text).join('\n'),
     };
   }
+  // The release found for the plugin, while it is newer than what is installed.
+  private newer(id: string) {
+    const release = this.releases.get(id);
+    const { version } = this.entry(id).manifest;
+    return release && isNewer(release.version, version ?? '0.0.0') ? release : undefined;
+  }
+  private async follow(id: string) {
+    this.releases.delete(id);
+    const release = await latestRelease({ ...this.entry(id).manifest, id }, this.api);
+    this.releases.set(id, { ...release, checkedAt: new Date().toISOString() });
+  }
+  async check(id: string) {
+    await this.follow(id).finally(() => this.changed());
+    return { ok: true, message: '' };
+  }
+  // As when their list is opened, which may be often.
+  async checkAll(now = Date.now()) {
+    if (now - this.checkedAt < CHECK_MS) return;
+    this.checkedAt = now;
+    const followed = [...this.entries].filter(([, { manifest }]) =>
+      releasesOf(manifest.repository),
+    );
+    const failed = (id: string, error: unknown) => this.log.write(id, `检查更新：${reason(error)}`);
+    await Promise.all(followed.map(([id]) => this.follow(id).catch((error) => failed(id, error))));
+    if (!this.closed) this.changed();
+  }
+  async download(id: string) {
+    const release = this.newer(id);
+    if (!release) throw new DomainError('plugin_update', '没有新版本。');
+    return downloadRelease(id, release);
+  }
   // What an archive of the id would take the place of.
   replaced(id: string) {
     const manifest = this.entries.get(id)?.manifest;
@@ -392,6 +436,7 @@ export class Plugins {
     removePluginConfig(this.directory, id);
     this.configs.delete(id);
     this.failures.delete(id);
+    this.releases.delete(id);
     this.log.clear(id);
     await this.refresh();
   }

@@ -147,6 +147,9 @@ export const pluginManifestSchema = z.object({
   repository: link.optional(),
 });
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
+// owner/name of the GitHub repository the plugin's versions are released in.
+export const releasesOf = (repository?: string) =>
+  /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+?)(\.git)?\/?$/.exec(repository ?? '')?.[1];
 // What a plugin reaches: its own files and the network, or all that the service does, which it asked for or the
 // service's system cannot keep it from.
 export const pluginAccessSchema = z.enum(['own', 'full', 'unlimited']);
@@ -162,6 +165,9 @@ export const pluginSchema = z.object({
     homepage: true,
     repository: true,
   }).shape,
+  // The version released since, and when that was last asked.
+  newer: z.string().max(60).optional(),
+  checkedAt: z.iso.datetime().optional(),
   enabled: z.boolean(),
   // Why it does not run though it is enabled, or could not be enabled.
   problem: z.string().optional(),
@@ -216,6 +222,11 @@ export const pluginCommandSchemas = [
       last: z.boolean(),
     })
     .strict(),
+  // Asks every plugin's repository for a newer version, of which `plugins` tells, or that of one.
+  z.object({ type: z.literal('plugin.checkAll'), requestId: z.uuid() }).strict(),
+  z.object({ type: z.literal('plugin.check'), ...request }).strict(),
+  // Fetches a newer version's archive, as if it had been uploaded.
+  z.object({ type: z.literal('plugin.download'), ...request, uploadId: z.uuid() }).strict(),
   // Puts the archive uploaded in place, once the user has seen what is in it.
   z.object({ type: z.literal('plugin.install'), requestId: z.uuid(), uploadId: z.uuid() }).strict(),
 ] as const;
