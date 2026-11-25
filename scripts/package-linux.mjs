@@ -4,8 +4,13 @@ import { readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import { ccdtResource } from './ccdt-resources.mjs';
-import { checkCcdt, posixService, stageCcdt, stageDesktop } from './package-desktop.mjs';
+import {
+  ccdtResource,
+  checkCcdt,
+  posixService,
+  stageCcdt,
+  stageDesktop,
+} from './package-desktop.mjs';
 
 // Builds the Linux package: a .deb for x64, made for and tried on the current Ubuntu LTS. Like the macOS
 // package it carries no OpenSSH or shell of its own: the SSH service runs inside the program, with the

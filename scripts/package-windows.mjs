@@ -5,8 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
-import { ccdtResource } from './ccdt-resources.mjs';
-import { checkCcdt, stageCcdt, stageDesktop } from './package-desktop.mjs';
+import { ccdtResource, checkCcdt, stageCcdt, stageDesktop } from './package-desktop.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const app = join(root, '.local/windows-package/app');

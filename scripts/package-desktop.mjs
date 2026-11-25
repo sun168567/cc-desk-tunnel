@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { build as viteBuild } from 'vite';
 
 // A package the program loads by name while it runs, copied with what it depends on. Compiled add-ons are
@@ -199,6 +199,12 @@ export async function stageCcdt(
   await addNode(root, directory, arch);
 }
 
+// The staged ccdt as an electron-builder resource. electron-builder leaves out the node_modules at the root of
+// what it copies, which would drop the SSH library: it copies from the parent, keeping only ccdt.
+export function ccdtResource(directory) {
+  return { from: dirname(directory), to: '.', filter: [`${basename(directory)}/**/*`] };
+}
+
 // Git Bash, which a Windows agent may run its commands in, as Claude Code does.
 function gitBash() {
   const program = process.env.ProgramFiles ?? 'C:\\Program Files';
@@ -224,7 +230,8 @@ export function checkCcdt(launcher, version) {
   const reported = run(['--version']).trim();
   if (reported !== `ccdt ${version}`) throw new Error(`The package's ccdt reports "${reported}".`);
   if (!windows) {
-    // Outside the checkout, a missing dependency cannot be borrowed from its node_modules.
+    // Outside the checkout, a missing dependency cannot be borrowed from its node_modules. Started without
+    // an IPC channel, the worker only loads its modules and exits.
     const directory = mkdtempSync(join(tmpdir(), 'ccdt-worker-check-'));
     try {
       cpSync(dirname(dirname(launcher)), directory, { recursive: true });
