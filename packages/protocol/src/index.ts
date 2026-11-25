@@ -1113,7 +1113,12 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
       .optional(),
     client: installerSchema.optional(),
   }),
-  z.object({ type: z.literal('service.update'), ...serviceUpdateSchema.shape }),
+  // `client` is the installer for clients, once the service has fetched it after it started.
+  z.object({
+    type: z.literal('service.update'),
+    ...serviceUpdateSchema.shape,
+    client: installerSchema.optional(),
+  }),
   // The user's computers connected now, each with whether commands reach it yet: sent on signing in and
   // whenever it changes. A computer not listed is away, and its sessions can only be read.
   z.object({

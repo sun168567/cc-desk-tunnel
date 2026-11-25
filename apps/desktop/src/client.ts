@@ -587,11 +587,11 @@ export class ProxyClient {
           this.results.set(message.requestId, message);
         this.update({ compaction: message.values });
       } else if (message.type === 'service.update') {
-        const { type: _type, ...update } = message;
+        const { type: _type, client, ...update } = message;
         this.update(
           update.state === 'restarting'
-            ? { update, error: `服务端已升级到 ${update.latest}，正在重启；请稍候重新连接。` }
-            : { update },
+            ? { update, error: `服务端已升级到 ${update.latest}，正在重启，稍候会自动重新连接。` }
+            : { update, ...(client && { release: client.version }) },
         );
       } else if (message.type === 'account.token.created') {
         const { type: _type, ...setupToken } = message;
