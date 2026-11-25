@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build as electronBuild, Platform, Arch } from 'electron-builder';
@@ -36,14 +36,10 @@ const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'),
 const ccdt = join(root, `.local/macos-package/${architecture}/ccdt`);
 rmSync(ccdt, { recursive: true, force: true });
 await stageCcdt(root, ccdt, { version, desktop: true, arch: architecture });
-// The system's icon format wants a source of 512 pixels or more; the artwork is the one of the Windows package.
-const icon = join(app, 'macos-icon.png');
-execFileSync(
-  'sips',
-  ['-z', '1024', '1024', join(root, 'apps/desktop/electron/icon.png'), '--out', icon],
-  { stdio: 'ignore' },
-);
 const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/package.json'), 'utf8'));
+const electronDist = join(root, 'node_modules/electron/dist');
+const useInstalledElectron =
+  architecture === process.arch && existsSync(join(electronDist, 'Electron.app'));
 const folder = (what) => `访问你选择的${what}项目，让 Claude 经执行通道读取和修改其中的文件。`;
 // electron-builder leaves a pull request's build unsigned, lest a fork reach a certificate. The signature here is
 // ad hoc and uses none, and a build left without it fails the check below: it is signed as any other.
@@ -56,19 +52,30 @@ const results = await electronBuild({
     productName: 'CC Desk Tunnel',
     electronVersion: electron.version,
     // The Electron installed here is of this machine's architecture; the other one is downloaded.
-    ...(architecture === process.arch &&
-    existsSync(join(root, 'node_modules/electron/dist/Electron.app'))
-      ? { electronDist: join(root, 'node_modules/electron/dist') }
-      : {}),
+    ...(useInstalledElectron ? { electronDist } : {}),
     directories: { app, output },
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
     extraResources: [{ from: ccdt, to: 'ccdt' }],
+    // Electron ships its notices beside Electron.app. Preserve those for the target architecture
+    // before electron-builder renames the bundle and removes the standalone files.
+    afterExtract({ appOutDir }) {
+      const runtime = useInstalledElectron ? electronDist : appOutDir;
+      const licenses = join(appOutDir, 'Electron.app/Contents/Resources/licenses');
+      mkdirSync(licenses, { recursive: true });
+      copyFileSync(join(root, 'LICENSE'), join(licenses, 'LICENSE'));
+      copyFileSync(join(root, 'NOTICE'), join(licenses, 'NOTICE'));
+      copyFileSync(join(runtime, 'LICENSE'), join(licenses, 'LICENSE.electron.txt'));
+      copyFileSync(
+        join(runtime, 'LICENSES.chromium.html'),
+        join(licenses, 'LICENSES.chromium.html'),
+      );
+    },
     mac: {
       category: 'public.app-category.developer-tools',
       minimumSystemVersion: '13.0',
-      icon,
+      icon: join(root, 'apps/desktop/public/assets/icon-512.png'),
       artifactName: 'CC-Desk-Tunnel-${version}-mac-${arch}.${ext}',
       // Signed for this machine only ("ad hoc"), with no certificate. An application with no signature at
       // all is reported as damaged on Apple silicon once it has been downloaded; one signed this way is

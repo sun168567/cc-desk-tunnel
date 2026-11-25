@@ -1,8 +1,10 @@
-# Windows 客户端
+# 桌面客户端
 
-Electron + React 的 Windows 桌面客户端：界面、到服务端的连接桥，以及随连接启停的本机 OpenSSH。登录页和“帮助”菜单里的项目链接由 `src/project.tsx` 配置，地址为空时不显示。
+Windows、macOS 与 Linux 共用 Electron + React 界面和连接桥。Windows 使用随包的 OpenSSH，macOS 与 Linux 使用应用内的 SSH 服务。登录页和“帮助”菜单里的项目链接由 `src/project.tsx` 配置，地址为空时不显示。
 
 ## 启动
+
+macOS 用户打开对应芯片的 DMG，将 CC Desk Tunnel 拖入“应用程序”后启动。首次打开及从源码构建的步骤见 [macOS 客户端](../../docs/macos.md)。
 
 用户双击 `CC Desk Tunnel.exe` 或快捷方式启动，不需要终端、源码仓库、Node / npm。标准安装包为 `CC-Desk-Tunnel-Setup-<版本>-x64.exe`（构建产物在 `artifacts/windows/`），支持当前用户安装、选择目录、开始菜单 / 桌面快捷方式、覆盖升级和卸载；卸载默认保留客户端项目 / 地址偏好，不删除 Windows 项目或 Linux Claude 登录 / 会话。服务凭据默认只在内存里；勾选“记住凭据”后经 DPAPI 加密保存。
 

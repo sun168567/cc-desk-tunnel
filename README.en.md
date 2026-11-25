@@ -95,7 +95,7 @@ If you have one computer and Claude Code runs well on it locally, the local vers
 | 📱 **Browser and phone** | Optional: work on sessions of online computers, or start plain sessions that run on the server; install it as an app on a phone; adds no port or container |
 | 📊 **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics; compact automatically before the prompt cache expires |
 | ⏰ **Scheduled tasks** | The client sends a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
-| ⬆️ **Upgrades and backups** | Upgrade the service and the clients with one click in the client, without logging in to the server; back up and restore the service with one command |
+| ⬆️ **Upgrades and backups** | Upgrade the service from the client without logging in to the server; Windows clients can also upgrade in the app, while macOS and Linux clients require downloading and installing the new package; back up and restore the service with one command |
 | 🧩 **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
 
 ## ⚙️ How it works
@@ -118,7 +118,7 @@ This repository publishes all of its own client, server, build and deployment so
 **You need:**
 
 - 🐧 **A server**: Linux with a public IP or domain name and Docker installed, Ubuntu recommended; x86_64, or arm64 as experimental support. Builds and tests run on your computers, so **an entry-level machine with 2 vCPUs and 1 GB of memory is enough**.
-- 💻 **Computers**: Windows 10 / 11 x64. The desktop client and `ccdt` on macOS and Linux are experimental; use `ccdt` on Linux without a desktop.
+- 💻 **Computers**: Windows 10 / 11 x64, macOS 13 or later (Apple silicon or Intel), or Linux x64. The desktop client and `ccdt` on macOS and Linux are experimental; use `ccdt` on Linux without a desktop.
 
 ### 1. Deploy the service
 
@@ -157,13 +157,13 @@ Install either client or both. Each must be the **same version** as the service.
 
 | | Good for | Get it |
 | --- | --- | --- |
-| 🖥️ **Desktop client** | Managing sessions on all your computers by project, the process folded into summaries | The table at the top of the [latest release](https://github.com/sun168567/cc-desk-tunnel/releases/latest): Windows `.exe`; macOS `.dmg` and Linux `.deb` (experimental, see [macOS](docs/macos.md) · [Linux](docs/linux.md), in Chinese) |
+| 🖥️ **Desktop client** | Managing sessions on all your computers by project, the process folded into summaries | The table at the top of the [latest release](https://github.com/sun168567/cc-desk-tunnel/releases/latest): Windows `.exe`; macOS Apple silicon or Intel `.dmg` and Linux `.deb` (experimental, see [macOS](docs/macos.md) · [Linux](docs/linux.md), in Chinese) |
 | ⌨️ **Terminal client** | `ccdt`: the official Claude Code in your own terminal; also machines without a desktop | Included with the desktop client; to use only the terminal, install it on its own with the commands below |
 
 The Windows installer bundles PowerShell 7, OpenSSH and `ccdt`; nothing else is needed. Start it, enter the three values from step 1 and connect.
 
 > [!NOTE]
-> The installers are not code-signed. When Windows shows "Windows protected your PC" on first run, choose "More info → Run anyway"; if security software blocks a bundled component, verify before allowing it, see [Antivirus and SmartScreen](docs/troubleshooting.en.md#antivirus-and-smartscreen). The macOS and Linux clients are upgraded by downloading and installing the new package.
+> The Windows installers are not code-signed. When Windows shows "Windows protected your PC" on first run, choose "More info → Run anyway"; if security software blocks a bundled component, verify before allowing it, see [Antivirus and SmartScreen](docs/troubleshooting.en.md#antivirus-and-smartscreen). The macOS app has an ad hoc signature and has not been notarized by Apple. On macOS and Linux, upgrade by downloading and installing the new package.
 
 To install `ccdt` on its own (for the current user, no administrator rights needed; then run `ccdt login`):
 
@@ -249,6 +249,7 @@ npm ci
 npm run dev               # local simulated service + browser UI, no account needed
 npm test                  # unit tests; also typecheck, test:ui, check
 npm run package:windows   # builds the Windows installer; preparation in apps/desktop/README.md
+npm run package:macos     # on a Mac, builds a DMG for its CPU in artifacts/macos/
 npm run package:server    # builds the server archive; on the server, run its deploy/install.sh
 ```
 

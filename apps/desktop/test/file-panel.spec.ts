@@ -148,9 +148,11 @@ test('Electron: the file panel shows the project, previews files and copies, ren
     await expect(page.getByRole('textbox', { name: '消息' })).toBeInViewport();
 
     // Closed and opened again by its shortcut, where it was.
-    await page.keyboard.press('Control+Shift+KeyE');
+    const filePanelShortcut =
+      process.platform === 'darwin' ? 'Meta+Shift+KeyE' : 'Control+Shift+KeyE';
+    await page.keyboard.press(filePanelShortcut);
     await expect(panel).toHaveCount(0);
-    await page.keyboard.press('Control+Shift+KeyE');
+    await page.keyboard.press(filePanelShortcut);
     await expect(panel.locator('.file-crumb-list .current')).toHaveText('示例项目');
   } finally {
     await application.close();
