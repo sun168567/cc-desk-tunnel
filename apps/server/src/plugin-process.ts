@@ -8,11 +8,12 @@ import { fileURLToPath } from 'node:url';
 export type Where = { root: string; confined: boolean };
 
 const RUN = fileURLToPath(new URL('plugin-run.py', import.meta.url));
-// What a confined plugin's programs run from: the system and Node. The last of the system's is often a link to
-// elsewhere.
+export const HOST = fileURLToPath(new URL('plugin-host.ts', import.meta.url));
+// What a confined plugin's programs run from: the system, Node and the host of its ui file. The last of the system's is
+// often a link to elsewhere.
 const READABLE = [
   ...['/usr', '/bin', '/sbin', '/lib', '/lib64', '/etc', '/opt', '/etc/resolv.conf'],
-  process.execPath,
+  ...[process.execPath, HOST, fileURLToPath(new URL('../package.json', import.meta.url))],
 ];
 const DEVICES = ['/dev/null', '/dev/zero', '/dev/full', '/dev/random', '/dev/urandom'];
 const VARIABLES = /^(PATH|LANG|LC_\w+|TZ|(https?|all|no)_proxy|NODE_EXTRA_CA_CERTS)$/i;

@@ -83,6 +83,116 @@ test('a broken plugin and one that does not end leave the others alone, and each
   assert.match(logged('t.d-works'), /RunEnded → 成功 \d+ms\n    sent\n$/);
 });
 
+test('a plugin is set by what its ui file declares and checks, and its secrets go to its commands alone', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
+  const root = join(directory, 'plugins', 't.set');
+  agree(directory, 't.set');
+  mkdirSync(join(root, 'hooks'), { recursive: true });
+  writeFileSync(
+    join(root, 'hooks', 'hooks.json'),
+    JSON.stringify({
+      hooks: {
+        RunEnded: [{ hooks: [{ type: 'command', command: process.execPath, args: ['told.mjs'] }] }],
+      },
+    }),
+  );
+  writeFileSync(
+    join(root, 'told.mjs'),
+    "import { readFileSync } from 'node:fs';\n" +
+      'console.log(JSON.parse(readFileSync(0, "utf8")).config);\n',
+  );
+  writeFileSync(
+    join(root, 'ui.ts'),
+    `console.log('loaded');
+export const settings = [{ title: '渠道', showWhen: 'on', fields: {
+  on: { type: 'boolean', title: '启用', default: true },
+  token: { type: 'string', title: 'Token', sensitive: true, required: true,
+    validate: (value: string, all: { lines: number }) => ({ valid: value.length > all.lines, message: value + ' 太短' }) },
+  lines: { type: 'number', title: '行数', default: 5, max: 9 },
+  test: { type: 'button', title: '测试', run: async (all: { token: string }) => ({ ok: !!process.env.CLAUDE_PLUGIN_DATA, message: all.token }) },
+} }];`,
+  );
+  const plugins = new Plugins(directory);
+  t.after(() => {
+    plugins.close();
+    rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  await plugins.start();
+  assert.equal(plugins.list()[0]!.problem, '待配置：Token');
+
+  const wrong = await plugins.configure('t.set', { token: 'abcd', lines: 10 });
+  assert.deepEqual(wrong, {
+    errors: { token: '*** 太短', lines: '不能大于 9' },
+    notice: undefined,
+  });
+  // Neither was kept, and what holds beside one that does not is.
+  assert.deepEqual(plugins.list()[0]!.secrets, []);
+  await plugins.configure('t.set', { lines: 4, token: 'ab' });
+  assert.deepEqual([plugins.list()[0]!.values.lines, plugins.list()[0]!.secrets], [4, []]);
+  // A button takes the values of the form, kept or not.
+  assert.deepEqual(await plugins.press('t.set', 'test', { token: 'not-kept-yet' }), {
+    ok: true,
+    message: '***',
+  });
+  await plugins.configure('t.set', { token: 'secret-token' });
+  const [listed] = plugins.list();
+  assert.equal(listed!.problem, undefined);
+  assert.deepEqual([listed!.values, listed!.secrets], [{ on: true, lines: 4 }, ['token']]);
+
+  // Left empty a secret stays; the command is given it, and the log is not.
+  await plugins.configure('t.set', { token: '', lines: 6 });
+  plugins.dispatch({
+    version: EVENTS_VERSION,
+    hook_event_name: 'RunEnded',
+    timestamp: new Date().toISOString(),
+  });
+  const ran = () => plugins.logOf('t.set').includes('RunEnded');
+  for (const deadline = Date.now() + 10_000; !ran() && Date.now() < deadline;)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.match(plugins.logOf('t.set'), /token: '\*\*\*', lines: 6/);
+  assert.doesNotMatch(plugins.logOf('t.set'), /secret-token/);
+
+  await plugins.enable('t.set', false);
+  assert.deepEqual(plugins.list()[0]!.settings, []);
+  await plugins.enable('t.set', true);
+  assert.deepEqual(plugins.list()[0]!.secrets, ['token']);
+});
+
+test('a check that hangs keeps nothing from being saved, and a ui file that cannot be loaded is told of', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
+  const add = (name: string, ui: string) => {
+    mkdirSync(join(directory, 'plugins', name, 'hooks'), { recursive: true });
+    writeFileSync(join(directory, 'plugins', name, 'hooks', 'hooks.json'), '{"hooks":{}}');
+    writeFileSync(join(directory, 'plugins', name, 'ui.ts'), ui);
+  };
+  const field = (more: string) =>
+    `export const settings = [{ title: 'A', fields: { a: { type: 'string', title: 'A', ${more} } } }];`;
+  agree(directory, 't.b-throws', 't.c-unknown', 't.d-garbles');
+  add('t.a-hangs', field('validate: () => { for (;;); }'));
+  add('t.b-throws', 'throw new Error("no luck");');
+  add('t.c-unknown', field('type: "list"'));
+  add('t.d-garbles', "import { writeSync } from 'node:fs'; writeSync(3, '{');");
+  // Kept for what the field was before the plugin was updated.
+  writeFileSync(
+    join(directory, 'plugin-config', 't.a-hangs.json'),
+    '{"agreed":true,"values":{"a":5}}',
+  );
+  const plugins = new Plugins(directory);
+  t.after(() => {
+    plugins.close();
+    rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  await plugins.start();
+  const [hangs, throws, unknown, garbles] = plugins.list();
+  assert.equal(hangs!.values.a, '');
+  assert.equal(throws!.problem, '加载失败：no luck');
+  assert.equal(garbles!.problem, '加载失败：没有结果就退出了');
+  assert.match(unknown!.problem!, /^加载失败：settings\.0\.fields\.a/);
+  const saved = await plugins.configure('t.a-hangs', { a: 'x' });
+  assert.equal(plugins.list()[0]!.values.a, 'x');
+  assert.match(saved.notice!, /没跑成：超过 2 秒/);
+});
+
 test('a plugin that is not confined runs once the user enabled it, and one that an update makes so is asked about anew', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
   const add = (id: string, permissions: string[]) => {
@@ -153,6 +263,12 @@ for (const [name, go] of Object.entries(tries)) {
   try { go(); console.log(name); } catch {}
 }`,
   );
+  writeFileSync(
+    join(root, 'ui.ts'),
+    `import { readFileSync } from 'node:fs';
+export const settings = [{ title: 'A', fields: {
+  a: { type: 'button', title: 'A', run: () => ({ ok: true, message: String(readFileSync('../../secret')) }) } } }];`,
+  );
   const plugins = new Plugins(directory);
   t.after(() => {
     plugins.close();
@@ -177,6 +293,7 @@ for (const [name, go] of Object.entries(tries)) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
   for (const path of ['loaded', 'plugin-data/t.own/late'])
     assert.ok(!existsSync(join(directory, path)), path);
+  assert.match((await plugins.press('t.own', 'a', {})).message, /EACCES/);
 });
 
 test('every wait is resolved by the end of its run, and a failed run says why and how the quota stands', () => {

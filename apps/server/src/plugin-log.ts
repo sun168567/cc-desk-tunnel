@@ -13,6 +13,13 @@ import { join } from 'node:path';
 const LIMIT = 1024 * 1024;
 const LINES = 200;
 
+// A plugin's secrets are not shown as they are; in another form, as signed or encoded, they cannot be told.
+export const masked = (text: string, secrets: string[]) =>
+  secrets
+    .filter((secret) => secret.length >= 4)
+    .sort((a, b) => b.length - a.length)
+    .reduce((result, secret) => result.replaceAll(secret, '***'), text);
+
 export class PluginLog {
   private directory: string;
   constructor(directory: string) {

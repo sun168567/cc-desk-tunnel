@@ -1,13 +1,15 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { pluginValueSchema } from '@cc-desk-tunnel/protocol';
 
-// Whether a plugin is enabled, kept apart from the plugin's own directory so that replacing the plugin keeps it. A file
-// that cannot be read is a plugin's that was never set.
+// Whether a plugin is enabled and what it is set to, kept apart from the plugin's own directory so that replacing the
+// plugin keeps them. They hold its secrets. A file that cannot be read is a plugin's that was never set.
 const configSchema = z.object({
   enabled: z.boolean().default(true),
   // The user enabled it knowing that it is not confined.
   agreed: z.boolean().default(false),
+  values: z.record(z.string(), pluginValueSchema).default({}),
 });
 export type PluginConfig = z.infer<typeof configSchema>;
 

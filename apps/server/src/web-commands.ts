@@ -22,8 +22,11 @@ export const browserCommands = new Set<Command['type']>([
   'quota.watch',
   'account.status',
   'compaction.get',
-  // As on the desktop: whoever holds a browser's login can have commands run on the user's computers already.
+  // As on the desktop: no window reads a plugin's secrets back, and whoever holds a browser's login can have commands
+  // run on the user's computers already.
   'plugin.enable',
+  'plugin.configure',
+  'plugin.press',
   'plugin.log',
   'web.settings.get',
   'web.settings.update',
@@ -47,6 +50,8 @@ export const browserActivity = new Set<Command['type']>([
   'run.task.background',
   'approval.reply',
   'plugin.enable',
+  'plugin.configure',
+  'plugin.press',
   'web.settings.update',
   'web.sessions.revoke',
   'web.totp.setup',

@@ -1679,7 +1679,20 @@ export function createProxyServer(options: ServerOptions) {
   async function plugin(peer: Peer, command: CommandOf<`plugin.${string}` & Command['type']>) {
     const { id, requestId } = command;
     if (command.type === 'plugin.enable') await plugins.enable(id, command.enabled);
-    else send(peer, { type: 'plugin.log', requestId, text: plugins.logOf(id, command.clear) });
+    else if (command.type === 'plugin.configure')
+      send(peer, {
+        type: 'plugin.checked',
+        requestId,
+        ...(await plugins.configure(id, command.values)),
+      });
+    else if (command.type === 'plugin.log')
+      send(peer, { type: 'plugin.log', requestId, text: plugins.logOf(id, command.clear) });
+    else
+      send(peer, {
+        type: 'plugin.done',
+        requestId,
+        ...(await plugins.press(id, command.button, command.values)),
+      });
   }
   // Resolves to the session ID carried in the response frame; account and usage commands have none.
   async function execute(peer: Peer, command: Command): Promise<string | undefined> {
@@ -1705,6 +1718,8 @@ export function createProxyServer(options: ServerOptions) {
         return session.id;
       }
       case 'plugin.enable':
+      case 'plugin.configure':
+      case 'plugin.press':
       case 'plugin.log':
         await plugin(peer, command);
         return undefined;

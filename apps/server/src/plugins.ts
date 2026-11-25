@@ -4,14 +4,22 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, watch } from 'node:fs
 import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { pluginManifestSchema, pluginIdSchema } from '@cc-desk-tunnel/protocol';
-import type { Plugin, PluginAccess, PluginManifest } from '@cc-desk-tunnel/protocol';
+import type {
+  Plugin,
+  PluginAccess,
+  PluginManifest,
+  PluginValue,
+  PluginValues,
+} from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
 import { readPluginConfig, writePluginConfig } from './plugin-config.ts';
 import type { PluginConfig } from './plugin-config.ts';
 import { hooksFileSchema, matches } from './plugin-hooks.ts';
 import type { Hook } from './plugin-hooks.ts';
-import { PluginLog } from './plugin-log.ts';
+import { masked, PluginLog } from './plugin-log.ts';
 import { confinable, launch, stop } from './plugin-process.ts';
+import { askButton, askCheck, checkValues, fieldsOf, loadUi, NOTHING } from './plugin-ui.ts';
+import type { Declared } from './plugin-ui.ts';
 import { matcherFields } from './service-events.ts';
 import type { ServiceEvent } from './service-events.ts';
 
@@ -19,6 +27,7 @@ import type { ServiceEvent } from './service-events.ts';
 type Entry = {
   manifest: Partial<PluginManifest>;
   access: PluginAccess;
+  declared: Declared;
   broken?: string;
 };
 
@@ -34,18 +43,19 @@ const unconfined = {
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// The plugins in <data>/plugins, each a directory with a hooks/hooks.json (see docs/plugins.md): hands them the
-// service's events. The directory is watched, so a change there holds a moment later. A plugin's code runs in processes
-// of its own, and how they went goes to its log.
+// The plugins in <data>/plugins, each a directory with a hooks/hooks.json and, for its settings, a ui file (see
+// docs/plugins.md): hands them the service's events and keeps what they are set to. The directory is watched, so a
+// change there holds a moment later. A plugin's code runs in processes of its own, and how they went goes to its log.
 export class Plugins {
   private directory: string;
   private changed: () => void;
   private log: PluginLog;
   private entries = new Map<string, Entry>();
-  // Apart from what is read anew, which may be while a plugin runs.
+  // Apart from what is read anew, which may be while a plugin is set or runs.
   private configs = new Map<string, PluginConfig>();
   private failures = new Map<string, { at: string; message: string }>();
   private running = new Set<ChildProcess>();
+  private pressed = new Set<string>();
   private watcher?: FSWatcher;
   private settle?: NodeJS.Timeout;
   private stale = new Set<string>();
@@ -82,9 +92,15 @@ export class Plugins {
   }
   list(): Plugin[] {
     return [...this.entries].map(([id, entry]) => {
+      const fields = fieldsOf(entry.declared.settings);
+      const values = this.values(id);
       const config = this.config(id);
       const enabled = this.enabled(id, entry.access);
       const waiting = entry.access === 'own' ? undefined : unconfined[entry.access];
+      const secret = (key: string) => {
+        const field = fields[key];
+        return field?.type === 'string' && !!field.sensitive;
+      };
       return {
         id,
         title: entry.manifest.displayName,
@@ -95,8 +111,15 @@ export class Plugins {
         repository: entry.manifest.repository,
         access: entry.access,
         enabled,
-        problem: enabled ? entry.broken : config.enabled ? (entry.broken ?? waiting) : undefined,
+        problem: enabled
+          ? this.problem(id)
+          : config.enabled
+            ? (entry.broken ?? waiting)
+            : undefined,
         failure: this.failures.get(id),
+        settings: entry.declared.settings,
+        values: Object.fromEntries(Object.entries(values).filter(([key]) => !secret(key))),
+        secrets: Object.keys(values).filter((key) => secret(key) && values[key] !== ''),
       };
     });
   }
@@ -115,7 +138,7 @@ export class Plugins {
       const entries = new Map<string, Entry>();
       for (const id of names.sort()) {
         const known = this.entries.get(id);
-        entries.set(id, known && !stale.has(id) ? known : this.load(id));
+        entries.set(id, known && !stale.has(id) ? known : await this.load(id));
       }
       if (this.closed) return;
       this.entries = entries;
@@ -126,11 +149,12 @@ export class Plugins {
       .catch((error) => console.error(`Plugins were not read: ${reason(error)}`));
     return this.loading;
   }
-  private load(id: string): Entry {
+  private async load(id: string): Promise<Entry> {
     const root = join(this.directory, 'plugins', id);
     const entry: Entry = {
       manifest: {},
       access: this.access({}),
+      declared: NOTHING,
     };
     try {
       const manifest = join(root, '.claude-plugin', 'plugin.json');
@@ -140,6 +164,9 @@ export class Plugins {
           .parse(JSON.parse(readFileSync(manifest, 'utf8')));
       entry.access = this.access(entry.manifest);
       this.hooks(id);
+      // A disabled plugin's code does not run, and so it has nothing to be set.
+      if (this.enabled(id, entry.access))
+        entry.declared = await loadUi({ root, confined: entry.access === 'own' });
     } catch (error) {
       entry.broken = `加载失败：${reason(error)}`;
       this.log.write(id, entry.broken);
@@ -173,6 +200,39 @@ export class Plugins {
     if (!entry) throw new DomainError('not_found', '插件不存在。');
     return entry;
   }
+  // What the plugin is set to, with the defaults of what it was not.
+  private values(id: string, changes: Record<string, PluginValue | null> = {}): PluginValues {
+    const values: PluginValues = {};
+    const { values: all } = this.config(id);
+    for (const [key, field] of Object.entries(fieldsOf(this.entry(id).declared.settings))) {
+      if (field.type === 'button') continue;
+      // An update of the plugin may have made the field one of another type.
+      const kept = typeof all[key] === field.type ? all[key] : undefined;
+      const change = changes[key];
+      const same = field.type === 'string' && field.sensitive && change === '';
+      const value = change === undefined || same ? kept : (change ?? undefined);
+      // Text not set is empty and a switch not set is off, so that the plugin's own code need not tell them apart.
+      const unset = { string: '', boolean: false, number: undefined }[field.type];
+      const effective = value ?? field.default ?? unset;
+      if (effective !== undefined) values[key] = effective;
+    }
+    return values;
+  }
+  private secrets(id: string, values = this.values(id)) {
+    const kept = this.config(id).values;
+    return Object.entries(fieldsOf(this.entry(id).declared.settings)).flatMap(([key, field]) =>
+      field.type === 'string' && field.sensitive
+        ? [values[key], kept[key]].filter((value) => typeof value === 'string')
+        : [],
+    );
+  }
+  private problem(id: string) {
+    const entry = this.entry(id);
+    if (entry.broken) return entry.broken;
+    const groups = entry.declared.settings;
+    const wrong = Object.keys(checkValues(groups, this.values(id)))[0];
+    return wrong && `待配置：${fieldsOf(groups)[wrong]!.title}`;
+  }
   private write(id: string, config: PluginConfig) {
     writePluginConfig(this.directory, id, config);
     this.configs.set(id, config);
@@ -186,6 +246,60 @@ export class Plugins {
     await this.refresh();
     this.log.write(id, enabled ? '启用' : '停用');
   }
+  // Keeps each of the changes that holds, whatever else is still to be set.
+  async configure(id: string, changes: Record<string, PluginValue | null>) {
+    const entry = this.entry(id);
+    const groups = entry.declared.settings;
+    const values = this.values(id, changes);
+    const secrets = this.secrets(id, values);
+    const own = checkValues(groups, values);
+    const said = await askCheck(this.where(id), groups, values);
+    this.printed(id, '检查设置', said.printed, secrets);
+    const errors = { ...said.errors, ...own };
+    for (const key of Object.keys(errors)) errors[key] = masked(errors[key]!, secrets);
+    const kept = { ...this.config(id).values };
+    const held = Object.entries(changes).filter(([key]) => {
+      const empty = values[key] === undefined || values[key] === '';
+      return empty || !errors[key];
+    });
+    for (const [key, change] of held)
+      if (change === null) delete kept[key];
+      else if (values[key] !== undefined) kept[key] = values[key];
+    if (held.length) {
+      this.write(id, { ...this.config(id), values: kept });
+      const fields = fieldsOf(this.entry(id).declared.settings);
+      const titles = held.map(([key]) => fields[key]?.title ?? key);
+      this.log.write(id, `设置：${titles.join('、')}`);
+    }
+    return { errors, notice: said.notice && masked(said.notice, secrets) };
+  }
+  async press(id: string, button: string, changes: Record<string, PluginValue | null>) {
+    const entry = this.entry(id);
+    const group = entry.declared.settings.find((item) => button in item.fields);
+    const field = group?.fields[button];
+    if (field?.type !== 'button') throw new DomainError('not_found', '插件没有这个按钮。');
+    const key = `${id}/${button}`;
+    if (this.pressed.has(key)) return { ok: false, message: '正在运行。' };
+    this.pressed.add(key);
+    try {
+      const values = this.values(id, changes);
+      const secrets = this.secrets(id, values);
+      const errors = {
+        ...(await askCheck(this.where(id), [group!], values)).errors,
+        ...checkValues([group!], values),
+      };
+      const wrong = Object.entries(errors)[0];
+      const result = wrong
+        ? { ok: false, message: `${group!.fields[wrong[0]]!.title}：${wrong[1]}`, printed: '' }
+        : await askButton(this.where(id), button, field.timeout, values);
+      const message = masked(result.message, secrets);
+      this.log.write(id, `[${field.title}] ${result.ok ? '成功' : '失败'} ${message}`.trim());
+      this.printed(id, field.title, result.printed, secrets);
+      return { ok: result.ok, message };
+    } finally {
+      this.pressed.delete(key);
+    }
+  }
   logOf(id: string, clear = false) {
     this.entry(id);
     if (clear) this.log.clear(id);
@@ -194,7 +308,7 @@ export class Plugins {
 
   dispatch(event: ServiceEvent) {
     for (const id of this.entries.keys()) {
-      if (this.closed || !this.enabled(id) || this.entry(id).broken) continue;
+      if (this.closed || !this.enabled(id) || this.problem(id)) continue;
       try {
         for (const hook of this.hooksFor(id, event)) this.run(id, hook, event);
       } catch (error) {
@@ -222,6 +336,8 @@ export class Plugins {
     const shell = !hook.args && !before.length;
     const command = hook.args || shell ? words : ['/bin/sh', '-c', ...words];
     const [file, ...args] = [...before, ...command];
+    const config = this.values(id);
+    const secrets = this.secrets(id, config);
     const started = Date.now();
     const child = spawn(file!, args, {
       cwd: root,
@@ -247,7 +363,7 @@ export class Plugins {
       clearTimeout(timer);
       if (this.closed) return;
       const of = event.session_id ? ` 会话=${event.session_id} 运行=${event.run_id}` : '';
-      const output = printed.trim();
+      const output = masked(printed.trim(), secrets);
       const text = `${result} ${Date.now() - started}ms${output && `\n${output.replace(/^/gm, '    ')}`}`;
       this.log.write(id, `${event.hook_event_name}${of} → ${text}`);
       this.told(id, result === '成功' ? undefined : `${event.hook_event_name} ${result}`);
@@ -260,7 +376,7 @@ export class Plugins {
     );
     // A command that does not read its input may be gone before it is written.
     child.stdin.on('error', () => {});
-    child.stdin.end(JSON.stringify(event));
+    child.stdin.end(JSON.stringify({ ...event, config }));
   }
   private failed(id: string, message: string) {
     this.log.write(id, message);
@@ -272,5 +388,9 @@ export class Plugins {
     if (failure) this.failures.set(id, { at: new Date().toISOString(), message: failure });
     else this.failures.delete(id);
     if (before !== failure) this.changed();
+  }
+  private printed(id: string, of: string, text: string, secrets: string[]) {
+    if (text.trim())
+      this.log.write(id, `[${of}]\n${masked(text.trim(), secrets).replace(/^/gm, '    ')}`);
   }
 }
