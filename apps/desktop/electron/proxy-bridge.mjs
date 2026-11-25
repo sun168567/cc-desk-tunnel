@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
 import { isIP } from 'node:net';
 import { connect } from 'node:tls';
@@ -12,8 +13,9 @@ import { startPosixSsh } from './posix-ssh.mjs';
 import { openChannels } from './tunnel-channels.mjs';
 import { httpProxy, openSocket } from './system-proxy.mjs';
 import { channelFailure, controlFailure, passing } from './connect-errors.mjs';
+import { cancelled } from './release-download.mjs';
 // Loaded by the main process from here, so that the package's bundle of this module holds it.
-export { upgradeService } from './service-upgrade.mjs';
+export { probeService, upgradeService } from './service-upgrade.mjs';
 export { createFiles, gitChanges } from './files.mjs';
 
 // The SSH service of a connection. The two are started and closed alike and give the same credentials; what
@@ -416,29 +418,81 @@ export async function openProxyBridge(
     server.listen(0, '127.0.0.1', resolve);
   });
   // Fetches the installer the service announced and accepts it only if its hash matches. Works after the
-  // connection closed, as it does when the service refused this client's version.
-  async function downloadInstaller(directory) {
+  // connection closed, as it does when the service refused this client's version. `progress` hears the bytes
+  // received. A service that sends nothing for `stall` milliseconds, before the file or within it, is given up;
+  // `signal` stops the download.
+  async function downloadInstaller(
+    directory,
+    { progress = () => {}, signal, stall = 30_000 } = {},
+  ) {
     // The service holds the Windows installer only.
     if (process.platform !== 'win32')
       throw new Error('这个系统上的客户端不能在应用内升级，请到发布页下载新版本。');
     if (!release || !token) throw new Error('服务端没有提供客户端安装包。');
     const expected = release;
     const target = join(directory, `CC-Desk-Tunnel-Setup-${expected.version}-x64.exe`);
-    const response = await authorizedGet(
-      address,
-      config,
-      '/client/installer',
-      token,
-      binaries.resolveProxy,
-    );
+    const seconds = `${Math.round(stall / 1000)} 秒`;
+    const failed = (reason) =>
+      Object.assign(
+        new Error(`从服务端下载安装包失败（${reason}）。\n可以重试，或改从 GitHub 发布页下载。`),
+        { told: true },
+      );
+    if (signal?.aborted) throw cancelled();
+    const asked = authorizedGet(address, config, '/client/installer', token, binaries.resolveProxy);
+    let quiet;
+    let stop;
+    let response;
+    try {
+      response = await new Promise((resolve, reject) => {
+        quiet = setTimeout(() => reject(failed(`${seconds}没有响应`)), stall);
+        stop = () => reject(cancelled());
+        signal?.addEventListener('abort', stop);
+        asked.then(resolve, (error) => reject(failed(error.message)));
+      });
+    } catch (error) {
+      // A reply that comes after all is not read.
+      asked.then(
+        (late) => late.destroy(),
+        () => {},
+      );
+      throw error;
+    } finally {
+      clearTimeout(quiet);
+      signal?.removeEventListener('abort', stop);
+    }
     if (response.statusCode !== 200) {
       response.resume();
-      throw new Error(`安装包下载失败（${response.statusCode}）。`);
+      throw failed(
+        response.statusCode === 404 ? '服务端还没有这个安装包' : `HTTP ${response.statusCode}`,
+      );
     }
     const hash = createHash('sha256');
-    response.on('data', (chunk) => hash.update(chunk));
-    await pipeline(response, createWriteStream(target));
-    if (hash.digest('hex') !== expected.sha256) throw new Error('安装包校验失败，已放弃升级。');
+    let received = 0;
+    const watch = () => {
+      clearTimeout(quiet);
+      quiet = setTimeout(() => response.destroy(failed(`${seconds}没有收到数据`)), stall);
+    };
+    stop = () => response.destroy(cancelled());
+    signal?.addEventListener('abort', stop);
+    watch();
+    response.on('data', (chunk) => {
+      hash.update(chunk);
+      received += chunk.length;
+      watch();
+      progress(received, expected.size);
+    });
+    try {
+      await pipeline(response, createWriteStream(target));
+      if (hash.digest('hex') !== expected.sha256) throw new Error('安装包校验失败，已放弃升级。');
+    } catch (error) {
+      await rm(target, { force: true });
+      throw error.told || error.cancelled || error.message === '安装包校验失败，已放弃升级。'
+        ? error
+        : failed(error.message);
+    } finally {
+      clearTimeout(quiet);
+      signal?.removeEventListener('abort', stop);
+    }
     return target;
   }
   // One more connection to the service for the file panel, signed in with the execution channel's secret: it

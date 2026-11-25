@@ -1226,7 +1226,10 @@ export const articles: Article[] = [
             action: { label: '关于与更新', target: { settings: 'about' } },
           },
           { title: '先升级服务端', text: '约一分钟后自动重连。有会话正在运行时会提示。' },
-          { title: '再升级客户端', text: 'Windows 自动下载安装；macOS、Linux 重新下载安装。' },
+          {
+            title: '再升级客户端',
+            text: 'Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载；macOS、Linux 重新下载安装。',
+          },
         ],
       },
       {

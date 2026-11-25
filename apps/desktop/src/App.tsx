@@ -54,6 +54,7 @@ import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { isHere, thisDevice } from './device.ts';
 import { selfUpdating } from './platform.ts';
+import { useClientUpgrade } from './client-upgrade.ts';
 import { useDrafts } from './drafts.ts';
 import { useDrawerSwipe } from './useDrawerSwipe.ts';
 import { useWebNavigation } from './useWebNavigation.ts';
@@ -501,6 +502,13 @@ export function App({
     selfUpdating && version && state.release && isNewer(state.release, version)
       ? state.release
       : null;
+  // A service newer than this client that holds no installer for it yet, as just after its own upgrade: the
+  // release page has it. The service tells when its own arrives.
+  const behind =
+    selfUpdating && version && state.service && isNewer(state.service, version) && !upgrade
+      ? state.service
+      : null;
+  const upgrading = useClientUpgrade(setError);
   // A service of a newer version: what that version changed can be read here, whether or not this system's
   // client upgrades itself.
   const ahead =
@@ -1458,19 +1466,26 @@ export function App({
   const accountName = signedOut
     ? '未登录'
     : (state.account?.email ?? capabilities?.account.email ?? (nativeMode ? '账号' : '离线模拟'));
-  const upgradeItem: MenuItem | null = upgrade
-    ? {
-        label: `升级客户端到 ${upgrade}${working.length ? `（${working.length} 个会话正在运行）` : ''}`,
-        icon: <Download />,
-        disabled: busy || working.length > 0,
-        run: () => {
-          void act(() => window.desktop!.installUpdate());
-        },
-      }
-    : null;
+  // The client's upgrade, from the service or the release page; while one runs, how it goes and a way to stop it.
+  const upgradeItems: MenuItem[] = upgrading.step
+    ? [
+        { label: upgrading.text!, icon: <Download />, disabled: true, run: () => undefined },
+        ...(upgrading.cancellable
+          ? [{ label: '取消客户端升级', icon: <X />, run: upgrading.cancel }]
+          : []),
+      ]
+    : [upgrade, behind]
+        .filter((target): target is string => !!target)
+        .map((target) => ({
+          label: `${target === upgrade ? '升级客户端到' : '从 GitHub 下载并升级到'} ${target}${working.length ? `（${working.length} 个会话正在运行）` : ''}`,
+          icon: <Download />,
+          disabled: busy || working.length > 0,
+          run: () => upgrading.start(target === upgrade ? undefined : target),
+        }));
   // What an upgrade would bring is read where the upgrade is offered, before it is taken.
   const newer =
     upgrade ??
+    behind ??
     ahead ??
     (update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null);
   const updates = [
@@ -1483,15 +1498,17 @@ export function App({
           },
         ]
       : []),
-    ...(upgradeItem ? [upgradeItem] : []),
+    ...upgradeItems,
     ...(serviceUpdate ? [serviceUpdate] : []),
   ];
   // The rail shows its button only for an update that exists, not for the standing offer to look for one.
-  const pendingUpdate = upgrade
-    ? `客户端可升级到 ${upgrade}`
-    : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
-      ? (serviceUpdate?.label ?? null)
-      : null;
+  const pendingUpdate =
+    upgrading.text ??
+    (upgrade || behind
+      ? `客户端可升级到 ${upgrade ?? behind}`
+      : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
+        ? (serviceUpdate?.label ?? null)
+        : null);
   // What a menu shows beside an item that has a shortcut.
   const hint = (action: Action) =>
     (prefs.shortcuts.enabled && comboText(keyFor(prefs, action))) || undefined;

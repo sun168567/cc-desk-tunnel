@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -1399,4 +1401,60 @@ test('the quota is the account’s: a new connection is handed what the service 
   quotas.observeTerminal([{ name: 'five_hour', utilization: 13, resetsAt }]);
   for (const client of [first, late])
     assert.equal(used(await client.wait((message) => message.type === 'quota')), 13);
+});
+
+test('clients connected before the installer for clients has arrived are told of it once it has', async (t) => {
+  const version = serviceVersion();
+  const name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`;
+  const installer = Buffer.alloc(5000, 7);
+  const sha256 = createHash('sha256').update(installer).digest('hex');
+  // The release page holds the installer back until the client has connected.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const page = createHttpServer((request, response) => {
+    const base = `http://127.0.0.1:${(page.address() as AddressInfo).port}`;
+    if (request.url === `/repos/owner/name/releases/tags/v${version}`)
+      response.end(
+        JSON.stringify({
+          assets: [
+            { name: 'release.json', url: `${base}/assets/1` },
+            { name, url: `${base}/assets/2` },
+          ],
+        }),
+      );
+    else if (request.url === '/assets/1')
+      response.end(JSON.stringify({ version, files: [{ name, size: installer.length, sha256 }] }));
+    else if (request.url === '/assets/2') void held.then(() => response.end(installer));
+    else response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => page.listen(0, '127.0.0.1', resolve));
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-test-'));
+  const server = createProxyServer({
+    token,
+    dataDir: directory,
+    updates: {
+      repository: 'owner/name',
+      api: `http://127.0.0.1:${(page.address() as AddressInfo).port}`,
+      restart: () => undefined,
+    },
+  });
+  const client = new Client(await server.listen(0));
+  t.after(async () => {
+    client.socket.terminate();
+    await server.close();
+    page.closeAllConnections();
+    page.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const ready = await client.open();
+  assert.ok(ready.type === 'ready' && ready.client === undefined);
+  release();
+  const told = await client.wait(
+    (message) => message.type === 'service.update' && !!message.client,
+  );
+  assert.deepEqual(told.type === 'service.update' && told.client, {
+    version,
+    size: installer.length,
+    sha256,
+  });
 });

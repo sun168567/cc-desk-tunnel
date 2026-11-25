@@ -324,10 +324,20 @@ export function createProxyServer(options: ServerOptions) {
   const clientDir = options.clientDir ?? join(options.dataDir, 'client');
   const releases = new ClientReleases(clientDir);
   const version = serviceVersion();
-  const updates = options.updates
+  const updates: ServiceUpdates | undefined = options.updates
     ? new ServiceUpdates(
-        // The next client of another version is offered the installer the moment it is here.
-        { ...options.updates, clientDir, installed: () => void releases.refresh() },
+        // The next client of another version is offered the installer the moment it is here, and the clients
+        // connected now are told of it: after an upgrade they reconnect before it has arrived.
+        {
+          ...options.updates,
+          clientDir,
+          installed: () =>
+            void releases.refresh().then(() => {
+              const client = installer();
+              if (client && updates)
+                broadcast({ type: 'service.update', ...updates.state, client });
+            }),
+        },
         (state) => broadcast({ type: 'service.update', ...state }),
       )
     : undefined;

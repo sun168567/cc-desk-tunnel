@@ -4,6 +4,8 @@ import type { ConnectionForm } from './LoginPage.tsx';
 import SettingsPage from './SettingsPage.tsx';
 import type { Section } from './SettingsPage.tsx';
 import { ProxyClient } from './client.ts';
+import { messageOf, useClientUpgrade } from './client-upgrade.ts';
+import { thisDevice } from './device.ts';
 import { isNewer } from './paths.ts';
 import { selfUpdating } from './platform.ts';
 
@@ -37,9 +39,6 @@ export const desktopSignIns: SignIns = {
   subscribe: (callback) => window.desktop!.onSignIn(callback),
 };
 
-const messageOf = (failure: unknown) =>
-  String((failure as Error)?.message ?? failure).replace(/^.*?'[\w:]+': (Error: )?/, '');
-
 // The sign-in window: every step of signing in shows here, until the service's window takes over. That is choosing
 // the service, connecting, a refusal and why, a version to upgrade the client or the service to, and this
 // computer's settings, which need no connection.
@@ -66,8 +65,7 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
   const [notes, setNotes] = useState<string | null>(null);
   const [settings, setSettings] = useState<Section | null>(null);
   const [workspaceRoots, setWorkspaceRoots] = useState<string[]>([]);
-  // How far an installer being fetched is, from 0 to 1.
-  const [downloaded, setDownloaded] = useState<number | null>(null);
+  const upgrading = useClientUpgrade(setError);
   // The settings page takes a client; this one never connects.
   const [client] = useState(() => new ProxyClient());
   useEffect(() => {
@@ -80,13 +78,6 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
         if (next.status === 'disconnected') setConnecting(false);
       }),
     [signIns],
-  );
-  useEffect(
-    () =>
-      window.desktop?.onUpdateProgress(({ received, size }) =>
-        setDownloaded(size ? received / size : 0),
-      ),
-    [],
   );
   const settingsOpen = settings !== null;
   useEffect(() => {
@@ -130,18 +121,86 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
     setConnecting(false);
     setReport(null);
   }
-  function install(target?: string) {
-    setError(null);
-    void window
-      .desktop!.installUpdate(target)
-      .catch((failure: unknown) => setError(messageOf(failure)))
-      .finally(() => setDownloaded(null));
-  }
-
   // A refusal for the version: the service's installer for this client, or the release page's; the notes of a
-  // newer version; or an upgrade of a service older than this client.
+  // newer version; or an upgrade of a service older than this client. What the service has said since, asked
+  // again below, stands over what it said at the refusal.
   const ended = report?.status === 'disconnected' ? report : null;
-  const refused = ended?.mismatch ? ended : null;
+  const [since, setSince] = useState<Pick<
+    SignInReport,
+    'service' | 'release' | 'preparing'
+  > | null>(null);
+  useEffect(() => setSince(null), [report]);
+  const refused = ended?.mismatch ? { ...ended, ...since } : null;
+  // A service newer than this client that does not hold its installer yet fetches it: it is asked again until it
+  // does, more often while the download is under way, so that the window follows it and offers the upgrade once
+  // it can. A service that went on to take this client, upgraded by other means meanwhile, is signed in to.
+  const [asked, setAsked] = useState(0);
+  const waitingForInstaller =
+    !!window.desktop &&
+    selfUpdating &&
+    !!version &&
+    !!refused?.service &&
+    isNewer(refused.service, version) &&
+    refused.release !== refused.service &&
+    !upgrading.step &&
+    !connecting;
+  useEffect(() => {
+    if (!waitingForInstaller) return;
+    const timer = setTimeout(
+      () => {
+        void probe().then((result) => {
+          if (result?.status === 'refused') setSince(result);
+          else if (result?.status === 'ready') void start(form);
+          setAsked((count) => count + 1);
+        });
+      },
+      refused?.preparing !== null ? 3000 : 15000,
+    );
+    return () => clearTimeout(timer);
+  }, [waitingForInstaller, refused?.preparing, asked]);
+  // A service that upgraded itself from `restarting` at this window's asking is waited for, and signed in to once
+  // it answers as the new version. It is given a few minutes before the window says to connect later.
+  const [restarting, setRestarting] = useState<string | null>(null);
+  useEffect(() => {
+    if (!restarting) return;
+    let cancelled = false;
+    const deadline = Date.now() + 3 * 60_000;
+    const look = async () => {
+      while (!cancelled && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        if (cancelled) return;
+        const result = await probe();
+        if (cancelled) return;
+        if (
+          result?.status === 'ready' ||
+          (result?.status === 'refused' && result.service !== restarting)
+        ) {
+          setRestarting(null);
+          void start(form);
+          return;
+        }
+      }
+      if (!cancelled) {
+        setRestarting(null);
+        setError('服务端还没有重启好，请稍后点“连接”。');
+      }
+    };
+    void look();
+    return () => {
+      cancelled = true;
+    };
+  }, [restarting]);
+  async function probe() {
+    const device = await thisDevice().catch(() => null);
+    return window
+      .desktop!.probeService({
+        url: form.url,
+        fingerprint: form.fingerprint,
+        token: form.token.trim(),
+        deviceName: device?.name ?? 'CC Desk Tunnel',
+      })
+      .catch(() => null);
+  }
   const upgrade =
     window.desktop &&
     selfUpdating &&
@@ -166,8 +225,8 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
             : !selfUpdating
               ? '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。'
               : refused.preparing !== null
-                ? `服务端正在下载这一版的安装包（${Math.floor(refused.preparing * 100)}%），稍后重新连接就能从服务端升级；也可以现在直接从 GitHub 发布页下载。`
-                : '服务端还没有这一版的安装包，它会继续尝试下载；可以直接从 GitHub 发布页下载，或稍后重试。'
+                ? `服务端正在下载这一版的安装包（${Math.floor(refused.preparing * 100)}%），好了这里会出现升级按钮；也可以直接从 GitHub 发布页下载。`
+                : '服务端还没有这一版的安装包，正在重新下载；也可以直接从 GitHub 发布页下载。'
         }`
       : failure;
   const notesDialog = notes && (
@@ -215,9 +274,9 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
         error={shown}
         upgrade={upgrade}
         direct={direct}
-        downloaded={downloaded}
-        install={install}
+        upgrading={upgrading}
         older={older}
+        serviceUpgraded={setRestarting}
         newer={upgrade ?? ahead}
         showNotes={setNotes}
         submit={() => void start(form)}
