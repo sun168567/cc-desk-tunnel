@@ -30,7 +30,7 @@ import { waitFields } from './setting-fields.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
-import { isMac } from './platform.ts';
+import { selfUpdating } from './platform.ts';
 import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
@@ -834,9 +834,9 @@ function About({
         <Row
           title="客户端与服务端需要同一版本"
           detail={
-            isMac
-              ? '从发布页下载与服务端版本一致的 macOS 安装包，按这台 Mac 的芯片选择 Apple 芯片（arm64）或 Intel（x64）。打开 DMG 后，将应用拖入“应用程序”替换旧版。'
-              : '服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级'
+            selfUpdating
+              ? '服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级'
+              : '服务端跟随发布页；这个系统上的客户端要手动升级：下载与服务端同一版本的安装包，装好替换旧版'
           }
         >
           <span className="setting-actions">
@@ -852,13 +852,19 @@ function About({
                 {item.label}
               </button>
             ))}
-            {isMac && project.url ? (
+            {!selfUpdating && project.url ? (
               <button
                 type="button"
                 className="button"
-                onClick={() => void window.desktop!.openExternal(`${project.url}/releases`)}
+                onClick={() =>
+                  void window.desktop!.openExternal(
+                    service
+                      ? `${project.url}/releases/tag/v${service}`
+                      : `${project.url}/releases/latest`,
+                  )
+                }
               >
-                前往 macOS 安装包发布页
+                打开发布页
               </button>
             ) : (
               updates.length === 0 && <span className="setting-value">没有可用的更新操作</span>
