@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import type { UsagePage } from '@cc-desk-tunnel/protocol';
+import { useT } from './i18n.ts';
 
 type Bucket = UsagePage['series'][number];
 type Kinds = Pick<
   Bucket,
   'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheCreationTokens'
 >;
+// Each kind of token with the column that names it (account:usage.col.<column>).
 const kinds = [
-  ['inputTokens', '输入'],
-  ['outputTokens', '输出'],
-  ['cacheReadTokens', '缓存读取'],
-  ['cacheCreationTokens', '缓存写入'],
+  ['inputTokens', 'input'],
+  ['outputTokens', 'output'],
+  ['cacheReadTokens', 'cacheRead'],
+  ['cacheCreationTokens', 'cacheWrite'],
 ] as const;
 
 // The share of the prompt that was read from the cache instead of being processed again; null when nothing
@@ -58,6 +60,7 @@ export function TokenTrend({
   label: (at: string) => string;
   format: (value: number) => string;
 }) {
+  const t = useT();
   const [hover, setHover] = useState<number | null>(null);
   const top = ceiling(Math.max(...buckets.flatMap((item) => kinds.map(([key]) => item[key])), 0));
   const rates = buckets.map(cacheHitRate);
@@ -75,12 +78,12 @@ export function TokenTrend({
   return (
     <figure className="usage-chart usage-trend">
       <figcaption>
-        <span>Token 构成</span>
+        <span>{t('account:usage.composition')}</span>
         <ul className="usage-legend">
           {kinds.map(([key, name], index) => (
             <li key={key}>
               <i className={`series-${index + 1}`} />
-              {name}
+              {t(`account:usage.col.${name}`)}
             </li>
           ))}
         </ul>
@@ -133,19 +136,19 @@ export function TokenTrend({
             {kinds.map(([key, name], index) => (
               <span key={key}>
                 <i className={`series-${index + 1}`} />
-                {name} {format(hovered[key])}
+                {t(`account:usage.col.${name}`)} {format(hovered[key])}
               </span>
             ))}
             <span>
               <i className="series-rate" />
-              缓存命中率 {percent(rates[hover!])}
+              {t('account:usage.hitRateValue', { rate: percent(rates[hover!]) })}
             </span>
           </div>
         )}
       </div>
       <figcaption className="usage-second">
-        <span>缓存命中率</span>
-        <small>缓存读取 ÷（输入 + 缓存读取 + 缓存写入）</small>
+        <span>{t('account:usage.hitRate')}</span>
+        <small>{t('account:usage.hitFormula')}</small>
       </figcaption>
       <div
         className="usage-lines usage-rate"
@@ -193,6 +196,7 @@ export function ModelBreakdown({
   tokens: (value: number) => string;
   dollars: (value: number) => string;
 }) {
+  const t = useT();
   const sum = (item: UsagePage['byModel'][number]) =>
     item.inputTokens + item.outputTokens + item.cacheReadTokens + item.cacheCreationTokens;
   const byCost = models.some((item) => item.costUsd > 0);
@@ -200,16 +204,16 @@ export function ModelBreakdown({
   const whole = models.reduce((total, item) => total + weight(item), 0);
   return (
     <div className="usage-table usage-models">
-      <h2 className="usage-section">按模型</h2>
+      <h2 className="usage-section">{t('account:usage.byModel')}</h2>
       <table>
         <thead>
           <tr>
-            <th>模型</th>
-            <th>{byCost ? '费用占比' : 'Token 占比'}</th>
-            <th>请求数</th>
+            <th>{t('account:usage.model')}</th>
+            <th>{byCost ? t('account:usage.costShare') : t('account:usage.tokenShare')}</th>
+            <th>{t('account:usage.measure.requests')}</th>
             <th>Token</th>
-            <th>缓存命中率</th>
-            <th>等价费用</th>
+            <th>{t('account:usage.hitRate')}</th>
+            <th>{t('account:usage.measure.costUsd')}</th>
           </tr>
         </thead>
         <tbody>

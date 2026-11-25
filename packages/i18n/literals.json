@@ -24,7 +24,6 @@
     "apps/desktop/electron/ssh-keys.mjs": 2,
     "apps/desktop/electron/tunnel-channels.mjs": 1,
     "apps/desktop/electron/windows-ssh.mjs": 8,
-    "apps/desktop/src/AccountPanel.tsx": 81,
     "apps/desktop/src/CcdtDialog.tsx": 1,
     "apps/desktop/src/FilePanel.tsx": 91,
     "apps/desktop/src/files.ts": 2,
@@ -34,19 +33,12 @@
     "apps/desktop/src/HelpLink.tsx": 1,
     "apps/desktop/src/historyCache.ts": 1,
     "apps/desktop/src/notes.ts": 5,
-    "apps/desktop/src/quota.ts": 2,
-    "apps/desktop/src/QuotaSummary.tsx": 5,
     "apps/desktop/src/ReleaseNotes.tsx": 6,
     "apps/desktop/src/SchedulePanel.tsx": 75,
     "apps/desktop/src/schedules.ts": 48,
-    "apps/desktop/src/sessionStats.ts": 22,
     "apps/desktop/src/setting-fields.ts": 1,
     "apps/desktop/src/SettingsPage.tsx": 1,
-    "apps/desktop/src/SetupTokenDialog.tsx": 7,
-    "apps/desktop/src/turnStats.ts": 12,
-    "apps/desktop/src/ui.tsx": 4,
-    "apps/desktop/src/UsageCharts.tsx": 15,
-    "apps/desktop/src/UsagePanel.tsx": 73
+    "apps/desktop/src/ui.tsx": 4
   },
   "kept": {
     "apps/server/src/claude.ts": {

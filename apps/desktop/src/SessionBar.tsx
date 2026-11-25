@@ -24,8 +24,9 @@ function Part({
   icon: React.ReactNode;
   note?: string;
 }) {
+  const t = useT();
   const { open, setOpen, container, card } = usePopover();
-  const rows = sessionFields.flatMap((field) => {
+  const rows = sessionFields(t).flatMap((field) => {
     const value = field.group === group ? field.value(stats) : null;
     return value == null ? [] : [{ field, value }];
   });
@@ -35,7 +36,7 @@ function Part({
     <div className={`session-bar-part ${group}`} ref={container}>
       <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         {icon}
-        <span>{barText(group, stats, chosen) || title}</span>
+        <span>{barText(t, group, stats, chosen) || title}</span>
       </button>
       {open && (
         <div className="turn-stats-card" role="dialog" aria-label={title} ref={card}>

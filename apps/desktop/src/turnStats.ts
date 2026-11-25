@@ -1,4 +1,5 @@
 import type { TurnStats } from '@cc-desk-tunnel/protocol';
+import { localeOf, type T } from './i18n.ts';
 import { cacheHitRate, percent } from './UsageCharts.tsx';
 import { seconds, tokens } from './UsagePanel.tsx';
 
@@ -16,54 +17,70 @@ export type StatField = {
 
 const total = (stats: TurnStats) =>
   stats.inputTokens + stats.outputTokens + stats.cacheReadTokens + stats.cacheCreationTokens;
-const count = (value: number) => `${value.toLocaleString('zh-CN')} tok`;
+const count = (t: T, value: number) => `${value.toLocaleString(localeOf(t))} tok`;
 
-export const statFields: StatField[] = [
+// The fields in the window's words: what names and tells each figure takes the window's `t`.
+export const statFields = (t: T): StatField[] => [
   {
     key: 'tokens',
-    label: 'Token 用量',
+    label: t('account:stat.tokens'),
     summary: true,
-    value: (stats) => count(total(stats)),
-    short: (stats) => `${tokens(total(stats))} tok`,
+    value: (stats) => count(t, total(stats)),
+    short: (stats) => `${tokens(t, total(stats))} tok`,
   },
   {
     key: 'ttft',
-    label: '平均首字',
+    label: t('account:stat.ttft'),
     summary: true,
     value: (stats) => (stats.ttftMs == null ? null : seconds(stats.ttftMs)),
   },
   {
     key: 'speed',
-    label: '平均速度',
+    label: t('account:stat.speed'),
     summary: true,
     value: (stats) =>
       stats.outputPerSecond == null ? null : `${stats.outputPerSecond.toFixed(1)} tok/s`,
-    short: (stats) => `平均 ${Math.round(stats.outputPerSecond!)} tok/s`,
+    short: (stats) => t('account:stat.speedShort', { speed: Math.round(stats.outputPerSecond!) }),
   },
-  { key: 'modelTime', label: '模型用时', summary: false, value: (stats) => seconds(stats.modelMs) },
+  {
+    key: 'modelTime',
+    label: t('account:stat.modelTime'),
+    summary: false,
+    value: (stats) => seconds(stats.modelMs),
+  },
   {
     key: 'requests',
-    label: '模型请求',
+    label: t('account:stat.requests'),
     summary: false,
-    value: (stats) => `${stats.requests} 次`,
+    value: (stats) => t('account:stat.requestCount', { count: stats.requests }),
   },
-  { key: 'input', label: '输入', summary: false, value: (stats) => count(stats.inputTokens) },
-  { key: 'output', label: '输出', summary: false, value: (stats) => count(stats.outputTokens) },
+  {
+    key: 'input',
+    label: t('account:usage.col.input'),
+    summary: false,
+    value: (stats) => count(t, stats.inputTokens),
+  },
+  {
+    key: 'output',
+    label: t('account:usage.col.output'),
+    summary: false,
+    value: (stats) => count(t, stats.outputTokens),
+  },
   {
     key: 'cacheRead',
-    label: '缓存读取',
+    label: t('account:usage.col.cacheRead'),
     summary: false,
-    value: (stats) => count(stats.cacheReadTokens),
+    value: (stats) => count(t, stats.cacheReadTokens),
   },
   {
     key: 'cacheWrite',
-    label: '缓存写入',
+    label: t('account:usage.col.cacheWrite'),
     summary: false,
-    value: (stats) => count(stats.cacheCreationTokens),
+    value: (stats) => count(t, stats.cacheCreationTokens),
   },
   {
     key: 'cacheHit',
-    label: '缓存命中',
+    label: t('account:stat.cacheHit'),
     summary: false,
     value: (stats) => (total(stats) ? percent(cacheHitRate(stats)) : null),
   },
@@ -74,10 +91,14 @@ export const inSummary = (field: StatField, chosen: Record<string, boolean>) =>
   chosen[field.key] ?? field.summary;
 
 // The summary line: the fields switched on that have a value, short wording where a field has one.
-export const summaryText = (stats: TurnStats, chosen: Record<string, boolean>) =>
-  statFields
+export const summaryText = (t: T, stats: TurnStats, chosen: Record<string, boolean>) =>
+  statFields(t)
     .filter((field) => inSummary(field, chosen) && field.value(stats) != null)
-    .map((field) => field.short?.(stats) ?? `${field.label} ${field.value(stats)}`)
+    .map(
+      (field) =>
+        field.short?.(stats) ??
+        t('account:stat.labelled', { label: field.label, value: field.value(stats)! }),
+    )
     .join(' · ');
 
 // A made-up turn for the settings to preview the line with.

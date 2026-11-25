@@ -95,7 +95,7 @@ export default function ComposerControls({
     commitPending.current = false;
     dragging.current = false;
   }, [model]);
-  const quota = usePrefs().quota ? quotaFigures(account?.rateLimits) : [];
+  const quota = usePrefs().quota ? quotaFigures(t, account?.rateLimits) : [];
   const fullest = Math.max(0, ...quota.map((figure) => figure.used));
   return (
     <div className="composer-controls" ref={container}>

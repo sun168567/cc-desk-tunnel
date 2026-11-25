@@ -210,7 +210,7 @@ function SessionBarSettings() {
   const set = (values: Partial<typeof sessionBar>) =>
     setPrefs((prefs) => ({ ...prefs, sessionBar: { ...prefs.sessionBar, ...values } }));
   const preview = (['session', 'tokens'] as const)
-    .map((group) => barText(group, sampleSession, sessionBar.summary))
+    .map((group) => barText(t, group, sampleSession, sessionBar.summary))
     .filter(Boolean)
     .join('　　');
   return (
@@ -230,7 +230,7 @@ function SessionBarSettings() {
             <small>{preview || t('settings:bar.partsDetail')}</small>
           </span>
           <div className="stat-chips" role="group" aria-label={t('settings:bar.parts')}>
-            {sessionFields.map((field) => {
+            {sessionFields(t).map((field) => {
               const on = inBar(field, sessionBar.summary);
               return (
                 <button
@@ -287,11 +287,11 @@ function ReplyStats() {
           <span>
             <strong>{t('settings:summary.parts')}</strong>
             <small>
-              {summaryText(sampleStats, stats.summary) || t('settings:summary.partsDetail')}
+              {summaryText(t, sampleStats, stats.summary) || t('settings:summary.partsDetail')}
             </small>
           </span>
           <div className="stat-chips" role="group" aria-label={t('settings:summary.parts')}>
-            {statFields.map((field) => {
+            {statFields(t).map((field) => {
               const on = inSummary(field, stats.summary);
               return (
                 <button

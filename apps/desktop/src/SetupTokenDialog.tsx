@@ -13,27 +13,27 @@ export function SetupTokenDialog({
 }) {
   const t = useT();
   return (
-    <Modal title="Setup token 已生成" onClose={close}>
+    <Modal title={t('account:token.title')} onClose={close}>
       <div className="dialog-form">
-        <p>{result.saved ? '已保存到服务端并用于登录。' : '令牌已生成，但尚未保存到服务端。'}</p>
+        <p>{result.saved ? t('account:token.saved') : t('account:token.unsaved')}</p>
         {result.error && (
           <p className="error-text" role="alert">
             {wordsText(t, result.error)}
           </p>
         )}
-        <p className="muted">此处只显示一次，请按需复制保存；关闭后客户端不保留此令牌。</p>
+        <p className="muted">{t('account:token.once')}</p>
         <textarea
           className="setup-token-value"
-          aria-label="生成的 setup token"
+          aria-label={t('account:token.label')}
           value={result.token}
           readOnly
           rows={4}
           spellCheck={false}
         />
         <div className="dialog-actions">
-          <CopyButton text={result.token} label="复制 token" />
+          <CopyButton text={result.token} label={t('account:token.copy')} />
           <button type="button" className="button primary" onClick={close}>
-            关闭
+            {t('account:token.close')}
           </button>
         </div>
       </div>

@@ -11,11 +11,11 @@ export default function TurnStats({ stats }: { stats: Stats }) {
   const { stats: prefs } = usePrefs();
   const { open, setOpen, container, card } = usePopover();
   if (!prefs.enabled) return null;
-  const rows = statFields.flatMap((field) => {
+  const rows = statFields(t).flatMap((field) => {
     const value = field.value(stats);
     return value == null ? [] : [{ field, value }];
   });
-  const summary = summaryText(stats, prefs.summary);
+  const summary = summaryText(t, stats, prefs.summary);
 
   const total = rows.find(({ field }) => field.key === 'tokens');
   return (
