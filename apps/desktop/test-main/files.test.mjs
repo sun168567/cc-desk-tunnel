@@ -14,6 +14,9 @@ import { Duplex, PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { createFiles } from '../electron/files.mjs';
 import { FileService, sftpPath } from '../../server/src/files.ts';
+import { failureText } from '../electron/words.mjs';
+// What a failure says, in the catalogs' source language: the tests read its words.
+const told = (pattern) => (error) => pattern.test(failureText(error));
 
 // The service's side of the file connection, with OpenSSH's SFTP server as it finds one (Git's on Windows), joined
 // to the client by a pair of streams instead of the service's WebSocket.
@@ -94,7 +97,7 @@ test(
       (await f.files.list('server', f.at(f.remote))).map((entry) => entry.name),
       ['notes.md'],
     );
-    await assert.rejects(f.files.read('server', f.at(join(f.remote, 'gone.txt'))), /不存在/);
+    await assert.rejects(f.files.read('server', f.at(join(f.remote, 'gone.txt'))), told(/不存在/));
     // The panel's sessions share one connection.
     assert.equal(f.opened(), 1);
   },
@@ -164,7 +167,7 @@ test(
       progress: ({ done }) => done > 1024 * 1024 && controller.abort(),
       signal: controller.signal,
     });
-    await assert.rejects(copy, /已取消/);
+    await assert.rejects(copy, (error) => error.cancelled === true);
     const kept = statSync(join(f.remote, 'huge.bin')).size;
     assert.ok(kept > 0 && kept < 40 * 1024 * 1024, `kept ${kept}`);
     // The panel's own session is still there.

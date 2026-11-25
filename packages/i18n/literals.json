@@ -10,21 +10,7 @@
     "apps/cli/src/settings.mjs": 48,
     "apps/cli/src/tasks.mjs": 68,
     "apps/cli/src/upgrade.mjs": 13,
-    "apps/desktop/electron/ccdt.mjs": 5,
-    "apps/desktop/electron/connect-errors.mjs": 58,
-    "apps/desktop/electron/connections.cjs": 8,
-    "apps/desktop/electron/files.mjs": 11,
-    "apps/desktop/electron/posix-ssh-worker.mjs": 2,
-    "apps/desktop/electron/posix-ssh.mjs": 7,
-    "apps/desktop/electron/proxy-bridge.mjs": 25,
-    "apps/desktop/electron/release-download.mjs": 17,
-    "apps/desktop/electron/service-upgrade.mjs": 13,
-    "apps/desktop/electron/shell-environment.mjs": 14,
-    "apps/desktop/electron/ssh-keys.mjs": 2,
-    "apps/desktop/electron/tunnel-channels.mjs": 1,
-    "apps/desktop/electron/windows-ssh.mjs": 8,
     "apps/desktop/src/CcdtDialog.tsx": 1,
-    "apps/desktop/src/FilePanel.tsx": 1,
     "apps/desktop/src/help-content.ts": 522,
     "apps/desktop/src/HelpCenter.tsx": 58,
     "apps/desktop/src/HelpFigures.tsx": 52,
@@ -46,6 +32,10 @@
     "apps/desktop/src/setting-fields.ts": {
       "count": 1,
       "reason": "A list typed into a field may be parted by a full-width comma: input parsing, not text."
+    },
+    "apps/desktop/electron/connections.cjs": {
+      "count": 1,
+      "reason": "主连接 is the name earlier versions gave the first connection: compared when an old profile is moved, not shown."
     }
   }
 }

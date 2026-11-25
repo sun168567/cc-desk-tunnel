@@ -5,6 +5,10 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { FILES_TARGET_ENV } from '@cc-desk-tunnel/protocol';
+import { failure, failureOf } from './failure.cjs';
+
+// A transfer that was stopped: the panel shows it as stopped, not as a failure.
+const cancelled = () => failure('desktop:files.cancelled', undefined, { cancelled: true });
 
 // The file panel's files, wherever they are: `local` is this computer's, read here; `server` is the service's,
 // and any other target is one of the user's computers by its ID, both reached over SFTP. The SFTP sessions go
@@ -146,16 +150,16 @@ function sftpFiles(sftp) {
   return files;
 }
 
-// Says what went wrong in the user's words. SFTP's status codes come as `code`.
+// Says what went wrong in the user's words: a failure with its phrase. SFTP's status codes come as `code`.
 export function fileError(error, target) {
   const code = error?.code;
-  if (code === 2 || code === 'ENOENT') return '文件或文件夹不存在。';
+  const said = (key) => failure(key, undefined, { cause: error });
+  if (code === 2 || code === 'ENOENT') return said('desktop:files.missing');
   if (code === 3 || code === 'EACCES' || code === 'EPERM')
-    return target === 'server'
-      ? '没有权限。服务端的密钥、登录凭据和服务数据受保护，不能读取或修改。'
-      : '没有权限访问这个位置。';
-  if (code === 'EEXIST' || code === 'ENOTEMPTY') return '目标位置已有同名文件或文件夹。';
-  return error?.message || String(error);
+    return said(target === 'server' ? 'desktop:files.protected' : 'desktop:files.denied');
+  if (code === 'EEXIST' || code === 'ENOTEMPTY') return said('desktop:files.exists');
+  if (error?.phrase) return failureOf(error.phrase, { cause: error });
+  return new Error(error?.message || String(error), { cause: error });
 }
 
 export function createFiles({ open }) {
@@ -192,7 +196,7 @@ export function createFiles({ open }) {
       });
       if (closed) {
         created.end();
-        throw new Error('文件连接已关闭。');
+        throw failure('desktop:files.closed');
       }
       client = created;
       return created;
@@ -205,11 +209,7 @@ export function createFiles({ open }) {
       ssh.sftp({ [FILES_TARGET_ENV]: target }, (error, sftp) =>
         error
           ? reject(
-              new Error(
-                target === 'server'
-                  ? '服务端没有提供文件访问。'
-                  : '这台电脑现在连不上：它可能不在线，或执行通道尚未就绪。',
-              ),
+              failure(target === 'server' ? 'desktop:files.noServer' : 'desktop:files.unreachable'),
             )
           : // Requests still out when the connection goes fail on their own; the session has nothing more to say.
             resolve(sftp.on('error', () => {})),
@@ -279,7 +279,7 @@ export function createFiles({ open }) {
     work.catch(() => {});
     let abort;
     const stopped = new Promise((_resolve, reject) => {
-      abort = () => reject(new Error('已取消'));
+      abort = () => reject(cancelled());
       if (signal.aborted) abort();
       else signal.addEventListener('abort', abort, { once: true });
     });
@@ -287,7 +287,7 @@ export function createFiles({ open }) {
     return Promise.race([work, stopped]).finally(() => signal.removeEventListener('abort', abort));
   }
   async function copy({ from, to, conflict = 'replace', progress = () => {}, signal }) {
-    if (signal?.aborted) throw new Error('已取消');
+    if (signal?.aborted) throw cancelled();
     const own = [];
     // The copy's own SFTP sessions, which stopping it ends.
     async function own_(target) {
@@ -327,7 +327,7 @@ export function createFiles({ open }) {
       };
       let temporary;
       for (const item of plan) {
-        if (signal?.aborted) throw new Error('已取消');
+        if (signal?.aborted) throw cancelled();
         if (item.directory) {
           await write.mkdir(item.directory).catch(() => {});
           continue;
@@ -399,8 +399,8 @@ export function createFiles({ open }) {
       if (temporary) await rm(temporary, { recursive: true, force: true });
       return { files: plan.filter((item) => item.file).length, bytes: total };
     } catch (error) {
-      if (signal?.aborted) throw new Error('已取消');
-      throw new Error(fileError(error, to.target), { cause: error });
+      if (signal?.aborted) throw cancelled();
+      throw fileError(error, to.target);
     } finally {
       signal?.removeEventListener('abort', stop);
       stop();
@@ -414,7 +414,7 @@ export function createFiles({ open }) {
           try {
             return await run(target, ...args);
           } catch (error) {
-            throw new Error(fileError(error, target), { cause: error });
+            throw fileError(error, target);
           }
         },
       ]),

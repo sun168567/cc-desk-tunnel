@@ -1,3 +1,4 @@
+import { failureText } from '../electron/words.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
@@ -19,7 +20,7 @@ test('WSS pin comparison rejects empty, malformed and mismatched fingerprints', 
 test('native desktop refuses plaintext control connections', async () => {
   await assert.rejects(
     openProxyBridge({ url: 'ws://example.com/ws', fingerprint: 'AB'.repeat(32) }, {}),
-    /WSS/,
+    (error) => /WSS/.test(failureText(error)),
   );
 });
 test('empty certificate pin enables strict CA verification; malformed pins never disable verification', () => {
@@ -28,7 +29,10 @@ test('empty certificate pin enables strict CA verification; malformed pins never
   assert.deepEqual(controlTlsOptions({ fingerprint: 'AB'.repeat(32) }), {
     rejectUnauthorized: false,
   });
-  assert.throws(() => controlTlsOptions({ fingerprint: 'invalid' }), /SHA256/);
+  assert.throws(
+    () => controlTlsOptions({ fingerprint: 'invalid' }),
+    (error) => /SHA256/.test(failureText(error)),
+  );
 });
 test('local browser test bridge only accepts its explicitly configured origin', async () => {
   const bridge = await openProxyBridge(

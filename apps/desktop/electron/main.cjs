@@ -334,6 +334,10 @@ handle('panel:transfer', async (event, id, request) => {
         if (!event.sender.isDestroyed()) event.sender.send('panel:progress', id, report);
       },
     });
+  } catch (error) {
+    // A transfer the panel stopped did not fail.
+    if (error?.cancelled) return { files: 0, bytes: 0, cancelled: true };
+    throw error;
   } finally {
     transfers.delete(id);
   }
@@ -1222,6 +1226,8 @@ handle('update:install', async (event, version) => {
       if (Date.now() - told < 400 && step.received < step.size) return;
       told = Date.now();
     }
+    // Why a connection is tried again may be a phrase, which is said here.
+    if (step.reason !== undefined) step = { ...step, reason: words.say(step.reason) };
     if (!event.sender.isDestroyed()) event.sender.send('update:progress', { source, ...step });
   };
   const progress = (received, size) => tell({ phase: 'downloading', received, size });

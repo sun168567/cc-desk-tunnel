@@ -79,7 +79,7 @@ declare global {
             to: { target: string; dir: string };
             conflict?: 'replace' | 'skip' | 'resume';
           },
-        ) => Promise<{ files: number; bytes: number }>;
+        ) => Promise<{ files: number; bytes: number; cancelled?: true }>;
         cancel: (id: string) => Promise<void>;
         // What git sees changed in a project of this computer; null outside a repository or without git.
         changes: (directory: string) => Promise<{ path: string; status: string }[] | null>;

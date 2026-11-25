@@ -1,6 +1,7 @@
 import { connect } from 'node:net';
 import { createWebSocketStream } from 'ws';
 import { TUNNEL_CLOSE } from '@cc-desk-tunnel/protocol';
+import { phrase } from './failure.cjs';
 
 // The device's side of the execution channel. For each SSH connection the service announces, one connection
 // is opened to the service, signed in with the tunnel's secret and joined byte for byte to the local SSH
@@ -52,7 +53,7 @@ export function openChannels(
     try {
       channel = await connectChannel();
     } catch (error) {
-      if (error?.fatal) fail(error.message);
+      if (error?.fatal) fail(error.phrase ?? error.message);
       return;
     }
     if (closed) {
@@ -76,8 +77,7 @@ export function openChannels(
     channel.once('close', (code) => {
       clearInterval(heartbeat);
       open.delete(entry);
-      if (code === TUNNEL_CLOSE.refused)
-        fail('执行通道的认证没有通过。\n请重新连接；反复出现时确认服务地址没有指向另一套部署。');
+      if (code === TUNNEL_CLOSE.refused) fail(phrase('desktop:bridge.channelRefused'));
     });
     stream.on('error', () => local.destroy());
     local.on('error', () => stream.destroy());

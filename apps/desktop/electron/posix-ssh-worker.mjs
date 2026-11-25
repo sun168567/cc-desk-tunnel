@@ -10,6 +10,7 @@ import { serverAlgorithms } from './ssh2-hardening.mjs';
 import { captureShellEnvironment } from './shell-environment.mjs';
 import { connectionKeys } from './ssh-keys.mjs';
 import { repairChannelOutput } from './ssh-channel-output.mjs';
+import { failure, phrase } from './failure.cjs';
 
 const { Server, utils } = ssh2;
 
@@ -45,7 +46,8 @@ process.on('message', (message) => {
   if (message.type === 'close') void shutdown();
   if (message.type === 'start')
     void start(message).catch(async (error) => {
-      if (process.connected) process.send({ type: 'failed', message: error.message });
+      if (process.connected)
+        process.send({ type: 'failed', message: error.message, phrase: error.phrase });
       await shutdown();
     });
 });
@@ -66,9 +68,7 @@ async function systemSftp(given) {
       )
     )
       return path;
-  throw new Error(
-    '找不到系统的 sftp-server。\nmacOS 自带它；Linux 上请安装 OpenSSH 的 SFTP 服务端（Debian / Ubuntu 的 openssh-sftp-server）。',
-  );
+  throw failure('desktop:local.noSftpServer');
 }
 
 async function start({
@@ -225,7 +225,8 @@ async function start({
     listener.listen(0, '127.0.0.1', resolve);
   });
   listener.on('error', () => {
-    if (process.connected) process.send({ type: 'failed', message: '本机 SSH 执行服务已停止。' });
+    if (process.connected)
+      process.send({ type: 'failed', phrase: phrase('desktop:local.workerStopped') });
     void shutdown();
   });
   if (controller.signal.aborted) throw new Error('Tunnel cancelled');

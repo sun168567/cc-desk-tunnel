@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { failure } from './failure.cjs';
 
 function generate(supervisor, path) {
   return new Promise((resolve, reject) => {
@@ -11,9 +12,9 @@ function generate(supervisor, path) {
         stdio: 'ignore',
       },
     );
-    child.once('error', () => reject(new Error('无法启动系统 ssh-keygen。')));
+    child.once('error', () => reject(failure('desktop:local.keygenMissing')));
     child.once('close', (code) =>
-      code === 0 ? resolve() : reject(new Error('无法生成本次连接的 SSH 密钥。')),
+      code === 0 ? resolve() : reject(failure('desktop:local.keygenFailed')),
     );
   });
 }

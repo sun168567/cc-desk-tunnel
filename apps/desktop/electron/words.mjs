@@ -12,10 +12,8 @@ export function followLanguage(choice, systemLanguages) {
   void i18n.changeLanguage(language);
   return true;
 }
-// A failure that says what went wrong as a message of the catalogs (`phrase`), which is put into words where it
-// is shown. Its `message` is the key, for a log.
-export const failure = (key, params) =>
-  Object.assign(new Error(key), { phrase: params ? { key, params } : { key } });
-// What a failure says: its phrase in the current language, or the message of one that has none.
+// Words in the current language: a phrase (failure.cjs) is said, text is as it is.
+export const say = (words) => wordsText(i18n.t, words);
+// What a failure says: its phrase, or the message of one that has none.
 export const failureText = (error) =>
-  error?.phrase ? wordsText(i18n.t, error.phrase) : String(error?.message ?? error);
+  error?.phrase ? say(error.phrase) : String(error?.message ?? error);

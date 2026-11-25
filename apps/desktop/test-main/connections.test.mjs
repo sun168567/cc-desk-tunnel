@@ -12,6 +12,9 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { failureText } from '../electron/words.mjs';
+// What a failure says, in the catalogs' source language: the tests read its words.
+const told = (pattern) => (error) => pattern.test(failureText(error));
 
 const connections = createRequire(import.meta.url)('../electron/connections.cjs');
 const profile = (context) => {
@@ -45,10 +48,10 @@ test('a connection is made for a service, and goes by its name or else its addre
   assert.equal(connections.labelOf(base, { id, name: '' }), 'Example.com:443/team-a/ws');
   connections.rename(base, id, '  公司   开发 ');
   assert.equal(connections.labelOf(base, connections.list(base)[0]), '公司 开发');
-  assert.throws(() => connections.rename(base, id, 'x'.repeat(25)), /24/);
-  assert.throws(() => connections.rename(base, 'missing0', '别的'), /不存在/);
+  assert.throws(() => connections.rename(base, id, 'x'.repeat(25)), told(/24/));
+  assert.throws(() => connections.rename(base, 'missing0', '别的'), told(/不存在/));
   const other = signedIn(base, 'wss://example.com/team-b/ws');
-  assert.throws(() => connections.rename(base, other, '公司 开发'), /同名/);
+  assert.throws(() => connections.rename(base, other, '公司 开发'), told(/同名/));
   // Without a name, any number go by their addresses.
   connections.rename(base, id, '');
   assert.deepEqual(connections.list(base), [
@@ -117,7 +120,7 @@ test('a connection is removed with its profile, unless its window is open', (con
   writeFileSync(join(connections.directory(base, id), 'drafts.json'), '{}');
   connections.mark(base, id, true);
   assert.equal(connections.running(base, id), true);
-  assert.throws(() => connections.remove(base, id), /还开着/);
+  assert.throws(() => connections.remove(base, id), told(/还开着/));
   // What it has running is told to the other connections, not to itself.
   connections.mark(base, id, true, [{ id: 's1', folder: 'D:\\work' }, { folder: 1 }]);
   assert.deepEqual(connections.busy(base, 'other000'), [
@@ -133,7 +136,7 @@ test('a connection is removed with its profile, unless its window is open', (con
   assert.equal(existsSync(join(base, 'Partitions', id)), false);
   assert.deepEqual(connections.list(base), []);
   assert.equal(connections.autoLogin(base), null);
-  assert.throws(() => connections.remove(base, id), /不存在/);
+  assert.throws(() => connections.remove(base, id), told(/不存在/));
 });
 
 test('what sign-in windows, unfinished connections and connections gone leave goes, once their windows have', (context) => {

@@ -1,3 +1,4 @@
+import { say } from '../electron/words.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
@@ -152,7 +153,7 @@ test('a refused secret ends the connection; a channel nobody waits for any more 
   await f.until(() => f.arrivals.length === 2);
   f.arrivals[1].socket.close(TUNNEL_CLOSE.refused, 'Unauthorized');
   await f.until(() => failures.length, 'the failure');
-  assert.match(failures[0], /认证没有通过/);
+  assert.match(say(failures[0]), /认证没有通过/);
   assert.equal(failures.length, 1);
 });
 test('a channel that stops answering is given up with its local connection; one that answers is kept', async (t) => {

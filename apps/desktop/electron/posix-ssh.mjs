@@ -1,6 +1,7 @@
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolvePosixShell } from './shell-environment.mjs';
+import { failureOf, phrase } from './failure.cjs';
 
 // Starts the SSH service of this connection on macOS and Linux: an SSH server inside a process of this
 // program, on a loopback port, with a host key and a login key made for this connection alone. It runs
@@ -40,11 +41,15 @@ export async function startPosixSsh(connectionId, options, signal, onFailure, re
       })();
       return closePromise;
     };
-    const fail = (message) => {
+    // `words` are a phrase, or what the worker's failure said without one.
+    const fail = (words) => {
       if (closed) return;
       const stopped = close();
-      if (ready) onFailure(message);
-      else void stopped.then(() => reject(new Error(message)));
+      if (ready) onFailure(words);
+      else
+        void stopped.then(() =>
+          reject(typeof words === 'string' ? new Error(words) : failureOf(words)),
+        );
     };
     const cancel = () => {
       const stopped = close();
@@ -52,20 +57,19 @@ export async function startPosixSsh(connectionId, options, signal, onFailure, re
     };
     // The worker gives the login shell `readyMs` to report its environment and says so itself; this is for a
     // worker that says nothing at all, with time left for the keys and the rest of its start.
-    const timer = setTimeout(
-      () => fail('本机执行服务初始化超时，请检查登录 shell 启动脚本。'),
-      readyMs + 5000,
-    );
+    const timer = setTimeout(() => fail(phrase('desktop:local.workerTimeout')), readyMs + 5000);
     signal.addEventListener('abort', cancel, { once: true });
-    worker.once('error', () => fail('无法启动本机 SSH 执行服务。'));
+    worker.once('error', () => fail(phrase('desktop:local.workerMissing')));
     worker.once('exit', (code, signal) =>
       fail(
-        `本机 SSH 执行服务已停止（${signal ? `信号 ${signal}` : `退出码 ${code}`}），请重新连接。`,
+        signal
+          ? phrase('desktop:local.workerSignalled', { signal })
+          : phrase('desktop:local.workerExited', { code }),
       ),
     );
     worker.on('message', (message) => {
       if (closed) return;
-      if (message.type === 'failed') return fail(message.message);
+      if (message.type === 'failed') return fail(message.phrase ?? message.message);
       if (message.type !== 'ready' || ready) return;
       ready = true;
       clearTimeout(timer);
@@ -86,7 +90,7 @@ export async function startPosixSsh(connectionId, options, signal, onFailure, re
         keepaliveInterval: options.keepaliveInterval,
       },
       (error) => {
-        if (error) fail('无法初始化本机 SSH 执行服务。');
+        if (error) fail(phrase('desktop:local.workerNotStarted'));
       },
     );
   });

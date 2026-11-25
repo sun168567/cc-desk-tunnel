@@ -380,18 +380,11 @@ export default function FilePanel({
       .transfer(id, request)
       .then(
         (result) => {
+          if (result.cancelled) return finish({ state: 'cancelled' });
           finish({ state: 'done', done: result.bytes, total: result.bytes });
           if (request.to.target === place.id) void load(request.to.dir);
         },
-        (error: Error) =>
-          finish(
-            /已取消/.test(error.message)
-              ? { state: 'cancelled' }
-              : {
-                  state: 'failed',
-                  error: error.message,
-                },
-          ),
+        (error: Error) => finish({ state: 'failed', error: error.message }),
       );
   }
 

@@ -60,5 +60,184 @@
     "quit": "Quit",
     "backgroundTitle": "CC Desk Tunnel is still running",
     "backgroundBody": "Click the tray icon to bring the window back; right-click it and choose “Quit” to end the connection."
+  },
+  "bridge": {
+    "badPin": "Enter the SHA256 certificate fingerprint from the trusted install details, or leave it empty to verify with a CA.",
+    "pinMismatch": "The service certificate fingerprint doesn’t match; the service token wasn’t sent.",
+    "pinMismatchCheck": "The service certificate fingerprint doesn’t match; the service token wasn’t sent.\nCheck that the “Service certificate fingerprint” is the one given at install; after the service changes its certificate, enter the new fingerprint. If neither changed, this isn’t your server.",
+    "wssOnly": "Native mode needs a WSS address without credentials.",
+    "noAnswer": "The service didn’t finish answering within {{seconds}} s.\nCheck that the network is stable, or try again later; if it keeps happening, check the service log.",
+    "channelPinMismatch": "The execution channel reached a service certificate whose fingerprint doesn’t match; no credentials were sent.\nAfter the control connection was verified, the same address answered with another certificate: make sure the address isn’t hijacked or pointing at several servers.",
+    "silent": "Nothing has come from the service for {{seconds}} s; the connection is gone.\nA network, proxy or reverse proxy on the way cut it without telling this computer.",
+    "badClientMessage": "A client message was malformed.",
+    "badServiceMessage": "A message from the service wasn’t recognized.\nThe client and service may be different versions; upgrade both to the same one.",
+    "tunnelMismatch": "The tunnel connection ID doesn’t match.",
+    "readyMismatch": "The tunnel ready ID doesn’t match.",
+    "notReady": "Not connected to the service yet, or the execution channel isn’t ready.",
+    "closed": "The connection has closed.",
+    "channelRefused": "The execution channel wasn’t authorized.\nReconnect; if it keeps happening, make sure the address doesn’t point at another deployment."
+  },
+  "connect": {
+    "lines": "{{what}}\n{{check}}",
+    "via": "\nThis connection went through the system proxy {{proxy}}; make sure the proxy works too.",
+    "tooLong": "The session history exceeds the WebSocket receive limit.",
+    "tooMany": "Too many failed sign-ins: the service is refusing this computer for now. Try again later.",
+    "proxyRefused": {
+      "what": "The system proxy refused to forward the connection to {{target}}.",
+      "whatNamed": "The system proxy {{proxy}} refused to forward the connection to {{target}}.",
+      "check": "Check the Windows proxy settings, or add the service address to the proxy’s exclusions."
+    },
+    "unresolved": {
+      "what": "Can’t resolve the domain {{host}} in the service address.",
+      "check": "Check the address for typos, and that this computer’s network and DNS work.{{via}}"
+    },
+    "refused": {
+      "what": "{{target}} refused the connection.",
+      "check": "The service may not be running, or the port isn’t its control port; behind nginx, make sure nginx is running.{{via}}"
+    },
+    "timeout": {
+      "what": "Connecting to {{target}} timed out.",
+      "check": "Check that the server is online, that its firewall or cloud security group allows this port, and that this computer’s network can reach it.{{via}}"
+    },
+    "expired": {
+      "what": "The service certificate has expired.",
+      "check": "Renew it on the server (the deploy script’s certificate command), then reconnect."
+    },
+    "notYetValid": {
+      "what": "The service certificate isn’t valid yet.",
+      "check": "Check this computer’s system time."
+    },
+    "hostMismatch": {
+      "what": "The service certificate doesn’t match the host name {{host}} in the address.",
+      "check": "Connect with the certificate’s domain, or enter the fingerprint given at install under “Service certificate fingerprint”."
+    },
+    "untrusted": {
+      "what": "The service certificate isn’t from a trusted authority.",
+      "check": "With a self-signed certificate, enter the SHA256 fingerprint given at install under “Service certificate fingerprint”."
+    },
+    "notTls": {
+      "what": "{{target}} didn’t answer with TLS.",
+      "check": "The address should start with wss:// and point at the service’s control port; check the port.{{via}}"
+    },
+    "gateway": {
+      "what": "The reverse proxy at {{target}} answered {{status}}: the service behind it isn’t running or can’t be reached.",
+      "check": "Check on the server that the service is running."
+    },
+    "http": {
+      "what": "{{target}} answered HTTP {{status}}; it isn’t this service’s entry point.",
+      "check": "Check the service address; behind nginx, check that WebSocket (the Upgrade header) is forwarded."
+    },
+    "reset": {
+      "what": "The connection to {{target}} was cut.",
+      "check": "This usually means the port isn’t this service, or a network device in between cut it; check the address and try again.{{via}}"
+    },
+    "other": {
+      "what": "Can’t connect to {{target}}.",
+      "check": "Check the service address and the network.{{via}}"
+    },
+    "otherCode": {
+      "what": "Can’t connect to {{target}} ({{code}}).",
+      "check": "Check the service address and the network.{{via}}"
+    }
+  },
+  "channel": {
+    "failed": "The execution channel wasn’t ready within {{seconds}} s.\nThe service token was accepted, but connecting again to the service for the execution channel failed: {{cause}}\nThe execution channel uses the same address as the control connection, one more connection for each SSH connection: make sure no reverse proxy, system proxy or firewall limits concurrent connections to it.",
+    "noAnswer": "The execution channel wasn’t ready within {{seconds}} s.\nThe service token was accepted and this computer’s SSH service started, but the service’s probe command got no answer. {{slow}}, raise the wait time in Settings → Connection.",
+    "slow": "If the computer or network is slow",
+    "slowShell": "If the login shell’s startup scripts or the network are slow"
+  },
+  "component": {
+    "security": "Check “Protection history” in your antivirus or Windows Security: once you’ve checked where the file came from, restore the quarantined file, allow just that file, and reconnect. See “Antivirus and SmartScreen” on the project page.",
+    "pwsh": "PowerShell (pwsh.exe)",
+    "blocked": "{{name}} was blocked by Windows or security software and can’t start (system error {{code}}).\n{{hint}}",
+    "cannotStart": "{{name}} can’t start (system error {{code}}).\nReinstall the app; if it persists, check your security software’s block log.",
+    "exitCode": " (exit code {{code}})",
+    "sshdSaid": "The bundled OpenSSH service (sshd.exe) exited{{code}}.\nIts output: {{said}}",
+    "sshdExited": "The bundled OpenSSH service (sshd.exe) exited{{code}}.\nReconnect; if it keeps happening, reinstall the app.",
+    "notStartedSaid": "This computer’s SSH service didn’t start.\nIts output: {{said}}",
+    "exitedSaid": "This computer’s SSH service exited.\nIts output: {{said}}",
+    "notStarted": "This computer’s SSH service didn’t start.\nUsually security software blocked the bundled PowerShell or OpenSSH. {{hint}}",
+    "exited": "This computer’s SSH service exited.\nReconnect.",
+    "unsupportedShell": "This computer’s OpenSSH default shell is {{path}}, under which the bundled SSH service can’t run commands.\ncmd, PowerShell and Git Bash are supported; in the registry under HKLM\\SOFTWARE\\OpenSSH, remove DefaultShell and DefaultShellCommandOption or set them back.",
+    "missing": "The {{name}} installed with the app can’t be found.\nAntivirus or Windows Security most likely quarantined or deleted it. {{hint}}\nIf nothing was quarantined, reinstall the app.",
+    "prepareSlow": "Preparing this computer’s SSH service didn’t finish within {{seconds}} s.\nIt’s slower when the computer is busy or security software scans each program; reconnect.",
+    "prepareSaid": "Preparing this computer’s SSH service failed.\n{{said}}",
+    "prepareFailed": "Preparing this computer’s SSH service failed.\nReconnect; if it still fails, reinstall the app.",
+    "notListening": "This computer’s SSH service didn’t start listening within {{seconds}} s.\nIt’s slower when the computer is busy or security software scans each program; you can raise the wait time in Settings → Connection."
+  },
+  "local": {
+    "workerTimeout": "Starting this computer’s execution service timed out; check the login shell’s startup scripts.",
+    "workerMissing": "Can’t start this computer’s SSH execution service.",
+    "workerSignalled": "This computer’s SSH execution service stopped (signal {{signal}}); reconnect.",
+    "workerExited": "This computer’s SSH execution service stopped (exit code {{code}}); reconnect.",
+    "workerNotStarted": "Can’t set up this computer’s SSH execution service.",
+    "workerStopped": "This computer’s SSH execution service stopped.",
+    "noSftpServer": "The system’s sftp-server can’t be found.\nmacOS includes it; on Linux, install OpenSSH’s SFTP server (openssh-sftp-server on Debian / Ubuntu).",
+    "keygenMissing": "Can’t start the system’s ssh-keygen.",
+    "keygenFailed": "Can’t create this connection’s SSH key."
+  },
+  "shell": {
+    "unsupported": "Running here needs zsh or bash by absolute path; check the login shell setting.",
+    "missing": "This computer’s login shell can’t be found; check where zsh or bash is installed.",
+    "notExecutable": "This computer’s login shell can’t be run; check the permissions of zsh or bash.",
+    "timeout": "The login shell took too long to start; check its startup scripts for commands that wait or ask for input.",
+    "environmentTooLarge": "The login shell’s environment variables exceed the size limit.",
+    "outputTooLarge": "The output of the login shell’s startup scripts exceeds the size limit.",
+    "cannotStart": "Can’t start this computer’s login shell ({{code}}); check its path and permissions.",
+    "cannotStartUnknown": "Can’t start this computer’s login shell (unknown error); check its path and permissions.",
+    "signalled": "The login shell ended abnormally (signal {{signal}}) without a valid environment; check the shell and its startup scripts.",
+    "exited": "The login shell ended abnormally (exit code {{code}}) without a valid environment; check the shell and its startup scripts.",
+    "noEnvironment": "The login shell didn’t return a valid environment; check the zsh or bash startup scripts."
+  },
+  "download": {
+    "noInstaller": "The service doesn’t provide a client installer.",
+    "serverFailed": "Downloading the installer from the service failed ({{reason}}).\nTry again, or download from the GitHub release page instead.",
+    "noResponse": "no response for {{seconds}} s",
+    "noData": "no data for {{seconds}} s",
+    "notYet": "the service doesn’t have this installer yet",
+    "badHash": "The installer failed verification; the upgrade was abandoned.",
+    "cancelled": "Cancelled.",
+    "badVersion": "The version number is invalid.",
+    "noManifest": "Can’t read the release details of {{version}} ({{reason}}).\nCheck that this computer can reach github.com, or get the installer from the service instead.",
+    "notInManifest": "The release details have no installer for this version.",
+    "otherFile": "The installer on the release page isn’t the file the service provides; the upgrade was abandoned.",
+    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or get the installer from the service instead.",
+    "nothing": "the connection sent no data",
+    "httpFailed": "Downloading the installer failed ({{status}}).",
+    "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned."
+  },
+  "service": {
+    "refused": "The service refused the connection.",
+    "tooOld": "Service {{service}} is too old: run the install command on the server again to upgrade it (see “Quick start” in the project README).",
+    "upgradeRefused": "The service refused the upgrade.",
+    "declined": "The service wasn’t upgraded.",
+    "upgradeFailed": "The service upgrade failed.",
+    "manual": "Service {{version}} needs a new image: run sudo cc-desk-tunnel upgrade on the server; older deployments without that command run the install command again.",
+    "noNewer": "The service found no newer release.",
+    "closed": "The connection to the service was lost; reconnect in a moment to see whether it has upgraded.",
+    "unreachable": "Can’t reach the service: {{reason}}"
+  },
+  "files": {
+    "cancelled": "Cancelled",
+    "missing": "The file or folder doesn’t exist.",
+    "protected": "Permission denied. The service’s keys, sign-in credentials and data are protected and can’t be read or changed.",
+    "denied": "No permission to access this location.",
+    "exists": "A file or folder with that name is already there.",
+    "closed": "The file connection is closed.",
+    "noServer": "The service doesn’t provide file access.",
+    "unreachable": "This computer can’t be reached now: it may be offline, or its execution channel isn’t ready."
+  },
+  "ccdt": {
+    "said": "ccdt: {{said}}",
+    "failed": "ccdt didn’t run successfully: {{reason}}",
+    "noTerminal": "No terminal app to open was found: run ccdt open in a terminal.",
+    "terminalFailed": "Couldn’t open a terminal: {{reason}}",
+    "badAddress": "This connection’s address can’t be handed to ccdt."
+  },
+  "connections": {
+    "nameTooLong": "Names can be at most {{max}} characters.",
+    "nameTaken": "A connection with that name already exists.",
+    "tooMany": "At most {{max}} connections can be saved.",
+    "stillOpen": "This connection’s window is still open; quit it first."
   }
 }

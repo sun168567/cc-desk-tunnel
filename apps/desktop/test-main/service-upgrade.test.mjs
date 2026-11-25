@@ -1,3 +1,4 @@
+import { failureText } from '../electron/words.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -54,12 +55,12 @@ test('a newer client signs in to an older service with its protocol version and 
 
 test('a service that cannot upgrade from here says why', async () => {
   const manual = (await upgrade('manual')).result;
-  assert.match(manual.message, /cc-desk-tunnel upgrade/);
+  assert.match(failureText(manual), /cc-desk-tunnel upgrade/);
   assert.equal(manual.code, 'manual');
   const idle = (await upgrade('idle')).result;
-  assert.match(idle.message, /没有找到/);
+  assert.match(failureText(idle), /没有找到/);
   assert.equal(idle.code, 'current');
-  assert.match((await upgrade('available', '0.1.0')).result.message, /太旧/);
+  assert.match(failureText((await upgrade('available', '0.1.0')).result), /太旧/);
 });
 
 test('the install waits for a yes, and a no leaves the service as it is', async () => {
