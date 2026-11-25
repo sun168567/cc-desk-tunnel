@@ -1,6 +1,6 @@
 import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
-import { t } from './i18n.ts';
+import { localeOf, t } from './i18n.ts';
 import { conversation, planOf } from './transcript.ts';
 import type { Step } from './transcript.ts';
 import { pictureNote, toolPictures } from './pictures.ts';
@@ -16,7 +16,9 @@ function fenced(text: string) {
 function toolOutput(output: string) {
   const pictures = toolPictures(output);
   return pictures
-    ? [pictures.text, ...pictures.pictures.map(pictureNote)].filter(Boolean).join('\n')
+    ? [pictures.text, ...pictures.pictures.map((picture) => pictureNote(t, picture))]
+        .filter(Boolean)
+        .join('\n')
     : output;
 }
 
@@ -25,34 +27,39 @@ function toolOutput(output: string) {
 export function markdown(session: Session, events: SessionEvent[]) {
   const parts = [
     `# ${session.title}`,
-    `- 项目：\`${session.projectPath}\`\n- 导出时间：${new Date().toLocaleString('zh-CN')}`,
+    t('session:export.header', {
+      path: session.projectPath,
+      time: new Date().toLocaleString(localeOf(t)),
+    }),
   ];
+  const toolSummary = (name: string, status: string) =>
+    `<summary>${t('session:export.tool', { name })} · ${status}</summary>`;
   const step = (item: Step): string[] => {
     if (item.kind === 'assistant') return [item.text];
     if (item.kind === 'notice' || item.kind === 'note') return [`> ${item.text}`];
     if (item.kind === 'compact')
       return [
-        `> ${item.endedAt ? '上下文已压缩' : '上下文压缩未完成'}${item.previousTokens == null ? '' : ` · 压缩前 ${item.previousTokens.toLocaleString()} tokens`}`,
+        `> ${t(item.endedAt ? 'session:compact.done' : 'session:compact.unfinished')}${item.previousTokens == null ? '' : ` · ${t('session:compact.before', { tokens: item.previousTokens.toLocaleString(localeOf(t)) })}`}`,
       ];
     if (item.kind === 'tool') {
       const found = planOf(item.input);
       return found
-        ? [`### 计划 · ${item.status}\n\n${found.plan}`]
+        ? [`### ${t('session:plan.title')} · ${item.status}\n\n${found.plan}`]
         : [
-            `<details>\n<summary>工具 ${item.name} · ${item.status}</summary>\n\n${fenced(item.input)}\n</details>`,
+            `<details>\n${toolSummary(item.name, item.status)}\n\n${fenced(item.input)}\n</details>`,
           ];
     }
     if (item.kind !== 'work') return [];
     return item.items.map((work) =>
       work.kind === 'tool'
-        ? `<details>\n<summary>工具 ${work.name} · ${work.status}</summary>\n\n${fenced(work.input)}\n\n${work.output ? fenced(toolOutput(work.output)) : ''}\n</details>`
-        : `<details>\n<summary>思考</summary>\n\n${work.text}\n</details>`,
+        ? `<details>\n${toolSummary(work.name, work.status)}\n\n${fenced(work.input)}\n\n${work.output ? fenced(toolOutput(work.output)) : ''}\n</details>`
+        : `<details>\n<summary>${t('session:tool.thinking')}</summary>\n\n${work.text}\n</details>`,
     );
   };
   for (const turn of conversation(events, t)) {
     if (turn.question && !turn.question.continued)
       parts.push(
-        `## 你 · ${new Date(turn.question.at).toLocaleString('zh-CN')}`,
+        `## ${t('session:export.you')} · ${new Date(turn.question.at).toLocaleString(localeOf(t))}`,
         turn.question.text,
       );
     const body = [...turn.steps.flatMap(step), ...(turn.answer ? [turn.answer.text] : [])];
@@ -71,7 +78,7 @@ export async function exportSession(client: ProxyClient, session: Session) {
     await client.waitForHistory(session.id);
   }
   const text = markdown(session, client.shown(session.id));
-  const name = `${session.title.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || '会话'}.md`;
+  const name = `${session.title.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || t('session:export.untitled')}.md`;
   if (window.desktop) return window.desktop.saveFile(name, text);
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' }));

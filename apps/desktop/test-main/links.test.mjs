@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { linkTarget, localPicture } from '../src/links.ts';
 import { pictureNote, toolPictures } from '../src/pictures.ts';
+import { t } from '../src/i18n.ts';
 
 const windows = { projectPath: 'C:\\Work\\App', here: true, browser: false };
 const mac = { projectPath: '/Users/me/app', here: true, browser: false };
@@ -54,12 +55,15 @@ test('paths are read as Markdown passed them on, with a line and column at the e
 
 test('a path this window cannot open says why', () => {
   // On a Windows project, a POSIX path is one on the service.
-  assert.match(linkTarget('/data/state/x.txt', windows).reason, /服务端/);
-  assert.match(linkTarget('C:%5Cx', mac).reason, /Windows/);
-  assert.match(linkTarget('file://server/share/a.txt', windows).reason, /网络共享/);
-  assert.match(linkTarget('~/notes.md', windows).reason, /不完整/);
-  assert.match(linkTarget('src/a.ts', { ...windows, here: false }).reason, /另一台电脑/);
-  assert.match(linkTarget('src/a.ts', { ...windows, here: false, browser: true }).reason, /浏览器/);
+  assert.equal(linkTarget('/data/state/x.txt', windows).reason, 'server');
+  assert.equal(linkTarget('C:%5Cx', mac).reason, 'windows');
+  assert.equal(linkTarget('file://server/share/a.txt', windows).reason, 'share');
+  assert.equal(linkTarget('~/notes.md', windows).reason, 'partial');
+  assert.equal(linkTarget('src/a.ts', { ...windows, here: false }).reason, 'away');
+  assert.equal(
+    linkTarget('src/a.ts', { ...windows, here: false, browser: true }).reason,
+    'browser',
+  );
   // On a Mac, whether a POSIX path is the service's is for the desktop to find out.
   assert.equal(linkTarget('/data/state/x.txt', mac).kind, 'path');
 });
@@ -78,7 +82,7 @@ test('pictures a tool looked at are taken out of its output', () => {
     text: 'Read 1 image',
     pictures: [{ type: 'image/png', data }],
   });
-  assert.equal(pictureNote({ type: 'image/png', data }), '[图片 image/png · 1 KB]');
+  assert.equal(pictureNote(t, { type: 'image/png', data }), '[图片 image/png · 1 KB]');
   // Anything else is output as it is.
   assert.equal(toolPictures('["image"]'), null);
   assert.equal(toolPictures('plain "image" text'), null);

@@ -36,5 +36,9 @@
     "code": "复制代码",
     "message": "复制消息",
     "selectAll": "全选"
-  }
+  },
+  "today": "今天",
+  "yesterday": "昨天",
+  "save": "保存",
+  "gotIt": "知道了"
 }

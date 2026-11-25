@@ -1,5 +1,6 @@
 import { createContext } from 'react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
+import type { T } from './i18n.ts';
 
 // Where the links of a conversation lead from: the session's project folder, whether this window can open what
 // is in it (a desktop window on the computer the project is on), and whether it is a browser.
@@ -10,7 +11,11 @@ export type Link =
   | { kind: 'web'; url: string }
   | { kind: 'path'; path: string; line?: number; column?: number }
   // A path this window cannot open; it can still be copied.
-  | { kind: 'elsewhere'; path: string; reason: string };
+  | { kind: 'elsewhere'; path: string; reason: Elsewhere };
+// Why a path cannot be opened here: on a network share, not whole, on the server, on Windows, in a browser, or on
+// another computer.
+export type Elsewhere = 'share' | 'partial' | 'server' | 'windows' | 'browser' | 'away';
+export const elsewhereText = (t: T, reason: Elsewhere) => t(`session:link.elsewhere.${reason}`);
 
 // A line, and a column, at the end of a path: a.ts:12, a.ts:12:3, a.ts#L12, a.ts#L12C3, a.ts#L12-L20.
 const position = /(?:#L(\d+)(?:C(\d+))?(?:-L?\d+(?:C\d+)?)?|:(\d+)(?::(\d+))?(?:-\d+)?)$/;
@@ -64,22 +69,14 @@ export function linkTarget(href: string, place: Place | null): Link | null {
   let path = /^file:/i.test(bare) ? fromFileUrl(bare) : decoded(bare);
   // Another kind of address; a drive letter is one letter.
   if (!path || /^[a-z][a-z\d+.-]+:/i.test(path)) return null;
-  const elsewhere = (reason: string): Link => ({ kind: 'elsewhere', path: path!, reason });
-  if (/^[\\/]{2}/.test(path)) return elsewhere('这是网络共享上的路径，不直接打开。');
-  if (/^[~\\]/.test(path)) return elsewhere('这个路径不完整，没法确定在哪里。');
+  const elsewhere = (reason: Elsewhere): Link => ({ kind: 'elsewhere', path: path!, reason });
+  if (/^[\\/]{2}/.test(path)) return elsewhere('share');
+  if (/^[~\\]/.test(path)) return elsewhere('partial');
   const windows = isWindowsPath(place.projectPath);
   if (/^[a-z]:\//i.test(path) && windows) path = path.replaceAll('/', '\\');
   if (!isWindowsPath(path) && !path.startsWith('/')) path = joined(place.projectPath, path);
-  if (isWindowsPath(path) !== windows)
-    return elsewhere(
-      windows
-        ? '这是服务端上的路径，本机没有这个文件。'
-        : '这是 Windows 上的路径，不在这个会话的电脑上。',
-    );
-  if (!place.here)
-    return elsewhere(
-      place.browser ? '在浏览器里打不开电脑上的文件。' : '这个会话的项目在另一台电脑上。',
-    );
+  if (isWindowsPath(path) !== windows) return elsewhere(windows ? 'server' : 'windows');
+  if (!place.here) return elsewhere(place.browser ? 'browser' : 'away');
   const [line, column] = [found?.[1] ?? found?.[3], found?.[2] ?? found?.[4]].map(
     (value) => Number(value) || undefined,
   );

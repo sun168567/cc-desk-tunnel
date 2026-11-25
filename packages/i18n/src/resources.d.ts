@@ -41,6 +41,10 @@ export type Resources = {
       message: '复制消息';
       selectAll: '全选';
     };
+    today: '今天';
+    yesterday: '昨天';
+    save: '保存';
+    gotIt: '知道了';
   };
   connection: {
     interrupted: {
@@ -612,6 +616,29 @@ export type Resources = {
       leaveWeb: '将在浏览器中打开：';
       open: '打开';
       showInFiles: '在文件面板显示';
+      elsewhere: {
+        share: '这是网络共享上的路径，不直接打开。';
+        partial: '这个路径不完整，没法确定在哪里。';
+        server: '这是服务端上的路径，本机没有这个文件。';
+        windows: '这是 Windows 上的路径，不在这个会话的电脑上。';
+        browser: '在浏览器里打不开电脑上的文件。';
+        away: '这个会话的项目在另一台电脑上。';
+      };
+      openFailed: '没能打开这个链接。';
+      openLink: '打开链接';
+      copyLink: '复制链接';
+      copyPath: '复制路径';
+      actionFailed: '操作失败，请重试。';
+      reveal: '在文件夹中显示';
+      missing: '本机找不到这个路径';
+      runs: '它会运行程序，不直接打开';
+      openFolder: '打开文件夹';
+      openIn: '用 {{editor}} 打开';
+      openInAt: '用 {{editor}} 打开（第 {{line}} 行）';
+      openDefault: '用默认应用打开';
+      openWith: '打开方式…';
+      copyContent: '复制内容';
+      saveAs: '另存为…';
     };
     simulated: '模拟';
     delivery: {
@@ -666,6 +693,12 @@ export type Resources = {
     find: {
       open: '打开对话查找';
       find: '查找';
+      label: '对话内查找';
+      query: '查找对话内容';
+      partial: '（仅已加载部分）';
+      previous: '上一个匹配（Shift+Enter）';
+      next: '下一个匹配（Enter）';
+      close: '关闭查找（Esc）';
     };
     empty: {
       title: '新会话';
@@ -675,6 +708,73 @@ export type Resources = {
     };
     toEnd: '回到底部';
     textMenu: '对话文字操作';
+    composer: {
+      message: '消息';
+      remove: '移除';
+    };
+    picture: {
+      title: '图片';
+      enlarge: '点击放大';
+      note: '[图片 {{type}} · {{size}} KB]';
+    };
+    rich: {
+      svg: 'SVG 图像';
+      source: '查看源码';
+      picture: '查看图像';
+    };
+    project: {
+      path: '本机项目目录';
+      renameTitle: '项目显示名称';
+      displayName: '显示名称';
+      addTitle: '添加项目';
+      add: '添加';
+      renameHint: '只改名字，不改动文件夹 <code>{{path}}</code>；留空恢复文件夹名。';
+    };
+    delete: {
+      title: '删除会话';
+      native: '原生 Claude Code 会话及代理展示记录将删除，本机项目文件保持不变。';
+      plain: '会话记录将被删除，项目文件保持不变。';
+      confirm: '删除';
+      question: '删除“{{title}}”？';
+    };
+    rename: {
+      title: '重命名会话';
+      name: '名称';
+    };
+    ccdt: {
+      update: '更新 ccdt';
+      install: '安装 ccdt';
+      needed: '用 ccdt 打开需要先安装终端客户端 ccdt：在自己的终端里使用原版 Claude Code，与这里共用会话。';
+      copy: '复制命令';
+      guide: '安装说明';
+      outdated: '这台电脑上的 ccdt 是 {{installed}}，要与服务端同为 {{version}} 才能连接。';
+      runPowerShell: '在 PowerShell 里运行下面这行，装好后再选一次“在 ccdt 中打开”：';
+      runTerminal: '在终端里运行下面这行，装好后再选一次“在 ccdt 中打开”：';
+    };
+    stats: {
+      session: '会话统计';
+      tokens: 'Token 用量';
+      details: '用量明细';
+      turn: '本轮用量';
+      partial: '部分模型请求的记录还没有到达，以上数字可能偏小。';
+      since: '调用记录最早从 {{date}} 起，更早的请求不在统计内。';
+      lifetimes: 'CLI 报告的缓存写入中，1 小时缓存 {{hour}}、5 分钟缓存 {{minutes}} tokens；1 小时缓存的写入单价是 5 分钟的 1.6 倍。';
+      both: '{{lifetimes}}{{since}}';
+    };
+    question: {
+      label: 'Claude 的提问';
+      multiple: '可多选';
+      other: '其他（自己写）';
+      skip: '不回答';
+      submit: '提交回答';
+      otherFor: '其他回答：{{question}}';
+    };
+    export: {
+      header: '- 项目：`{{path}}`\n- 导出时间：{{time}}';
+      tool: '工具 {{name}}';
+      you: '你';
+      untitled: '会话';
+    };
   };
 };
 export type Messages = {
@@ -704,6 +804,10 @@ export type Messages = {
   'common:copy.code': Record<string, never>;
   'common:copy.message': Record<string, never>;
   'common:copy.selectAll': Record<string, never>;
+  'common:today': Record<string, never>;
+  'common:yesterday': Record<string, never>;
+  'common:save': Record<string, never>;
+  'common:gotIt': Record<string, never>;
   'connection:interrupted.read': Record<string, never>;
   'connection:interrupted.request': Record<string, never>;
   'connection:restored.read': Record<string, never>;
@@ -1146,6 +1250,27 @@ export type Messages = {
   'session:link.leaveWeb': Record<string, never>;
   'session:link.open': Record<string, never>;
   'session:link.showInFiles': Record<string, never>;
+  'session:link.elsewhere.share': Record<string, never>;
+  'session:link.elsewhere.partial': Record<string, never>;
+  'session:link.elsewhere.server': Record<string, never>;
+  'session:link.elsewhere.windows': Record<string, never>;
+  'session:link.elsewhere.browser': Record<string, never>;
+  'session:link.elsewhere.away': Record<string, never>;
+  'session:link.openFailed': Record<string, never>;
+  'session:link.openLink': Record<string, never>;
+  'session:link.copyLink': Record<string, never>;
+  'session:link.copyPath': Record<string, never>;
+  'session:link.actionFailed': Record<string, never>;
+  'session:link.reveal': Record<string, never>;
+  'session:link.missing': Record<string, never>;
+  'session:link.runs': Record<string, never>;
+  'session:link.openFolder': Record<string, never>;
+  'session:link.openIn': { editor: Value };
+  'session:link.openInAt': { editor: Value; line: Value };
+  'session:link.openDefault': Record<string, never>;
+  'session:link.openWith': Record<string, never>;
+  'session:link.copyContent': Record<string, never>;
+  'session:link.saveAs': Record<string, never>;
   'session:simulated': Record<string, never>;
   'session:delivery.submitted': Record<string, never>;
   'session:delivery.queued': Record<string, never>;
@@ -1184,10 +1309,63 @@ export type Messages = {
   'session:history.syncing': Record<string, never>;
   'session:find.open': Record<string, never>;
   'session:find.find': Record<string, never>;
+  'session:find.label': Record<string, never>;
+  'session:find.query': Record<string, never>;
+  'session:find.partial': Record<string, never>;
+  'session:find.previous': Record<string, never>;
+  'session:find.next': Record<string, never>;
+  'session:find.close': Record<string, never>;
   'session:empty.title': Record<string, never>;
   'session:empty.create': Record<string, never>;
   'session:empty.suggestions': Record<string, never>;
   'session:empty.more': Record<string, never>;
   'session:toEnd': Record<string, never>;
   'session:textMenu': Record<string, never>;
+  'session:composer.message': Record<string, never>;
+  'session:composer.remove': Record<string, never>;
+  'session:picture.title': Record<string, never>;
+  'session:picture.enlarge': Record<string, never>;
+  'session:picture.note': { type: Value; size: Value };
+  'session:rich.svg': Record<string, never>;
+  'session:rich.source': Record<string, never>;
+  'session:rich.picture': Record<string, never>;
+  'session:project.path': Record<string, never>;
+  'session:project.renameTitle': Record<string, never>;
+  'session:project.displayName': Record<string, never>;
+  'session:project.addTitle': Record<string, never>;
+  'session:project.add': Record<string, never>;
+  'session:project.renameHint': { path: Value };
+  'session:delete.title': Record<string, never>;
+  'session:delete.native': Record<string, never>;
+  'session:delete.plain': Record<string, never>;
+  'session:delete.confirm': Record<string, never>;
+  'session:delete.question': { title: Value };
+  'session:rename.title': Record<string, never>;
+  'session:rename.name': Record<string, never>;
+  'session:ccdt.update': Record<string, never>;
+  'session:ccdt.install': Record<string, never>;
+  'session:ccdt.needed': Record<string, never>;
+  'session:ccdt.copy': Record<string, never>;
+  'session:ccdt.guide': Record<string, never>;
+  'session:ccdt.outdated': { installed: Value; version: Value };
+  'session:ccdt.runPowerShell': Record<string, never>;
+  'session:ccdt.runTerminal': Record<string, never>;
+  'session:stats.session': Record<string, never>;
+  'session:stats.tokens': Record<string, never>;
+  'session:stats.details': Record<string, never>;
+  'session:stats.turn': Record<string, never>;
+  'session:stats.partial': Record<string, never>;
+  'session:stats.since': { date: Value };
+  'session:stats.lifetimes': { hour: Value; minutes: Value };
+  'session:stats.both': { lifetimes: Value; since: Value };
+  'session:question.label': Record<string, never>;
+  'session:question.multiple': Record<string, never>;
+  'session:question.other': Record<string, never>;
+  'session:question.skip': Record<string, never>;
+  'session:question.submit': Record<string, never>;
+  'session:question.otherFor': { question: Value };
+  'session:export.header': { path: Value; time: Value };
+  'session:export.tool': { name: Value };
+  'session:export.you': Record<string, never>;
+  'session:export.untitled': Record<string, never>;
 };

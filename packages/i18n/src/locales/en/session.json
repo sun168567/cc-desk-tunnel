@@ -167,7 +167,30 @@
     "leaveMail": "Opens in your mail app:",
     "leaveWeb": "Opens in your browser:",
     "open": "Open",
-    "showInFiles": "Show in file panel"
+    "showInFiles": "Show in file panel",
+    "elsewhere": {
+      "share": "This path is on a network share, so it isn't opened directly.",
+      "partial": "This path isn't complete, so where it leads can't be told.",
+      "server": "This path is on the server; this computer doesn't have the file.",
+      "windows": "This is a Windows path, not on this session's computer.",
+      "browser": "A browser can't open files on a computer.",
+      "away": "This session's project is on another computer."
+    },
+    "openFailed": "Couldn't open this link.",
+    "openLink": "Open link",
+    "copyLink": "Copy link",
+    "copyPath": "Copy path",
+    "actionFailed": "That didn't work, try again.",
+    "reveal": "Show in folder",
+    "missing": "This path isn't on this computer",
+    "runs": "It would run a program, so it isn't opened directly",
+    "openFolder": "Open folder",
+    "openIn": "Open in {{editor}}",
+    "openInAt": "Open in {{editor}} (line {{line}})",
+    "openDefault": "Open with default app",
+    "openWith": "Open with…",
+    "copyContent": "Copy contents",
+    "saveAs": "Save as…"
   },
   "simulated": "Simulated",
   "delivery": {
@@ -224,7 +247,13 @@
   },
   "find": {
     "open": "Find in conversation",
-    "find": "Find"
+    "find": "Find",
+    "label": "Find in conversation",
+    "query": "Find in conversation",
+    "partial": " (loaded part only)",
+    "previous": "Previous match (Shift+Enter)",
+    "next": "Next match (Enter)",
+    "close": "Close find (Esc)"
   },
   "empty": {
     "title": "New session",
@@ -233,5 +262,72 @@
     "more": "More ideas"
   },
   "toEnd": "Back to the end",
-  "textMenu": "Conversation text actions"
+  "textMenu": "Conversation text actions",
+  "composer": {
+    "message": "Message",
+    "remove": "Remove"
+  },
+  "picture": {
+    "title": "Image",
+    "enlarge": "Click to enlarge",
+    "note": "[Image {{type}} · {{size}} KB]"
+  },
+  "rich": {
+    "svg": "SVG image",
+    "source": "View source",
+    "picture": "View image"
+  },
+  "project": {
+    "path": "Project folder on this computer",
+    "renameTitle": "Project display name",
+    "displayName": "Display name",
+    "addTitle": "Add project",
+    "add": "Add",
+    "renameHint": "Changes only the name, not the folder <code>{{path}}</code>; leave it empty for the folder's name."
+  },
+  "delete": {
+    "title": "Delete session",
+    "native": "The Claude Code session and its records here will be deleted; the project files on this computer stay as they are.",
+    "plain": "The session's records will be deleted; the project files stay as they are.",
+    "confirm": "Delete",
+    "question": "Delete “{{title}}”?"
+  },
+  "rename": {
+    "title": "Rename session",
+    "name": "Name"
+  },
+  "ccdt": {
+    "update": "Update ccdt",
+    "install": "Install ccdt",
+    "needed": "Opening in ccdt needs the terminal client ccdt: use the original Claude Code in your own terminal, sharing sessions with this window.",
+    "copy": "Copy command",
+    "guide": "Install guide",
+    "outdated": "This computer has ccdt {{installed}}; it must be {{version}}, like the server, to connect.",
+    "runPowerShell": "Run this line in PowerShell, then choose “Open in ccdt” again:",
+    "runTerminal": "Run this line in a terminal, then choose “Open in ccdt” again:"
+  },
+  "stats": {
+    "session": "Session stats",
+    "tokens": "Token usage",
+    "details": "Usage details",
+    "turn": "This turn's usage",
+    "partial": "Some model requests haven't been recorded yet, so these figures may be low.",
+    "since": "The call log starts on {{date}}; earlier requests aren't counted.",
+    "lifetimes": "Of the cache writes the CLI reports, {{hour}} tokens went to the 1-hour cache and {{minutes}} to the 5-minute cache; a 1-hour cache write costs 1.6 times as much.",
+    "both": "{{lifetimes}} {{since}}"
+  },
+  "question": {
+    "label": "Claude's question",
+    "multiple": "Pick any",
+    "other": "Other (write your own)",
+    "skip": "Don't answer",
+    "submit": "Submit answer",
+    "otherFor": "Other answer: {{question}}"
+  },
+  "export": {
+    "header": "- Project: `{{path}}`\n- Exported: {{time}}",
+    "tool": "Tool {{name}}",
+    "you": "You",
+    "untitled": "Session"
+  }
 }

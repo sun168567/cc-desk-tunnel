@@ -36,5 +36,9 @@
     "code": "Copy code",
     "message": "Copy message",
     "selectAll": "Select all"
-  }
+  },
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "save": "Save",
+  "gotIt": "Got it"
 }

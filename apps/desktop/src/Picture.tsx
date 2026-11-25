@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from './i18n.ts';
 import { Modal } from './ui.tsx';
 
 // A picture whole, until closed.
@@ -12,8 +13,9 @@ export function PictureDialog({
   alt: string;
   onClose: () => void;
 }) {
+  const t = useT();
   return createPortal(
-    <Modal title={alt || '图片'} onClose={onClose}>
+    <Modal title={alt || t('session:picture.title')} onClose={onClose}>
       <div className="picture-view" onContextMenu={(event) => event.stopPropagation()}>
         <img src={src} alt={alt} />
       </div>
@@ -28,7 +30,7 @@ export function Picture({
   src,
   alt,
   link,
-  title = '点击放大',
+  title,
   onError,
 }: {
   src: string;
@@ -37,13 +39,14 @@ export function Picture({
   title?: string;
   onError?: () => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <>
       <button
         type="button"
         className="picture"
-        title={title}
+        title={title ?? t('session:picture.enlarge')}
         data-link={link}
         onClick={() => setOpen(true)}
       >

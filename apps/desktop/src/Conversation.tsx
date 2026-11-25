@@ -55,7 +55,7 @@ import ConversationFind, { SearchExpanded } from './ConversationFind.tsx';
 import { IconButton, Menu, Modal } from './ui.tsx';
 import { isMac } from './platform.ts';
 import type { MenuItem, MenuPosition } from './ui.tsx';
-import { isPicture, LinkPlace, linkTarget, localPicture } from './links.ts';
+import { elsewhereText, isPicture, LinkPlace, linkTarget, localPicture } from './links.ts';
 import type { Link } from './links.ts';
 import { followLink, linkMenu } from './linkActions.ts';
 import { pictureUrl, toolPictures } from './pictures.ts';
@@ -154,7 +154,7 @@ function LinkCardView({ card }: { card: LinkCard }) {
       ? t('session:link.webHint', { key: commandKey ? '⌘' : 'Ctrl' })
       : link.kind === 'path'
         ? t('session:link.pathHint')
-        : t('session:link.elsewhereHint', { reason: link.reason });
+        : t('session:link.elsewhereHint', { reason: elsewhereText(t, link.reason) });
   return (
     <div
       className={`link-card${card.above ? ' above' : ''}`}
@@ -541,7 +541,7 @@ function Message({
   joined?: boolean;
 }) {
   const t = useT();
-  const time = messageTime(item.kind === 'assistant' ? (item.doneAt ?? item.at) : item.at);
+  const time = messageTime(t, item.kind === 'assistant' ? (item.doneAt ?? item.at) : item.at);
   const user = item.kind === 'user';
   const stamp = time && (
     <time className="message-time" dateTime={item.at} title={time.full}>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Activity, Database } from 'lucide-react';
 import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
+import { localeOf, useT } from './i18n.ts';
 import ContextMeter from './ContextMeter.tsx';
 import { usePrefs } from './prefs.ts';
 import type { ProxyClient } from './client.ts';
@@ -75,6 +76,7 @@ export default function SessionBar({
   metrics: NativeMetrics | null;
   native: boolean;
 }) {
+  const t = useT();
   const { sessionBar } = usePrefs();
   const [stats, setStats] = useState<SessionStats | null>(null);
   useEffect(() => {
@@ -93,13 +95,18 @@ export default function SessionBar({
   if (!shown && !native) return null;
   // The call log is pruned, so a session older than its oldest record is counted from there.
   const since = stats?.firstRecordAt
-    ? `调用记录最早从 ${new Date(stats.firstRecordAt).toLocaleDateString('zh-CN')} 起，更早的请求不在统计内。`
+    ? t('session:stats.since', {
+        date: new Date(stats.firstRecordAt).toLocaleDateString(localeOf(t)),
+      })
     : undefined;
   // How the cache writes split by lifetime, which only the CLI's own totals say (CLI 2.1.311 and later).
   const usage = metrics?.usage;
   const lifetimes =
     usage?.cacheWrite1hTokens !== undefined
-      ? `CLI 报告的缓存写入中，1 小时缓存 ${usage.cacheWrite1hTokens.toLocaleString('zh-CN')}、5 分钟缓存 ${(usage.cacheWrite5mTokens ?? 0).toLocaleString('zh-CN')} tokens；1 小时缓存的写入单价是 5 分钟的 1.6 倍。`
+      ? t('session:stats.lifetimes', {
+          hour: usage.cacheWrite1hTokens.toLocaleString(localeOf(t)),
+          minutes: (usage.cacheWrite5mTokens ?? 0).toLocaleString(localeOf(t)),
+        })
       : undefined;
   return (
     <div className="session-bar">
@@ -109,7 +116,7 @@ export default function SessionBar({
             group="session"
             stats={stats}
             chosen={sessionBar.summary}
-            title="会话统计"
+            title={t('session:stats.session')}
             icon={<Activity />}
             note={since}
           />
@@ -117,9 +124,13 @@ export default function SessionBar({
             group="tokens"
             stats={stats}
             chosen={sessionBar.summary}
-            title="Token 用量"
+            title={t('session:stats.tokens')}
             icon={<Database />}
-            note={[lifetimes, since].filter(Boolean).join('') || undefined}
+            note={
+              lifetimes && since
+                ? t('session:stats.both', { lifetimes, since })
+                : (lifetimes ?? since)
+            }
           />
         </>
       )}
