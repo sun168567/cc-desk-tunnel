@@ -95,7 +95,7 @@ If you have one computer and Claude Code runs well on it locally, the local vers
 | 📱 **Browser and phone** | Optional: work on sessions of online computers, or start plain sessions that run on the server; install it as an app on a phone; adds no port or container |
 | 📊 **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics; compact automatically before the prompt cache expires |
 | ⏰ **Scheduled tasks** | The client sends a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
-| ⬆️ **Upgrades and backups** | Upgrade the service from the client without logging in to the server; Windows clients can also upgrade in the app, while macOS and Linux clients require downloading and installing the new package; back up and restore the service with one command |
+| ⬆️ **Upgrades and backups** | Upgrade the service and the Windows client with one click in the client, without logging in to the server; back up and restore the service with one command |
 | 🧩 **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
 
 ## ⚙️ How it works

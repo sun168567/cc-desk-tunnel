@@ -29,7 +29,9 @@ export const actions: { id: Action; name: string; desktop?: boolean }[] = [
   { id: 'zoomOut', name: '缩小界面', desktop: true },
   { id: 'zoomReset', name: '恢复界面大小', desktop: true },
 ];
-// KeyboardEvent calls Command the Meta key, recorded as Win for saved shortcuts.
+// On macOS the key of commands is Command, which a key press names `Win` here as on any keyboard. Option with an
+// arrow moves through text there, so going back and forward take the brackets, as in its browsers. Each default is
+// written in the order comboOf records a key press in, or a press of it would not match.
 const command = isMac ? 'Win' : 'Ctrl';
 const defaults: Record<Action, string> = {
   back: isMac ? 'Win+BracketLeft' : 'Alt+ArrowLeft',
