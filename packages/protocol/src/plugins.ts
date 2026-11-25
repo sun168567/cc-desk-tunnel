@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // The plugins of the service as its clients show them (see docs/plugins.md). What a plugin declares is data here: its
 // functions stay with the service, which runs them in a process of their own.
-// `author.plugin`, as its author names it: its settings, data and log are kept under it.
+// `author.plugin`, as its author names it: its settings, data, log and buttons' states are kept under it.
 export const pluginIdSchema = z
   .string()
   .regex(/^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/)
@@ -69,6 +69,59 @@ export type PluginValues = Record<string, PluginValue>;
 export const shownWhen = (showWhen: string | string[] | undefined, values: PluginValues) =>
   !showWhen || [showWhen].flat().some((name) => !!values[name]);
 
+// How many plugins may have a button beside the message input at once; a narrow toolbar holds no more.
+export const COMPOSER_SLOTS = 2;
+// A button of the plugin beside the message input, whose state each session has its own of. The service keeps the
+// state and the clients draw it; what the states mean is the plugin's alone.
+export const slotGestureSchema = z.enum(['click', 'doubleClick', 'longPress']);
+export type SlotGesture = z.infer<typeof slotGestureSchema>;
+export const composerSlotSchema = z.object({
+  title: label,
+  showWhen: z.union([key, z.array(key).min(1)]).optional(),
+  // A state, or the setting that names it.
+  initial: z.union([key, z.object({ setting: key })]),
+  // How a long press shows: when it counts, a ring that fills until then, and the icon trembling meanwhile.
+  hold: z
+    .object({
+      ms: z.number().int().min(400).max(5000).default(800),
+      ring: z.boolean().optional(),
+      effect: z.literal('tremble').optional(),
+    })
+    .default({ ms: 800 }),
+  // Shown beside the session in the list, in a state that is `active`.
+  mark: z.boolean().optional(),
+  states: z
+    .record(
+      key,
+      z.object({
+        // An SVG, of which the shape is drawn in the colour of the text.
+        icon: z.string().max(16_000),
+        title: label,
+        tip: z.string().max(120).optional(),
+        effect: z.enum(['shake', 'pulse']).optional(),
+        pivot: z.enum(['center', 'top']).optional(),
+        active: z.boolean().optional(),
+      }),
+    )
+    .refine((states) => Object.keys(states).length <= 10, '最多 10 个状态'),
+  // What a gesture or an event makes of the state: another for any, or by the state it is in.
+  on: z.record(z.string().max(60), z.union([key, z.record(key, key)])),
+});
+export type ComposerSlot = z.infer<typeof composerSlotSchema>;
+// The state a gesture or an event brings the slot to; nothing when it stays.
+export function slotMove(slot: ComposerSlot, cause: string, state: string) {
+  const move = slot.on[cause];
+  const to = typeof move === 'object' ? move[state] : move;
+  return to !== state && to !== undefined && slot.states[to] ? to : undefined;
+}
+// The state the slot is in: the one kept for the session, or what it begins with.
+export function slotState(slot: ComposerSlot, kept: string | undefined, values: PluginValues) {
+  if (kept !== undefined && slot.states[kept]) return kept;
+  const initial =
+    typeof slot.initial === 'string' ? slot.initial : String(values[slot.initial.setting]);
+  return slot.states[initial] ? initial : Object.keys(slot.states)[0]!;
+}
+
 const link = z.url({ protocol: /^https?$/ }).max(500);
 // A plugin's own .claude-plugin/plugin.json, of which an installed one needs the id.
 export const pluginManifestSchema = z.object({
@@ -120,6 +173,7 @@ export const pluginSchema = z.object({
   values: z.record(key, pluginValueSchema),
   // The sensitive settings that have a value.
   secrets: z.array(key),
+  composerSlot: composerSlotSchema.optional(),
 });
 export type Plugin = z.infer<typeof pluginSchema>;
 
@@ -139,6 +193,16 @@ export const pluginCommandSchemas = [
   z.object({ type: z.literal('plugin.try'), ...request, event: z.string().max(60) }).strict(),
   z
     .object({ type: z.literal('plugin.log'), ...request, clear: z.literal(true).optional() })
+    .strict(),
+  // What the user did to the plugin's button in a session, which counts if it still is in the state they saw.
+  z
+    .object({
+      type: z.literal('plugin.composerSlot'),
+      ...request,
+      sessionId: z.uuid(),
+      gesture: slotGestureSchema,
+      from: key,
+    })
     .strict(),
   // With its settings, data and log.
   z.object({ type: z.literal('plugin.remove'), ...request }).strict(),

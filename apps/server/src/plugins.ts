@@ -3,7 +3,13 @@ import type { ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch } from 'node:fs';
 import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
-import { pluginManifestSchema, pluginIdSchema } from '@cc-desk-tunnel/protocol';
+import {
+  COMPOSER_SLOTS,
+  pluginManifestSchema,
+  pluginIdSchema,
+  slotMove,
+  slotState,
+} from '@cc-desk-tunnel/protocol';
 import type {
   Plugin,
   PluginAccess,
@@ -33,6 +39,14 @@ type Entry = {
   declared: Declared;
   events: string[];
   broken?: string;
+  // It wanted a button when none was left, and so was not enabled.
+  refused?: string;
+};
+
+// Where the states of the plugins' buttons are kept: with each session.
+type ComposerSlots = {
+  of: (sessionId: string, id: string) => string | undefined;
+  set: (sessionId: string, id: string, state: string) => void;
 };
 
 // How much of what a command printed is kept, and how long changes in the directory are gathered.
@@ -53,6 +67,7 @@ const reason = (error: unknown) => (error instanceof Error ? error.message : Str
 export class Plugins {
   private directory: string;
   private changed: () => void;
+  private composerSlots: ComposerSlots;
   private log: PluginLog;
   private entries = new Map<string, Entry>();
   // Apart from what is read anew, which may be while a plugin is set or runs.
@@ -66,9 +81,14 @@ export class Plugins {
   private loading: Promise<void> = Promise.resolve();
   private closed = false;
   private confinable = false;
-  constructor(directory: string, changed: () => void = () => {}) {
+  constructor(
+    directory: string,
+    changed: () => void = () => {},
+    composerSlots: ComposerSlots = { of: () => undefined, set: () => {} },
+  ) {
     this.directory = directory;
     this.changed = changed;
+    this.composerSlots = composerSlots;
     this.log = new PluginLog(directory);
   }
   async start() {
@@ -117,12 +137,11 @@ export class Plugins {
         enabled,
         problem: enabled
           ? this.problem(id)
-          : config.enabled
-            ? (entry.broken ?? waiting)
-            : undefined,
+          : (entry.refused ?? (config.enabled ? (entry.broken ?? waiting) : undefined)),
         failure: this.failures.get(id),
         events: entry.events,
         settings: entry.declared.settings,
+        composerSlot: entry.declared.composerSlot,
         values: Object.fromEntries(Object.entries(values).filter(([key]) => !secret(key))),
         secrets: Object.keys(values).filter((key) => secret(key) && values[key] !== ''),
       };
@@ -146,6 +165,7 @@ export class Plugins {
         entries.set(id, known && !stale.has(id) ? known : await this.load(id));
       }
       if (this.closed) return;
+      this.grant(entries);
       this.entries = entries;
       this.changed();
     };
@@ -154,6 +174,25 @@ export class Plugins {
       .catch((error) => console.error(`Plugins were not read: ${reason(error)}`));
     return this.loading;
   }
+  // Of the plugins that want a button, those that had one keep it, and the others get what is left. One that gets
+  // none is not enabled.
+  private grant(entries: Map<string, Entry>) {
+    const had = (id: string) => Number(!!this.entries.get(id)?.declared.composerSlot);
+    const wanting = [...entries]
+      .filter(([, entry]) => entry.declared.composerSlot)
+      .sort(([a], [b]) => had(b) - had(a));
+    const holders = wanting.slice(0, COMPOSER_SLOTS);
+    if (holders.length < COMPOSER_SLOTS) for (const entry of entries.values()) delete entry.refused;
+    const named = holders.map(([id, { manifest }]) => `“${manifest.displayName ?? id}”`);
+    for (const [id, entry] of wanting.slice(COMPOSER_SLOTS)) {
+      entry.declared = NOTHING;
+      entry.refused = `${COMPOSER_SLOTS} 个输入框插槽已被${named.join('')}占用，停用其中一个后再启用。`;
+      const config = { ...this.config(id), enabled: false };
+      writePluginConfig(this.directory, id, config);
+      this.configs.set(id, config);
+      this.log.write(id, `没有启用：${entry.refused}`);
+    }
+  }
   private async load(id: string): Promise<Entry> {
     const root = join(this.directory, 'plugins', id);
     const entry: Entry = {
@@ -161,6 +200,8 @@ export class Plugins {
       access: this.access({}),
       declared: NOTHING,
       events: [],
+      // Still so, unless it is being enabled anew.
+      refused: this.config(id).enabled ? undefined : this.entries.get(id)?.refused,
     };
     try {
       const manifest = join(root, '.claude-plugin', 'plugin.json');
@@ -251,6 +292,8 @@ export class Plugins {
     this.write(id, { ...this.config(id), enabled, agreed: enabled && access !== 'own' });
     this.stale.add(id);
     await this.refresh();
+    const { refused } = this.entry(id);
+    if (enabled && refused) throw new DomainError('composer_slots', refused);
     this.log.write(id, enabled ? '启用' : '停用');
   }
   // Keeps each of the changes that holds, whatever else is still to be set.
@@ -313,6 +356,11 @@ export class Plugins {
     if (problem) return { ok: false, message: problem };
     const example = eventExample(event);
     if (!example) throw new DomainError('not_found', '没有这个事件。');
+    const { composerSlot: slot } = this.entry(id).declared;
+    if (slot && example.session_id) {
+      const active = Object.keys(slot.states).find((state) => slot.states[state]!.active);
+      example.slots = { composer: active ?? slotState(slot, undefined, this.values(id)) };
+    }
     const hooks = this.hooksFor(id, example);
     if (!hooks.length) return { ok: false, message: '这个事件没有匹配的命令。' };
     const results = await Promise.all(hooks.map((hook) => this.run(id, hook, example, '[试跑] ')));
@@ -332,7 +380,10 @@ export class Plugins {
     this.log.write(id, `安装 ${version ?? ''}`.trim());
     this.stale.add(id);
     await this.refresh();
-    return { ok: true, message: '' };
+    const { refused } = this.entry(id);
+    return refused
+      ? { ok: false, message: `已安装，但没有启用：${refused}` }
+      : { ok: true, message: '' };
   }
   async remove(id: string) {
     this.entry(id);
@@ -351,14 +402,36 @@ export class Plugins {
   }
 
   dispatch(event: ServiceEvent) {
+    const sessionId = event.session_id as string | undefined;
     for (const id of this.entries.keys()) {
+      const state = sessionId && this.state(id, sessionId);
+      // The state changes while the service closes too, and what the event did to it is not seen by the event.
+      if (sessionId) this.move(id, sessionId, event.hook_event_name);
       if (this.closed || !this.enabled(id) || this.problem(id)) continue;
+      const told = state ? { ...event, slots: { composer: state } } : event;
       try {
-        for (const hook of this.hooksFor(id, event)) void this.run(id, hook, event);
+        for (const hook of this.hooksFor(id, event)) void this.run(id, hook, told);
       } catch (error) {
         this.failed(id, `${event.hook_event_name} 没有运行：${reason(error)}`);
       }
     }
+  }
+  private state(id: string, sessionId: string) {
+    const { composerSlot: slot } = this.entry(id).declared;
+    return slot && slotState(slot, this.composerSlots.of(sessionId, id), this.values(id));
+  }
+  // Moves the plugin's button in a session, as a gesture or an event does. A gesture made on another state than it is
+  // in came late.
+  move(id: string, sessionId: string, cause: string, from?: string) {
+    const { composerSlot: slot } = this.entry(id).declared;
+    const state = this.state(id, sessionId);
+    if (!slot || !state || (from !== undefined && from !== state)) return;
+    const to = slotMove(slot, cause, state);
+    if (to) this.composerSlots.set(sessionId, id, to);
+  }
+  // What a run's end does to the buttons of a session, where the service stopped before it could be told.
+  interrupted(sessionId: string) {
+    for (const id of this.entries.keys()) this.move(id, sessionId, 'RunEnded');
   }
   private hooksFor(id: string, event: ServiceEvent) {
     const field = matcherFields[event.hook_event_name];

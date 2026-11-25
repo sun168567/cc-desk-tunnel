@@ -87,6 +87,8 @@ export class SessionStore {
   database: DatabaseSync;
   // Sessions as last read or written: an event is recorded without reading its session back.
   private known = new Map<string, { record: string; createRequestId: string }>();
+  // The sessions whose runs a stop of the service had cut off.
+  interrupted: string[] = [];
 
   constructor(directory: string) {
     this.directory = directory;
@@ -167,6 +169,7 @@ export class SessionStore {
             exitCode: null,
           });
         }
+        if (session.activeRun.surface !== 'terminal') this.interrupted.push(session.id);
         this.append(session.id, runId, {
           type: 'run.status',
           status: 'cancelled',
@@ -616,6 +619,7 @@ export class SessionStore {
       device: place.device,
       projectPath: place.projectPath ?? source.projectPath,
       autoTitle: false,
+      composerSlots: undefined,
       // Claude Code forks a session beside it, in the directory it works in.
       nativeRoot: native
         ? (source.nativeRoot ?? source.id)
@@ -806,6 +810,12 @@ export class SessionStore {
     if (session.permissionMode === permissionMode) return session;
     setMode(session, permissionMode);
     session.updatedAt = new Date().toISOString();
+    this.save(session);
+    return session;
+  }
+  setComposerSlot(sessionId: string, plugin: string, state: string) {
+    const { session } = this.get(sessionId);
+    session.composerSlots = { ...session.composerSlots, [plugin]: state };
     this.save(session);
     return session;
   }

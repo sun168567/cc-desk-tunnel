@@ -6,7 +6,7 @@
 
 ## 插件
 
-插件是 `<数据目录>/plugins/<id>/`（Docker 部署在容器里是 `/data/state/plugins/<id>/`）。id 是 `作者.插件名`，由作者定，两段都用小写字母、数字和连字符，作者一段建议用代码托管平台的用户名；设置、数据和日志都按它保存。目录里面的 `hooks/hooks.json` 与 Claude Code 插件的结构相同：
+插件是 `<数据目录>/plugins/<id>/`（Docker 部署在容器里是 `/data/state/plugins/<id>/`）。id 是 `作者.插件名`，由作者定，两段都用小写字母、数字和连字符，作者一段建议用代码托管平台的用户名；设置、数据、日志和按钮状态都按它保存。目录里面的 `hooks/hooks.json` 与 Claude Code 插件的结构相同：
 
 ```json
 {
@@ -89,6 +89,42 @@ export const settings = [
 - 值存在 `<数据目录>/plugin-config/<id>.json`（0600），命令从事件的 `config` 里得到，类型与这里相同。必填的没有填时插件不运行。
 - `ui.ts` 只在单独的子进程里运行，Node 只去掉类型，不支持 `enum` 之类需要转换的语法。停用的插件不运行任何代码，也就没有表单。
 
+## 输入框旁的按钮
+
+`ui.ts` 导出的 `slots.composer` 是输入框旁的一个按钮，每个会话有自己的状态。状态由服务端保存、告诉所有窗口，按钮由客户端绘制，桌面、网页和手机相同；各个状态意味着什么只有插件知道。
+
+```ts
+const pivot = 'top';
+export const slots = {
+  composer: {
+    title: '外部推送',
+    showWhen: ['dingtalk_on', 'pushplus_on'],
+    initial: { setting: 'default_mode' },
+    hold: { ms: 800, ring: true, effect: 'tremble' },
+    mark: true,
+    states: {
+      off: { icon: 'icons/bell.svg', title: '不订阅', tip: '已取消订阅' },
+      once: { icon: 'icons/bell-dot.svg', title: '本轮', tip: '已订阅本轮', effect: 'shake', pivot, active: true },
+      always: { icon: 'icons/bell-ring.svg', title: '持续', tip: '已持续订阅', effect: 'shake', pivot, active: true },
+    },
+    on: {
+      click: { off: 'once', once: 'off', always: 'off' },
+      doubleClick: { once: 'always' },
+      longPress: { off: 'always', once: 'always' },
+      RunEnded: { once: 'off' },
+    },
+  },
+};
+```
+
+- `states`：图标是插件目录里的 SVG，只取形状、用文字的颜色画；`tip` 是切换到它时输入框上方的一句话；`effect` 是切换后的动效，`shake` 或 `pulse`，绕 `pivot`（`center` 或 `top`）；`active` 用强调色。
+- `on`：手势 `click`、`doubleClick`、`longPress`，或任何会话事件，切到哪个状态；可以按当前状态分别写，没写的不动。第一下单击立即生效，400 毫秒内的第二下先看 `doubleClick`。事件在交给命令之后切换，命令看到的是切换前的状态，在事件的 `slots.composer` 里。
+- `initial` 是一个状态，或 `{ setting }` 指着的设置的值；会话没有动过按钮时用它，分叉出的会话也是。
+- `hold`：长按多久算数、有没有进度圈和图标抖动；算数之前松开不算单击。
+- `mark`：`active` 的状态在会话列表里显示图标。
+- 输入框插槽一共两个，一个插件占一个，启用着就算占用。都占用时，再启用、安装或放入要按钮的插件，它会保持停用并说明被谁占用；停用其中一个后可以启用。已经占着的不会被挤掉。
+- 两个窗口同时点时先到的算数。服务停止或重启打断的一轮没有 `RunEnded` 事件，但按钮照 `RunEnded` 切换。
+
 插件响应的事件可以在设置页“试跑”：用示例事件运行它的命令，和事件真的来时一样。
 
 ## 日志
@@ -100,13 +136,13 @@ export const settings = [
 这份规范（事件、`hooks.json`、`plugin.json`、`ui.ts`）独立于客户端与服务端的协议，服务端升级后老插件照常使用：
 
 - 只增加，不删除，也不改变已有的含义；要改时用新的名字。事件的 `version` 现在是 1，以后若有新版本，只发给声明要它的插件。
-- 不认识的事件和多余的属性忽略。`status`、`code`、`model`、`effort`、`permission_mode` 这类字段以后可能有新的值；`reason` 和错误的 `message` 是给人看的，不要按文字判断。
+- 不认识的事件、插槽和多余的属性忽略。`status`、`code`、`model`、`effort`、`permission_mode` 这类字段以后可能有新的值；`reason` 和错误的 `message` 是给人看的，不要按文字判断。
 - 用到较新的写法（如新的字段类型）的插件写上 `minVersion`，旧服务端会说明需要哪个版本。
-- 设置按字段名保存，更新插件时留着，字段改了类型时用默认值。
+- 设置按字段名、会话里按钮的状态按 id 和状态名保存，更新插件时都留着：字段改了类型时用默认值，不再有的状态回到初始状态。
 
 ## 事件
 
-每个事件都有 `version`、`hook_event_name`、`timestamp`（ISO 8601）、`config`（插件的设置）。除设备事件外还有 `session_id`、`session_title`、`project_path`、`run_id`，以及会话所在的设备 `device`（`id`、`name`、`platform`：`win32`、`darwin` 或 `linux`；很早的会话可能没有）和当时的状态：
+每个事件都有 `version`、`hook_event_name`、`timestamp`（ISO 8601）、`config`（插件的设置）；插件有按钮时，会话事件还有 `slots`。除设备事件外还有 `session_id`、`session_title`、`project_path`、`run_id`，以及会话所在的设备 `device`（`id`、`name`、`platform`：`win32`、`darwin` 或 `linux`；很早的会话可能没有）和当时的状态：
 
 - `model`（最近一次实际使用的，还没有时是会话选定的）、`effort`、`permission_mode`。
 - `context`：最近一次读到的上下文，`used_tokens` 与 `window_tokens`。

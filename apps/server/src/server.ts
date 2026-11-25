@@ -310,9 +310,20 @@ export function createProxyServer(options: ServerOptions) {
     options.files === false ? undefined : new FileService(options.dataDir, options.files);
   // The file panel's connections of each control connection, which end with it.
   const fileConnections = new Map<string, Set<WebSocket>>();
-  const plugins = new Plugins(store.directory, () => {
-    if (!closing) broadcast({ type: 'plugins', plugins: plugins.list() });
-  });
+  const plugins = new Plugins(
+    store.directory,
+    () => {
+      if (!closing) broadcast({ type: 'plugins', plugins: plugins.list() });
+    },
+    {
+      of: (sessionId, id) => store.get(sessionId).session.composerSlots?.[id],
+      set: (sessionId, id, state) =>
+        broadcast({
+          type: 'session.updated',
+          session: store.setComposerSlot(sessionId, id, state),
+        }),
+    },
+  );
   const events = new ServiceEvents(
     (sessionId) => ({
       session: store.get(sessionId).session,
@@ -1720,6 +1731,8 @@ export function createProxyServer(options: ServerOptions) {
       return send(peer, { type: 'plugin.done', requestId, ...(await plugins.install(archive)) });
     }
     const { id, requestId } = command;
+    if (command.type === 'plugin.composerSlot')
+      return plugins.move(id, command.sessionId, command.gesture, command.from);
     if (command.type === 'plugin.remove') await plugins.remove(id);
     else if (command.type === 'plugin.enable') await plugins.enable(id, command.enabled);
     else if (command.type === 'plugin.configure')
@@ -1768,6 +1781,7 @@ export function createProxyServer(options: ServerOptions) {
       case 'plugin.try':
       case 'plugin.log':
       case 'plugin.remove':
+      case 'plugin.composerSlot':
       case 'plugin.upload':
       case 'plugin.install':
         await plugin(peer, command);
@@ -2598,6 +2612,7 @@ export function createProxyServer(options: ServerOptions) {
       await files?.start();
       updates?.start();
       await plugins.start();
+      for (const sessionId of store.interrupted) plugins.interrupted(sessionId);
       if (usageReceiver)
         options.claude!.environment = telemetryEnvironment(await usageReceiver.listen());
       await new Promise<void>((resolve, reject) => {

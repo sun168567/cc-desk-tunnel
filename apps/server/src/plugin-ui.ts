@@ -1,11 +1,16 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { pluginGroupSchema, shownWhen } from '@cc-desk-tunnel/protocol';
-import type { PluginField, PluginGroup, PluginValues } from '@cc-desk-tunnel/protocol';
+import { pluginGroupSchema, composerSlotSchema, shownWhen } from '@cc-desk-tunnel/protocol';
+import type {
+  PluginField,
+  PluginGroup,
+  ComposerSlot,
+  PluginValues,
+} from '@cc-desk-tunnel/protocol';
 import { HOST, launch, stop } from './plugin-process.ts';
 import type { Where } from './plugin-process.ts';
 
@@ -14,11 +19,13 @@ const CHECK_MS = 2000;
 const BUTTON_SECONDS = 20;
 // The longest answer, in characters.
 const REPLY_LIMIT = 256 * 1024;
+const ICON_LIMIT = 16_000;
 
 const declaredSchema = z.object({
   settings: z.array(pluginGroupSchema),
+  slots: z.object({ composer: composerSlotSchema.optional() }),
 });
-export type Declared = { settings: PluginGroup[] };
+export type Declared = { settings: PluginGroup[]; composerSlot?: ComposerSlot };
 export const NOTHING: Declared = { settings: [] };
 
 const uiFile = (root: string) =>
@@ -81,7 +88,8 @@ function read(answer: string): Reply {
 
 // What the plugin declares; nothing for one without a ui file.
 export async function loadUi(where: Where): Promise<Declared> {
-  const file = uiFile(where.root);
+  const { root } = where;
+  const file = uiFile(root);
   if (!file) return NOTHING;
   const { reply } = await ask(where, file, {}, LOAD_MS);
   if (reply.failure) throw new Error(reply.failure);
@@ -96,8 +104,26 @@ export async function loadUi(where: Where): Promise<Declared> {
   const names = declared.data.settings.flatMap((group) => Object.keys(group.fields));
   const twice = names.find((name, index) => names.indexOf(name) !== index);
   if (twice) throw new Error(`字段 ${twice} 重复`);
-  return declared.data;
+  const { settings, slots } = declared.data;
+  return { settings, composerSlot: slots.composer && drawn(root, slots.composer) };
 }
+// The slot with its icons in place of the paths of their files.
+function drawn(root: string, slot: ComposerSlot): ComposerSlot {
+  const states = Object.entries(slot.states).map(([name, state]) => {
+    const path = resolve(root, state.icon);
+    if (!path.startsWith(resolve(root) + sep) || !path.endsWith('.svg') || !existsSync(path))
+      throw new Error(`没有图标 ${state.icon}（要是插件目录里的 .svg）`);
+    const icon = readFileSync(path, 'utf8');
+    if (icon.length > ICON_LIMIT) throw new Error(`图标 ${state.icon} 超过 ${ICON_LIMIT} 个字符`);
+    return [name, { ...state, icon }] as const;
+  });
+  const strays = Object.values(slot.on)
+    .flatMap((move) => (typeof move === 'object' ? Object.entries(move).flat() : [move]))
+    .filter((name) => !slot.states[name]);
+  if (strays.length) throw new Error(`slots.composer.on 里没有这个状态：${strays[0]}`);
+  return { ...slot, states: Object.fromEntries(states) };
+}
+
 export const fieldsOf = (groups: PluginGroup[]): Record<string, PluginField> =>
   Object.assign({}, ...groups.map((group) => group.fields));
 // The groups that are in use, and so checked: those shown whole.

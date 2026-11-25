@@ -248,6 +248,38 @@ test('an archive is checked before any of it is run, and takes the place of the 
   assert.deepEqual(plugins.list(), []);
 });
 
+test('a third plugin that wants a button is not enabled while two have one', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
+  const add = (name: string, ui: string) => {
+    const root = join(directory, 'plugins', name);
+    mkdirSync(join(root, 'hooks'), { recursive: true });
+    writeFileSync(join(root, 'hooks', 'hooks.json'), '{"hooks":{}}');
+    writeFileSync(join(root, 'a.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    writeFileSync(join(root, 'ui.mjs'), ui);
+  };
+  const button =
+    "export const slots = { composer: { title: 'B', initial: 'a', states: { a: { icon: 'a.svg', title: 'A' } }, on: {} } };";
+  agree(directory, 't.b', 't.c', 't.d', 't.none');
+  for (const id of ['t.b', 't.c', 't.d']) add(id, button);
+  add('t.none', 'export const settings = [];');
+  const plugins = new Plugins(directory);
+  t.after(() => {
+    plugins.close();
+    rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  const enabled = () => plugins.list().flatMap(({ id, enabled }) => (enabled ? [id] : []));
+  await plugins.start();
+  assert.deepEqual(enabled(), ['t.b', 't.c', 't.none']);
+  assert.match(plugins.list()[2]!.problem!, /输入框插槽已被“t\.b”“t\.c”占用/);
+  await assert.rejects(plugins.enable('t.d', true), /输入框插槽已被“t\.b”“t\.c”占用/);
+  await plugins.enable('t.c', false);
+  assert.equal(plugins.list()[2]!.problem, undefined);
+  await plugins.enable('t.d', true);
+  // Those that have one keep it, whatever their names.
+  await assert.rejects(plugins.enable('t.c', true), /输入框插槽已被“t\.b”“t\.d”占用/);
+  assert.deepEqual(enabled(), ['t.b', 't.d', 't.none']);
+});
+
 test('a plugin that is not confined runs once the user enabled it, and one that an update makes so is asked about anew', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
   const add = (id: string, permissions: string[]) => {

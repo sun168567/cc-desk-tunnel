@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -167,6 +167,89 @@ test('a plugin added while the service runs hears of a wait, its end and the end
   const resolved = await heard('WaitResolved');
   assert.deepEqual([resolved.wait_id, resolved.allowed], [waiting.wait_id, false]);
   assert.equal((await heard('RunEnded')).status, 'completed');
+});
+
+test('a plugin’s button keeps its state with the session, and the end of a run moves it as declared', async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const sessionId = await f.create(client);
+  const root = join(f.directory, 'plugins', 't.bell');
+  agree(f.directory, 't.bell');
+  mkdirSync(join(root, 'hooks'), { recursive: true });
+  writeFileSync(join(root, 'bell.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  writeFileSync(
+    join(root, 'ui.mjs'),
+    `const state = (title) => ({ icon: 'bell.svg', title });
+export const slots = { composer: { title: '订阅', initial: 'off',
+  states: { off: state('不订阅'), once: state('本轮') },
+  on: { click: { off: 'once', once: 'off' }, RunEnded: { once: 'off' } } } };`,
+  );
+  const told = join(f.directory, 'plugin-data', 't.bell', 'told');
+  const code =
+    "require('fs').writeFileSync(process.env.CLAUDE_PLUGIN_DATA + '/told', require('fs').readFileSync(0))";
+  const hook = { type: 'command', command: process.execPath, args: ['-e', code] };
+  writeFileSync(
+    join(root, 'hooks', 'hooks.json'),
+    JSON.stringify({ hooks: { RunEnded: [{ hooks: [hook] }] } }),
+  );
+  await client.wait((message) => message.type === 'plugins' && !!message.plugins[0]?.composerSlot);
+  const click = (from: string) =>
+    client.request({
+      type: 'plugin.composerSlot',
+      id: 't.bell',
+      sessionId,
+      gesture: 'click',
+      from,
+    });
+  const moved = (state: string) =>
+    client.wait(
+      (message) =>
+        message.type === 'session.updated' && message.session.composerSlots?.['t.bell'] === state,
+    );
+  await click('off');
+  await moved('once');
+  // A click on a state it has left came late.
+  await click('off');
+  await client.request({ type: 'message.send', sessionId, text: '试试', scenario: 'chat' });
+  await moved('off');
+  for (const deadline = Date.now() + 5000; Date.now() < deadline;) {
+    if (existsSync(told) && readFileSync(told, 'utf8')) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.deepEqual(JSON.parse(readFileSync(told, 'utf8')).slots, { composer: 'once' });
+});
+
+test('a button a run’s end was to move is moved after the service was stopped, at once or cut off', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-test-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const root = join(directory, 'plugins', 't.bell');
+  agree(directory, 't.bell');
+  mkdirSync(join(root, 'hooks'), { recursive: true });
+  writeFileSync(join(root, 'hooks', 'hooks.json'), '{"hooks":{}}');
+  writeFileSync(join(root, 'bell.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  writeFileSync(
+    join(root, 'ui.mjs'),
+    `const state = (title) => ({ icon: 'bell.svg', title });
+export const slots = { composer: { title: '订阅', initial: 'off',
+  states: { off: state('不订阅'), once: state('本轮') }, on: { RunEnded: { once: 'off' } } } };`,
+  );
+  const store = new SessionStore(directory);
+  const [cut, waiting] = ['运行中', '等下一轮'].map((title) => {
+    const { id } = store.create(randomUUID(), title, 'D:\\p', device);
+    store.setComposerSlot(id, 't.bell', 'once');
+    return id;
+  });
+  store.append(cut!, randomUUID(), {
+    type: 'run.status',
+    status: 'running',
+    connectionId: randomUUID(),
+  });
+  store.close();
+  const server = createProxyServer({ token, dataDir: directory, stepMs: 2 });
+  await server.listen(0);
+  const slots = (id: string) => server.store.get(id).session.composerSlots;
+  assert.deepEqual([slots(cut!), slots(waiting!)], [{ 't.bell': 'off' }, { 't.bell': 'once' }]);
+  await server.close();
 });
 
 test('requires authentication, rejects wrong token/version/origin and accepts health', async (t) => {
