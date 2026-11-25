@@ -16,8 +16,7 @@ export type UpgradeStep = {
   reason?: string;
 };
 
-export const messageOf = (failure: unknown) =>
-  String((failure as Error)?.message ?? failure).replace(/^.*?'[\w:]+': (Error: )?/, '');
+export const messageOf = (failure: unknown) => String((failure as Error)?.message ?? failure);
 
 export const megabytes = (bytes: number) => `${(bytes / 1048576).toFixed(1)} MB`;
 const share = (step: UpgradeStep) =>

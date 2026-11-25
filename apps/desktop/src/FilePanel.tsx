@@ -225,9 +225,7 @@ export default function FilePanel({
     try {
       directory = (await api().stat(place.id, path)).kind === 'directory';
     } catch (error) {
-      setMessage(
-        (error as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
-      );
+      setMessage((error as Error).message);
       return;
     }
     await go(directory ? path : parentOf(style, path));
@@ -391,10 +389,7 @@ export default function FilePanel({
               ? { state: 'cancelled' }
               : {
                   state: 'failed',
-                  error: error.message.replace(
-                    /^Error invoking remote method '[^']+': (Error: )?/,
-                    '',
-                  ),
+                  error: error.message,
                 },
           ),
       );
@@ -446,9 +441,7 @@ export default function FilePanel({
       await change();
       setMessage(null);
     } catch (error) {
-      setMessage(
-        (error as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
-      );
+      setMessage((error as Error).message);
     }
     reloadAround(around);
   }

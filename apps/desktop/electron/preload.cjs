@@ -1,48 +1,58 @@
 const { contextBridge, ipcRenderer, webFrame, webUtils } = require('electron');
+// A request to the main process. Electron puts "Error invoking remote method '…': Error: " before what a
+// failure says; the page gets the words alone.
+const invoke = (...args) =>
+  ipcRenderer.invoke(...args).catch((error) => {
+    throw new Error(
+      String(error?.message ?? error).replace(
+        /^Error invoking remote method '[^']+': (?:\w*Error: )?/,
+        '',
+      ),
+    );
+  });
 contextBridge.exposeInMainWorld('desktop', {
   dev: process.argv.includes('--cc-desk-tunnel-dev'),
   platform: process.platform,
   // Read once, before the page draws: see `boot` in main.cjs.
   boot: ipcRenderer.sendSync('boot'),
-  saveShared: (key, value) => ipcRenderer.invoke('shared:save', key, value),
-  legacyProjects: () => ipcRenderer.invoke('projects:legacy'),
-  legacyProjectsMoved: () => ipcRenderer.invoke('projects:moved'),
+  saveShared: (key, value) => invoke('shared:save', key, value),
+  legacyProjects: () => invoke('projects:legacy'),
+  legacyProjectsMoved: () => invoke('projects:moved'),
   onSharedChanged: (callback) => {
     const listener = (_event, key, value) => callback(key, value);
     ipcRenderer.on('shared:changed', listener);
     return () => ipcRenderer.removeListener('shared:changed', listener);
   },
-  setBusy: (runs) => ipcRenderer.invoke('busy:set', runs),
-  accounts: () => ipcRenderer.invoke('accounts:list'),
-  openAccount: (id) => ipcRenderer.invoke('accounts:open', id),
-  renameAccount: (id, name) => ipcRenderer.invoke('accounts:rename', id, name),
-  forgetAccount: (id) => ipcRenderer.invoke('accounts:forget', id),
-  newLoginWindow: () => ipcRenderer.invoke('login:window'),
-  chooseProject: () => ipcRenderer.invoke('project:choose'),
-  asOnDisk: (path) => ipcRenderer.invoke('project:spelling', path),
-  foldersExist: (folders) => ipcRenderer.invoke('folders:exist', folders),
-  chooseFiles: () => ipcRenderer.invoke('files:choose'),
+  setBusy: (runs) => invoke('busy:set', runs),
+  accounts: () => invoke('accounts:list'),
+  openAccount: (id) => invoke('accounts:open', id),
+  renameAccount: (id, name) => invoke('accounts:rename', id, name),
+  forgetAccount: (id) => invoke('accounts:forget', id),
+  newLoginWindow: () => invoke('login:window'),
+  chooseProject: () => invoke('project:choose'),
+  asOnDisk: (path) => invoke('project:spelling', path),
+  foldersExist: (folders) => invoke('folders:exist', folders),
+  chooseFiles: () => invoke('files:choose'),
   pathForFile: (file) => webUtils.getPathForFile(file),
-  saveFile: (name, text) => ipcRenderer.invoke('file:save', name, text),
-  saveImage: (type, bytes) => ipcRenderer.invoke('image:save', type, bytes),
-  openFolder: (directory) => ipcRenderer.invoke('folder:open', directory),
-  openLogs: () => ipcRenderer.invoke('log:open'),
-  openDevTools: () => ipcRenderer.invoke('devtools:open'),
-  gitBranch: (directory) => ipcRenderer.invoke('git:branch', directory),
+  saveFile: (name, text) => invoke('file:save', name, text),
+  saveImage: (type, bytes) => invoke('image:save', type, bytes),
+  openFolder: (directory) => invoke('folder:open', directory),
+  openLogs: () => invoke('log:open'),
+  openDevTools: () => invoke('devtools:open'),
+  gitBranch: (directory) => invoke('git:branch', directory),
   files: {
-    list: (target, directory) => ipcRenderer.invoke('panel:list', target, directory),
-    home: (target) => ipcRenderer.invoke('panel:home', target),
-    chooseFolder: () => ipcRenderer.invoke('panel:choose-folder'),
-    stat: (target, file) => ipcRenderer.invoke('panel:stat', target, file),
-    read: (target, file, limit) => ipcRenderer.invoke('panel:read', target, file, limit),
-    mkdir: (target, directory) => ipcRenderer.invoke('panel:mkdir', target, directory),
-    rename: (target, from, to) => ipcRenderer.invoke('panel:rename', target, from, to),
-    remove: (target, files) => ipcRenderer.invoke('panel:remove', target, files),
-    exists: (target, directory, names) =>
-      ipcRenderer.invoke('panel:exists', target, directory, names),
-    transfer: (id, request) => ipcRenderer.invoke('panel:transfer', id, request),
-    cancel: (id) => ipcRenderer.invoke('panel:cancel', id),
-    changes: (directory) => ipcRenderer.invoke('panel:changes', directory),
+    list: (target, directory) => invoke('panel:list', target, directory),
+    home: (target) => invoke('panel:home', target),
+    chooseFolder: () => invoke('panel:choose-folder'),
+    stat: (target, file) => invoke('panel:stat', target, file),
+    read: (target, file, limit) => invoke('panel:read', target, file, limit),
+    mkdir: (target, directory) => invoke('panel:mkdir', target, directory),
+    rename: (target, from, to) => invoke('panel:rename', target, from, to),
+    remove: (target, files) => invoke('panel:remove', target, files),
+    exists: (target, directory, names) => invoke('panel:exists', target, directory, names),
+    transfer: (id, request) => invoke('panel:transfer', id, request),
+    cancel: (id) => invoke('panel:cancel', id),
+    changes: (directory) => invoke('panel:changes', directory),
     drag: (file) => ipcRenderer.send('panel:drag', file),
     onProgress: (callback) => {
       const listener = (_event, id, report) => callback(id, report);
@@ -50,41 +60,41 @@ contextBridge.exposeInMainWorld('desktop', {
       return () => ipcRenderer.removeListener('panel:progress', listener);
     },
   },
-  copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
-  openExternal: (url) => ipcRenderer.invoke('external:open', url),
-  openWeb: (url) => ipcRenderer.invoke('web:open', url),
-  openLink: (url) => ipcRenderer.invoke('link:open', url),
-  inspectPath: (path) => ipcRenderer.invoke('path:inspect', path),
-  actOnPath: (action, path, options) => ipcRenderer.invoke('path:act', action, path, options),
-  workspaceRoots: () => ipcRenderer.invoke('workspace:roots'),
-  chooseWorkspace: (reset) => ipcRenderer.invoke('workspace:choose', reset),
-  createWorkspace: () => ipcRenderer.invoke('workspace:create'),
-  removeWorkspace: (directory) => ipcRenderer.invoke('workspace:remove', directory),
-  loadLogin: () => ipcRenderer.invoke('login:load'),
-  loadLauncher: () => ipcRenderer.invoke('launcher:load'),
-  saveLogin: (login) => ipcRenderer.invoke('login:save', login),
-  signOut: (error) => ipcRenderer.invoke('login:leave', error),
-  startSignIn: (login) => ipcRenderer.invoke('launcher:start', login),
-  cancelSignIn: () => ipcRenderer.invoke('launcher:cancel'),
-  widenLauncher: (wide) => ipcRenderer.invoke('launcher:wide', wide),
-  reportSignIn: (report) => ipcRenderer.invoke('signin:report', report),
+  copyText: (text) => invoke('clipboard:write', text),
+  openExternal: (url) => invoke('external:open', url),
+  openWeb: (url) => invoke('web:open', url),
+  openLink: (url) => invoke('link:open', url),
+  inspectPath: (path) => invoke('path:inspect', path),
+  actOnPath: (action, path, options) => invoke('path:act', action, path, options),
+  workspaceRoots: () => invoke('workspace:roots'),
+  chooseWorkspace: (reset) => invoke('workspace:choose', reset),
+  createWorkspace: () => invoke('workspace:create'),
+  removeWorkspace: (directory) => invoke('workspace:remove', directory),
+  loadLogin: () => invoke('login:load'),
+  loadLauncher: () => invoke('launcher:load'),
+  saveLogin: (login) => invoke('login:save', login),
+  signOut: (error) => invoke('login:leave', error),
+  startSignIn: (login) => invoke('launcher:start', login),
+  cancelSignIn: () => invoke('launcher:cancel'),
+  widenLauncher: (wide) => invoke('launcher:wide', wide),
+  reportSignIn: (report) => invoke('signin:report', report),
   onSignIn: (callback) => {
     const listener = (_event, report) => callback(report);
     ipcRenderer.on('signin:report', listener);
     return () => ipcRenderer.removeListener('signin:report', listener);
   },
-  loadDrafts: () => ipcRenderer.invoke('drafts:load'),
-  saveDrafts: (drafts) => ipcRenderer.invoke('drafts:save', drafts),
-  loadSchedules: (initial) => ipcRenderer.invoke('schedules:load', initial),
-  saveSchedules: (text) => ipcRenderer.invoke('schedules:save', text),
+  loadDrafts: () => invoke('drafts:load'),
+  saveDrafts: (drafts) => invoke('drafts:save', drafts),
+  loadSchedules: (initial) => invoke('schedules:load', initial),
+  saveSchedules: (text) => invoke('schedules:save', text),
   onSchedulesChanged: (callback) => {
     const listener = (_event, text) => callback(text);
     ipcRenderer.on('schedules:changed', listener);
     return () => ipcRenderer.removeListener('schedules:changed', listener);
   },
-  windowSettings: () => ipcRenderer.invoke('window:settings'),
-  setWindowSettings: (values) => ipcRenderer.invoke('window:settings:set', values),
-  notify: (notice) => ipcRenderer.invoke('notify:show', notice),
+  windowSettings: () => invoke('window:settings'),
+  setWindowSettings: (values) => invoke('window:settings:set', values),
+  notify: (notice) => invoke('notify:show', notice),
   onNotifyClicked: (callback) => {
     const listener = (_event, sessionId) => callback(sessionId);
     ipcRenderer.on('notify:clicked', listener);
@@ -92,27 +102,27 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   zoom: (direction) =>
     webFrame.setZoomLevel(direction ? webFrame.getZoomLevel() + Math.sign(direction) * 0.5 : 0),
-  quit: () => ipcRenderer.invoke('app:quit'),
-  version: () => ipcRenderer.invoke('app:version'),
-  releaseNotes: (version) => ipcRenderer.invoke('release:notes', version),
-  device: () => ipcRenderer.invoke('device:get'),
-  installUpdate: (version) => ipcRenderer.invoke('update:install', version),
-  cancelUpdate: () => ipcRenderer.invoke('update:cancel'),
-  probeService: (config) => ipcRenderer.invoke('service:probe', config),
+  quit: () => invoke('app:quit'),
+  version: () => invoke('app:version'),
+  releaseNotes: (version) => invoke('release:notes', version),
+  device: () => invoke('device:get'),
+  installUpdate: (version) => invoke('update:install', version),
+  cancelUpdate: () => invoke('update:cancel'),
+  probeService: (config) => invoke('service:probe', config),
   onUpdateProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on('update:progress', listener);
     return () => ipcRenderer.removeListener('update:progress', listener);
   },
-  upgradeService: (config) => ipcRenderer.invoke('service:upgrade', config),
-  openInCcdt: (request) => ipcRenderer.invoke('ccdt:open', request),
+  upgradeService: (config) => invoke('service:upgrade', config),
+  openInCcdt: (request) => invoke('ccdt:open', request),
   onServiceUpgrade: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on('service:upgrade-progress', listener);
     return () => ipcRenderer.removeListener('service:upgrade-progress', listener);
   },
-  connectProxy: (config) => ipcRenderer.invoke('proxy:connect', config),
-  disconnectProxy: () => ipcRenderer.invoke('proxy:disconnect'),
+  connectProxy: (config) => invoke('proxy:connect', config),
+  disconnectProxy: () => invoke('proxy:disconnect'),
   onProxyClosed: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('proxy:closed', listener);

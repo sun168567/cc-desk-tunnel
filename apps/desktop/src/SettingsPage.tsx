@@ -384,9 +384,7 @@ function Connections() {
         return true;
       },
       (failure) => {
-        setError(
-          String(failure?.message ?? failure).replace(/^.*?'(accounts|login):\w+': (Error: )?/, ''),
-        );
+        setError(String(failure?.message ?? failure));
         return false;
       },
     );

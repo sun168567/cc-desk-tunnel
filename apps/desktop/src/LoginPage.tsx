@@ -87,10 +87,7 @@ export default function LoginPage({
     document.addEventListener('pointerdown', away);
     return () => document.removeEventListener('pointerdown', away);
   }, [listOpen]);
-  const failed = (failure: unknown) =>
-    setListError(
-      String((failure as Error)?.message ?? failure).replace(/^.*?'accounts:\w+': (Error: )?/, ''),
-    );
+  const failed = (failure: unknown) => setListError(String((failure as Error)?.message ?? failure));
   // A service whose token its connection keeps shows the field filled. Typing there replaces it; emptied, the
   // field asks for one again.
   const [replaced, setReplaced] = useState<string | null>(null);

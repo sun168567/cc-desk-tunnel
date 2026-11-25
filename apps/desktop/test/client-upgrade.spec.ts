@@ -145,7 +145,7 @@ test('a download from the release page that fails says why, and both ways are of
   await expect(page.getByRole('status')).toContainText('网络中断，正在重新连接（第 2/5 次）');
   await page.evaluate(() =>
     window.upgradeTest.fail(
-      "Error invoking remote method 'update:install': Error: 从 GitHub 下载安装包中断（15 秒没有收到数据），已下载 1.0 MB / 4.0 MB。",
+      '从 GitHub 下载安装包中断（15 秒没有收到数据），已下载 1.0 MB / 4.0 MB。',
     ),
   );
   await expect(page.getByRole('alert')).toHaveText(/^从 GitHub 下载安装包中断/);
