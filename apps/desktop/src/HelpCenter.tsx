@@ -15,13 +15,14 @@ import {
   X,
 } from 'lucide-react';
 import changelog from '../../../CHANGELOG.md?raw';
+import { useT } from './i18n.ts';
 import { articles, freshness, groups, newsOf, starters } from './help-content.ts';
 import type { Article, Block, News, Prompt, Target } from './help-content.ts';
 import Figure from './HelpFigures.tsx';
 import { CopyButton } from './copy.tsx';
 import { releaseSection } from './notes.ts';
 import { usePrefs } from './prefs.ts';
-import { actions as shortcutActions, keyFor, show as keyText } from './shortcuts.ts';
+import { actionName, actions as shortcutActions, keyFor, show as keyText } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
 import { openProject, project } from './project.tsx';
 import './help.css';
@@ -714,13 +715,14 @@ function PromptCard({
 
 // The window's shortcuts as the user set them, and the keys of the input box.
 function Keys({ browser }: { browser: boolean }) {
+  const t = useT();
   const prefs = usePrefs();
   const rows = shortcutActions
     .filter((action) => !browser || !action.desktop)
     .filter((action) => !action.id.startsWith('zoom'))
     .map((action) => [
-      action.name,
-      prefs.shortcuts.enabled ? keyText(keyFor(prefs, action.id)) : '',
+      actionName(t, action.id),
+      prefs.shortcuts.enabled ? keyText(t, keyFor(prefs, action.id)) : '',
     ])
     .filter(([, keys]) => keys);
   return (
@@ -835,6 +837,7 @@ function search(list: Article[], query: string, context: Context) {
 
 // The marks of an article's text, made into what they stand for.
 function Inline({ text, context }: { text: string; context: Context }) {
+  const t = useT();
   const prefs = usePrefs();
   const parts = fill(text, context).split(
     /(`[^`]+`|\*\*[^*]+\*\*|\[\[\w+\]\]|\[[^\]]+\]\([^)]+\))/g,
@@ -849,7 +852,7 @@ function Inline({ text, context }: { text: string; context: Context }) {
           const combo = keyFor(prefs, part.slice(2, -2) as Action);
           return combo ? (
             <span className="help-key-combo inline" key={index}>
-              {keyText(combo)
+              {keyText(t, combo)
                 .split('+')
                 .map((key, at) => (
                   <kbd key={at}>{key}</kbd>

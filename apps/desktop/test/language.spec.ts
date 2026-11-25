@@ -11,7 +11,7 @@ test('the window takes the system’s language until one is chosen, and changes 
   // The sign-in page is in English already.
   await expect(page.getByText('Connect to the proxy service', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Local settings', exact: true }).click();
-  await page.getByRole('button', { name: '外观', exact: true }).click();
+  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
   const english = page.getByRole('radiogroup', { name: 'Display language' });
   await expect(english.getByRole('radio', { name: 'Use system setting' })).toHaveAttribute(
     'aria-checked',

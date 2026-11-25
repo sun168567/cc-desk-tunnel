@@ -91,7 +91,7 @@ import {
   RenameProjectDialog,
   RenameSessionDialog,
 } from './SessionDialogs.tsx';
-import SettingsPage, { sections } from './SettingsPage.tsx';
+import SettingsPage, { sectionName } from './SettingsPage.tsx';
 import type { Section } from './SettingsPage.tsx';
 import Sidebar from './Sidebar.tsx';
 import TitleBar from './TitleBar.tsx';
@@ -1550,7 +1550,7 @@ export function App({
         : null);
   // What a menu shows beside an item that has a shortcut.
   const hint = (action: Action) =>
-    (prefs.shortcuts.enabled && comboText(keyFor(prefs, action))) || undefined;
+    (prefs.shortcuts.enabled && comboText(t, keyFor(prefs, action))) || undefined;
   const settingsMenu: MenuItem[] = [
     ...(host.accountManagement
       ? [
@@ -1836,8 +1836,7 @@ export function App({
                   ? t('nav:bar.settings')
                   : inBrowser && place.section === 'account'
                     ? t('nav:title.usage')
-                    : (sections.find((item) => item.id === place.section)?.name ??
-                      t('nav:bar.settings'))
+                    : sectionName(t, place.section)
         }
         back={
           !inBrowser && narrow() && place.page === 'settings'

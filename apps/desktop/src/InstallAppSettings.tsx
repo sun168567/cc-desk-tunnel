@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { webAppBadgeSchema, webAppNameSchema } from '@cc-desk-tunnel/protocol';
+import { useT } from './i18n.ts';
 import { Page, Row, Switch } from './ui.tsx';
 
 type Settings = { name: string; label: string; badge: boolean };
@@ -47,6 +48,7 @@ const limitLabel = (value: string) =>
     .join('');
 
 export default function InstallAppSettings() {
+  const t = useT();
   const [value, setValue] = useState(read);
   const [error, setError] = useState('');
   function change(fields: Partial<Settings>, composing = false) {
@@ -56,9 +58,9 @@ export default function InstallAppSettings() {
     if (composing) return;
     const parsedName = webAppNameSchema.safeParse(next.name.trim() || defaultName);
     const parsedLabel = webAppBadgeSchema.safeParse(next.label);
-    if (!parsedName.success) return setError('应用名称须为 1–40 个字符，不含控制字符。');
+    if (!parsedName.success) return setError(t('settings:install.nameInvalid'));
     if (next.badge && next.label.trim() && !parsedLabel.success)
-      return setError('角标内容须为 1–3 个字符，不含控制字符。');
+      return setError(t('settings:install.badgeInvalid'));
     const settings = { ...next, name: parsedName.data, label: parsedLabel.data ?? '' };
     try {
       localStorage.setItem(storageKey, JSON.stringify(settings));
@@ -67,16 +69,16 @@ export default function InstallAppSettings() {
       url.hash = location.hash === '#install' ? '' : location.hash;
       history.replaceState(history.state, '', url);
     } catch {
-      setError('保存失败，请检查浏览器是否允许本地存储。');
+      setError(t('settings:install.saveFailed'));
     }
   }
   return (
-    <Page title="手机应用" intro="从浏览器菜单选择“添加至手机”或“添加到主屏幕”。">
+    <Page title={t('settings:section.install.name')} intro={t('settings:install.intro')}>
       <div className="card">
-        <Row title="应用名称">
+        <Row title={t('settings:install.name')}>
           <input
             className="setting-name"
-            aria-label="应用名称"
+            aria-label={t('settings:install.name')}
             maxLength={40}
             placeholder={defaultName}
             value={value.name}
@@ -86,19 +88,19 @@ export default function InstallAppSettings() {
             onCompositionEnd={(event) => change({ name: event.currentTarget.value })}
           />
         </Row>
-        <Row title="图标右上角显示角标">
+        <Row title={t('settings:install.badge')}>
           <Switch
-            label="图标右上角显示角标"
+            label={t('settings:install.badge')}
             checked={value.badge}
             onChange={(badge) => change({ badge })}
           />
         </Row>
         {value.badge && (
-          <Row title="角标内容">
+          <Row title={t('settings:install.badgeText')}>
             <input
               className="setting-name"
-              aria-label="角标内容"
-              placeholder="最多 3 个字符"
+              aria-label={t('settings:install.badgeText')}
+              placeholder={t('settings:install.badgeHint')}
               value={value.label}
               onChange={(event) => {
                 const composing = (event.nativeEvent as InputEvent).isComposing;

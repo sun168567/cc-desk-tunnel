@@ -6,6 +6,7 @@ import {
   waitFields,
   waitRange,
 } from '../../desktop/src/setting-fields.ts';
+import { t } from './i18n.mjs';
 
 // The settings ccdt changes, with the desktop client's words and choices: how this computer connects, which ccdt
 // keeps for itself, and the service's own and Claude Code's, which the service keeps for every client. Each has a
@@ -38,7 +39,7 @@ export async function readRemote(service) {
 
 // Every setting with its current value. `waits` are ccdt's own, in seconds, a missing one taking the default.
 export function entries({ waits = {}, compaction, cli, web, here } = {}) {
-  const list = waitFields.map(({ step, title, detail }) => ({
+  const list = waitFields(t).map(({ step, title, detail }) => ({
     name: `connection.${step}`,
     group: '本机',
     title,
@@ -50,32 +51,34 @@ export function entries({ waits = {}, compaction, cli, web, here } = {}) {
   // On Windows: Git Bash is listed whether or not this computer has it, and saved once it does.
   if (here && (here.platform ?? 'win32') === 'win32') {
     const has = (shell) => !!here.shells?.includes(shell);
+    const shell = shellField(t);
     list.push({
       name: 'device.shell',
       group: '本机',
-      ...shellField,
+      ...shell,
       kind: 'choice',
       value: here.shell ?? null,
-      options: shellField.options.map(([shell, words]) => [
-        shell,
-        has(shell) ? words : `${words}（未检测到）`,
+      options: shell.options.map(([name, words]) => [
+        name,
+        has(name) ? words : `${words}（未检测到）`,
       ]),
-      available: shellField.options.map(([shell]) => shell).filter(has),
+      available: shell.options.map(([name]) => name).filter(has),
       read: String,
     });
   }
   const usable = (values) => values && !values.error;
+  const idle = idleCompactionFields(t);
   if (usable(compaction))
     list.push(
       {
         name: 'compaction.enabled',
         group: '服务端',
-        ...idleCompactionFields.enabled,
+        ...idle.enabled,
         kind: 'switch',
         value: compaction.enabled,
       },
       ...['afterMinutes', 'minTokens'].map((key) => {
-        const field = idleCompactionFields[key];
+        const field = idle[key];
         const name = (value) =>
           key === 'afterMinutes' ? `${value} 分钟` : `${value / 1000}K tokens`;
         return {
@@ -109,7 +112,7 @@ export function entries({ waits = {}, compaction, cli, web, here } = {}) {
     where: '在图形客户端的“设置 → 浏览器访问”里设置。',
   });
   if (usable(cli))
-    for (const group of cliSettingGroups(cli))
+    for (const group of cliSettingGroups(t, cli))
       for (const field of group.fields)
         list.push({
           ...field,
@@ -219,7 +222,7 @@ export async function save(entry, value, { config, service }) {
   }
   if (!service) throw new Error('改服务端的设置要先连上服务端。');
   if (scope === 'device') {
-    if (value && !entry.available.includes(value)) throw new Error(shellField.missing);
+    if (value && !entry.available.includes(value)) throw new Error(shellField(t).missing);
     await service.request({ type: 'device.shell', shell: value });
     return;
   }

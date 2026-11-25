@@ -6,6 +6,8 @@ export { namespaces };
 export { phrase, wordsText } from './phrase.ts';
 export type { ListValue, MessageKey, Phrase, PhraseValue, Value, Words } from './phrase.ts';
 export type { I18n };
+// The `t` of an instance (createI18n): what code shared by the clients takes to say its words.
+export type T = I18n['t'];
 export type Namespace = (typeof namespaces)[number];
 
 // The languages the program speaks. zh-CN is the source: a message is written there first, and every other
