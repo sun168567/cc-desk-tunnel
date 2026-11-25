@@ -5,6 +5,7 @@ import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { hooksFileSchema, matches } from './plugin-hooks.ts';
 import type { Hook } from './plugin-hooks.ts';
+import { PluginLog } from './plugin-log.ts';
 import { launch, stop } from './plugin-process.ts';
 import { matcherFields } from './service-events.ts';
 import type { ServiceEvent } from './service-events.ts';
@@ -20,14 +21,14 @@ const ID = /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/;
 const OUTPUT_LIMIT = 8192;
 const SETTLE_MS = 300;
 
-const report = (id: string, text: string) => console.error(`Plugin ${id}: ${text}`);
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // The plugins in <data>/plugins, each a directory with a hooks/hooks.json (see docs/plugins.md): hands them the
 // service's events. The directory is watched, so a change there holds a moment later. A plugin's code runs in processes
-// of its own.
+// of its own, and how they went goes to its log.
 export class Plugins {
   private directory: string;
+  private log: PluginLog;
   private entries = new Map<string, Entry>();
   private running = new Set<ChildProcess>();
   private watcher?: FSWatcher;
@@ -37,6 +38,7 @@ export class Plugins {
   private closed = false;
   constructor(directory: string) {
     this.directory = directory;
+    this.log = new PluginLog(directory);
   }
   async start() {
     const plugins = join(this.directory, 'plugins');
@@ -88,7 +90,7 @@ export class Plugins {
       this.hooks(id);
     } catch (error) {
       entry.broken = `加载失败：${reason(error)}`;
-      report(id, entry.broken);
+      this.log.write(id, entry.broken);
     }
     return entry;
   }
@@ -102,7 +104,7 @@ export class Plugins {
       try {
         for (const hook of this.hooksFor(id, event)) this.run(id, hook, event);
       } catch (error) {
-        report(id, `${event.hook_event_name} 没有运行：${reason(error)}`);
+        this.log.write(id, `${event.hook_event_name} 没有运行：${reason(error)}`);
       }
     }
   }
@@ -149,7 +151,7 @@ export class Plugins {
       const of = event.session_id ? ` 会话=${event.session_id} 运行=${event.run_id}` : '';
       const output = printed.trim();
       const text = `${result} ${Date.now() - started}ms${output && `\n${output.replace(/^/gm, '    ')}`}`;
-      if (result !== '成功') report(id, `${event.hook_event_name}${of} → ${text}`);
+      this.log.write(id, `${event.hook_event_name}${of} → ${text}`);
     };
     child.on('error', (error) => ended(`没有启动（${error.message}）`));
     child.on('close', (code, signal) =>

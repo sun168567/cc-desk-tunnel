@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import type { EventPayload, Session } from '@cc-desk-tunnel/protocol';
 import { matches } from '../src/plugin-hooks.ts';
+import { Plugins } from '../src/plugins.ts';
 import { EVENTS_VERSION, ServiceEvents } from '../src/service-events.ts';
 import type { ServiceEvent } from '../src/service-events.ts';
 
@@ -11,6 +15,54 @@ test('a matcher is names or a regular expression, as in Claude Code', () => {
   assert.ok(!matches('Bash', 'BashOutput'));
   assert.ok(matches('^mcp__.*', 'mcp__memory__read') && !matches('^mcp__.*', 'Bash'));
   assert.throws(() => matches('^(\\w+)+!$', 'a'.repeat(60)), /timed out/);
+});
+
+test('a broken plugin and one that does not end leave the others alone, and each log says how it went', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-plugins-'));
+  const plugins = new Plugins(directory);
+  t.after(() => {
+    plugins.close();
+    rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  const add = (name: string, text: string) => {
+    mkdirSync(join(directory, 'plugins', name, 'hooks'), { recursive: true });
+    writeFileSync(join(directory, 'plugins', name, 'hooks', 'hooks.json'), text);
+  };
+  const script = (code: string, timeout: number) =>
+    JSON.stringify({
+      hooks: {
+        RunEnded: [
+          {
+            hooks: [{ type: 'command', command: process.execPath, args: ['-e', code], timeout }],
+          },
+        ],
+      },
+    });
+  add('t.a-broken', '{');
+  add('t.b-hangs', script('setInterval(() => {}, 1000)', 0.5));
+  add('t.c-fails', script('console.error("no token"); process.exit(3)', 10));
+  add('t.d-works', script('console.log("sent")', 10));
+  const logged = (name: string) => {
+    try {
+      return readFileSync(join(directory, 'plugin-logs', `${name}.log`), 'utf8');
+    } catch {
+      return '';
+    }
+  };
+  await plugins.start();
+  plugins.dispatch({
+    version: EVENTS_VERSION,
+    hook_event_name: 'RunEnded',
+    timestamp: new Date().toISOString(),
+    status: 'completed',
+  });
+  const all = ['t.a-broken', 't.b-hangs', 't.c-fails', 't.d-works'];
+  for (const deadline = Date.now() + 10_000; !all.every(logged) && Date.now() < deadline;)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.match(logged('t.a-broken'), /加载失败：/);
+  assert.match(logged('t.b-hangs'), /RunEnded → 超时 0\.5s，已结束 \d+ms\n$/);
+  assert.match(logged('t.c-fails'), /RunEnded → 退出 3 \d+ms\n    no token\n$/);
+  assert.match(logged('t.d-works'), /RunEnded → 成功 \d+ms\n    sent\n$/);
 });
 
 test('every wait is resolved by the end of its run, and a failed run says why and how the quota stands', () => {
