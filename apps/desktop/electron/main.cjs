@@ -36,7 +36,7 @@ const { openLog } = require('./client-log.cjs');
 const { hostname, tmpdir } = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
-const { mkdir, readdir, rmdir, unlink } = require('node:fs/promises');
+const { mkdir, readdir, rm, rmdir, unlink } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 let bridge;
 // The last connection, kept for its installer download after a service refused this client's version.
@@ -1107,44 +1107,95 @@ handle('notify:show', (event, notice) => {
 });
 // Upgrades in place: the installer runs silently over the current install and starts the new version. It
 // comes from the connected service, or, when the user chooses so, straight from the release page: `version`
-// is then the one to fetch, which the service's refusal of this client named.
+// is then the one to fetch, which the service's refusal of this client named. One upgrade runs at a time; the
+// window hears each step on `update:progress`, bytes as they come and the steps between them, and can stop the
+// download with `update:cancel`.
+let upgrading = null;
+handle('update:cancel', () => upgrading?.abort());
 handle('update:install', async (event, version) => {
   if (!app.isPackaged) throw new Error('源码运行不支持自升级；请重新打包安装。');
   // Only the Windows installer can be run over an installation. Elsewhere the user installs a new package.
   if (process.platform !== 'win32')
     throw new Error('这个系统上的客户端不能在应用内升级，请到发布页下载新版本。');
+  if (upgrading) throw new Error('客户端已经在升级了。');
+  if (version === undefined && !lastBridge) throw new Error('请先连接服务。');
   const directory = await mkdtemp(path.join(tmpdir(), 'cc-desk-tunnel-update-'));
-  let installer;
-  if (version === undefined) {
-    if (!lastBridge) throw new Error('请先连接服务。');
-    installer = await lastBridge.downloadInstaller(directory);
-  } else {
-    const { downloadRelease } = await import(
-      pathToFileURL(path.join(__dirname, 'release-download.mjs')).href
-    );
-    let told = 0;
-    // Chromium's network stack: the Windows proxy settings apply, as they do to the connection itself.
-    installer = await downloadRelease((url, init) => net.fetch(url, init), version, directory, {
-      announced: lastBridge?.release(),
-      progress(received, size) {
-        if (Date.now() - told < 500 && received < size) return;
-        told = Date.now();
-        if (!event.sender.isDestroyed()) event.sender.send('update:progress', { received, size });
-      },
-    });
+  const controller = (upgrading = new AbortController());
+  const source = version === undefined ? 'service' : 'github';
+  let told = 0;
+  const tell = (step) => {
+    if (step.phase === 'downloading') {
+      if (Date.now() - told < 400 && step.received < step.size) return;
+      told = Date.now();
+    }
+    if (!event.sender.isDestroyed()) event.sender.send('update:progress', { source, ...step });
+  };
+  const progress = (received, size) => tell({ phase: 'downloading', received, size });
+  try {
+    tell({ phase: 'connecting' });
+    let installer;
+    if (version === undefined)
+      installer = await lastBridge.downloadInstaller(directory, {
+        progress,
+        signal: controller.signal,
+      });
+    else {
+      const { downloadRelease } = await import(
+        pathToFileURL(path.join(__dirname, 'release-download.mjs')).href
+      );
+      // Chromium's network stack: the Windows proxy settings apply, as they do to the connection itself.
+      installer = await downloadRelease((url, init) => net.fetch(url, init), version, directory, {
+        announced: lastBridge?.release(),
+        progress,
+        report: tell,
+        signal: controller.signal,
+      });
+    }
+    // The installer replaces the program under every connection's window, so the others go first.
+    if (others().some((entry) => connections.running(base, entry.id))) {
+      tell({ phase: 'closing' });
+      dismissOthers();
+    }
+    for (
+      let waited = 0;
+      others().some((entry) => connections.running(base, entry.id));
+      waited += 250
+    ) {
+      if (waited >= 15000) throw new Error('其他连接的窗口没有退出，请先退出它们再升级。');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    tell({ phase: 'installing' });
+    // The window shows that step for a moment; the installer then starts and this client quits at once, as the
+    // installer expects of the program it replaces.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true }).catch(() => {});
+    if (error?.cancelled) return { cancelled: true };
+    throw error;
+  } finally {
+    upgrading = null;
   }
-  // The installer replaces the program under every connection's window, so the others go first.
-  dismissOthers();
-  for (
-    let waited = 0;
-    others().some((entry) => connections.running(base, entry.id));
-    waited += 250
-  ) {
-    if (waited >= 15000) throw new Error('其他连接的窗口没有退出，请先退出它们再升级。');
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+  // The installer works for a while with no window of its own: the system's notification says what goes on.
+  if (Notification.isSupported())
+    new Notification({
+      title: '正在升级 CC Desk Tunnel',
+      body: '安装完成后会自动重新打开。',
+      icon: path.join(__dirname, 'icon.png'),
+    }).show();
   app.quit();
+  return {};
+});
+// The sign-in window asks a service that refused this client what it says now (see probeService), with the token
+// its sign-in used.
+handle('service:probe', async (_event, config) => {
+  const { probeService } = await import(
+    pathToFileURL(path.join(__dirname, 'proxy-bridge.mjs')).href
+  );
+  return probeService(
+    { ...config, token: config?.token || attemptToken },
+    { resolveProxy: (url) => session.defaultSession.resolveProxy(url) },
+  );
 });
 async function closeBridge() {
   keepAwake(false);
