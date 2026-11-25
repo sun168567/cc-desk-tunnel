@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { upgradeText } from '../src/client-upgrade.ts';
+import { upgradeText as said } from '../src/client-upgrade.ts';
+import { t } from '../src/i18n.ts';
+
+const upgradeText = (step, quiet) => said(t, step, quiet);
 
 test('each step of a client upgrade reads as one line, and a wait long enough to look like a hang says how long', () => {
   const service = { source: 'service' };

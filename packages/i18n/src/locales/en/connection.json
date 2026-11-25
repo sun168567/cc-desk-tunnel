@@ -1,0 +1,113 @@
+{
+  "interrupted": {
+    "read": "The connection broke before the read finished. Try again once it's back.",
+    "request": "The connection broke and the request was not confirmed. The task may still be running; check the session history for the result. It is not sent again."
+  },
+  "restored": {
+    "read": "Connection restored. The last read did not finish; try again.",
+    "request": "Connection restored. The last request was not confirmed because of the break. The task may still be running; check the session history for the result. It is not sent again."
+  },
+  "invalidUrl": "Enter a WebSocket service address without credentials.",
+  "loopbackOnly": "The offline prototype only connects to a loopback service.",
+  "tokenTooShort": "The service token is at least 24 characters.",
+  "browserSameService": "The browser can only connect to this service.",
+  "retrying": "Can't reach the service for now. Retrying.",
+  "localFailed": "Preparing the local connection failed.",
+  "incompatibleMessage": "A message from the service is in a format this client doesn't read; disconnected.",
+  "incompatibleHistory": "The history is in a format this client doesn't read; disconnected.",
+  "requestFailed": "The request failed.",
+  "serviceRestarting": "The service was upgraded to {{version}} and is restarting. It will reconnect shortly.",
+  "nativeEnded": "The native connection has ended. Connect again.",
+  "noData": "The service returned no data.",
+  "notConnected": "Not connected to the service.",
+  "historyStalled": "No new history for 30 seconds. Try again.",
+  "timeout": "The request timed out. Check the history for the result; it was not sent again.",
+  "switched": "Switched sessions; the read was cancelled.",
+  "historyIncomplete": "The session history has not fully loaded. Reopen the session and try again.",
+  "historyCancelled": "Reading the history was cancelled.",
+  "login": {
+    "unnamed": "Connection without a saved address",
+    "title": "Connect to the proxy service",
+    "simulation": "Offline simulation",
+    "mode": "Connection type",
+    "local": "Local simulation",
+    "remote": "Remote proxy",
+    "url": "Service address",
+    "accounts": "Services signed in before",
+    "forget": "Remove sign-in record",
+    "fingerprintOptional": "Service certificate fingerprint (optional)",
+    "fingerprint": "Service certificate fingerprint",
+    "fingerprintPlaceholder": "Leave empty to verify with a CA",
+    "token": "Service token",
+    "remember": "Remember token",
+    "autoLogin": "Sign in automatically",
+    "connecting": "Connecting…",
+    "connect": "Connect",
+    "localSettings": "Local settings",
+    "forgetConfirm": "Remove the sign-in record of “{{name}}”? The token, drafts and scheduled tasks saved for it on this computer are removed too; sessions on the service are not affected.",
+    "forgetLabel": "Remove the sign-in record of {{name}}",
+    "otherWindow": "“{{name}}” is already signed in in another window; switched to that window.",
+    "failed": "Couldn't connect to the service. Try again."
+  },
+  "upgrade": {
+    "serviceForceConfirm": "Sessions are running on the service {{service}}. Forcing the upgrade restarts the service: replies, commands and approvals waiting for you are interrupted and may need to start over. Continue?",
+    "serviceConfirm": "The service {{service}} will upgrade to the latest release and restart, which takes a few minutes. Continue?",
+    "serviceRunning": "Upgrading the service",
+    "serviceStep": "Upgrading the service: {{step}}",
+    "serviceDone": "The service was upgraded to {{version}} and is restarting; it connects once ready…",
+    "serviceFailed": "The service upgrade failed.",
+    "service": "Upgrade the service",
+    "serviceForce": "Force the service upgrade",
+    "fromGithubInstead": "Download {{version}} from GitHub releases instead",
+    "fromGithub": "Download and upgrade to {{version}} from GitHub releases",
+    "client": "Upgrade the client to {{version}}",
+    "notes": "What's new in {{version}}",
+    "notRestarted": "The service hasn't finished restarting. Click “Connect” in a moment.",
+    "clientNewer": "This client is newer. Upgrade the service first.",
+    "manualClient": "On this system the client is upgraded by hand: download the installer of the service's version from GitHub releases.",
+    "preparing": "The service is downloading the installer of this version ({{percent}}%). An upgrade button appears here once it's ready; you can also download it from GitHub releases.",
+    "refetching": "The service doesn't have this version's installer yet and is downloading it again; you can also download it from GitHub releases."
+  },
+  "clientUpgrade": {
+    "connecting": {
+      "service": "Connecting to the service…",
+      "github": "Connecting to GitHub…"
+    },
+    "connectingWaited": {
+      "service_one": "Connecting to the service, waited {{count}} second",
+      "service_other": "Connecting to the service, waited {{count}} seconds",
+      "github_one": "Connecting to GitHub, waited {{count}} second",
+      "github_other": "Connecting to GitHub, waited {{count}} seconds"
+    },
+    "downloading": {
+      "service": "Downloading from the service {{share}}",
+      "github": "Downloading from GitHub {{share}}"
+    },
+    "downloadingQuiet": {
+      "service_one": "Downloading from the service {{share}}, no new data for {{count}} second",
+      "service_other": "Downloading from the service {{share}}, no new data for {{count}} seconds",
+      "github_one": "Downloading from GitHub {{share}}, no new data for {{count}} second",
+      "github_other": "Downloading from GitHub {{share}}, no new data for {{count}} seconds"
+    },
+    "retrying": "Network interrupted, reconnecting (attempt {{attempt}} of {{attempts}})",
+    "resuming": "Connection broke, resuming…",
+    "verifying": "Verifying the installer…",
+    "closing": "Closing the windows of other connections…",
+    "installing": "Installing; the client opens again when done"
+  },
+  "web": {
+    "selfSigned": "This service uses a self-signed certificate; make sure the address can be trusted. Import a proper certificate in the desktop client under “Settings → Browser access”, or let a reverse proxy provide HTTPS.",
+    "stateFailed": "Couldn't read the sign-in state.",
+    "ended": "The sign-in has ended. Sign in again.",
+    "logoutFailed": "Couldn't sign out. Try again.",
+    "title": "Sign in to the service workbench",
+    "connecting": "Connecting to the service…",
+    "failed": "Sign-in failed.",
+    "totp": "Authenticator code",
+    "totpAdvice": "Two-step verification with an authenticator is recommended.",
+    "signingIn": "Signing in…",
+    "signIn": "Sign in"
+  },
+  "browserRequestFailed": "The request failed. Try again.",
+  "browserTimeout": "The connection timed out. Try again."
+}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import type { WebLoginState } from '@cc-desk-tunnel/protocol';
+import { useT } from './i18n.ts';
 import { browserLogin, browserLogout, browserSession } from './browser-api.ts';
 import { App } from './App.tsx';
 
 export function CertificateWarning() {
+  const t = useT();
   const ref = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     const element = ref.current;
@@ -23,12 +25,12 @@ export function CertificateWarning() {
   return (
     <p ref={ref} className="web-trust-warning" role="note">
       <ShieldAlert aria-hidden="true" />
-      当前服务使用自签名证书，请确认访问地址可信。建议在桌面端“设置 →
-      浏览器访问”导入正规证书，或由反向代理提供 HTTPS。
+      {t('connection:web.selfSigned')}
     </p>
   );
 }
 export default function WebGate() {
+  const t = useT();
   const [session, setSession] = useState<WebLoginState | null>(null);
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -44,7 +46,7 @@ export default function WebGate() {
       if (current === generation.current) setSession(next);
     } catch (error) {
       if (current === generation.current)
-        setError(error instanceof Error ? error.message : '读取登录状态失败。');
+        setError(error instanceof Error ? error.message : t('connection:web.stateFailed'));
     } finally {
       if (current === generation.current) setBusy(false);
     }
@@ -59,7 +61,7 @@ export default function WebGate() {
     setSession((value) => (value ? { ...value, authenticated: false, session: undefined } : null));
     setPassword('');
     setCode('');
-    setError('登录已结束，请重新登录。');
+    setError(t('connection:web.ended'));
     void check();
   }, [check]);
   const logout = useCallback(async () => {
@@ -68,7 +70,7 @@ export default function WebGate() {
       expired();
       setError('');
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : '退出登录失败，请重试。');
+      throw new Error(error instanceof Error ? error.message : t('connection:web.logoutFailed'));
     }
   }, [expired]);
   if (session?.authenticated)
@@ -77,14 +79,14 @@ export default function WebGate() {
     <main className="web-login">
       <section className="web-login-body">
         <h1>CC Desk Tunnel</h1>
-        <p className="muted">登录服务端工作台</p>
+        <p className="muted">{t('connection:web.title')}</p>
         {session?.selfSigned && <CertificateWarning />}
         {!session ? (
           <>
-            <p role="status">{busy ? '正在连接服务…' : error}</p>
+            <p role="status">{busy ? t('connection:web.connecting') : error}</p>
             {!busy && (
               <button className="button" onClick={() => void check()}>
-                重试
+                {t('common:retry')}
               </button>
             )}
           </>
@@ -106,7 +108,7 @@ export default function WebGate() {
                   },
                   (error: unknown) => {
                     if (current === generation.current)
-                      setError(error instanceof Error ? error.message : '登录失败。');
+                      setError(error instanceof Error ? error.message : t('connection:web.failed'));
                   },
                 )
                 .finally(() => {
@@ -115,7 +117,7 @@ export default function WebGate() {
             }}
           >
             <label>
-              服务凭据
+              {t('connection:login.token')}
               <input
                 type="password"
                 autoComplete="current-password"
@@ -127,7 +129,7 @@ export default function WebGate() {
             </label>
             {session.totpEnabled && (
               <label>
-                验证器动态码
+                {t('connection:web.totp')}
                 <input
                   inputMode="numeric"
                   autoComplete="one-time-code"
@@ -140,14 +142,14 @@ export default function WebGate() {
                 />
               </label>
             )}
-            {!session.totpEnabled && <p className="muted">建议开启验证器两步验证。</p>}
+            {!session.totpEnabled && <p className="muted">{t('connection:web.totpAdvice')}</p>}
             {error && (
               <p className="error" role="alert">
                 {error}
               </p>
             )}
             <button className="button primary" disabled={busy}>
-              {busy ? '正在登录…' : '登录'}
+              {busy ? t('connection:web.signingIn') : t('connection:web.signIn')}
             </button>
           </form>
         )}

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { platformOf } from '@cc-desk-tunnel/protocol';
 import { languageChoices, languageNames } from '@cc-desk-tunnel/i18n';
-import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Bell,
@@ -21,6 +20,7 @@ import {
   SquareTerminal,
   UserRound,
 } from 'lucide-react';
+import { useT } from './i18n.ts';
 import type { ConnectedDevice, ProxyClient } from './client.ts';
 import WebAccessSettings from './WebAccessSettings.tsx';
 import InstallAppSettings from './InstallAppSettings.tsx';
@@ -194,7 +194,7 @@ const kinds: { key: NotifyKind; title: string; detail: string }[] = [
 // itself, as lists of languages do, so that it is found whatever language the window is in.
 function LanguageSettings() {
   const { language } = usePrefs();
-  const { t } = useTranslation();
+  const t = useT();
   return (
     <>
       <h2 className="page-heading">{t('language.title')}</h2>

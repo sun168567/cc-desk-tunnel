@@ -18,7 +18,7 @@ import type {
   UsageSummary,
 } from '@cc-desk-tunnel/protocol';
 import { wordsText } from '@cc-desk-tunnel/i18n';
-import { useTranslation } from 'react-i18next';
+import { useT } from './i18n.ts';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
@@ -59,7 +59,7 @@ export default function AccountPanel({
   usageOnly?: boolean;
   quotaUnavailable?: string;
 }) {
-  const { t } = useTranslation();
+  const t = useT();
   const account = capabilities?.account;
   const { quotaReads } = usePrefs();
   const [working, setWorking] = useState(false);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
 import { wordsText } from '@cc-desk-tunnel/i18n';
-import { useTranslation } from 'react-i18next';
+import { useT } from './i18n.ts';
 import { usePopover } from './usePopover.ts';
 
 // The native summary names its categories in English, and a newer CLI gives each a stable id as well; the common ones
@@ -71,7 +71,7 @@ export default function ContextMeter({
   metrics: NativeMetrics | null;
   withPercent?: boolean;
 }) {
-  const { t } = useTranslation();
+  const t = useT();
   const [hovered, setHovered] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const popover = usePopover();

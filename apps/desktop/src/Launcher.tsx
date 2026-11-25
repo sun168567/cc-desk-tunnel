@@ -1,10 +1,11 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from './i18n.ts';
 import LoginPage from './LoginPage.tsx';
 import type { ConnectionForm } from './LoginPage.tsx';
 import SettingsPage from './SettingsPage.tsx';
 import type { Section } from './SettingsPage.tsx';
 import { ProxyClient } from './client.ts';
-import { say } from './i18n.ts';
+
 import { messageOf, useClientUpgrade } from './client-upgrade.ts';
 import { thisDevice } from './device.ts';
 import { isNewer } from './paths.ts';
@@ -44,6 +45,7 @@ export const desktopSignIns: SignIns = {
 // the service, connecting, a refusal and why, a version to upgrade the client or the service to, and this
 // computer's settings, which need no connection.
 export default function Launcher({ signIns }: { signIns: SignIns }) {
+  const t = useT();
   const [form, setForm] = useState<ConnectionForm>(() => ({
     url: window.desktop ? '' : (localStorage.getItem('proxy-url') ?? 'ws://127.0.0.1:8787/ws'),
     token: '',
@@ -68,7 +70,7 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
   const [workspaceRoots, setWorkspaceRoots] = useState<string[]>([]);
   const upgrading = useClientUpgrade(setError);
   // The settings page takes a client; this one never connects.
-  const [client] = useState(() => new ProxyClient(say));
+  const [client] = useState(() => new ProxyClient());
   useEffect(() => {
     void window.desktop?.version().then(setVersion);
   }, []);
@@ -94,7 +96,7 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
       shown: undefined,
       error: messageOf(failure),
     }));
-    if (result.shown) setError(`“${result.shown}”已在另一个窗口登录，已切换到那个窗口。`);
+    if (result.shown) setError(t('connection:login.otherWindow', { name: result.shown }));
     else if (result.error) setError(result.error);
     // Otherwise the reports tell how it goes.
     else return;
@@ -183,7 +185,7 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
       }
       if (!cancelled) {
         setRestarting(null);
-        setError('服务端还没有重启好，请稍后点“连接”。');
+        setError(t('connection:upgrade.notRestarted'));
       }
     };
     void look();
@@ -217,17 +219,19 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
     form.mode === 'remote' && version && refused?.service && isNewer(version, refused.service)
       ? refused.service
       : null;
-  const failure = error ?? (ended && (ended.error ?? '没能连接到服务，请再试一次。'));
+  const failure = error ?? (ended && (ended.error ?? t('connection:login.failed')));
   const shown =
     failure && refused?.service && !upgrade && version && !error
       ? `${failure}${
           isNewer(version, refused.service)
-            ? '此客户端较新，请先升级服务端。'
+            ? t('connection:upgrade.clientNewer')
             : !selfUpdating
-              ? '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。'
+              ? t('connection:upgrade.manualClient')
               : refused.preparing !== null
-                ? `服务端正在下载这一版的安装包（${Math.floor(refused.preparing * 100)}%），好了这里会出现升级按钮；也可以直接从 GitHub 发布页下载。`
-                : '服务端还没有这一版的安装包，正在重新下载；也可以直接从 GitHub 发布页下载。'
+                ? t('connection:upgrade.preparing', {
+                    percent: Math.floor(refused.preparing * 100),
+                  })
+                : t('connection:upgrade.refetching')
         }`
       : failure;
   const notesDialog = notes && (

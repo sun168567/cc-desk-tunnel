@@ -1,30 +1,19 @@
-import { createI18n, pseudoLanguage, resolveLanguage, wordsText } from '@cc-desk-tunnel/i18n';
+import { createI18n, namespaces, sourceLanguage, wordsText } from '@cc-desk-tunnel/i18n';
 import type { Words } from '@cc-desk-tunnel/i18n';
-import { getPrefs, onPrefs } from './prefs.ts';
+import { useTranslation } from 'react-i18next';
 
-// The window's language: the one chosen in the settings, or the system's. The desktop's main process says which
-// languages the system prefers (`boot` in main.cjs), so that the window and its tray and dialogs agree; a browser
-// says it itself. `?lang=en-XA` in development shows the made-up language that finds text left out of the
-// catalogs (packages/i18n).
-const systemLanguages = () => window.desktop?.boot?.languages ?? navigator.languages;
-const pseudo =
-  import.meta.env.DEV && new URLSearchParams(location.search).get('lang') === pseudoLanguage;
-const chosen = () =>
-  pseudo ? pseudoLanguage : resolveLanguage(getPrefs().language, systemLanguages());
-
-export const i18n = createI18n(chosen());
+// The window's text, from the catalogs of packages/i18n. It starts in the source language; language.ts, which the
+// window loads first, puts it in the language the settings or the system choose and follows them. Code that runs
+// without a window, as the unit tests run it, reads Chinese.
+export const i18n = createI18n(sourceLanguage);
 // Text outside what React draws, such as a notification or an error, in the language at the moment it is made.
 // What a component draws takes its text from `useTranslation`, which draws it again when the language changes.
 export const t = i18n.t;
-
-function follow() {
-  const language = chosen();
-  if (i18n.language !== language) void i18n.changeLanguage(language);
-  // The page's language picks the right glyphs for Chinese and tells assistive technology how to read it.
-  document.documentElement.lang = language === pseudoLanguage ? 'en' : language;
-}
-follow();
-onPrefs(follow);
+// A component's `t`, for keys of every namespace (`connection:login.title`); it draws the component again when the
+// language changes.
+export const useT = (): T => useTranslation(namespaces).t;
+// The `t` a function takes when it makes text at render time: a component's, from useT(), or the one above.
+export type T = typeof t;
 
 // What the service said, in the window's language at the moment it is said (see `Say` in client.ts).
 export const say = (words: Words, fallback?: string) => wordsText(t, words, fallback);

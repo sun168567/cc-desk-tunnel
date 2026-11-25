@@ -8,7 +8,7 @@ import type {
   WebTotpSetup,
 } from '@cc-desk-tunnel/protocol';
 import { wordsText } from '@cc-desk-tunnel/i18n';
-import { useTranslation } from 'react-i18next';
+import { useT } from './i18n.ts';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Modal, Row, Switch } from './ui.tsx';
 import { CopyButton } from './copy.tsx';
@@ -143,7 +143,7 @@ export default function WebAccessSettings({
   browser: boolean;
   connectionUrl?: string;
 }) {
-  const { t } = useTranslation();
+  const t = useT();
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [values, setValues] = useState<WebSettingsState | null>(null);
   const [certificate, setCertificate] = useState<WebCertificateState | null>(null);

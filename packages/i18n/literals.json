@@ -27,10 +27,7 @@
     "apps/desktop/src/AccountPanel.tsx": 81,
     "apps/desktop/src/activity.ts": 55,
     "apps/desktop/src/App.tsx": 138,
-    "apps/desktop/src/browser-api.ts": 2,
     "apps/desktop/src/CcdtDialog.tsx": 13,
-    "apps/desktop/src/client-upgrade.ts": 14,
-    "apps/desktop/src/client.ts": 23,
     "apps/desktop/src/commands.ts": 5,
     "apps/desktop/src/Composer.tsx": 24,
     "apps/desktop/src/ComposerControls.tsx": 24,
@@ -38,7 +35,6 @@
     "apps/desktop/src/Conversation.tsx": 80,
     "apps/desktop/src/ConversationFind.tsx": 7,
     "apps/desktop/src/copy.tsx": 4,
-    "apps/desktop/src/device.ts": 2,
     "apps/desktop/src/exportSession.ts": 11,
     "apps/desktop/src/FilePanel.tsx": 91,
     "apps/desktop/src/files.ts": 2,
@@ -51,10 +47,8 @@
     "apps/desktop/src/IdleCompactionSettings.tsx": 4,
     "apps/desktop/src/IdleReminder.tsx": 12,
     "apps/desktop/src/InstallAppSettings.tsx": 12,
-    "apps/desktop/src/Launcher.tsx": 8,
     "apps/desktop/src/linkActions.ts": 20,
     "apps/desktop/src/links.ts": 6,
-    "apps/desktop/src/LoginPage.tsx": 42,
     "apps/desktop/src/MessageInput.tsx": 3,
     "apps/desktop/src/messageTime.ts": 2,
     "apps/desktop/src/modes.ts": 5,
@@ -95,11 +89,9 @@
     "apps/desktop/src/turnStats.ts": 12,
     "apps/desktop/src/TurnStats.tsx": 4,
     "apps/desktop/src/ui.tsx": 4,
-    "apps/desktop/src/UpgradeProgress.tsx": 1,
     "apps/desktop/src/UsageCharts.tsx": 15,
     "apps/desktop/src/UsagePanel.tsx": 73,
-    "apps/desktop/src/WebAccessSettings.tsx": 90,
-    "apps/desktop/src/WebGate.tsx": 13
+    "apps/desktop/src/WebAccessSettings.tsx": 90
   },
   "kept": {
     "apps/server/src/claude.ts": {

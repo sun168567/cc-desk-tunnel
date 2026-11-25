@@ -1,6 +1,6 @@
 import type { SetupTokenResult } from '@cc-desk-tunnel/protocol';
 import { wordsText } from '@cc-desk-tunnel/i18n';
-import { useTranslation } from 'react-i18next';
+import { useT } from './i18n.ts';
 import { CopyButton } from './copy.tsx';
 import { Modal } from './ui.tsx';
 
@@ -11,7 +11,7 @@ export function SetupTokenDialog({
   result: SetupTokenResult;
   close: () => void;
 }) {
-  const { t } = useTranslation();
+  const t = useT();
   return (
     <Modal title="Setup token 已生成" onClose={close}>
       <div className="dialog-form">

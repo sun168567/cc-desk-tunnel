@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { projectOf } from '@cc-desk-tunnel/protocol';
 import type { Project, Session } from '@cc-desk-tunnel/protocol';
+import { useT } from './i18n.ts';
 import type { ConnectedDevice } from './client.ts';
 import { deviceName } from './device.ts';
 import NoticeBell from './NoticeBell.tsx';
@@ -99,6 +100,7 @@ export default function Sidebar({
   projectMenu?: (project: Project, position: MenuPosition) => void;
   footer?: ReactNode;
 }) {
+  const t = useT();
   const prefs = usePrefs();
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
@@ -149,7 +151,7 @@ export default function Sidebar({
     const groups = new Map<string, Elsewhere>();
     const entryOf = (device: { id: string; name: string }) => {
       const entry: Elsewhere = groups.get(device.id) ?? {
-        name: deviceName(device, serverDeviceId),
+        name: deviceName(t, device, serverDeviceId),
         online: devices.some((item) => item.id === device.id && item.ready),
         projects: new Map(),
         plain: [],
@@ -179,7 +181,7 @@ export default function Sidebar({
       entry.projects.set(key, group);
     }
     return [...groups.entries()];
-  }, [elsewhere, devices, serverDeviceId, projects, search, hereId]);
+  }, [elsewhere, devices, serverDeviceId, projects, search, hereId, t]);
   const othersCount = others.reduce(
     (count, [, device]) =>
       count +

@@ -10,7 +10,6 @@ import {
 } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { useTranslation } from 'react-i18next';
 import { wordsText } from '@cc-desk-tunnel/i18n';
 import {
   CircleHelp,
@@ -52,7 +51,7 @@ import { hostCapabilities } from './host-capabilities.ts';
 import AccountPanel from './AccountPanel.tsx';
 import { QuotaSummary } from './QuotaSummary.tsx';
 import { ProxyClient, RequestInterruptedError } from './client.ts';
-import { say } from './i18n.ts';
+import { say, useT } from './i18n.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { deviceName, isHere, thisDevice } from './device.ts';
@@ -141,9 +140,9 @@ export function App({
   report?: (report: SignInReport) => void;
   leave?: (error: string | null) => void;
 } = {}) {
-  const { t } = useTranslation();
+  const t = useT();
   const host = hostCapabilities(!!browser);
-  const [client] = useState(() => new ProxyClient(say));
+  const [client] = useState(() => new ProxyClient());
   useEffect(() => {
     if (!browser) return;
     client.connectBrowser(
@@ -2060,7 +2059,7 @@ export function App({
                 {remote ? (
                   <p>
                     这个会话在设备“
-                    {selected.device && deviceName(selected.device, state.serverDeviceId)}
+                    {selected.device && deviceName(t, selected.device, state.serverDeviceId)}
                     ”上，项目目录是 <code>{selected.projectPath}</code>
                     。在这里的对话、审批和停止都作用于那台电脑，命令也在那里执行。
                   </p>
@@ -2068,7 +2067,7 @@ export function App({
                   <p>
                     这个会话在设备“
                     {selected.device
-                      ? deviceName(selected.device, state.serverDeviceId)
+                      ? deviceName(t, selected.device, state.serverDeviceId)
                       : '未知设备'}
                     ”上，项目目录是 <code>{selected.projectPath}</code>
                     。那台电脑不在线，这里只能查看，它上线后可以直接操作。
@@ -2110,7 +2109,9 @@ export function App({
                 <Laptop />
                 <p>
                   设备“
-                  {selected.device ? deviceName(selected.device, state.serverDeviceId) : '未知设备'}
+                  {selected.device
+                    ? deviceName(t, selected.device, state.serverDeviceId)
+                    : '未知设备'}
                   ”未连接，当前只能查看会话。
                 </p>
               </div>
