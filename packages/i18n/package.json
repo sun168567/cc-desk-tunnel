@@ -1,0 +1,11 @@
+{
+  "name": "@cc-desk-tunnel/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "i18next": "27.2.9"
+  }
+}
