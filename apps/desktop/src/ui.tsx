@@ -11,12 +11,15 @@ export function Page({
   title,
   label = title,
   intro,
+  before,
   actions,
   children,
 }: {
   title: string;
   label?: string;
   intro?: ReactNode;
+  // Above the title, as the way back to the page it belongs to.
+  before?: ReactNode;
   // Beside the title, for what acts on the whole page.
   actions?: ReactNode;
   children?: ReactNode;
@@ -33,6 +36,7 @@ export function Page({
   return (
     <section className="page" aria-label={label}>
       <div className="page-body">
+        {before}
         {actions || help ? (
           <header className="page-header">
             {heading}

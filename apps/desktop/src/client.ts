@@ -14,6 +14,7 @@ import type {
   Device,
   IdleCompaction,
   NativeCapabilities,
+  Plugin,
   AccountQuota,
   ServerMessage,
   Project,
@@ -48,7 +49,11 @@ type DataMessage = Extract<
       | 'instructions.state'
       | 'web.settings.state'
       | 'web.totp.setup'
-      | 'web.certificate.state';
+      | 'web.certificate.state'
+      | 'plugin.checked'
+      | 'plugin.done'
+      | 'plugin.log'
+      | 'plugin.archive';
   }
 >;
 // Commands answered with a data frame, and the frame each one gets.
@@ -71,6 +76,14 @@ type Replies = {
   'web.certificate.get': 'web.certificate.state';
   'web.certificate.set': 'web.certificate.state';
   'web.certificate.reset': 'web.certificate.state';
+  'plugin.configure': 'plugin.checked';
+  'plugin.press': 'plugin.done';
+  'plugin.try': 'plugin.done';
+  'plugin.check': 'plugin.done';
+  'plugin.download': 'plugin.archive';
+  'plugin.install': 'plugin.done';
+  'plugin.log': 'plugin.log';
+  'plugin.upload': 'plugin.archive';
 };
 
 type NewCommand = Command extends infer C
@@ -135,6 +148,7 @@ export type ClientState = {
   // The user's computers connected to the service now, and whether commands reach each yet. Another
   // computer's sessions can be worked on from here while it is listed and ready.
   devices: ConnectedDevice[];
+  plugins: Plugin[];
   sessions: Session[];
   // The projects of all the user's computers, as the service keeps them.
   projects: Project[];
@@ -185,6 +199,7 @@ export class ProxyClient {
     browser: null,
     files: null,
     devices: [],
+    plugins: [],
     sessions: [],
     projects: [],
     events: {},
@@ -579,7 +594,11 @@ export class ProxyClient {
         message.type === 'instructions.state' ||
         message.type === 'web.settings.state' ||
         message.type === 'web.totp.setup' ||
-        message.type === 'web.certificate.state'
+        message.type === 'web.certificate.state' ||
+        message.type === 'plugin.checked' ||
+        message.type === 'plugin.done' ||
+        message.type === 'plugin.log' ||
+        message.type === 'plugin.archive'
       ) {
         if (this.pending.has(message.requestId)) this.results.set(message.requestId, message);
       } else if (message.type === 'compaction.state') {
@@ -605,6 +624,8 @@ export class ProxyClient {
         this.update({ quota });
       } else if (message.type === 'devices') {
         this.update({ devices: message.devices });
+      } else if (message.type === 'plugins') {
+        this.update({ plugins: message.plugins });
       } else if (message.type === 'projects') {
         this.update({ projects: message.projects });
       } else if (message.type === 'session.updated') {
@@ -1061,7 +1082,10 @@ export class ProxyClient {
         command.type.startsWith('account.') ||
         command.type.startsWith('service.')
           ? 30000
-          : 10000;
+          : // A plugin's button takes up to a minute.
+            command.type.startsWith('plugin.')
+            ? 70000
+            : 10000;
       const request = {
         resolve,
         reject,

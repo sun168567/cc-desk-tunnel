@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { webCommandSchemas, webSettingsStateSchema, webTotpSetupSchema } from './web.ts';
 import { webCertificateStateSchema } from './web-certificate.ts';
+import { pluginCommandSchemas, pluginMessageSchemas } from './plugins.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
+export * from './plugins.ts';
 
-export const PROTOCOL_VERSION = 29;
+export const PROTOCOL_VERSION = 30;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with
 // the service's number to have it upgrade (see the README). A new number adds its line here.
 export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
@@ -28,6 +30,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.16': 27,
   '0.3.17': 28,
   '0.3.18': 29,
+  '0.3.21': 30,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
@@ -536,6 +539,8 @@ export const sessionSchema = z.object({
       compacted: z.boolean().optional(),
     })
     .optional(),
+  // The states of the plugins' buttons beside the message input that were set in it (see `composerSlotSchema`).
+  composerSlots: z.record(z.string(), z.string().max(60)).optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
   activeRun: z
@@ -613,6 +618,7 @@ export type ServiceUpdate = z.infer<typeof serviceUpdateSchema>;
 const request = { requestId: id };
 export const commandSchema = z.discriminatedUnion('type', [
   ...webCommandSchemas,
+  ...pluginCommandSchemas,
   z
     .object({
       type: z.literal('server.session.create'),
@@ -964,6 +970,7 @@ export const historyControlSchema = z
   })
   .strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
+  ...pluginMessageSchemas,
   z.object({
     type: z.literal('session.history.part'),
     requestId: id,

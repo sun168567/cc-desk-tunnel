@@ -33,6 +33,7 @@ import {
   MAX_FRAME_BYTES,
   pathKey,
   platformOf,
+  PLUGIN_ARCHIVE_LIMIT,
   PROTOCOL_VERSION,
   runWorking,
   TUNNEL_CLOSE,
@@ -83,7 +84,11 @@ import {
   terminalSettings,
   TerminalTranscript,
 } from './terminal-transcript.ts';
+import { readArchive } from './plugin-install.ts';
+import type { PluginArchive } from './plugin-install.ts';
+import { Plugins } from './plugins.ts';
 import { inOrder } from './question.ts';
+import { ServiceEvents } from './service-events.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
@@ -123,6 +128,8 @@ type Peer = {
   left: boolean;
   // The client keeps the plan quota current on its screen, so the service reads it while runs go on.
   quotaWanted?: boolean;
+  // A plugin's archive on its way, and what was in it once it has come.
+  upload?: { id: string; parts: Buffer[]; size: number; archive?: PluginArchive };
   subscriptions: Set<string>;
   history?: HistoryDelivery;
   responses: Map<string, { command: string; response: Promise<ServerMessage> }>;
@@ -177,6 +184,9 @@ export type Run = {
   // Approvals and questions answered already: a second answer, from another window or computer, came late.
   answered: Set<string>;
   cancelReason?: string;
+  // The service's own compaction of an idle session, as long as nobody sends a message into it: plugins hear nothing
+  // of it.
+  unasked?: boolean;
   // Output still arriving in pieces: sent on as it comes, recorded once it is whole.
   open?: Fragment;
   input?: NativeInput;
@@ -229,6 +239,7 @@ const INTERRUPTS = new Set(['\x1b', '\x03', '\x1b[27u', '\x1b[99;5u']);
 // go through, and the wait that ends its runs if it stays away.
 type Seat = {
   device: string;
+  place: Device;
   peers: Set<Peer>;
   door?: Door;
   opening?: Promise<void>;
@@ -299,6 +310,29 @@ export function createProxyServer(options: ServerOptions) {
     options.files === false ? undefined : new FileService(options.dataDir, options.files);
   // The file panel's connections of each control connection, which end with it.
   const fileConnections = new Map<string, Set<WebSocket>>();
+  const plugins = new Plugins(
+    store.directory,
+    () => {
+      if (!closing) broadcast({ type: 'plugins', plugins: plugins.list() });
+    },
+    {
+      of: (sessionId, id) => store.get(sessionId).session.composerSlots?.[id],
+      set: (sessionId, id, state) =>
+        broadcast({
+          type: 'session.updated',
+          session: store.setComposerSlot(sessionId, id, state),
+        }),
+    },
+  );
+  const events = new ServiceEvents(
+    (sessionId) => ({
+      session: store.get(sessionId).session,
+      metrics: store.lastMetrics(sessionId),
+      quota: quotas.current(),
+    }),
+    () => plugins.any(),
+    (event) => plugins.dispatch(event),
+  );
   const compactions = new IdleCompactions(store.directory, compactIdle);
   armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
@@ -672,7 +706,8 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     settle(run);
-    record(run.sessionId, run.id, payload);
+    const event = record(run.sessionId, run.id, payload);
+    if (!run.unasked) events.observe(event);
     if (payload.type === 'native.title' && store.get(run.sessionId).session.autoTitle)
       broadcast({
         type: 'session.updated',
@@ -1109,12 +1144,13 @@ export function createProxyServer(options: ServerOptions) {
           rmSync(settingsPath, { force: true });
           rmSync(hooksPath, { force: true });
           rmSync(statusPath, { force: true });
-          store.append(current.sessionId, current.id, {
+          const closed = store.append(current.sessionId, current.id, {
             type: 'run.status',
             status: 'completed',
             surface: 'terminal',
             connectionId: peer.id,
           });
+          events.observe(closed);
           updated(current.sessionId);
           if (current.owner)
             send(current.owner, {
@@ -1202,13 +1238,14 @@ export function createProxyServer(options: ServerOptions) {
         }
         if (ended || !activity || activity === continued.activity) return;
         continued.activity = activity;
-        record(terminal.sessionId, terminal.id, {
+        const event = record(terminal.sessionId, terminal.id, {
           type: 'run.status',
           status: 'running',
           surface: 'terminal',
           activity,
           connectionId: continued.connectionId,
         });
+        events.observe(event);
         updated(terminal.sessionId);
       })
       .catch(() => {});
@@ -1500,6 +1537,7 @@ export function createProxyServer(options: ServerOptions) {
         throw new DomainError('run_finishing', '原生运行正在停止，请稍后发送。');
       active.input.assertWritable();
       peer?.subscriptions.add(command.sessionId);
+      active.unasked = false;
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
       active.input.submit(command.requestId, store.notice(command.sessionId) + text);
       // A message sent while Claude waits on its question is the user's answer in the chat instead.
@@ -1517,6 +1555,7 @@ export function createProxyServer(options: ServerOptions) {
       sessionId: command.sessionId,
       device,
       connectionId: peer?.id ?? serverDevice.id,
+      unasked: !peer,
       controller: new AbortController(),
       toolFinished: false,
       approvals: new Map(),
@@ -1653,6 +1692,74 @@ export function createProxyServer(options: ServerOptions) {
     return true;
   }
 
+  // An archive comes in parts to the connection that sends it, one at a time.
+  function uploadPlugin(
+    peer: Peer,
+    { requestId, uploadId, data, last }: CommandOf<'plugin.upload'>,
+  ) {
+    if (peer.upload?.id !== uploadId) peer.upload = { id: uploadId, parts: [], size: 0 };
+    const { upload } = peer;
+    const part = Buffer.from(data, 'base64');
+    upload.size += part.length;
+    if (upload.size > PLUGIN_ARCHIVE_LIMIT) {
+      peer.upload = undefined;
+      throw new DomainError('plugin_archive', '压缩包超过 5 MB。');
+    }
+    upload.parts.push(part);
+    if (!last) return;
+    peer.upload = undefined;
+    offerPlugin(peer, requestId, uploadId, readArchive(Buffer.concat(upload.parts)));
+  }
+  // Says what is in an archive, for the user to agree to.
+  function offerPlugin(peer: Peer, requestId: string, id: string, archive: PluginArchive) {
+    peer.upload = { id, parts: [], size: 0, archive };
+    send(peer, {
+      type: 'plugin.archive',
+      requestId,
+      manifest: archive.manifest,
+      events: archive.events,
+      commands: archive.commands,
+      files: archive.files.size,
+      access: plugins.access(archive.manifest),
+      replaces: plugins.replaced(archive.manifest.id),
+    });
+  }
+  async function plugin(peer: Peer, command: CommandOf<`plugin.${string}` & Command['type']>) {
+    if (command.type === 'plugin.upload') return uploadPlugin(peer, command);
+    if (command.type === 'plugin.checkAll') return void plugins.checkAll();
+    if (command.type === 'plugin.install') {
+      const archive = peer.upload?.id === command.uploadId ? peer.upload.archive : undefined;
+      peer.upload = undefined;
+      if (!archive) throw new DomainError('plugin_archive', '没有收到完整的压缩包，请重新选择。');
+      const { requestId } = command;
+      return send(peer, { type: 'plugin.done', requestId, ...(await plugins.install(archive)) });
+    }
+    const { id, requestId } = command;
+    if (command.type === 'plugin.composerSlot')
+      return plugins.move(id, command.sessionId, command.gesture, command.from);
+    if (command.type === 'plugin.download')
+      return offerPlugin(peer, requestId, command.uploadId, await plugins.download(id));
+    if (command.type === 'plugin.remove') await plugins.remove(id);
+    else if (command.type === 'plugin.enable') await plugins.enable(id, command.enabled);
+    else if (command.type === 'plugin.configure')
+      send(peer, {
+        type: 'plugin.checked',
+        requestId,
+        ...(await plugins.configure(id, command.values)),
+      });
+    else if (command.type === 'plugin.log')
+      send(peer, { type: 'plugin.log', requestId, text: plugins.logOf(id, command.clear) });
+    else
+      send(peer, {
+        type: 'plugin.done',
+        requestId,
+        ...(command.type === 'plugin.press'
+          ? await plugins.press(id, command.button, command.values)
+          : command.type === 'plugin.check'
+            ? await plugins.check(id)
+            : await plugins.attempt(id, command.event)),
+      });
+  }
   // Resolves to the session ID carried in the response frame; account and usage commands have none.
   async function execute(peer: Peer, command: Command): Promise<string | undefined> {
     if (isWebCommand(command)) {
@@ -1676,6 +1783,20 @@ export function createProxyServer(options: ServerOptions) {
         announce();
         return session.id;
       }
+      case 'plugin.enable':
+      case 'plugin.configure':
+      case 'plugin.press':
+      case 'plugin.try':
+      case 'plugin.log':
+      case 'plugin.remove':
+      case 'plugin.composerSlot':
+      case 'plugin.checkAll':
+      case 'plugin.check':
+      case 'plugin.download':
+      case 'plugin.upload':
+      case 'plugin.install':
+        await plugin(peer, command);
+        return undefined;
       case 'account.status':
       case 'account.login':
       case 'account.token':
@@ -1970,6 +2091,7 @@ export function createProxyServer(options: ServerOptions) {
         },
       });
       send(peer, devices());
+      send(peer, { type: 'plugins', plugins: plugins.list() });
       return true;
     }
     const auth = authSchema.safeParse(value);
@@ -2024,6 +2146,7 @@ export function createProxyServer(options: ServerOptions) {
       ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
     send(peer, devices());
+    send(peer, { type: 'plugins', plugins: plugins.list() });
     // Every connection that asks has an execution channel of its own, to the computer it comes from.
     if (auth.data.tunnel && options.tunnel) {
       peer.tunnel = new Tunnel(
@@ -2213,11 +2336,13 @@ export function createProxyServer(options: ServerOptions) {
   }
   // The computer's place here, made when the first of its connections says which computer it is.
   function enter(peer: Peer) {
-    const device = deviceOf(peer).id;
+    const place = deviceOf(peer);
+    const device = place.id;
     let seat = seats.get(device);
     if (!seat) {
-      seat = { device, peers: new Set() };
+      seat = { device, place, peers: new Set() };
       seats.set(device, seat);
+      events.device('DeviceOnline', place);
       if (options.tunnel) {
         seat.door = new Door(options.tunnel, store.directory, device);
         seat.opening = seat.door.start();
@@ -2226,6 +2351,7 @@ export function createProxyServer(options: ServerOptions) {
     }
     clearTimeout(seat.away);
     seat.away = undefined;
+    seat.place = place;
     seat.peers.add(peer);
     return seat;
   }
@@ -2243,6 +2369,7 @@ export function createProxyServer(options: ServerOptions) {
     clearTimeout(seat.away);
     if (seats.get(seat.device) !== seat) return;
     seats.delete(seat.device);
+    events.device('DeviceOffline', seat.place);
     for (const run of runs.values()) if (run.device === seat.device) cancel(run, reason);
     for (const terminal of terminals.values())
       if (terminal.device === seat.device) {
@@ -2495,6 +2622,8 @@ export function createProxyServer(options: ServerOptions) {
       await releases.refresh();
       await files?.start();
       updates?.start();
+      await plugins.start();
+      for (const sessionId of store.interrupted) plugins.interrupted(sessionId);
       if (usageReceiver)
         options.claude!.environment = telemetryEnvironment(await usageReceiver.listen());
       await new Promise<void>((resolve, reject) => {
@@ -2510,6 +2639,7 @@ export function createProxyServer(options: ServerOptions) {
     },
     async close() {
       closing = true;
+      plugins.close();
       web.close();
       updates?.stop();
       login?.process.cancel();

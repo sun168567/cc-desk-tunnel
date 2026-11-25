@@ -221,12 +221,14 @@ export function App({
       (place.page === 'settings' || next.page === 'settings') &&
       (place.page !== next.page ||
         place.section !== next.section ||
+        place.plugin !== next.plugin ||
         place.settingsIndex !== next.settingsIndex)
     ) {
       document.documentElement.style.setProperty(
         '--settings-shift',
         next.page !== 'settings' ||
-          (place.page === 'settings' && next.settingsIndex && !place.settingsIndex)
+          (place.page === 'settings' &&
+            ((next.settingsIndex && !place.settingsIndex) || (place.plugin && !next.plugin)))
           ? '-24px'
           : '24px',
       );
@@ -885,7 +887,8 @@ export function App({
       last.section === next.section &&
       last.settingsIndex === next.settingsIndex &&
       last.sessionId === next.sessionId &&
-      last.article === next.article
+      last.article === next.article &&
+      last.plugin === next.plugin
     )
       return;
     trail.current = { places: [...places.slice(0, at + 1), next].slice(-50), at: 0 };
@@ -1766,11 +1769,20 @@ export function App({
                   ? '设置'
                   : inBrowser && place.section === 'account'
                     ? '订阅用量'
-                    : (sections.find((item) => item.id === place.section)?.name ?? '设置')
+                    : place.plugin
+                      ? (state.plugins.find(({ id }) => id === place.plugin)?.title ?? place.plugin)
+                      : (sections.find((item) => item.id === place.section)?.name ?? '设置')
         }
         back={
           !inBrowser && narrow() && place.page === 'settings'
-            ? () => (place.settingsIndex ? open('chat') : visit({ ...place, settingsIndex: true }))
+            ? () =>
+                place.settingsIndex
+                  ? open('chat')
+                  : visit(
+                      place.plugin
+                        ? { ...place, plugin: undefined }
+                        : { ...place, settingsIndex: true },
+                    )
             : stepAvailable(-1)
               ? () => step(-1)
               : undefined
@@ -1800,7 +1812,7 @@ export function App({
         openUpdate={(position) => setMenu({ kind: 'update', ...position })}
         openSettings={(position) =>
           narrow()
-            ? visit({ ...place, page: 'settings', settingsIndex: true })
+            ? visit({ ...place, page: 'settings', settingsIndex: true, plugin: undefined })
             : setMenu({ kind: 'settings', ...position })
         }
       />
@@ -1815,6 +1827,9 @@ export function App({
           go={(section) => open('settings', section)}
           native={nativeMode}
           here={state.devices.find((device) => device.id === state.device?.id)}
+          plugins={state.plugins}
+          plugin={place.plugin}
+          openPlugin={(plugin) => visit({ ...place, plugin })}
           form={form}
           changeForm={changeForm}
           workspaceRoot={workspaceRoots[0] ?? ''}
@@ -1879,6 +1894,7 @@ export function App({
             selectedId={selected?.id}
             projects={state.projects}
             localProjects={host.localProjects}
+            plugins={state.plugins}
             connected={connected}
             busy={busy}
             refreshing={refreshing}
@@ -2149,6 +2165,18 @@ export function App({
                   void refreshStatus();
                 }}
                 configure={configure}
+                plugins={state.plugins}
+                slot={(id, gesture, from) =>
+                  void act(async () => {
+                    await client.request({
+                      type: 'plugin.composerSlot',
+                      id,
+                      sessionId: selected.id,
+                      gesture,
+                      from,
+                    });
+                  })
+                }
                 stop={stopRun}
               />
             )}

@@ -12,6 +12,7 @@
     "@cc-desk-tunnel/protocol": "0.0.0",
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",
+    "fflate": "0.8.3",
     "node-pty": "1.1.0",
     "ws": "8.22.0",
     "ssh2": "1.17.0"
