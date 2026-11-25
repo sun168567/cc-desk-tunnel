@@ -4746,6 +4746,18 @@ dialog:has(.ccdt-dialog) {
   width: 16px;
   height: 16px;
 }
+/* How much of each kind of slot is taken. */
+.plugin-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.plugin-tags > .badge {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
 .plugin-empty {
   margin: 0;
   padding: 16px 0;
@@ -4874,5 +4886,139 @@ dialog:has(> .plugin-log) {
   }
   .plugin-facts dd {
     margin-bottom: 8px;
+  }
+}
+
+/* A plugin's button beside the message input, and its mark beside a session (see ComposerSlot.tsx). */
+.slot-control {
+  flex-shrink: 0;
+}
+/* A double tap is the button's, and must not zoom the page. */
+.slot-control > .chip {
+  position: relative;
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+  overflow: visible;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.chip.slot.active,
+button.chip.slot.active:hover:not(:disabled) {
+  color: var(--accent);
+}
+.slot-icon {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask: var(--icon) center / contain no-repeat;
+}
+.slot-icon.top {
+  transform-origin: 50% 15%;
+}
+.slot-mark {
+  width: 12px;
+  height: 12px;
+  color: var(--accent);
+}
+.slot-icon.shake {
+  animation: slot-shake 600ms ease-in-out;
+}
+.slot-icon.pulse {
+  animation: slot-pulse 400ms ease-out;
+}
+.slot-icon.tremble {
+  animation: slot-tremble 90ms linear infinite alternate;
+}
+@keyframes slot-shake {
+  15% {
+    transform: rotate(16deg);
+  }
+  35% {
+    transform: rotate(-13deg);
+  }
+  55% {
+    transform: rotate(9deg);
+  }
+  75% {
+    transform: rotate(-5deg);
+  }
+}
+@keyframes slot-pulse {
+  50% {
+    transform: scale(1.3);
+  }
+}
+@keyframes slot-tremble {
+  from {
+    transform: translate(-1px, 0.4px) rotate(-5deg);
+  }
+  to {
+    transform: translate(1px, -0.4px) rotate(5deg);
+  }
+}
+/* Fills around the icon while it is held. */
+.chip > .slot-ring {
+  position: absolute;
+  inset: -3px;
+  width: 36px;
+  height: 36px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.slot-ring > circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: slot-ring var(--press) linear forwards;
+}
+@keyframes slot-ring {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* A fingertip covers the icon and a ring just round it, so on a touch screen the ring is drawn wide of the finger. */
+@media (pointer: coarse) {
+  .chip > .slot-ring {
+    inset: -15px;
+    width: 60px;
+    height: 60px;
+  }
+  .slot-ring > circle {
+    stroke-width: 1.8;
+  }
+}
+/* A tap leaves a touch screen's button hovered until something else is tapped. */
+@media (hover: none) {
+  .slot-control > button.chip:hover:not(:disabled) {
+    background: transparent;
+  }
+}
+.slot-tip {
+  position: fixed;
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translate(-50%, calc(-100% - 10px));
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot-icon {
+    animation: none;
   }
 }

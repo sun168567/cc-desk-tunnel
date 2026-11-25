@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { strToU8, zipSync } from 'fflate';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { login, screenshots } from './helpers.ts';
+import { createSession, login, screenshots, send, settled } from './helpers.ts';
 
 const shots = resolve(screenshots, 'plugins');
 mkdirSync(shots, { recursive: true });
@@ -12,13 +12,30 @@ const ui = `
 export const settings = [
   { title: '钉钉', showWhen: 'on', fields: {
     on: { type: 'boolean', title: '启用钉钉' },
+    bell: { type: 'boolean', title: '显示铃铛', default: true },
     url: { type: 'string', title: '机器人地址', sensitive: true, required: true,
       validate: (value: string) => ({ valid: value.startsWith('https://'), message: '要以 https:// 开头' }) },
     format: { type: 'string', title: '格式', description: '消息的样式', options: [{ value: 'card', label: '卡片' }, { value: 'text', label: '文本' }], default: 'card' },
     body: { type: 'string', title: '模板', multiline: true, default: '{session}' },
     test: { type: 'button', title: '测试消息', label: '发送', run: async (all: { url: string }) => ({ ok: true, message: '已发送到 ' + all.url }) },
   } },
-];`;
+];
+const state = (icon: string, title: string, more = {}) => ({ icon, title, ...more });
+export const slots = { composer: {
+  title: '外部推送', showWhen: 'bell', initial: 'off', mark: true,
+  hold: { ms: 700, ring: true, effect: 'tremble' },
+  states: {
+    off: state('bell.svg', '不订阅', { tip: '已取消订阅' }),
+    once: state('bell.svg', '本轮', { tip: '已订阅本轮', effect: 'shake', pivot: 'top', active: true }),
+    always: state('bell.svg', '持续', { tip: '已持续订阅', effect: 'shake', pivot: 'top', active: true }),
+  },
+  on: {
+    click: { off: 'once', once: 'off', always: 'off' },
+    doubleClick: { once: 'always' },
+    longPress: { off: 'always', once: 'always' },
+    RunEnded: { once: 'off' },
+  },
+} };`;
 function add(id: string) {
   const root = resolve(plugins, id);
   // Enabled by the user, as one is where the system cannot confine it.
@@ -47,11 +64,15 @@ function add(id: string) {
       },
     }),
   );
+  writeFileSync(
+    resolve(root, 'bell.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>',
+  );
   writeFileSync(resolve(root, 'ui.ts'), ui);
 }
 // The service watches the directory itself, which stays; Windows keeps a plugin's while a command of it ends.
 async function clean() {
-  for (const path of ['t.notify', '../plugin-config'])
+  for (const path of ['t.notify', 't.bell', '../plugin-config'])
     await expect
       .poll(() => {
         try {
@@ -189,4 +210,61 @@ test('a plugin put in place is set on its own page, each change saved at once, t
   await form.getByRole('switch', { name: '启用 通知' }).click();
   await expect(form.getByLabel('格式')).toHaveValue('text');
   await expect(form.getByLabel('模板')).toHaveValue('{session} {project}');
+});
+
+test('a plugin’s button goes by click, double click and long press, in every window, and by the end of a run', async ({
+  page,
+  context,
+}) => {
+  add('t.bell');
+  await page.goto('/');
+  await login(page);
+  await createSession(page, '订阅');
+  const bell = page.getByRole('button', { name: '外部推送', exact: true });
+  const mark = page.locator('.session-row.selected').getByRole('img', { name: /外部推送/ });
+  await expect(bell).toHaveAttribute('title', '外部推送：不订阅');
+  await bell.click();
+  await expect(bell).toHaveAttribute('title', '外部推送：本轮');
+  await expect(page.getByRole('status').filter({ hasText: '已订阅本轮' })).toBeVisible();
+  await expect(mark).toHaveAttribute('aria-label', '外部推送：本轮');
+  await page.waitForTimeout(450);
+  await bell.click();
+  await expect(bell).toHaveAttribute('title', '外部推送：不订阅');
+  await expect(mark).toHaveCount(0);
+  await page.waitForTimeout(450);
+  await bell.dblclick();
+  await expect(bell).toHaveAttribute('title', '外部推送：持续');
+  await page.waitForTimeout(450);
+  await bell.click();
+
+  // Let go before it counts, a long press was thought better of.
+  const box = (await bell.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(page.locator('.slot-ring')).toBeVisible();
+  await expect(page.locator('.slot-icon.tremble')).toBeVisible();
+  await page.screenshot({ path: resolve(shots, 'hold.png') });
+  await page.mouse.up();
+  await page.waitForTimeout(450);
+  await expect(bell).toHaveAttribute('title', '外部推送：不订阅');
+  await page.mouse.down();
+  await expect(bell).toHaveAttribute('title', '外部推送：持续');
+  await page.mouse.up();
+  await page.screenshot({ path: resolve(shots, 'subscribed.png') });
+
+  const other = await context.newPage();
+  await other.goto('/');
+  await login(other);
+  await other.locator('.session-row').filter({ hasText: '订阅' }).first().click();
+  const there = other.getByRole('button', { name: '外部推送', exact: true });
+  await expect(there).toHaveAttribute('title', '外部推送：持续');
+  await there.click();
+  await expect(bell).toHaveAttribute('title', '外部推送：不订阅');
+  await other.waitForTimeout(450);
+  await there.click();
+  await expect(bell).toHaveAttribute('title', '外部推送：本轮');
+  await send(page, '梳理当前项目');
+  await settled(page);
+  await expect(bell).toHaveAttribute('title', '外部推送：不订阅');
+  await expect(there).toHaveAttribute('title', '外部推送：不订阅');
 });

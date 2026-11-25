@@ -14,7 +14,8 @@ import {
   X,
 } from 'lucide-react';
 import { projectOf } from '@cc-desk-tunnel/protocol';
-import type { Project, Session } from '@cc-desk-tunnel/protocol';
+import type { Plugin, Project, Session } from '@cc-desk-tunnel/protocol';
+import { ComposerSlotMarks } from './ComposerSlot.tsx';
 import type { ConnectedDevice } from './client.ts';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
@@ -50,6 +51,7 @@ type Elsewhere = {
 
 export default function Sidebar({
   localProjects = true,
+  plugins,
   sessions,
   elsewhere,
   devices,
@@ -70,6 +72,7 @@ export default function Sidebar({
   footer,
 }: {
   localProjects?: boolean;
+  plugins: Plugin[];
   sessions: Session[];
   // Sessions on the user's other computers: listed apart, by computer and under it by project, and not part of any
   // project here.
@@ -281,6 +284,7 @@ export default function Sidebar({
       >
         <button type="button" className="session-select" onClick={() => select(session.id)}>
           <strong>{session.title}</strong>
+          <ComposerSlotMarks plugins={plugins} session={session} />
           {session.activeRun && (
             <span className={`running-dot${breathing(session.activeRun) ? ' breathing' : ''}`} />
           )}

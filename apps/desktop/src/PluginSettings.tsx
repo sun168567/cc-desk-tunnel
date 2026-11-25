@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronRight, ScrollText, Trash2 } from 'lucide-react';
+import { COMPOSER_SLOTS } from '@cc-desk-tunnel/protocol';
 import type { Plugin } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import PluginInstall from './PluginInstall.tsx';
@@ -53,7 +54,17 @@ export default function PluginSettings({
   return (
     <Page
       title="插件"
-      intro="保存在服务端，对所有连接到它的设备生效。"
+      intro={
+        <>
+          保存在服务端，对所有连接到它的设备生效。
+          <span className="plugin-tags">
+            <span className="badge" title={`输入框旁的插件按钮，最多同时 ${COMPOSER_SLOTS} 个`}>
+              输入框插槽 {plugins.filter(({ composerSlot }) => composerSlot).length}/
+              {COMPOSER_SLOTS}
+            </span>
+          </span>
+        </>
+      }
       actions={
         !browser && (
           <PluginInstall

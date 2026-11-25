@@ -19,13 +19,16 @@ import type {
   NativeMetrics,
   NativeSession,
   PermissionMode,
+  Plugin,
   Session,
+  SlotGesture,
 } from '@cc-desk-tunnel/protocol';
 import { slashCommands } from './commands.ts';
 import ComposerControls from './ComposerControls.tsx';
 import MessageInput, { messageLimit } from './MessageInput.tsx';
 import type { MessageInputHandle } from './MessageInput.tsx';
 import PermissionMenu from './PermissionMenu.tsx';
+import ComposerSlotButton, { composerSlots } from './ComposerSlot.tsx';
 import { IconButton } from './ui.tsx';
 import type { MenuPosition } from './ui.tsx';
 
@@ -84,6 +87,8 @@ export default function Composer({
   compact,
   refresh,
   configure,
+  plugins,
+  slot,
   stop,
 }: {
   session: Session;
@@ -122,11 +127,15 @@ export default function Composer({
     effort?: Effort | null;
     permissionMode?: PermissionMode;
   }) => Promise<void>;
+  plugins: Plugin[];
+  // What the user did to a plugin's button, in the state it was shown in.
+  slot: (plugin: string, gesture: SlotGesture, from: string) => void;
   stop: () => void;
 }) {
   const input = useRef<MessageInputHandle>(null);
   const tooLong = draft.length > messageLimit;
   const toolbar = useRef<HTMLDivElement>(null);
+  const slots = composerSlots(plugins, session);
   useLayoutEffect(() => {
     const bar = toolbar.current!;
     const fit = () => {
@@ -145,7 +154,7 @@ export default function Composer({
     observer.observe(bar);
     for (const child of bar.children) observer.observe(child);
     return () => observer.disconnect();
-  }, [session, native, capabilities, nativeSession, !!resume, !!draft.trim()]);
+  }, [session, native, capabilities, nativeSession, !!resume, !!draft.trim(), slots.length]);
   const branch = useBranch(session.projectPath, !!session.activeRun);
   const [dropping, setDropping] = useState(false);
   // The command menu: this window's own actions, then Claude Code's commands that fit what follows the slash. Enter
@@ -404,6 +413,14 @@ export default function Composer({
               change={(permissionMode) => void configure({ permissionMode })}
             />
           )}
+          {slots.map((shown) => (
+            <ComposerSlotButton
+              key={shown.id + session.id}
+              shown={shown}
+              disabled={!connected}
+              move={(gesture, from) => slot(shown.id, gesture, from)}
+            />
+          ))}
           <span className="toolbar-space" />
           {native && (
             <ComposerControls
