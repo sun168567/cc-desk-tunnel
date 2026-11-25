@@ -9,5 +9,24 @@
   "device": {
     "browser": "Browser",
     "server": "Server"
-  }
+  },
+  "collapse": "Collapse",
+  "expand": "Expand",
+  "locale": "en",
+  "ago": {
+    "now": "just now",
+    "minutes": "{{n}} min",
+    "hours": "{{n}} h",
+    "days": "{{n}} d"
+  },
+  "span": {
+    "seconds": "{{s}} s",
+    "minutes": "{{m}} min {{s}} s",
+    "hours": "{{h}} h {{m}} min"
+  },
+  "hours": {
+    "whole": "{{h}} h",
+    "minutes": "{{h}} h {{m}} min"
+  },
+  "minutes": "{{m}} min"
 }

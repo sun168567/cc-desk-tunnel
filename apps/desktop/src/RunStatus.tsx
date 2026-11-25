@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { TerminalActivity } from '@cc-desk-tunnel/protocol';
 import type { TaskProgress } from './client.ts';
+import { useT } from './i18n.ts';
+import type { T } from './i18n.ts';
 
 // A session a terminal of `ccdt` holds, as its CLI's hooks report what it is doing.
-export function terminalState(activity?: TerminalActivity) {
-  if (activity === 'working') return '终端运行中';
-  if (activity === 'waiting') return '终端等你确认';
-  return '终端打开中';
+export function terminalState(t: T, activity?: TerminalActivity) {
+  if (activity === 'working') return t('session:terminal.working');
+  if (activity === 'waiting') return t('session:terminal.waiting');
+  return t('session:terminal.open');
 }
 
 // The service's clock as this window knows it, and when something last came from a session's run.
@@ -22,11 +24,14 @@ function useTick(active: boolean, every = 1000) {
     return () => clearInterval(timer);
   }, [active, every]);
 }
-export function span(seconds: number) {
+export function span(t: T, seconds: number) {
   const whole = Math.max(0, Math.floor(seconds));
-  if (whole < 60) return `${whole} 秒`;
-  if (whole < 3600) return `${Math.floor(whole / 60)} 分 ${whole % 60} 秒`;
-  return `${Math.floor(whole / 3600)} 小时 ${Math.floor((whole % 3600) / 60)} 分`;
+  if (whole < 60) return t('common:span.seconds', { s: whole });
+  if (whole < 3600) return t('common:span.minutes', { m: Math.floor(whole / 60), s: whole % 60 });
+  return t('common:span.hours', {
+    h: Math.floor(whole / 3600),
+    m: Math.floor((whole % 3600) / 60),
+  });
 }
 
 // Whether a run is alive. A tool that takes long tells its time in its own row above, and counts as word of
@@ -47,13 +52,14 @@ export function RunStatus({
   connected: boolean;
   suffix: string;
 }) {
+  const t = useT();
   useTick(!tool, 5000);
   const quiet = (clock.now() - since) / 1000;
   const silent = !tool && quiet >= 60;
   return (
     <div className="run-indicator" role="status">
       <span className={`running-dot${connected && !silent ? ' breathing' : ''}`} />
-      {silent ? `仍在运行 · 已 ${Math.floor(quiet / 60)} 分钟没有新输出` : '运行中'}
+      {silent ? t('session:run.quiet', { n: Math.floor(quiet / 60) }) : t('session:run.running')}
       {suffix}
     </div>
   );
@@ -73,15 +79,18 @@ export function TaskLine({
   clock: Clock;
   connected: boolean;
 }) {
+  const t = useT();
   useTick(connected);
   const said =
     progress?.summary ??
     (progress?.tool
-      ? `${progress.toolUses ? `第 ${progress.toolUses} 次工具调用 · ` : ''}${progress.tool}`
+      ? progress.toolUses
+        ? t('session:run.toolCall', { n: progress.toolUses, tool: progress.tool })
+        : progress.tool
       : '');
   return (
     <small>
-      已等待 {span((clock.now() - since) / 1000)}
+      {t('session:run.waited', { span: span(t, (clock.now() - since) / 1000) })}
       {said && ` · ${said}`}
     </small>
   );

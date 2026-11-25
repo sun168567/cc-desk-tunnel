@@ -9,5 +9,24 @@
   "device": {
     "browser": "浏览器",
     "server": "服务端"
-  }
+  },
+  "collapse": "收起",
+  "expand": "展开",
+  "locale": "zh-CN",
+  "ago": {
+    "now": "刚刚",
+    "minutes": "{{n}} 分钟",
+    "hours": "{{n}} 小时",
+    "days": "{{n}} 天"
+  },
+  "span": {
+    "seconds": "{{s}} 秒",
+    "minutes": "{{m}} 分 {{s}} 秒",
+    "hours": "{{h}} 小时 {{m}} 分"
+  },
+  "hours": {
+    "whole": "{{h}} 小时",
+    "minutes": "{{h}} 小时 {{m}} 分钟"
+  },
+  "minutes": "{{m}} 分钟"
 }

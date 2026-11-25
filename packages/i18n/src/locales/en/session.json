@@ -1,0 +1,19 @@
+{
+  "terminal": {
+    "working": "Terminal running",
+    "waiting": "Terminal waiting for you",
+    "open": "Terminal open"
+  },
+  "run": {
+    "quiet": "Still running · no new output for {{n}} min",
+    "running": "Running",
+    "toolCall": "Tool call {{n}} · {{tool}}",
+    "waited": "Waited {{span}}"
+  },
+  "idle": {
+    "before": "The prompt cache expires in about {{minutes}} min. Compacting now reads the cache, far cheaper than compacting after it expires (context about {{size}}).",
+    "after": "{{span}} since the last turn, so the prompt cache has expired: the next message rereads about {{size}} of context at full price. For a new task, start a new session (like /clear); to go on more cheaply, switch to a cheaper model to compact, then switch back.",
+    "compactNow": "Compact now",
+    "close": "Dismiss"
+  }
+}

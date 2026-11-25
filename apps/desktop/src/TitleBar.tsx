@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, PanelLeft, PanelRight } from 'lucide-react';
+import { useT } from './i18n.ts';
 import { useConnectionName } from './shared.ts';
 import { IconButton } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
@@ -32,23 +33,29 @@ export default function TitleBar({
   // The file panel's switch, where the window has one.
   files?: { open: boolean; toggle: () => void; hint?: string };
 }) {
+  const t = useT();
   const connectionName = useConnectionName();
   return (
     <header className="titlebar">
-      <IconButton className="history-back" title="后退" disabled={!back} onClick={back}>
+      <IconButton className="history-back" title={t('nav:back')} disabled={!back} onClick={back}>
         <ArrowLeft />
       </IconButton>
-      <IconButton className="history-button" title="前进" disabled={!forward} onClick={forward}>
+      <IconButton
+        className="history-button"
+        title={t('nav:forward')}
+        disabled={!forward}
+        onClick={forward}
+      >
         <ArrowRight />
       </IconButton>
       <IconButton
         className="sidebar-toggle"
-        title={sideOpen ? '收起侧栏' : '展开会话列表'}
+        title={sideOpen ? t('nav:collapseSidebar') : t('nav:expandSidebar')}
         onClick={toggleSide}
       >
         <PanelLeft />
       </IconButton>
-      <nav className="titlebar-menus" aria-label="菜单">
+      <nav className="titlebar-menus" aria-label={t('nav:menu')}>
         {menus.map((menu) => (
           <button
             type="button"
@@ -67,7 +74,11 @@ export default function TitleBar({
       {files && (
         <IconButton
           className={`files-toggle ${files.open ? 'active' : ''}`}
-          title={`${files.open ? '关闭' : '打开'}文件面板${files.hint ? `（${files.hint}）` : ''}`}
+          title={
+            files.hint
+              ? t(files.open ? 'nav:files.closeWith' : 'nav:files.openWith', { hint: files.hint })
+              : t(files.open ? 'nav:files.close' : 'nav:files.open')
+          }
           aria-pressed={files.open}
           onClick={files.toggle}
         >
@@ -80,7 +91,7 @@ export default function TitleBar({
       >
         <span className={`connection-dot ${connected ? 'online' : ''}`} />
         {connectionName && <span className="connection-name">{connectionName}</span>}
-        <span>{connected ? '已连接' : '重连中'}</span>
+        <span>{connected ? t('nav:connected') : t('nav:reconnecting')}</span>
         {!connectionName && <small>{adapterName}</small>}
       </span>
     </header>

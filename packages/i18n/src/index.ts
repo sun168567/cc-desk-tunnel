@@ -61,10 +61,10 @@ const mapTree = (tree: Tree, change: (text: string) => string): Tree =>
     ]),
   );
 
-export const resources = {
-  ...catalogs,
-  [pseudoLanguage]: mapTree(catalogs.en as unknown as Tree, pseudo),
-};
+// The made-up language formats dates and numbers as English does: `common:locale` is a tag, not text.
+const pseudoCatalogs = mapTree(catalogs.en as unknown as Tree, pseudo);
+(pseudoCatalogs.common as Tree).locale = catalogs.en.common.locale;
+export const resources = { ...catalogs, [pseudoLanguage]: pseudoCatalogs };
 
 // How each language writes lists in a sentence, for the formats of `{{value, format}}`: `quoted` names,
 // `clauses` that begin a sentence, and `parts` of a longer list. The made-up language writes as English.

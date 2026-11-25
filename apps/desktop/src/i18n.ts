@@ -14,6 +14,9 @@ export const t = i18n.t;
 export const useT = (): T => useTranslation(namespaces).t;
 // The `t` a function takes when it makes text at render time: a component's, from useT(), or the one above.
 export type T = typeof t;
+// The language's tag for formatting dates and numbers (`toLocaleString`), from the same `t`: what a component
+// formats follows the language as its text does.
+export const localeOf = (t: T) => t('common:locale');
 
 // What the service said, in the window's language at the moment it is said (see `Say` in client.ts).
 export const say = (words: Words, fallback?: string) => wordsText(t, words, fallback);
