@@ -1,6 +1,8 @@
 import { ChevronDown, Download, Settings, SquareTerminal, Unplug, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
+import type { ClientUpgrade } from './client-upgrade.ts';
+import UpgradeProgress from './UpgradeProgress.tsx';
 import { thisDevice } from './device.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import { serviceKey } from './shared.ts';
@@ -31,9 +33,9 @@ export default function LoginPage({
   error,
   upgrade,
   direct,
-  downloaded,
-  install,
+  upgrading,
   older,
+  serviceUpgraded,
   newer,
   showNotes,
   submit,
@@ -48,13 +50,15 @@ export default function LoginPage({
   // The version of the installer a service of another version offers this client.
   upgrade: string | null;
   // The service's version, when this client is the older one: its installer can be fetched from the release
-  // page instead, and `downloaded` is how far that is, from 0 to 1.
+  // page instead.
   direct: string | null;
-  downloaded: number | null;
-  // Fetches and runs the installer the service holds, or the given version's from the release page.
-  install: (version?: string) => void;
+  // Fetches and runs the installer the service holds, or the given version's from the release page, and tells
+  // how that goes.
+  upgrading: ClientUpgrade;
   // The service's version, when it refused this client as the newer one: it can be asked to upgrade itself.
   older: string | null;
+  // The service upgraded itself from `older` and is restarting.
+  serviceUpgraded: (from: string) => void;
   // The version the service is at or offers, when it is newer than this client: its notes can be read.
   newer: string | null;
   // Shows what a version changed.
@@ -127,6 +131,10 @@ export default function LoginPage({
     // Refused for sessions at work, by a service that can be forced past them.
     forcible?: boolean;
   } | null>(null);
+  // A new attempt to connect, by hand or once an upgraded service is back, has its own outcome to tell.
+  useEffect(() => {
+    if (connecting) setServiceUpgrade(null);
+  }, [connecting]);
   function upgradeService(service: string, force = false) {
     if (
       !window.confirm(
@@ -153,10 +161,11 @@ export default function LoginPage({
           ...(force ? { force } : {}),
         }),
       )
-      .then(({ version, error, code }) =>
+      .then(({ version, error, code }) => {
+        if (version) serviceUpgraded(service);
         setServiceUpgrade(
           version
-            ? { phase: 'done', text: `服务端已升级到 ${version}，正在重启；稍候再连接。` }
+            ? { phase: 'done', text: `服务端已升级到 ${version}，正在重启，好了就自动连接…` }
             : {
                 phase: 'failed',
                 text: error ?? '服务端升级失败。',
@@ -164,8 +173,8 @@ export default function LoginPage({
                   code === 'busy' &&
                   service.localeCompare(FORCED_UPGRADE_SINCE, undefined, { numeric: true }) >= 0,
               },
-        ),
-      )
+        );
+      })
       .finally(stop);
   }
   const shownError =
@@ -335,12 +344,13 @@ export default function LoginPage({
               {shownError}
             </p>
           )}
-          {upgrade && (
+          <UpgradeProgress upgrade={upgrading} />
+          {upgrade && !upgrading.step && (
             <button
               className="button login-submit"
               type="button"
               disabled={connecting}
-              onClick={() => install()}
+              onClick={() => upgrading.start()}
             >
               <Download />
               升级客户端到 {upgrade}
@@ -373,22 +383,20 @@ export default function LoginPage({
               查看 {newer} 的更新内容
             </button>
           )}
-          {direct && (
+          {direct && !upgrading.step && (
             <button
               className="button login-submit"
               type="button"
               disabled={connecting}
-              onClick={() => install(direct)}
+              onClick={() => upgrading.start(direct)}
             >
               <Download />
-              {downloaded !== null
-                ? `正在从 GitHub 下载 ${Math.floor(downloaded * 100)}%`
-                : upgrade
-                  ? `改从 GitHub 发布页下载 ${direct}`
-                  : `从 GitHub 发布页下载并升级到 ${direct}`}
+              {upgrade
+                ? `改从 GitHub 发布页下载 ${direct}`
+                : `从 GitHub 发布页下载并升级到 ${direct}`}
             </button>
           )}
-          <button className="button primary login-submit" disabled={connecting}>
+          <button className="button primary login-submit" disabled={connecting || !!upgrading.step}>
             <Unplug />
             {connecting ? '连接中…' : '连接'}
           </button>

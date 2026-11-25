@@ -492,6 +492,36 @@ button.chip.danger:hover:not(:disabled) {
 .login-submit {
   margin-top: 5px;
 }
+/* A client upgrade under way, where the buttons that start one were: its step, the bytes so far, a way to stop. */
+.upgrade-progress {
+  display: grid;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.upgrade-progress-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.upgrade-progress small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.upgrade-progress progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+.upgrade-progress .button {
+  justify-self: end;
+  min-height: 28px;
+  font-size: 12px;
+}
 /* The window: a title bar across the top, then the rail of pages, the side column and the page itself. */
 .shell {
   display: grid;

@@ -160,11 +160,29 @@ declare global {
       // This computer as the service knows it.
       device: () => Promise<import('@cc-desk-tunnel/protocol').Device>;
       // Fetches and runs an installer: the one the connected service holds, or, given a version, that
-      // version's from the release page.
-      installUpdate: (version?: string) => Promise<void>;
+      // version's from the release page. Ends `cancelled` when stopped with `cancelUpdate`; otherwise the
+      // client quits for the installer.
+      installUpdate: (version?: string) => Promise<{ cancelled?: boolean }>;
+      cancelUpdate: () => Promise<void>;
       onUpdateProgress: (
-        callback: (progress: { received: number; size: number }) => void,
+        callback: (step: import('./client-upgrade.ts').UpgradeStep) => void,
       ) => () => void;
+      // What a service that refused this client says to it now (see probeService in electron/service-upgrade.mjs).
+      probeService: (config: {
+        url: string;
+        fingerprint: string;
+        token: string;
+        deviceName: string;
+      }) => Promise<
+        | { status: 'ready' | 'unreachable' }
+        | { status: 'failed'; error: string }
+        | {
+            status: 'refused';
+            service: string | null;
+            release: string | null;
+            preparing: number | null;
+          }
+      >;
       // Has a service that refused this client as the newer one upgrade itself to the newest release, given
       // the service's version from the refusal; ends with the version installed or why it was not.
       upgradeService: (config: {
