@@ -1,5 +1,6 @@
 import { basename } from 'node:path';
 import { EXIT, Follow, exitOf, findSession, follow, said, subscribe } from './agent.mjs';
+import { t } from './i18n.mjs';
 
 // The commands of ccdt for programs and other agents: `ccdt -p` as `claude -p` is written, and the commands that
 // follow a session afterwards. `context` brings what main.mjs knows: how to sign in, and how to make sure this
@@ -21,34 +22,49 @@ export function next(result) {
     case 'awaiting_approval':
       return [
         approval.kind === 'plan'
-          ? `Claude 写好了计划，等待批准：\n${approval.plan}`
-          : `Claude 请求批准${approval.safetyCheck ? '（Claude Code 安全检查）' : ''}：${approval.tool} ${clip(typeof approval.input === 'string' ? approval.input : JSON.stringify(approval.input))}`,
-        approval.reason && `原因：${approval.reason}`,
+          ? t('cli:next.plan', { plan: approval.plan })
+          : t(approval.safetyCheck ? 'cli:next.approvalSafety' : 'cli:next.approval', {
+              tool: approval.tool,
+              input: clip(
+                typeof approval.input === 'string'
+                  ? approval.input
+                  : JSON.stringify(approval.input),
+              ),
+            }),
+        approval.reason && t('cli:next.reason', { reason: approval.reason }),
         approval.kind === 'plan'
-          ? `批准：ccdt approve ${id} [--mode auto|acceptEdits|default]；要它改计划：ccdt deny ${id} "意见"`
-          : `批准：ccdt approve ${id}；拒绝：ccdt deny ${id}`,
-        `回复后 ccdt 接着等到它再停下。也可以在图形客户端里处理。`,
+          ? t('cli:next.approvePlan', { id })
+          : t('cli:next.approveTool', { id }),
+        t('cli:next.afterReplyOrWindow'),
       ]
         .filter(Boolean)
         .join('\n');
     case 'awaiting_answer':
       return [
-        'Claude 在提问：',
+        t('cli:next.asking'),
         ...approval.questions.map(
           (item, index) =>
-            `${index + 1}. ${item.question}${item.options.length ? `（可选：${item.options.join(' / ')}${item.multiSelect ? '，可多选，用逗号隔开' : ''}）` : ''}`,
+            `${index + 1}. ${item.question}${
+              item.options.length
+                ? t(item.multiSelect ? 'cli:next.optionsMulti' : 'cli:next.options', {
+                    options: item.options.join(' / '),
+                  })
+                : ''
+            }`,
         ),
-        `回答：ccdt answer ${id} "第 1 题的答案" ["第 2 题的答案" …]；不答：ccdt deny ${id}`,
-        `回复后 ccdt 接着等到它再停下。`,
+        t('cli:next.answer', { id }),
+        t('cli:next.afterReply'),
       ].join('\n');
     case 'background':
-      return `这一轮已结束，Claude 启动的后台任务还在运行，结束后它会自动接着做：ccdt wait ${id} 等到那时。`;
+      return t('cli:next.background', { id });
     case 'running':
-      return `还在运行：ccdt wait ${id} 接着等，ccdt status ${id} 看进度，ccdt tell ${id} "补充" 追加指示。`;
+      return t('cli:next.running', { id });
     case 'failed':
-      return `运行失败${result.errors?.length ? `：${result.errors.join('；')}` : '。'}`;
+      return result.errors?.length
+        ? t('cli:next.failedWith', { errors: result.errors.join(t('cli:next.errorSeparator')) })
+        : t('cli:next.failed');
     case 'cancelled':
-      return '运行已停止。';
+      return t('cli:next.cancelled');
     default:
       return undefined;
   }
@@ -95,7 +111,7 @@ export function streamer(context) {
 }
 
 // Said where a run on this computer goes on after ccdt has let go of its connection.
-const UNCARRIED = 'Claude 在这台电脑上执行命令要靠它的连接：保持图形客户端或 ccdt online 开着。';
+const uncarried = () => t('cli:task.uncarried');
 
 // Follows the run to where it stops, signing in again after a lost connection, and prints the result.
 async function await_(
@@ -123,7 +139,7 @@ async function await_(
       return print(context, result, format);
     } catch (error) {
       if (error.exit !== EXIT.connection || !service.ended) throw error;
-      context.err('连接断开，正在重连……Claude 在服务端继续运行。');
+      context.err(t('cli:task.reconnecting'));
       await new Promise((resolve) => setTimeout(resolve, wait));
       try {
         service = await context.keep(await context.connect(), session);
@@ -136,14 +152,13 @@ async function await_(
 
 const formatOf = (values) => {
   const format = values['output-format'] ?? (values.json ? 'json' : 'text');
-  if (!['text', 'json', 'stream-json'].includes(format))
-    throw said('--output-format 只能是 text、json 或 stream-json。');
+  if (!['text', 'json', 'stream-json'].includes(format)) throw said(t('cli:task.badFormat'));
   return format;
 };
 const timeoutOf = (values) => {
   if (values.timeout === undefined) return undefined;
   const seconds = Number(values.timeout);
-  if (!(seconds > 0)) throw said('--timeout 写秒数，如 --timeout 600。');
+  if (!(seconds > 0)) throw said(t('cli:task.badTimeout'));
   return seconds * 1000;
 };
 
@@ -165,14 +180,14 @@ async function configure(service, session, values) {
 export async function printTask(context, values, prompt) {
   const format = formatOf(values);
   const text = prompt.trim();
-  if (!text) throw said('要写任务内容：ccdt -p "任务"，或从标准输入传入。');
+  if (!text) throw said(t('cli:task.noText'));
   let service = await context.connect();
   const all = [...service.sessions.values()];
   let session;
   if (values.session) session = findSession(all, values.session);
   else if (values.continue) {
     session = context.newest(all.filter((other) => context.mine(other)))[0];
-    if (!session) throw said('这个目录还没有会话：去掉 -c 新建一个。');
+    if (!session) throw said(t('cli:task.noSession'));
   } else {
     const response = await service.request({
       type: 'session.create',
@@ -196,7 +211,7 @@ export async function printTask(context, values, prompt) {
     if (format === 'text') context.out(session.id);
     else context.out(JSON.stringify(result));
     context.err(
-      `已发出。ccdt wait ${short(session.id)} 等结果，ccdt status ${short(session.id)} 看进度。${context.carried(session) ? '' : `\n${UNCARRIED}`}`,
+      `${t('cli:task.sent', { id: short(session.id) })}${context.carried(session) ? '' : `\n${uncarried()}`}`,
     );
     return EXIT.done;
   }
@@ -260,19 +275,26 @@ export async function status(context, values, ref) {
   };
   if (values.json) context.out(JSON.stringify(result));
   else {
-    const words = {
-      idle: '空闲',
-      running: '运行中',
-      background: '这一轮已结束，后台任务还在运行',
-      awaiting_approval: '等待批准',
-      awaiting_answer: '等待回答',
-      terminal: '在 ccdt 终端里打开着',
-    };
+    const states = [
+      'idle',
+      'running',
+      'background',
+      'awaiting_approval',
+      'awaiting_answer',
+      'terminal',
+    ];
     context.out(
       [
-        `${current.title}（${short(current.id)}）：${words[result.state] ?? result.state}`,
-        last?.type === 'tool.requested' && `最近：${last.name} ${clip(last.input, 120)}`,
-        result.reply && `Claude 最后说：${clip(result.reply, 300)}`,
+        t('cli:status.line', {
+          title: current.title,
+          id: short(current.id),
+          state: states.includes(result.state)
+            ? t(`cli:status.state.${result.state}`)
+            : result.state,
+        }),
+        last?.type === 'tool.requested' &&
+          t('cli:status.latest', { tool: last.name, input: clip(last.input, 120) }),
+        result.reply && t('cli:status.reply', { reply: clip(result.reply, 300) }),
       ]
         .filter(Boolean)
         .join('\n'),
@@ -285,7 +307,7 @@ export async function status(context, values, ref) {
 // `ccdt tell <ID> "…"`: a message to the session. While Claude works it joins the turn under way, which is how
 // a run is steered; otherwise it starts the next turn.
 export async function tell(context, values, ref, text) {
-  if (!text.trim()) throw said('要写追加的内容：ccdt tell <会话> "内容"。');
+  if (!text.trim()) throw said(t('cli:task.noTell'));
   let { service, session } = await opened(context, ref, true);
   // Whether it joins a turn under way, as the session was before it was sent.
   const running = !!session.activeRun;
@@ -295,7 +317,7 @@ export async function tell(context, values, ref, text) {
   if (values.json)
     context.out(JSON.stringify({ session_id: session.id, sent: true, joined: running }));
   context.err(
-    `${running ? '已追加到正在进行的这一轮。' : '已发出。'}ccdt wait ${short(session.id)} 等结果。${running || context.carried(session) ? '' : `\n${UNCARRIED}`}`,
+    `${t(running ? 'cli:task.added' : 'cli:task.told', { id: short(session.id) })}${running || context.carried(session) ? '' : `\n${uncarried()}`}`,
   );
   return EXIT.done;
 }
@@ -305,7 +327,7 @@ export async function tell(context, values, ref, text) {
 export async function wait(context, values, ref) {
   let { service, session } = await opened(context, ref, true);
   const run = session.activeRun;
-  if (run?.surface === 'terminal') throw said('这个会话在 ccdt 终端里打开着，在那里继续。');
+  if (run?.surface === 'terminal') throw said(t('cli:task.inTerminal'));
   service = await context.keep(service, session);
   return await await_(context, service, session, undefined, {
     format: formatOf(values),
@@ -320,13 +342,13 @@ export async function stop(context, values, ref) {
   const run = session.activeRun;
   if (!run) {
     await context.release(service);
-    context.err('这个会话没有在运行。');
+    context.err(t('cli:task.notRunning'));
     return EXIT.done;
   }
   await service.request({ type: 'run.cancel', sessionId: session.id, runId: run.id });
   await context.release(service);
   if (values.json) context.out(JSON.stringify({ session_id: session.id, stopped: true }));
-  else context.err('已停止。');
+  else context.err(t('cli:task.stopped'));
   return EXIT.done;
 }
 
@@ -341,7 +363,7 @@ async function waitingOn(context, ref, bg) {
     (snapshot?.session ?? session).activeRun?.status === 'awaiting_approval' && followed.pending();
   if (!approval) {
     await context.release(service);
-    throw said('这个会话现在没有等待批准或回答的请求：ccdt status 看它在做什么。');
+    throw said(t('cli:task.nothingWaiting'));
   }
   return { service, session, approval };
 }
@@ -367,7 +389,7 @@ async function reply(context, values, service, session, approval, answer) {
   if (values.json || formatOf(values) !== 'text')
     context.out(JSON.stringify({ session_id: session.id, answered: true }));
   context.err(
-    `已回复。ccdt wait ${short(session.id)} 等它接着做。${context.carried(session) ? '' : `\n${UNCARRIED}`}`,
+    `${t('cli:task.replied', { id: short(session.id) })}${context.carried(session) ? '' : `\n${uncarried()}`}`,
   );
   return EXIT.done;
 }
@@ -377,10 +399,10 @@ export async function approve(context, values, ref) {
   const { service, session, approval } = await waitingOn(context, ref, values.bg);
   if (approval.kind === 'question') {
     await context.release(service);
-    throw said(`Claude 在提问，不是请求批准：用 ccdt answer ${short(session.id)} "答案"。`);
+    throw said(t('cli:task.askingNotApproval', { id: short(session.id) }));
   }
   if (values.mode && !['auto', 'acceptEdits', 'default'].includes(values.mode))
-    throw said('--mode 只能是 auto、acceptEdits 或 default。');
+    throw said(t('cli:task.badMode'));
   return reply(context, values, service, session, approval, {
     allowed: true,
     ...(approval.kind === 'plan' && values.mode ? { plan: { mode: values.mode } } : {}),
@@ -402,12 +424,12 @@ export async function answer(context, values, ref, answers) {
   const { service, session, approval } = await waitingOn(context, ref, values.bg);
   if (approval.kind !== 'question') {
     await context.release(service);
-    throw said(`Claude 在请求批准，不是提问：用 ccdt approve ${short(session.id)} 或 ccdt deny。`);
+    throw said(t('cli:task.approvalNotAsking', { id: short(session.id) }));
   }
   if (answers.length !== approval.questions.length) {
     await context.release(service);
     throw said(
-      `Claude 问了 ${approval.questions.length} 个问题，要按顺序给 ${approval.questions.length} 个答案：\n${approval.questions.map((item, index) => `${index + 1}. ${item.question}`).join('\n')}`,
+      `${t('cli:task.answerCount', { count: approval.questions.length })}\n${approval.questions.map((item, index) => `${index + 1}. ${item.question}`).join('\n')}`,
     );
   }
   return reply(context, values, service, session, approval, {
@@ -464,7 +486,7 @@ export async function logs(context, values, ref) {
       shown
         .map((item) =>
           item.type === 'tool'
-            ? `· ${item.name} ${clip(item.input, 160)}${item.status ? `（${item.status}）` : ''}`
+            ? `· ${item.name} ${clip(item.input, 160)}${item.status ? t('cli:logs.status', { status: item.status }) : ''}`
             : item.type === 'user'
               ? `> ${item.text.trim()}`
               : item.type === 'error'

@@ -1,3 +1,4 @@
+import './zh.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';

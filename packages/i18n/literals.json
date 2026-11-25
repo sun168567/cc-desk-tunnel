@@ -1,15 +1,5 @@
 {
   "pending": {
-    "apps/cli/src/acp.mjs": 42,
-    "apps/cli/src/agent.mjs": 9,
-    "apps/cli/src/config.mjs": 1,
-    "apps/cli/src/connection.mjs": 5,
-    "apps/cli/src/main.mjs": 157,
-    "apps/cli/src/online.mjs": 3,
-    "apps/cli/src/picker.mjs": 2,
-    "apps/cli/src/settings.mjs": 48,
-    "apps/cli/src/tasks.mjs": 68,
-    "apps/cli/src/upgrade.mjs": 13,
     "apps/desktop/src/CcdtDialog.tsx": 1,
     "apps/desktop/src/help-content.ts": 522,
     "apps/desktop/src/HelpCenter.tsx": 58,
@@ -36,6 +26,14 @@
     "apps/desktop/electron/connections.cjs": {
       "count": 1,
       "reason": "主连接 is the name earlier versions gave the first connection: compared when an old profile is moved, not shown."
+    },
+    "apps/cli/src/settings.mjs": {
+      "count": 5,
+      "reason": "What may be typed for on, off and default: the words of both languages are taken, whatever the language shown."
+    },
+    "apps/cli/src/config.mjs": {
+      "count": 1,
+      "reason": "主连接 is the name earlier desktop versions gave the first connection: compared when reading its profile, not shown."
     }
   }
 }

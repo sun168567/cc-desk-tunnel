@@ -2,6 +2,7 @@
 // in each language's folder and a line for each here.
 import zhCommon from './locales/zh-CN/common.json' with { type: 'json' };
 import zhAccount from './locales/zh-CN/account.json' with { type: 'json' };
+import zhCli from './locales/zh-CN/cli.json' with { type: 'json' };
 import zhConnection from './locales/zh-CN/connection.json' with { type: 'json' };
 import zhDesktop from './locales/zh-CN/desktop.json' with { type: 'json' };
 import zhFiles from './locales/zh-CN/files.json' with { type: 'json' };
@@ -12,6 +13,7 @@ import zhSession from './locales/zh-CN/session.json' with { type: 'json' };
 import zhSettings from './locales/zh-CN/settings.json' with { type: 'json' };
 import enCommon from './locales/en/common.json' with { type: 'json' };
 import enAccount from './locales/en/account.json' with { type: 'json' };
+import enCli from './locales/en/cli.json' with { type: 'json' };
 import enConnection from './locales/en/connection.json' with { type: 'json' };
 import enDesktop from './locales/en/desktop.json' with { type: 'json' };
 import enFiles from './locales/en/files.json' with { type: 'json' };
@@ -23,6 +25,7 @@ import enSettings from './locales/en/settings.json' with { type: 'json' };
 
 // common: words used all over the window
 // account: the Claude account, its quota and usage, the call log and the run stats
+// cli: ccdt, the terminal client: its commands, help, prompts and the agent and ACP modes
 // connection: connecting and signing in, requests and their failures
 // desktop: the desktop program outside its page: menus, tray, dialogs, and what the main process and the connection bridge say
 // files: the file panel
@@ -34,6 +37,7 @@ import enSettings from './locales/en/settings.json' with { type: 'json' };
 export const namespaces = [
   'common',
   'account',
+  'cli',
   'connection',
   'desktop',
   'files',
@@ -47,6 +51,7 @@ export const catalogs = {
   'zh-CN': {
     common: zhCommon,
     account: zhAccount,
+    cli: zhCli,
     connection: zhConnection,
     desktop: zhDesktop,
     files: zhFiles,
@@ -59,6 +64,7 @@ export const catalogs = {
   en: {
     common: enCommon,
     account: enAccount,
+    cli: enCli,
     connection: enConnection,
     desktop: enDesktop,
     files: enFiles,

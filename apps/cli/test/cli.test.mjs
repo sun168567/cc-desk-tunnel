@@ -1,3 +1,4 @@
+import './zh.mjs';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import {

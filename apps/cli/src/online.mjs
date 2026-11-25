@@ -1,6 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
+import { t } from './i18n.mjs';
 
 // `ccdt online`: this computer stays online for Claude's commands without a terminal, as it is while a terminal of
 // ccdt is open; on a server without a screen it runs in the background. A lost connection is signed in again, at
@@ -26,7 +27,7 @@ export async function stayOnline({
     try {
       await service.channel();
       mark(true);
-      say(`${stamp()} 已在线：Claude 可以在这台电脑（${hostname()}）上执行命令。`);
+      say(`${stamp()} ${t('cli:online.online', { host: hostname() })}`);
     } catch (error) {
       // A connection that ended before its channel was ready is signed in again below.
       if (!service.ended) {
@@ -37,7 +38,7 @@ export async function stayOnline({
     await service.closed;
     mark(false);
     if (stopping) return 0;
-    say(`${stamp()} 连接断开，正在重连……`);
+    say(`${stamp()} ${t('cli:online.reconnecting')}`);
     for (let ms = 1000; ; ms = Math.min(ms * 2, 60000)) {
       await Promise.race([wait(ms), stop]);
       if (stopping) return 0;

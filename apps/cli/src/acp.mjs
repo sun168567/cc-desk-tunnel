@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { terminalStatuses } from '@cc-desk-tunnel/protocol';
 import { Follow, catchUp, findSession } from './agent.mjs';
+import { t } from './i18n.mjs';
 
 // `ccdt acp`: Claude Code on the service as an agent of the Agent Client Protocol (agentclientprotocol.com), over
 // standard input and output, for the editors and agents that speak it (Zed, JetBrains, acpx…). It is a translation of
@@ -12,15 +13,15 @@ import { Follow, catchUp, findSession } from './agent.mjs';
 export const ACP_VERSION = 1;
 
 // The permission modes of a session, as an ACP client offers them to choose from.
-const MODES = [
-  { id: 'auto', name: '自动', description: '由 Claude Code 判断哪些操作需要询问' },
-  { id: 'default', name: '每次询问', description: '编辑和命令都先询问' },
-  { id: 'acceptEdits', name: '自动接受编辑', description: '编辑不再询问，命令仍询问' },
-  { id: 'plan', name: '计划', description: '先写计划，批准后再动手' },
-  { id: 'bypassPermissions', name: '绕过权限', description: '什么都不问（须先在客户端允许）' },
-];
-const modes = (current) => ({ currentModeId: current ?? 'auto', availableModes: MODES });
-const EFFORTS = { low: '低', medium: '中', high: '高', xhigh: '极高', max: '最高' };
+const MODES = ['auto', 'default', 'acceptEdits', 'plan', 'bypassPermissions'];
+const modeList = () =>
+  MODES.map((id) => ({
+    id,
+    name: t(`cli:acp.mode.${id}.name`),
+    description: t(`cli:acp.mode.${id}.detail`),
+  }));
+const modes = (current) => ({ currentModeId: current ?? 'auto', availableModes: modeList() });
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const DEFAULT = 'default';
 
 // What a client offers to choose for a session (ACP's session config options), most used first: the model, how hard
@@ -32,12 +33,15 @@ export function sessionOptions({ mode, model, effort }, models = []) {
     (model ? models.find((row) => row.resolvedModel === model) : undefined);
   const rows = current
     ? models
-    : [{ value: model ?? DEFAULT, displayName: model ?? '默认', description: '' }, ...models];
+    : [
+        { value: model ?? DEFAULT, displayName: model ?? t('cli:acp.default'), description: '' },
+        ...models,
+      ];
   const levels = current?.supportedEffortLevels ?? [];
   return [
     {
       id: 'model',
-      name: '模型',
+      name: t('cli:acp.model'),
       category: 'model',
       type: 'select',
       currentValue: current?.value ?? model ?? DEFAULT,
@@ -51,24 +55,27 @@ export function sessionOptions({ mode, model, effort }, models = []) {
       ? [
           {
             id: 'effort',
-            name: '推理强度',
+            name: t('cli:acp.effort'),
             category: 'thought_level',
             type: 'select',
             currentValue: effort && levels.includes(effort) ? effort : DEFAULT,
             options: [
-              { value: DEFAULT, name: '默认' },
-              ...levels.map((level) => ({ value: level, name: EFFORTS[level] ?? level })),
+              { value: DEFAULT, name: t('cli:acp.default') },
+              ...levels.map((level) => ({
+                value: level,
+                name: EFFORTS.includes(level) ? t(`cli:acp.level.${level}`) : level,
+              })),
             ],
           },
         ]
       : []),
     {
       id: 'mode',
-      name: '审批模式',
+      name: t('cli:acp.mode.title'),
       category: 'mode',
       type: 'select',
       currentValue: mode ?? 'auto',
-      options: MODES.map(({ id, name, description }) => ({ value: id, name, description })),
+      options: modeList().map(({ id, name, description }) => ({ value: id, name, description })),
     },
   ];
 }
@@ -326,9 +333,9 @@ export async function serveAcp(context, { input = process.stdin, output = proces
           `\n\n${approval.questions
             .map(
               (item, index) =>
-                `${index + 1}. ${item.question}${item.options.length ? `（${item.options.join(' / ')}）` : ''}`,
+                `${index + 1}. ${item.question}${item.options.length ? t('cli:acp.options', { options: item.options.join(' / ') }) : ''}`,
             )
-            .join('\n')}\n\n（直接回复即可回答。）`,
+            .join('\n')}\n\n${t('cli:acp.replyToAnswer')}`,
         ),
       });
       served.wake?.();
@@ -337,14 +344,14 @@ export async function serveAcp(context, { input = process.stdin, output = proces
     const plan = approval.kind === 'plan';
     const options = plan
       ? [
-          { optionId: 'auto', name: '批准，自动执行', kind: 'allow_once' },
-          { optionId: 'acceptEdits', name: '批准，自动接受编辑', kind: 'allow_once' },
-          { optionId: 'default', name: '批准，每步询问', kind: 'allow_once' },
-          { optionId: 'reject', name: '继续规划', kind: 'reject_once' },
+          { optionId: 'auto', name: t('cli:acp.plan.auto'), kind: 'allow_once' },
+          { optionId: 'acceptEdits', name: t('cli:acp.plan.acceptEdits'), kind: 'allow_once' },
+          { optionId: 'default', name: t('cli:acp.plan.default'), kind: 'allow_once' },
+          { optionId: 'reject', name: t('cli:acp.plan.reject'), kind: 'reject_once' },
         ]
       : [
-          { optionId: 'allow', name: '允许', kind: 'allow_once' },
-          { optionId: 'reject', name: '拒绝', kind: 'reject_once' },
+          { optionId: 'allow', name: t('cli:acp.allow'), kind: 'allow_once' },
+          { optionId: 'reject', name: t('cli:acp.reject'), kind: 'reject_once' },
         ];
     const tool = served.follow.tools.get(approval.toolId);
     let outcome;
@@ -376,12 +383,13 @@ export async function serveAcp(context, { input = process.stdin, output = proces
         allowed,
         ...(plan && allowed ? { plan: { mode: outcome.optionId } } : {}),
       })
-      .catch((error) => context.err(`回复审批失败：${error.message}`));
+      .catch((error) => context.err(t('cli:acp.replyFailed', { reason: error.message })));
   }
 
   function served(sessionId) {
     const found = sessions.get(sessionId);
-    if (!found) throw Object.assign(new Error(`没有这个会话：${sessionId}`), { code: -32602 });
+    if (!found)
+      throw Object.assign(new Error(t('cli:acp.noSession', { id: sessionId })), { code: -32602 });
     return found;
   }
   function serve(session) {
@@ -402,9 +410,7 @@ export async function serveAcp(context, { input = process.stdin, output = proces
   }
   const ignored = (servers) => {
     if (servers?.length)
-      context.err(
-        `ccdt acp 暂不连接客户端传来的 MCP 服务（${servers.map((server) => server.name).join('、')}）。`,
-      );
+      context.err(t('cli:acp.mcpIgnored', { names: servers.map((server) => server.name) }));
   };
 
   // A choice made in the client, kept by the service for the session's next turns as a window's is. `answered`: the
@@ -490,9 +496,12 @@ export async function serveAcp(context, { input = process.stdin, output = proces
     async 'session/set_config_option'({ sessionId, configId, value }) {
       const entry = served(sessionId);
       const option = options(entry).find((item) => item.id === configId);
-      if (!option) throw Object.assign(new Error(`没有这个选项：${configId}`), { code: -32602 });
+      if (!option)
+        throw Object.assign(new Error(t('cli:acp.noOption', { id: configId })), { code: -32602 });
       if (!option.options.some((item) => item.value === value))
-        throw Object.assign(new Error(`${option.name}没有这个值：${value}`), { code: -32602 });
+        throw Object.assign(new Error(t('cli:acp.noValue', { option: option.name, value })), {
+          code: -32602,
+        });
       await configure(
         entry,
         configId === 'model'
@@ -507,7 +516,7 @@ export async function serveAcp(context, { input = process.stdin, output = proces
     async 'session/prompt'({ sessionId, prompt }) {
       const entry = served(sessionId);
       const words = promptText(prompt);
-      if (!words) throw Object.assign(new Error('提示里没有文字。'), { code: -32602 });
+      if (!words) throw Object.assign(new Error(t('cli:acp.noText')), { code: -32602 });
       let made = await connected();
       made = await kept(made, made.sessions.get(sessionId) ?? { id: sessionId });
       entry.question = false;
@@ -533,9 +542,14 @@ export async function serveAcp(context, { input = process.stdin, output = proces
       if (entry.follow.started && status) {
         if (status.status === 'cancelled') return 'cancelled';
         if (status.status === 'failed')
-          throw Object.assign(new Error(entry.follow.errors.join('；') || '运行失败。'), {
-            code: -32603,
-          });
+          throw Object.assign(
+            new Error(
+              entry.follow.errors.join(t('cli:next.errorSeparator')) || t('cli:next.failed'),
+            ),
+            {
+              code: -32603,
+            },
+          );
         if (terminalStatuses.has(status.status) || status.waiting === 'background')
           return 'end_turn';
       }
@@ -588,7 +602,7 @@ export async function serveAcp(context, { input = process.stdin, output = proces
     if (!method)
       return write({
         id: message.id,
-        error: { code: -32601, message: `不支持 ${message.method}` },
+        error: { code: -32601, message: t('cli:acp.unsupported', { method: message.method }) },
       });
     try {
       write({ id: message.id, result: (await method(message.params ?? {})) ?? null });
@@ -610,12 +624,12 @@ export async function serveAcp(context, { input = process.stdin, output = proces
     try {
       message = JSON.parse(raw);
     } catch {
-      write({ id: null, error: { code: -32700, message: '不是 JSON。' } });
+      write({ id: null, error: { code: -32700, message: t('cli:acp.notJson') } });
       continue;
     }
     void handle(message);
   }
-  for (const waiting of asked.values()) waiting.reject(new Error('输入已结束。'));
+  for (const waiting of asked.values()) waiting.reject(new Error(t('cli:acp.inputEnded')));
   await service?.close().catch(() => {});
   return 0;
 }
