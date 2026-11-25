@@ -103,6 +103,8 @@ function program(name: string) {
 }
 // Signs in on a sign-in window, as the user does.
 async function signIn(page: Page, values: { url?: string; token?: string }) {
+  // The mode buttons come with the form: until it is drawn they are not visible either.
+  await page.getByLabel('服务地址').waitFor();
   const localMode = page.getByRole('button', { name: '本地模拟', exact: true });
   if (await localMode.isVisible()) await localMode.click();
   if (values.url !== undefined) await page.getByLabel('服务地址').fill(values.url);

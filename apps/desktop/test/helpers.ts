@@ -31,6 +31,8 @@ export function connection() {
 // Signs in on the sign-in page; in a browser the page signed in takes its place in the tab.
 export async function login(page: Page, wait = true) {
   const config = connection();
+  // The mode buttons come with the form: until it is drawn they are not visible either.
+  await page.getByLabel('服务地址').waitFor();
   const localMode = page.getByRole('button', { name: '本地模拟', exact: true });
   if (await localMode.isVisible()) await localMode.click();
   await page.getByLabel('服务地址').fill(config.serverUrl);
