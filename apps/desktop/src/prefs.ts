@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react';
+import { isLanguageChoice } from '@cc-desk-tunnel/i18n';
+import type { LanguageChoice } from '@cc-desk-tunnel/i18n';
 import { onSharedChange, saveShared, shareOnce, shared } from './shared.ts';
 import { defaultView, viewModes } from './transcriptView.ts';
 import type { TranscriptView } from './transcriptView.ts';
@@ -50,6 +52,8 @@ export type Prefs = {
   // The strip under the input box with the whole session's figures; chosen the same way.
   sessionBar: { enabled: boolean; summary: Record<string, boolean> };
   theme: Theme;
+  // The language of the window, its menus and dialogs: the system's, or one chosen here (see i18n.ts).
+  language: LanguageChoice;
   // The file panel beside the conversation: whether it is open, and how wide the user made it.
   filePanel: { open: boolean; width: number };
 };
@@ -80,6 +84,7 @@ const defaults: Prefs = {
   view: defaultView,
   sessionBar: { enabled: false, summary: {} },
   theme: 'system',
+  language: 'system',
   filePanel: { open: false, width: 420 },
 };
 
@@ -144,6 +149,7 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
         ),
       },
       theme: themes.find((entry) => entry.theme === saved.theme)?.theme ?? defaults.theme,
+      language: isLanguageChoice(saved.language) ? saved.language : defaults.language,
       filePanel: {
         open: saved.filePanel?.open === true,
         width:

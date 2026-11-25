@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import { I18nextProvider } from 'react-i18next';
+import { i18n } from './i18n.ts';
 import WebGate from './WebGate.tsx';
 import { App } from './App.tsx';
 import Launcher, { desktopSignIns } from './Launcher.tsx';
@@ -68,14 +70,16 @@ function BrowserSignIn() {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {window.desktop?.boot?.launcher ? (
-      <Launcher signIns={desktopSignIns} />
-    ) : window.desktop ? (
-      <App />
-    ) : import.meta.env.DEV ? (
-      <BrowserSignIn />
-    ) : (
-      <WebGate />
-    )}
+    <I18nextProvider i18n={i18n}>
+      {window.desktop?.boot?.launcher ? (
+        <Launcher signIns={desktopSignIns} />
+      ) : window.desktop ? (
+        <App />
+      ) : import.meta.env.DEV ? (
+        <BrowserSignIn />
+      ) : (
+        <WebGate />
+      )}
+    </I18nextProvider>
   </React.StrictMode>,
 );

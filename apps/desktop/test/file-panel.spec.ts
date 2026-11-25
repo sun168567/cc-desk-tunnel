@@ -37,7 +37,7 @@ test('Electron: the file panel shows the project, previews files and copies, ren
   mkdirSync(outside);
   writeFileSync(join(outside, 'upload.txt'), 'uploaded');
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...connectionArgs(profile)],
     env,
   });
   try {

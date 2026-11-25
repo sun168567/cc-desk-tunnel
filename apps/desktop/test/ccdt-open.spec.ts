@@ -86,7 +86,12 @@ test('a session opens in ccdt signed in as the window is, or the window says how
   env.Path = `${bin};${process.env.SystemRoot}\\System32`;
   env.LOCALAPPDATA = resolve(root, 'local');
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(resolve(root, 'profile'))],
+    args: [
+      resolve('apps/desktop'),
+      '--smoke-test',
+      '--lang=zh-CN',
+      ...connectionArgs(resolve(root, 'profile')),
+    ],
     env,
   });
   try {

@@ -1,5 +1,7 @@
 {
   "language": {
+    "title": "Display language",
+    "detail": "For windows, menus and dialogs; the system setting uses your system’s display language",
     "system": "Use system setting"
   }
 }

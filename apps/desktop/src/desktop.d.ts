@@ -8,7 +8,13 @@ declare global {
       platform: 'win32' | 'darwin' | 'linux';
       // Which of this computer's connections the window is ('' the first), and what they all share.
       // `launcher`: a sign-in window, which is no connection's (see Launcher.tsx).
-      boot: { connection: string; launcher?: boolean; shared: import('./shared.ts').Shared };
+      boot: {
+        connection: string;
+        launcher?: boolean;
+        shared: import('./shared.ts').Shared;
+        // The system's languages, most preferred first.
+        languages: string[];
+      };
       saveShared: (key: 'prefs', value: unknown) => Promise<void>;
       // The computer's project list from before the service kept them, while this connection has yet to hand it
       // to its service, and the call that says it has (see App.tsx).

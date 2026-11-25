@@ -200,7 +200,7 @@ test('Electron loads the built UI with sandbox and closes its execution connecti
     JSON.stringify({ projectNames: { [legacy.toLowerCase()]: '升级前的名字' } }),
   );
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...args],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...args],
     env,
   });
   let sessionTitle = '';
@@ -724,7 +724,13 @@ test('Electron remembers the sign-in, connects on the next launch and stays in t
   const launch = () =>
     _electron.launch({
       // As the sign-in window starts it: signing in by itself once the token is remembered.
-      args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile), '--sign-in'],
+      args: [
+        resolve('apps/desktop'),
+        '--smoke-test',
+        '--lang=zh-CN',
+        ...connectionArgs(profile),
+        '--sign-in',
+      ],
       env,
     });
   let application = await launch();

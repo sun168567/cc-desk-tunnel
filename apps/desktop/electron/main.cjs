@@ -1004,6 +1004,12 @@ function takeShared() {
       window.webContents.send('shared:changed', key, value);
   }
 }
+// The system's languages, most preferred first, which the window's language follows unless one is chosen in
+// the settings (packages/i18n `resolveLanguage`). Chromium's `--lang` sets the language for one run.
+const systemLanguages = () => {
+  const chosen = app.commandLine.getSwitchValue('lang');
+  return chosen ? [chosen] : app.getPreferredSystemLanguages();
+};
 // What the page needs before it draws anything.
 ipcMain.on('boot', (event) => {
   event.returnValue = event.senderFrame.url.startsWith('file://')
@@ -1011,6 +1017,7 @@ ipcMain.on('boot', (event) => {
         connection: event.sender === mainWindow?.webContents ? connectionId : '',
         launcher: event.sender !== mainWindow?.webContents,
         shared: Object.fromEntries(Object.keys(seen).map((key) => [key, snapshot(key)])),
+        languages: systemLanguages(),
       }
     : null;
 });

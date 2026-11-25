@@ -35,6 +35,7 @@ env.HOME = home;
 const args = [
   ...process.argv.slice(3),
   '--smoke-test',
+  '--lang=zh-CN',
   `--user-data-dir=${join(directory, 'profile')}`,
 ];
 const application = await _electron.launch({

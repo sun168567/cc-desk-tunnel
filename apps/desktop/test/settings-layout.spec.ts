@@ -262,7 +262,7 @@ test('Electron: this computer’s settings as the desktop client shows them', as
   const profile = resolve('.local/ui-test/profile-settings-layout');
   rmSync(profile, { recursive: true, force: true });
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...connectionArgs(profile)],
     env,
   });
   try {

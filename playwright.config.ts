@@ -12,6 +12,8 @@ export default defineConfig({
     browserName: 'chromium',
     channel: process.env.PLAYWRIGHT_CHANNEL,
     viewport: { width: 1280, height: 900 },
+    // The tests read the window in its source language; the system's would be the machine's.
+    locale: 'zh-CN',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },

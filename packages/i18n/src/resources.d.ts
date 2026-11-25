@@ -2,6 +2,8 @@
 export type Resources = {
   common: {
     language: {
+      title: '界面语言';
+      detail: '窗口、菜单和对话框的语言；跟随系统时使用系统的显示语言';
       system: '跟随系统';
     };
   };

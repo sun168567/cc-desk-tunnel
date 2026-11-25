@@ -56,7 +56,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
   env.PATH = `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`;
   const application = await _electron.launch({
     executablePath,
-    args: ['--smoke-test', ...connectionArgs(join(directory, 'profile'))],
+    args: ['--smoke-test', '--lang=zh-CN', ...connectionArgs(join(directory, 'profile'))],
     cwd: directory,
     env,
   });
@@ -95,7 +95,7 @@ test('packaged exe runs without development dependencies and reclaims bundled re
       await new Promise<void>((accept, reject) => {
         execFile(
           executablePath,
-          ['--smoke-test', ...connectionArgs(join(directory, 'profile'))],
+          ['--smoke-test', '--lang=zh-CN', ...connectionArgs(join(directory, 'profile'))],
           { env, windowsHide: true, timeout: 10000 },
           (error) => (error ? reject(error) : accept()),
         );

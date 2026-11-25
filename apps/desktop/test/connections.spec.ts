@@ -55,7 +55,12 @@ function program(name: string) {
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] = value;
   const profile = resolve('.local/ui-test', name);
   rmSync(profile, { recursive: true, force: true });
-  const args = [resolve('apps/desktop'), '--smoke-test', `--user-data-dir=${profile}`];
+  const args = [
+    resolve('apps/desktop'),
+    '--smoke-test',
+    '--lang=zh-CN',
+    `--user-data-dir=${profile}`,
+  ];
   const opened: ElectronApplication[] = [];
   return {
     profile,
@@ -352,7 +357,7 @@ async function oldProfile(
   const page = resolve(desk.profile, '..', 'old-profile.html');
   writeFileSync(page, '<!doctype html><title>old</title>');
   const maker = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', `--user-data-dir=${folder}`],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', `--user-data-dir=${folder}`],
     env: desk.env,
   });
   let token: string;

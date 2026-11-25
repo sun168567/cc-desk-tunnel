@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { platformOf } from '@cc-desk-tunnel/protocol';
+import { languageChoices, languageNames } from '@cc-desk-tunnel/i18n';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Bell,
@@ -187,6 +189,41 @@ const kinds: { key: NotifyKind; title: string; detail: string }[] = [
   { key: 'schedule', title: '定时任务未发出', detail: '到点的任务发送失败或被跳过' },
   { key: 'connection', title: '连接中断', detail: '与服务的连接意外断开' },
 ];
+
+// The language of this computer's windows, a choice of the computer like the colours. A language is named in
+// itself, as lists of languages do, so that it is found whatever language the window is in.
+function LanguageSettings() {
+  const { language } = usePrefs();
+  const { t } = useTranslation();
+  return (
+    <>
+      <h2 className="page-heading">{t('language.title')}</h2>
+      <div className="card">
+        <div className="setting-row stat-picks">
+          <span>
+            <strong>{t('language.title')}</strong>
+            <small>{t('language.detail')}</small>
+          </span>
+          <div className="stat-chips" role="radiogroup" aria-label={t('language.title')}>
+            {languageChoices.map((choice) => (
+              <button
+                type="button"
+                key={choice}
+                role="radio"
+                className="stat-chip"
+                lang={choice === 'system' ? undefined : choice}
+                aria-checked={choice === language}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, language: choice }))}
+              >
+                {choice === 'system' ? t('language.system') : languageNames[choice]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 
 // How much of the work behind a reply is shown is a choice of this computer's window too.
 function ThemeSettings() {
@@ -654,6 +691,7 @@ function Appearance({ browser }: { browser: boolean }) {
   const { quota } = usePrefs();
   return (
     <Page title="外观" intro={here(browser)}>
+      <LanguageSettings />
       <ThemeSettings />
       {window.desktop && (
         <>
