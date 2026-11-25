@@ -265,7 +265,22 @@
   "textMenu": "Conversation text actions",
   "composer": {
     "message": "Message",
-    "remove": "Remove"
+    "remove": "Remove",
+    "compact": "Compact context",
+    "refresh": "Refresh Claude Code status",
+    "refreshDetail": "Context and plan quota",
+    "commands": "Session commands",
+    "project": "The session's project",
+    "plain": "Plain session",
+    "branch": "The project's current git branch",
+    "inTerminal": "The session is open in a terminal; once the terminal is closed, carry on here",
+    "placeholder": "Ask anything…",
+    "addFiles": "Add files: put their paths in the message",
+    "stop": "Stop",
+    "continue": "Continue from the last turn",
+    "send": "Send message",
+    "contextUsed": "{{percent}}% used",
+    "tooLong": "The message is over {{limit}} characters; shorten it to send"
   },
   "picture": {
     "title": "Image",
@@ -329,5 +344,68 @@
     "tool": "Tool {{name}}",
     "you": "You",
     "untitled": "Session"
+  },
+  "simulation": {
+    "scenario": "Scenario",
+    "label": "Simulation scenario",
+    "chat": "Chat",
+    "approval": "Tool approval",
+    "question": "Question",
+    "plan": "Plan",
+    "upstreamError": "Upstream error"
+  },
+  "quota": {
+    "label": "Quota used",
+    "used": "{{label}} quota {{used}}% used",
+    "usedResets": "{{label}} quota {{used}}% used, resets {{time}}",
+    "open": "Click for account and quota"
+  },
+  "model": {
+    "label": "Model and effort",
+    "choose": "Choose model",
+    "model": "Model",
+    "default": "Default model",
+    "busy": "A session is running; refresh once it ends",
+    "refreshing": "Refreshing the model list…",
+    "refresh": "Refresh the model list"
+  },
+  "effort": {
+    "reset": "Reset effort to default",
+    "label": "Effort",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "xhigh": "Extra high",
+    "max": "Max",
+    "default": "Default",
+    "native": "Claude Code default"
+  },
+  "command": {
+    "review": "Review the code changes",
+    "security-review": "Check the current branch's changes for security issues",
+    "context": "Show context usage",
+    "usage": "Show usage and quota",
+    "init": "Write a CLAUDE.md for the project"
+  },
+  "context": {
+    "title": "Context window",
+    "waiting": "Waiting for Claude Code's status",
+    "category": {
+      "system_prompt": "System prompt",
+      "system_tools": "System tools",
+      "mcp_instructions": "MCP server instructions",
+      "mcp_tools": "MCP tools",
+      "custom_agents": "Custom agents",
+      "memory_files": "Memory files",
+      "skills": "Skills",
+      "messages": "Messages"
+    },
+    "used": "Used",
+    "window": "Window",
+    "left": "Left",
+    "model": "Model",
+    "measured": "{{time}} · Claude Code's summary",
+    "percent": "Context {{percent}}%",
+    "usedLeft": "{{used}}% used ({{left}}% left)"
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Check, RotateCcw } from 'lucide-react';
+import { localeOf, type T, useT } from './i18n.ts';
 import { usePrefs } from './prefs.ts';
 import { quotaFigures } from './quota.ts';
 import type {
@@ -14,13 +15,7 @@ import ContextMeter from './ContextMeter.tsx';
 import { IconButton } from './ui.tsx';
 import { modelDetail, modelName } from './modelNames.ts';
 
-const effortNames: Record<Effort, string> = {
-  low: '低',
-  medium: '中',
-  high: '高',
-  xhigh: '极高',
-  max: '最高',
-};
+const effortName = (t: T, effort: Effort) => t(`session:effort.${effort}`);
 export default function ComposerControls({
   model,
   effort,
@@ -49,6 +44,7 @@ export default function ComposerControls({
   refreshing: boolean;
   canRefreshModels: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // With the strip under the input box switched on, the ring is shown there instead.
   const barShowsContext = usePrefs().sessionBar.enabled;
@@ -82,7 +78,7 @@ export default function ComposerControls({
   const levels = chosen?.supportedEffortLevels ?? [];
   const actual = nativeSession?.effort;
   const shownEffort = preview ?? effort ?? actual;
-  const label = chosen ? modelName(chosen) : (model ?? '原生默认');
+  const label = chosen ? modelName(chosen) : (model ?? t('session:effort.native'));
   async function saveEffort() {
     dragging.current = false;
     if (!commitPending.current || disabled) return;
@@ -107,17 +103,18 @@ export default function ComposerControls({
         <button
           type="button"
           className={`quota-note ${fullest >= 90 ? 'danger' : fullest >= 70 ? 'warn' : ''}`}
-          aria-label="额度已用"
+          aria-label={t('session:quota.label')}
           title={[
-            ...quota.map(
-              (figure) =>
-                `${figure.label}额度已用 ${figure.used}%${
-                  figure.resetsAt
-                    ? `，${new Date(figure.resetsAt).toLocaleString('zh-CN')} 重置`
-                    : ''
-                }`,
+            ...quota.map((figure) =>
+              figure.resetsAt
+                ? t('session:quota.usedResets', {
+                    label: figure.label,
+                    used: figure.used,
+                    time: new Date(figure.resetsAt).toLocaleString(localeOf(t)),
+                  })
+                : t('session:quota.used', { label: figure.label, used: figure.used }),
             ),
-            '点击查看账号与额度',
+            t('session:quota.open'),
           ].join('\n')}
           onClick={openAccount}
         >
@@ -130,7 +127,7 @@ export default function ComposerControls({
           type="button"
           className="model-trigger"
           disabled={disabled}
-          aria-label="模型与推理强度"
+          aria-label={t('session:model.label')}
           aria-expanded={open}
           onClick={() => {
             setOpen((value) => !value);
@@ -138,20 +135,28 @@ export default function ComposerControls({
           }}
         >
           <span>{label}</span>
-          <small>{effort ? effortNames[effort] : actual ? effortNames[actual] : '默认'}</small>
+          <small>
+            {effort
+              ? effortName(t, effort)
+              : actual
+                ? effortName(t, actual)
+                : t('session:effort.default')}
+          </small>
           <ChevronDown />
         </button>
         {open && (
           <div
             className={`model-menu${choosing ? ' choosing' : ''}`}
             role="dialog"
-            aria-label="模型与推理强度"
+            aria-label={t('session:model.label')}
           >
             <div className="effort-view" hidden={choosing}>
               <div className="effort-heading">
-                <strong>{shownEffort ? effortNames[shownEffort] : '原生默认'}</strong>
+                <strong>
+                  {shownEffort ? effortName(t, shownEffort) : t('session:effort.native')}
+                </strong>
                 <IconButton
-                  title="恢复默认推理强度"
+                  title={t('session:effort.reset')}
                   disabled={disabled}
                   onClick={() => {
                     setPreview(null);
@@ -174,12 +179,14 @@ export default function ComposerControls({
                         : 0,
                     } as CSSProperties
                   }
-                  aria-label="推理强度"
+                  aria-label={t('session:effort.label')}
                   disabled={disabled}
                   type="range"
                   min={0}
                   max={levels.length - 1}
-                  aria-valuetext={shownEffort ? effortNames[shownEffort] : '原生默认'}
+                  aria-valuetext={
+                    shownEffort ? effortName(t, shownEffort) : t('session:effort.native')
+                  }
                   value={Math.max(0, levels.indexOf(shownEffort ?? 'high'))}
                   data-unset={shownEffort ? undefined : ''}
                   onPointerDown={(event) => {
@@ -239,7 +246,7 @@ export default function ComposerControls({
                       }
                       onClick={() => void configure({ effort: level })}
                     >
-                      {effortNames[level]}
+                      {effortName(t, level)}
                     </button>
                   ))}
                 </div>
@@ -249,9 +256,9 @@ export default function ComposerControls({
               <>
                 <button type="button" className="model-back" onClick={() => setChoosing(false)}>
                   <ArrowLeft />
-                  选择模型
+                  {t('session:model.choose')}
                 </button>
-                <div className="model-options" role="listbox" aria-label="模型">
+                <div className="model-options" role="listbox" aria-label={t('session:model.model')}>
                   <button
                     type="button"
                     role="option"
@@ -262,7 +269,7 @@ export default function ComposerControls({
                       setOpen(false);
                     }}
                   >
-                    <span>默认模型</span>
+                    <span>{t('session:model.default')}</span>
                     {model === null && <Check />}
                   </button>
                   {capabilities?.models
@@ -289,11 +296,11 @@ export default function ComposerControls({
                   type="button"
                   className="model-refresh"
                   disabled={disabled || refreshing || !canRefreshModels}
-                  title={canRefreshModels ? undefined : '有会话正在运行，结束后可刷新'}
+                  title={canRefreshModels ? undefined : t('session:model.busy')}
                   onClick={refresh}
                 >
                   <RotateCcw />
-                  {refreshing ? '正在刷新模型列表…' : '刷新模型列表'}
+                  {refreshing ? t('session:model.refreshing') : t('session:model.refresh')}
                 </button>
               </>
             )}
