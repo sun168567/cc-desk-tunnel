@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { strToU8, zipSync } from 'fflate';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { login, screenshots } from './helpers.ts';
 
@@ -72,6 +73,59 @@ async function openPlugins(page: Page) {
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '插件', exact: true }).click();
 }
+
+test('a plugin is installed from an archive once its contents were agreed to, and removed', async ({
+  page,
+}) => {
+  await openPlugins(page);
+  const choose = (files: Record<string, string>) =>
+    page.getByLabel('插件压缩包').setInputFiles({
+      name: 'notify.zip',
+      mimeType: 'application/zip',
+      buffer: Buffer.from(
+        zipSync(
+          Object.fromEntries(Object.entries(files).map(([name, text]) => [name, strToU8(text)])),
+        ),
+      ),
+    });
+  await choose({ 'readme.txt': 'nothing' });
+  await expect(page.getByRole('alert')).toContainText('没有 .claude-plugin/plugin.json');
+  await choose({
+    'notify/.claude-plugin/plugin.json': JSON.stringify({
+      id: 't.notify',
+      displayName: '通知',
+      version: '1.0.0',
+      permissions: ['full'],
+    }),
+    'notify/hooks/hooks.json': JSON.stringify({
+      hooks: {
+        RunEnded: [{ hooks: [{ type: 'command', command: 'node', args: ['notify.mjs'] }] }],
+      },
+    }),
+    // More than one part of an upload.
+    'notify/notify.mjs': Array.from({ length: 12_000 }, () => Math.random().toString(36)).join(
+      '\n',
+    ),
+  });
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('node notify.mjs');
+  expect(existsSync(resolve(plugins, 't.notify'))).toBe(false);
+  await page.screenshot({ path: resolve(shots, 'install.png') });
+  await dialog.getByRole('button', { name: '安装', exact: true }).click();
+  // It is the user who enables one that is not confined.
+  const row = page.locator('.plugin-open').filter({ hasText: '通知' });
+  await expect(row).toContainText('它要完整权限，由你启用。');
+  page.once('dialog', (asked) => void asked.accept());
+  await page.getByRole('switch', { name: '启用 通知' }).click();
+  await expect(row).toHaveText('通知');
+  await row.click();
+  await expect(page.locator('.workspace')).toContainText('1.0.0');
+  await page.locator('.plugin-back').click();
+  page.once('dialog', (asked) => void asked.accept());
+  await page.getByRole('button', { name: '删除 通知' }).click();
+  await expect(page.getByText('还没有插件')).toBeVisible();
+  expect(existsSync(resolve(plugins, 't.notify'))).toBe(false);
+});
 
 test('a plugin put in place is set on its own page, each change saved at once, tried and switched off', async ({
   page,

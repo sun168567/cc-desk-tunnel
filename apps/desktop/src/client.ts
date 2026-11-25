@@ -52,7 +52,8 @@ type DataMessage = Extract<
       | 'web.certificate.state'
       | 'plugin.checked'
       | 'plugin.done'
-      | 'plugin.log';
+      | 'plugin.log'
+      | 'plugin.archive';
   }
 >;
 // Commands answered with a data frame, and the frame each one gets.
@@ -78,7 +79,9 @@ type Replies = {
   'plugin.configure': 'plugin.checked';
   'plugin.press': 'plugin.done';
   'plugin.try': 'plugin.done';
+  'plugin.install': 'plugin.done';
   'plugin.log': 'plugin.log';
+  'plugin.upload': 'plugin.archive';
 };
 
 type NewCommand = Command extends infer C
@@ -592,7 +595,8 @@ export class ProxyClient {
         message.type === 'web.certificate.state' ||
         message.type === 'plugin.checked' ||
         message.type === 'plugin.done' ||
-        message.type === 'plugin.log'
+        message.type === 'plugin.log' ||
+        message.type === 'plugin.archive'
       ) {
         if (this.pending.has(message.requestId)) this.results.set(message.requestId, message);
       } else if (message.type === 'compaction.state') {

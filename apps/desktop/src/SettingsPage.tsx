@@ -1084,7 +1084,13 @@ export default function SettingsPage({
               <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
             </Page>
           ) : section === 'plugins' ? (
-            <PluginSettings client={client} plugins={plugins} shown={plugin} open={openPlugin} />
+            <PluginSettings
+              client={client}
+              plugins={plugins}
+              shown={plugin}
+              open={openPlugin}
+              browser={browser}
+            />
           ) : section === 'install' && browser ? (
             <InstallAppSettings />
           ) : section === 'general' ? (

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, watch } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch } from 'node:fs';
 import type { FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { pluginManifestSchema, pluginIdSchema } from '@cc-desk-tunnel/protocol';
@@ -13,10 +13,12 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import { DomainError } from './errors.ts';
 import { eventExample } from './event-examples.ts';
-import { readPluginConfig, writePluginConfig } from './plugin-config.ts';
+import { readPluginConfig, removePluginConfig, writePluginConfig } from './plugin-config.ts';
 import type { PluginConfig } from './plugin-config.ts';
 import { hooksFileSchema, matches } from './plugin-hooks.ts';
 import type { Hook } from './plugin-hooks.ts';
+import { checkVersion, installArchive } from './plugin-install.ts';
+import type { PluginArchive } from './plugin-install.ts';
 import { masked, PluginLog } from './plugin-log.ts';
 import { confinable, launch, stop } from './plugin-process.ts';
 import { askButton, askCheck, checkValues, fieldsOf, loadUi, NOTHING } from './plugin-ui.ts';
@@ -167,6 +169,7 @@ export class Plugins {
           .partial()
           .parse(JSON.parse(readFileSync(manifest, 'utf8')));
       entry.access = this.access(entry.manifest);
+      checkVersion(entry.manifest);
       entry.events = Object.keys(this.hooks(id)).filter((event) => eventExample(event));
       // A disabled plugin's code does not run, and so it has nothing to be set.
       if (this.enabled(id, entry.access))
@@ -186,7 +189,7 @@ export class Plugins {
     if (!config) this.configs.set(id, (config = readPluginConfig(this.directory, id)));
     return config;
   }
-  private access({ permissions }: Partial<PluginManifest>): PluginAccess {
+  access({ permissions }: Partial<PluginManifest>): PluginAccess {
     if (permissions?.includes('full')) return 'full';
     return this.confinable ? 'own' : 'unlimited';
   }
@@ -317,6 +320,29 @@ export class Plugins {
       ok: results.every(({ ok }) => ok),
       message: results.map(({ text }) => text).join('\n'),
     };
+  }
+  // What an archive of the id would take the place of.
+  replaced(id: string) {
+    const manifest = this.entries.get(id)?.manifest;
+    return manifest && { version: manifest.version, author: manifest.author?.name };
+  }
+  async install(archive: PluginArchive) {
+    const { id, version } = archive.manifest;
+    installArchive(this.directory, archive);
+    this.log.write(id, `安装 ${version ?? ''}`.trim());
+    this.stale.add(id);
+    await this.refresh();
+    return { ok: true, message: '' };
+  }
+  async remove(id: string) {
+    this.entry(id);
+    rmSync(this.root(id), { recursive: true, force: true });
+    rmSync(join(this.directory, 'plugin-data', id), { recursive: true, force: true });
+    removePluginConfig(this.directory, id);
+    this.configs.delete(id);
+    this.failures.delete(id);
+    this.log.clear(id);
+    await this.refresh();
   }
   logOf(id: string, clear = false) {
     this.entry(id);

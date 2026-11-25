@@ -70,12 +70,17 @@ export const shownWhen = (showWhen: string | string[] | undefined, values: Plugi
   !showWhen || [showWhen].flat().some((name) => !!values[name]);
 
 const link = z.url({ protocol: /^https?$/ }).max(500);
-// A plugin's own .claude-plugin/plugin.json.
+// A plugin's own .claude-plugin/plugin.json, of which an installed one needs the id.
 export const pluginManifestSchema = z.object({
   id: pluginIdSchema,
   displayName: label.optional(),
   description: z.string().max(1000).optional(),
   version: z.string().max(60).optional(),
+  // The oldest service it works with.
+  minVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/)
+    .optional(),
   // What it needs beyond its own files and the network; only `full` is known.
   permissions: z.array(z.string().max(60)).max(20).optional(),
   author: z
@@ -118,6 +123,9 @@ export const pluginSchema = z.object({
 });
 export type Plugin = z.infer<typeof pluginSchema>;
 
+// A plugin's archive comes in parts, so that a frame of one is within MAX_FRAME_BYTES.
+export const PLUGIN_PART_BYTES = 128 * 1024;
+export const PLUGIN_ARCHIVE_LIMIT = 5 * 1024 * 1024;
 const request = { requestId: z.uuid(), id: pluginIdSchema };
 // A sensitive setting left out or empty keeps its value; null clears any setting.
 const values = z.record(key, pluginValueSchema.nullable());
@@ -132,6 +140,20 @@ export const pluginCommandSchemas = [
   z
     .object({ type: z.literal('plugin.log'), ...request, clear: z.literal(true).optional() })
     .strict(),
+  // With its settings, data and log.
+  z.object({ type: z.literal('plugin.remove'), ...request }).strict(),
+  // A part of a zip archive, base64; after the last one the service says what is in it.
+  z
+    .object({
+      type: z.literal('plugin.upload'),
+      requestId: z.uuid(),
+      uploadId: z.uuid(),
+      data: z.base64().max(Math.ceil(PLUGIN_PART_BYTES / 3) * 4),
+      last: z.boolean(),
+    })
+    .strict(),
+  // Puts the archive uploaded in place, once the user has seen what is in it.
+  z.object({ type: z.literal('plugin.install'), requestId: z.uuid(), uploadId: z.uuid() }).strict(),
 ] as const;
 export const pluginMessageSchemas = [
   // Every plugin, sent on signing in and to every connection whenever it changes.
@@ -150,4 +172,17 @@ export const pluginMessageSchemas = [
     message: z.string(),
   }),
   z.object({ type: z.literal('plugin.log'), requestId: z.uuid(), text: z.string() }),
+  z.object({
+    type: z.literal('plugin.archive'),
+    requestId: z.uuid(),
+    manifest: pluginManifestSchema,
+    events: z.array(z.string()),
+    commands: z.array(z.string()),
+    files: z.number().int().nonnegative(),
+    access: pluginAccessSchema,
+    // The plugin of its id, which it takes the place of.
+    replaces: z
+      .object({ version: z.string().optional(), author: z.string().optional() })
+      .optional(),
+  }),
 ] as const;

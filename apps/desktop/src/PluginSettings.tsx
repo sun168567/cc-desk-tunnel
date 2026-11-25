@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ChevronRight, ScrollText } from 'lucide-react';
+import { ChevronRight, ScrollText, Trash2 } from 'lucide-react';
 import type { Plugin } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import PluginInstall from './PluginInstall.tsx';
 import PluginLog from './PluginLog.tsx';
 import PluginPage, { reach, titleOf, troubleOf } from './PluginPage.tsx';
 import { IconButton, Page, Switch } from './ui.tsx';
@@ -12,11 +13,14 @@ export default function PluginSettings({
   plugins,
   shown,
   open,
+  browser,
 }: {
   client: ProxyClient;
   plugins: Plugin[];
   shown?: string;
   open: (id: string | undefined) => void;
+  // Where plugins are set but neither installed nor removed.
+  browser: boolean;
 }) {
   const [failure, setFailure] = useState<{ id: string; message: string }>();
   const [logging, setLogging] = useState<Plugin>();
@@ -47,7 +51,18 @@ export default function PluginSettings({
       />
     );
   return (
-    <Page title="插件" intro="保存在服务端，对所有连接到它的设备生效。">
+    <Page
+      title="插件"
+      intro="保存在服务端，对所有连接到它的设备生效。"
+      actions={
+        !browser && (
+          <PluginInstall
+            client={client}
+            failed={(message) => setFailure(message ? { id: '', message } : undefined)}
+          />
+        )
+      }
+    >
       {/* What its row says already is not said twice. */}
       {failure && !plugins.some(({ problem }) => problem === failure.message) && (
         <p className="error-text" role="alert">
@@ -57,7 +72,7 @@ export default function PluginSettings({
       <div className="settings-list card">
         {!plugins.length && (
           <p className="muted plugin-empty">
-            还没有插件。把插件放进服务端数据目录的 plugins，它就会出现在这里。
+            还没有插件。插件也可以直接放进服务端数据目录的 plugins，放进去就会出现在这里。
           </p>
         )}
         {plugins.map((item) => {
@@ -78,6 +93,17 @@ export default function PluginSettings({
                 <IconButton title={`${title}：日志`} onClick={() => setLogging(item)}>
                   <ScrollText />
                 </IconButton>
+                {!browser && (
+                  <IconButton
+                    title={`删除 ${title}`}
+                    onClick={() =>
+                      window.confirm(`删除“${title}”，连同它的设置、数据和日志？`) &&
+                      void act(item.id, client.request({ type: 'plugin.remove', id: item.id }))
+                    }
+                  >
+                    <Trash2 />
+                  </IconButton>
+                )}
                 <Switch
                   label={`启用 ${title}`}
                   checked={item.enabled}

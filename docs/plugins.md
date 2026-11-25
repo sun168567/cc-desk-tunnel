@@ -47,9 +47,12 @@
 
 密钥在数据目录里：文件面板（见[部署与安全边界](deployment.md)）和其他受限的插件读不到，会话里的 Claude 能读到。
 
-## plugin.json
+## 安装
 
-`plugin.json` 有 `id`、`displayName`、`description`、`version`、`author`（名字，或 `{ name, url }`）、`homepage`、`repository`（发布新版本的地址），显示在设置页的“关于”里。
+- 桌面客户端的“设置 → 插件 → 安装插件”：zip，不超过 5 MB，内容是插件的文件或装着它们的一个文件夹，要有 `.claude-plugin/plugin.json` 和 `hooks/hooks.json`。服务端先核对格式、列出版本、权限、事件和会运行的命令，这时不运行其中任何代码；同意后才放进去。id 相同的插件被替换，设置、数据和日志保留；作者变了会写明，但压缩包里的 id 和作者都是自称的，来源由用户判断。浏览器里可以设置插件，不能安装和删除。
+- 或者直接把目录放进 `plugins`。
+
+`plugin.json` 有 `id`、`displayName`、`description`、`version`、`author`（名字，或 `{ name, url }`）、`homepage`、`repository`（发布新版本的地址），显示在设置页的“关于”里；还有 `minVersion`，它能用的最低服务端版本（如 `0.4.0`），更旧的服务端不安装、不运行它，并说明原因。只有安装压缩包时必须有 `id`。
 
 ## 设置
 
@@ -92,9 +95,16 @@ export const settings = [
 
 每个插件的运行记在 `<数据目录>/plugin-logs/<id>.log`：哪个事件、哪个会话、成功与否、用时，以及命令打印的内容（标准输出与标准错误，最多留最后 8192 个字符）。超过约 1 MB 换新文件，旧的留一份 `<id>.1.log`。事件的内容不进日志；插件不要把密钥打印出来。
 
-## 事件
+## 兼容
 
-这份合约独立于客户端与服务端的协议，只增加，不删除，也不改变已有的含义。
+这份规范（事件、`hooks.json`、`plugin.json`、`ui.ts`）独立于客户端与服务端的协议，服务端升级后老插件照常使用：
+
+- 只增加，不删除，也不改变已有的含义；要改时用新的名字。事件的 `version` 现在是 1，以后若有新版本，只发给声明要它的插件。
+- 不认识的事件和多余的属性忽略。`status`、`code`、`model`、`effort`、`permission_mode` 这类字段以后可能有新的值；`reason` 和错误的 `message` 是给人看的，不要按文字判断。
+- 用到较新的写法（如新的字段类型）的插件写上 `minVersion`，旧服务端会说明需要哪个版本。
+- 设置按字段名保存，更新插件时留着，字段改了类型时用默认值。
+
+## 事件
 
 每个事件都有 `version`、`hook_event_name`、`timestamp`（ISO 8601）、`config`（插件的设置）。除设备事件外还有 `session_id`、`session_title`、`project_path`、`run_id`，以及会话所在的设备 `device`（`id`、`name`、`platform`：`win32`、`darwin` 或 `linux`；很早的会话可能没有）和当时的状态：
 

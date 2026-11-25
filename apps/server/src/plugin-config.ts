@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { pluginValueSchema } from '@cc-desk-tunnel/protocol';
@@ -22,6 +22,8 @@ export function readPluginConfig(directory: string, id: string): PluginConfig {
     return configSchema.parse({});
   }
 }
+export const removePluginConfig = (directory: string, id: string) =>
+  rmSync(file(directory, id), { force: true });
 export function writePluginConfig(directory: string, id: string, config: PluginConfig) {
   mkdirSync(join(directory, 'plugin-config'), { recursive: true, mode: 0o700 });
   const path = file(directory, id);

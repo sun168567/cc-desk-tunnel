@@ -33,6 +33,7 @@ import {
   MAX_FRAME_BYTES,
   pathKey,
   platformOf,
+  PLUGIN_ARCHIVE_LIMIT,
   PROTOCOL_VERSION,
   runWorking,
   TUNNEL_CLOSE,
@@ -83,6 +84,8 @@ import {
   terminalSettings,
   TerminalTranscript,
 } from './terminal-transcript.ts';
+import { readArchive } from './plugin-install.ts';
+import type { PluginArchive } from './plugin-install.ts';
 import { Plugins } from './plugins.ts';
 import { inOrder } from './question.ts';
 import { ServiceEvents } from './service-events.ts';
@@ -125,6 +128,8 @@ type Peer = {
   left: boolean;
   // The client keeps the plan quota current on its screen, so the service reads it while runs go on.
   quotaWanted?: boolean;
+  // A plugin's archive on its way, and what was in it once it has come.
+  upload?: { id: string; parts: Buffer[]; size: number; archive?: PluginArchive };
   subscriptions: Set<string>;
   history?: HistoryDelivery;
   responses: Map<string, { command: string; response: Promise<ServerMessage> }>;
@@ -1676,9 +1681,47 @@ export function createProxyServer(options: ServerOptions) {
     return true;
   }
 
+  // An archive comes in parts to the connection that sends it, one at a time.
+  function uploadPlugin(
+    peer: Peer,
+    { requestId, uploadId, data, last }: CommandOf<'plugin.upload'>,
+  ) {
+    if (peer.upload?.id !== uploadId) peer.upload = { id: uploadId, parts: [], size: 0 };
+    const { upload } = peer;
+    const part = Buffer.from(data, 'base64');
+    upload.size += part.length;
+    if (upload.size > PLUGIN_ARCHIVE_LIMIT) {
+      peer.upload = undefined;
+      throw new DomainError('plugin_archive', '压缩包超过 5 MB。');
+    }
+    upload.parts.push(part);
+    if (!last) return;
+    peer.upload = undefined;
+    const archive = readArchive(Buffer.concat(upload.parts));
+    peer.upload = { ...upload, parts: [], archive };
+    send(peer, {
+      type: 'plugin.archive',
+      requestId,
+      manifest: archive.manifest,
+      events: archive.events,
+      commands: archive.commands,
+      files: archive.files.size,
+      access: plugins.access(archive.manifest),
+      replaces: plugins.replaced(archive.manifest.id),
+    });
+  }
   async function plugin(peer: Peer, command: CommandOf<`plugin.${string}` & Command['type']>) {
+    if (command.type === 'plugin.upload') return uploadPlugin(peer, command);
+    if (command.type === 'plugin.install') {
+      const archive = peer.upload?.id === command.uploadId ? peer.upload.archive : undefined;
+      peer.upload = undefined;
+      if (!archive) throw new DomainError('plugin_archive', '没有收到完整的压缩包，请重新选择。');
+      const { requestId } = command;
+      return send(peer, { type: 'plugin.done', requestId, ...(await plugins.install(archive)) });
+    }
     const { id, requestId } = command;
-    if (command.type === 'plugin.enable') await plugins.enable(id, command.enabled);
+    if (command.type === 'plugin.remove') await plugins.remove(id);
+    else if (command.type === 'plugin.enable') await plugins.enable(id, command.enabled);
     else if (command.type === 'plugin.configure')
       send(peer, {
         type: 'plugin.checked',
@@ -1724,6 +1767,9 @@ export function createProxyServer(options: ServerOptions) {
       case 'plugin.press':
       case 'plugin.try':
       case 'plugin.log':
+      case 'plugin.remove':
+      case 'plugin.upload':
+      case 'plugin.install':
         await plugin(peer, command);
         return undefined;
       case 'account.status':
