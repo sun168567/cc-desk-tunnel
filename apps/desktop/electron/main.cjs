@@ -35,9 +35,10 @@ const { asOnDisk } = require('./disk-path.cjs');
 const { openLog } = require('./client-log.cjs');
 const { hostname, tmpdir } = require('node:os');
 const { randomUUID } = require('node:crypto');
-const { spawn } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
 const { mkdir, readdir, rm, rmdir, unlink } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
+const { promisify } = require('node:util');
 let bridge;
 // The last connection, kept for its installer download after a service refused this client's version.
 let lastBridge;
@@ -394,7 +395,12 @@ async function linkedPath(target) {
 }
 handle('path:inspect', async (_event, target) => {
   const { kind, runs } = await linkedPath(target);
-  return { kind, runs, editors: linkEditors(), openWith: process.platform === 'win32' };
+  return {
+    kind,
+    runs,
+    editors: linkEditors(),
+    openWith: ['win32', 'darwin'].includes(process.platform),
+  };
 });
 handle('path:act', async (event, action, target, options) => {
   const { file, kind, runs, size } = await linkedPath(target);
@@ -447,6 +453,17 @@ handle('path:act', async (event, action, target, options) => {
   }
   if (runs) throw new Error('Refused to run');
   if (action === 'default') return open();
+  if (action === 'with' && process.platform === 'darwin') {
+    const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+      title: `选择打开“${path.basename(file)}”的应用`,
+      defaultPath: '/Applications',
+      properties: ['openFile'],
+      filters: [{ name: '应用程序', extensions: ['app'] }],
+    });
+    if (result.canceled || !result.filePaths.length) return '';
+    await promisify(execFile)('/usr/bin/open', ['-a', result.filePaths[0], file]);
+    return '';
+  }
   if (action === 'with' && process.platform === 'win32') {
     const chooser = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'OpenWith.exe');
     spawn(chooser, [file], { detached: true, stdio: 'ignore' })

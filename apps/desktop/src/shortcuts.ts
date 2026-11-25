@@ -29,31 +29,24 @@ export const actions: { id: Action; name: string; desktop?: boolean }[] = [
   { id: 'zoomOut', name: '缩小界面', desktop: true },
   { id: 'zoomReset', name: '恢复界面大小', desktop: true },
 ];
+// KeyboardEvent calls Command the Meta key, recorded as Win for saved shortcuts.
+const command = isMac ? 'Win' : 'Ctrl';
 const defaults: Record<Action, string> = {
-  back: 'Alt+ArrowLeft',
-  forward: 'Alt+ArrowRight',
-  toggleSide: 'Ctrl+KeyB',
-  newSession: 'Ctrl+KeyN',
-  settings: 'Ctrl+Comma',
-  find: 'Ctrl+KeyF',
+  back: isMac ? 'Win+BracketLeft' : 'Alt+ArrowLeft',
+  forward: isMac ? 'Win+BracketRight' : 'Alt+ArrowRight',
+  toggleSide: `${command}+KeyB`,
+  newSession: `${command}+KeyN`,
+  settings: `${command}+Comma`,
+  find: `${command}+KeyF`,
   cycleMode: 'Alt+Shift+KeyM',
-  toggleFiles: 'Ctrl+Shift+KeyE',
-  zoomIn: 'Ctrl+Equal',
-  zoomOut: 'Ctrl+Minus',
-  zoomReset: 'Ctrl+Digit0',
-};
-// On macOS the key of commands is Command, which a key press names `Win` here as on any keyboard. Option
-// with an arrow moves through text there, so going back and forward take the brackets, as in its browsers.
-const macDefaults = {
-  ...(Object.fromEntries(
-    Object.entries(defaults).map(([action, combo]) => [action, combo.replace('Ctrl+', 'Win+')]),
-  ) as Record<Action, string>),
-  back: 'Win+BracketLeft',
-  forward: 'Win+BracketRight',
+  toggleFiles: isMac ? 'Shift+Win+KeyE' : 'Ctrl+Shift+KeyE',
+  zoomIn: `${command}+Equal`,
+  zoomOut: `${command}+Minus`,
+  zoomReset: `${command}+Digit0`,
 };
 // The combination an action answers to: the user's own, or the default; empty when the user removed it.
 export const keyFor = (prefs: Prefs, action: Action) =>
-  prefs.shortcuts.keys[action] ?? (isMac ? macDefaults : defaults)[action];
+  prefs.shortcuts.keys[action] ?? defaults[action];
 
 const numpad: Record<string, string> = {
   NumpadAdd: 'Equal',
