@@ -1,6 +1,6 @@
 # macOS 客户端（实验性）
 
-macOS 客户端与 Windows 版共用界面和连接协议，可以连接同一台 Linux 服务端。目前为实验性支持。macOS 执行端由 @dcomdjl 在 [#40](https://github.com/sun168567/cc-desk-tunnel/pull/40) 中贡献。
+macOS 上的客户端与 Windows 上的是同一套界面和同一条连接，服务端不需要另行配置。它目前是实验性支持：维护者没有 Mac，构建和自动测试都在 GitHub 的 macOS 机器上完成，真机上的使用情况靠使用者反馈。执行端的实现来自 [#40](https://github.com/sun168567/cc-desk-tunnel/pull/40)（@dcomdjl）。
 
 需要 macOS 13 或更新的系统，Apple 芯片与 Intel 各有一个安装包。两端版本要一致，与 Windows 相同。
 
