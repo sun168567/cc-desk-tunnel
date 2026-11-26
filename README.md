@@ -126,7 +126,7 @@ Claude Code（简称 CC）运行在你自己的 Linux 服务器上，会话、�
 在服务器上执行：
 
 ```sh
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+sudo bash -c "$(curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install.sh)"
 ```
 
 一路回车即可。装完会打印客户端要填的**服务地址、证书指纹、服务凭据**，以及要在防火墙放行的端口（默认 TCP 8787，只有这一个）。以后在客户端的“设置 → 关于与更新”里就能升级服务端，一般不用再登录服务器。
@@ -172,12 +172,12 @@ Windows 安装包自带 PowerShell 7、OpenSSH 和 `ccdt`，不用另装任何�
 
 ```powershell
 # Windows（PowerShell）
-irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+irm https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.ps1 | iex
 ```
 
 ```sh
 # macOS、Linux（实验性）
-curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
+curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.sh | sh
 ```
 
 脚本安装最新正式版并按 `SHA256SUMS` 校验；服务端不是最新版时，指定与它相同的版本，见[终端客户端](docs/cli.md#安装)。

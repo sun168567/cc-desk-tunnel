@@ -92,7 +92,8 @@ const [
 // A file of this release, downloaded by following the link.
 const file = (name) => `${repository}/releases/download/${tag}/${name}`;
 const link = (words, name) => `[${words}](${file(name)})`;
-const raw = 'https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy';
+// The install scripts are files of every release; the newest one's installs the newest release unless told a version.
+const scripts = `${repository}/releases/latest/download`;
 // Every release reads the same way: how to get and upgrade to it first, each file a link that downloads it; then
 // what the project is, this version's section of the change log with its headings one level up, and where each
 // system stands. A preview carries the same text, so that making it the release later changes nothing a reader has
@@ -112,12 +113,12 @@ const notes = [
   '',
   '```powershell',
   '# Windows，在 PowerShell 里运行',
-  `irm ${raw}/install-ccdt.ps1 | iex`,
+  `irm ${scripts}/install-ccdt.ps1 | iex`,
   '```',
   '',
   '```sh',
   '# macOS、Linux',
-  `curl -fsSL ${raw}/install-ccdt.sh | sh`,
+  `curl -fsSL ${scripts}/install-ccdt.sh | sh`,
   '```',
   '',
   '- **已在使用**：在图形客户端的“设置 → 关于与更新”里先升级服务端，再按提示升级客户端；图形客户端自带的 `ccdt` 随它升级；单独安装的 `ccdt` 运行 `ccdt upgrade`，服务端与它自己一起升级。',

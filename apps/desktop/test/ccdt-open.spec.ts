@@ -114,7 +114,7 @@ test('a session opens in ccdt signed in as the window is, or the window says how
     await open();
     await expect(dialog.getByRole('heading')).toHaveText('安装 ccdt');
     await expect(dialog.locator('pre')).toHaveText(
-      `$env:CCDT_VERSION = '${version}'; irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex`,
+      `$env:CCDT_VERSION = '${version}'; irm https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.ps1 | iex`,
     );
     await expect(dialog.getByRole('button', { name: '安装说明' })).toBeVisible();
     await page.screenshot({ path: resolve(folder, '01-未安装.png') });

@@ -7,7 +7,7 @@ Ubuntu amd64 优先；arm64 为实验性支持：镜像构建、部署自测和�
 最省事的方式是一条命令。脚本检查 Docker 等依赖（缺少时给出安装命令，不代为安装），从发布页下载最新的服务端程序包并校验，解压到 `/opt/cc-desk-tunnel`，随后进入下面的交互安装；已有部署时改为询问是否升级。程序目录可用环境变量 `CC_DESK_TUNNEL_DIR` 更改，`CC_DESK_TUNNEL_VERSION=X.Y.Z` 可指定版本，`CC_DESK_TUNNEL_LANG=en` 让脚本和管理命令改说英文、之后的命令沿用（`=zh` 改回中文）；这些变量写在 `sudo env` 之后。
 
 ```sh
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+sudo bash -c "$(curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install.sh)"
 ```
 
 镜像用 GitHub 上预先构建好的 `ghcr.io/sun168567/cc-desk-tunnel:X.Y.Z`，版本与程序包相同，x86_64 和 arm64 用同一个标签，Docker 自动选择。拉取不到时（服务器连不上 ghcr.io，或这个版本发布时还没有镜像），改为在服务器上从程序包构建，首次需要几分钟，期间联网下载系统包、Node.js、Claude Code 和 npm 依赖。想始终在本机构建（例如改过 Dockerfile）时设置 `CC_DESK_TUNNEL_BUILD=1`；只用预构建镜像、拉取不到就停下时设置 `CC_DESK_TUNNEL_BUILD=0`。

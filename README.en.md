@@ -126,7 +126,7 @@ This repository publishes all of its own client, server, build and deployment so
 On the server:
 
 ```sh
-sudo env CC_DESK_TUNNEL_LANG=en bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+sudo env CC_DESK_TUNNEL_LANG=en bash -c "$(curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install.sh)"
 ```
 
 `CC_DESK_TUNNEL_LANG=en` has the script, and the `cc-desk-tunnel` command it leaves, speak English (Chinese without it); later commands keep it. Press Enter through the questions. At the end it prints what the client needs — **service address, certificate fingerprint, service token** — and the port to open in the firewall (TCP 8787 by default, the only one). From then on, the client's Settings → About and updates upgrades the service too, so you rarely need the server again.
@@ -170,12 +170,12 @@ To install `ccdt` on its own (for the current user, no administrator rights need
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+irm https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.ps1 | iex
 ```
 
 ```sh
 # macOS, Linux (experimental)
-curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
+curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.sh | sh
 ```
 
 The script installs the newest release and checks it against `SHA256SUMS`; if the service is not on the newest release, install the same version as the service, see [Terminal client](docs/cli.md#安装) (in Chinese).

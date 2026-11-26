@@ -37,7 +37,7 @@ Windows 上的 shell 命令与脚本使用 `pwsh.exe`（PowerShell 7）。终端
 
 1. 在合并请求里改好版本号与变更记录，合入 `main`。
 2. 在任意一台电脑上检出最新的 `main`，准备好已登录的 `gh`。发布的文件不在本机构建。
-3. `npm run release` 先建一个草稿发布，写好发布说明，再启动 GitHub 上的 `package` 工作流：它从同一提交打出 Windows 安装包、macOS 的两个 dmg、Linux 的 deb、服务端程序包和服务端镜像，每个客户端都实际启动一次作检查，然后连同 `release.json`（版本、协议版本、提交、各文件的大小与 SHA256）和 `SHA256SUMS` 一起挂到草稿上，约十五分钟。任何一个文件没有打出或检查没过即中止，草稿留在原处，删掉后可重来。默认停在草稿，核对无误后在发布页点发布，或直接用 `npm run release -- --publish`。`--dry-run` 只把发布说明写到 `artifacts/release/notes.md`，不动 GitHub。
+3. `npm run release` 先建一个草稿发布，写好发布说明，再启动 GitHub 上的 `package` 工作流：它从同一提交打出 Windows 安装包、macOS 的两个 dmg、Linux 的 deb、`ccdt` 的各个包、服务端程序包和服务端镜像，每个客户端都实际启动一次作检查，然后连同 `deploy/` 下的三个安装脚本（`install.sh`、`install-ccdt.sh`、`install-ccdt.ps1`；README 里的一行安装命令从最新的正式版下载它们，脚本因此总与它安装的版本相符）、`release.json`（版本、协议版本、提交、各文件的大小与 SHA256）和 `SHA256SUMS` 一起挂到草稿上，约十五分钟。任何一个文件没有打出或检查没过即中止，草稿留在原处，删掉后可重来。默认停在草稿，核对无误后在发布页点发布，或直接用 `npm run release -- --publish`。`--dry-run` 只把发布说明写到 `artifacts/release/notes.md`，不动 GitHub。
 
 发布的文件只来自 GitHub 的机器：谁来发布、在哪台电脑上发布，得到的都是同一提交按同一流程构建的文件，构建记录留在该次运行里。
 
