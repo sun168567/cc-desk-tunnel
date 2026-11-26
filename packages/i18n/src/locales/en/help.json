@@ -559,7 +559,10 @@
         "table1": {
           "head": ["Follow up", "What it does"],
           "rows": [
-            ["`ccdt status <session>`", "What it’s doing, what it’s waiting for"],
+            [
+              "`ccdt status <session>`",
+              "What it’s doing, what it’s waiting for, how far its task list is"
+            ],
             ["`ccdt tell <session> \"…\"`", "Add an instruction on the way"],
             ["`ccdt wait <session>`", "Wait until the turn ends"],
             [

@@ -181,6 +181,20 @@ test('questions are answered in order; a plan is sent back with what to change',
   assert.equal(await wait(planned.context, { json: true }, id), EXIT.needsYou);
   assert.equal(planned.json().approval.kind, 'plan');
   assert.match(planned.json().approval.plan, /计划：整理设置页/);
+  // Approved, the plan's steps are Claude Code's task list, which status shows.
+  assert.equal(await approve(f.run().context, { json: true }, id), EXIT.done);
+  const seen = f.run();
+  await status(seen.context, { json: true }, id);
+  assert.deepEqual(seen.json().tasks, [
+    { content: '读现有结构', status: 'in_progress' },
+    { content: '按计划修改', status: 'pending' },
+    { content: '补测试', status: 'pending' },
+  ]);
+  const told = f.run();
+  await status(told.context, {}, id);
+  assert.match(told.out.join('\n'), /任务清单：完成 0\/3，正在做：读现有结构/);
+  await f.send(id, 'plan');
+  assert.equal(await wait(f.run().context, { json: true }, id), EXIT.needsYou);
   const denied = f.run();
   assert.equal(await deny(denied.context, { json: true }, id, '先只改文档'), EXIT.done);
   assert.match(denied.json().result, /按你的意见继续规划/);
