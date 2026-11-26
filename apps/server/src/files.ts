@@ -29,7 +29,14 @@ export type FilesOptions = {
 };
 // `server`: the service's own files can be shown, an SFTP server being installed (an image from before 0.3.17
 // has none; other computers' files are reached all the same).
-export type FilesState = { server: boolean; protected: boolean; dataDir: string; home: string };
+// `claude` is the CLI's configuration directory, where it keeps what it knows of each working directory.
+export type FilesState = {
+  server: boolean;
+  protected: boolean;
+  dataDir: string;
+  home: string;
+  claude: string;
+};
 
 const SYSTEM_SFTP_SERVERS = [
   '/usr/lib/openssh/sftp-server',
@@ -99,13 +106,18 @@ export class FileService {
       protected: this.landlock,
       dataDir: sftpPath(this.dataDir),
       home: sftpPath(homedir()),
+      claude: sftpPath(this.claudeDir()),
     };
   }
   // What the service's SFTP server is kept from: the CLI's credentials and settings (a setup token lives in
   // them), its account file, SSH keys in the home directory, everything of the data directory other than the
   // working directories and the home directory, and /proc, which shows every process's environment.
+  // The CLI's configuration directory: `~/.claude` unless the options or CLAUDE_CONFIG_DIR say otherwise.
+  claudeDir() {
+    return this.options.configDir ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+  }
   protectedPaths() {
-    const configDir = this.options.configDir ?? join(homedir(), '.claude');
+    const configDir = this.claudeDir();
     let data: string[] = [];
     try {
       data = readdirSync(this.dataDir).filter((name) => !OPEN_IN_DATA.has(name));

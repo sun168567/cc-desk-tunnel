@@ -47,6 +47,12 @@
   "close": "Close the file panel",
   "current": "Current location",
   "up": "Up one level",
+  "folders": {
+    "work": "The session’s working directory on the server",
+    "records": "What Claude keeps on the server: memory, conversation records",
+    "noRecords": "Claude hasn’t kept anything for this session yet",
+    "none": "This folder doesn’t exist"
+  },
   "landlock": {
     "detail": "The kernel doesn’t support Landlock: sign-in credentials, setup tokens and the like can be read and changed",
     "title": "Sensitive files unprotected",

@@ -305,7 +305,8 @@
         ],
         "list1": ["Giving Claude a file needs no panel: drag it into the input box."],
         "list2": [
-          "The numbered folders on the server are the sessions’ working folders; each is marked with the project or session it belongs to."
+          "The numbered folders on the server are the sessions’ working folders; each is marked with the project or session it belongs to.",
+          "On the server, the two buttons at the end of the path open the session’s working folder, and the memory and conversation records Claude keeps for it."
         ],
         "prompts1": {
           "title": "Or just have Claude move them",

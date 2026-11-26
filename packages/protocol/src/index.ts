@@ -1032,6 +1032,8 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
         dataDir: z.string(),
         home: z.string(),
         protected: z.boolean(),
+        // The CLI's configuration directory, which keeps each working directory's memory and session records.
+        claude: z.string().optional(),
       })
       .optional(),
     // The plan quota the service holds; every change to it follows as `quota`.

@@ -157,6 +157,7 @@ test(
       dataDir: sftpPath(f.directory),
       home: sftpPath((await import('node:os')).homedir()),
       protected: false,
+      claude: sftpPath(join(f.directory, 'home', '.claude')),
     });
     const work = join(f.directory, 'native', 'root');
     mkdirSync(work, { recursive: true });
