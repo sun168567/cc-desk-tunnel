@@ -264,6 +264,10 @@
   },
   "toEnd": "Back to the end",
   "textMenu": "Conversation text actions",
+  "tasks": {
+    "label": "Task list",
+    "progress": "Tasks {{done}}/{{count}}"
+  },
   "composer": {
     "message": "Message",
     "remove": "Remove",

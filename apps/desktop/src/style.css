@@ -2536,6 +2536,77 @@ details[open] > summary > .fold-chevron {
   padding: 6px 28px 22px;
   flex-shrink: 0;
 }
+/* Claude Code's task list above the message box (TaskChecklist.tsx). */
+.task-checklist {
+  max-width: 820px;
+  margin: 0 auto 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--raised);
+  font-size: 13px;
+}
+.task-checklist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.task-checklist-head strong {
+  font-weight: 600;
+}
+.task-checklist-head .task-current {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-checklist-head svg {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  color: var(--muted);
+}
+.task-checklist ol {
+  display: grid;
+  gap: 4px;
+  max-height: 168px;
+  margin: 0;
+  padding: 0 10px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+.task-checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 18px;
+}
+.task-checklist li svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.task-checklist li.completed span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.task-checklist li.in_progress span {
+  font-weight: 600;
+}
+.task-checklist li.in_progress svg {
+  color: var(--accent);
+}
 .composer-context {
   display: flex;
   gap: 6px;

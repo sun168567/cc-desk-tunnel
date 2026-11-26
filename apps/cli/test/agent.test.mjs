@@ -591,3 +591,32 @@ test('with -p, -r takes the session it continues, as claude -p’s does; alone i
   assert.deepEqual(printing(['-r']), ['-r']);
   assert.deepEqual(printing(['-r', '--all']), ['-r', '--all']);
 });
+
+test('ccdt acp: Claude Code’s task list is the session’s plan, given whole each time it changes', async (t) => {
+  const f = await fixture(t);
+  const client = acpClient(f, () => ({ outcome: 'cancelled' }));
+  await client.request('initialize', { protocolVersion: 1, clientCapabilities: {} });
+  const created = await client.request('session/new', { cwd: here, mcpServers: [] });
+  const sessionId = created.result.sessionId;
+  let sequence = 2000;
+  const event = (payload) =>
+    client.made[0].emit('message', {
+      type: 'session.event',
+      event: { sessionId, sequence: sequence++, payload },
+    });
+  const call = (toolId, name, input, output) => {
+    event({ type: 'tool.requested', toolId, name, input: JSON.stringify(input), target: 'Linux' });
+    event({ type: 'tool.result', toolId, status: 'completed', output, exitCode: null });
+  };
+  call('a', 'TaskCreate', { subject: '读代码' }, 'Task #1 created successfully: 读代码');
+  call('b', 'TaskCreate', { subject: '改代码' }, 'Task #2 created successfully: 改代码');
+  call('c', 'TaskUpdate', { taskId: '1', status: 'in_progress' }, 'Updated task #1 status');
+  const plans = () => client.updates(sessionId).filter((update) => update.sessionUpdate === 'plan');
+  while (plans().length < 3) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(plans().at(-1).entries, [
+    { content: '读代码', priority: 'medium', status: 'in_progress' },
+    { content: '改代码', priority: 'medium', status: 'pending' },
+  ]);
+  client.end();
+  await client.served;
+});

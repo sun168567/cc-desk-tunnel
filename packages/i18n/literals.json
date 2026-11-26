@@ -2,7 +2,7 @@
   "pending": {},
   "kept": {
     "apps/server/src/simulation.ts": {
-      "count": 36,
+      "count": 40,
       "reason": "The offline simulation stands in for Claude: its replies and tool output are sample content the UI tests read, not the program’s text."
     },
     "apps/server/src/store.ts": {

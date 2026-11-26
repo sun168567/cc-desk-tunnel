@@ -1289,6 +1289,7 @@ export type Resources = {
             '**命令菜单**：输入 `/` 或 `\\`：压缩上下文，以及 Claude Code 的命令和 skills。',
             '**给它文件和截图**：点 +，或拖入、粘贴。消息里放的是文件在你电脑上的路径，Claude 去那里读，不上传。',
             '**大改动先出计划**：切到[计划模式](#approval)，它写出计划，你改好、批准后再动手。',
+            '**任务清单**：较长的工作 Claude 会列出步骤，没做完时显示在输入框上方，可以折叠。',
             '**模型与推理强度**：在输入框下方切换，只影响这个会话。',
           ];
           note1: {
@@ -1623,6 +1624,7 @@ export type Resources = {
           list1: readonly [
             '会话建在编辑器打开的文件夹对应的项目里，这里同样看得到。',
             '审批变成编辑器里的权限请求；模型、推理强度和审批模式在编辑器里直接选。',
+            'Claude 的任务清单作为 ACP 的计划（plan）交给编辑器，编辑器支持就会显示。',
             'ACP 没有“提问”：Claude 的问题作为回复显示，下一条消息就是回答。',
             '不能往进行中的一轮追加内容，要纠偏就取消后重发。',
           ];
@@ -2852,6 +2854,10 @@ export type Resources = {
     };
     toEnd: '回到底部';
     textMenu: '对话文字操作';
+    tasks: {
+      label: '任务清单';
+      progress: '任务 {{done}}/{{count}}';
+    };
     composer: {
       message: '消息';
       remove: '移除';
@@ -4557,6 +4563,7 @@ export type Messages = {
   'help:articles.conversation.blocks.list1.3': Record<string, never>;
   'help:articles.conversation.blocks.list1.4': Record<string, never>;
   'help:articles.conversation.blocks.list1.5': Record<string, never>;
+  'help:articles.conversation.blocks.list1.6': Record<string, never>;
   'help:articles.conversation.blocks.note1.title': Record<string, never>;
   'help:articles.conversation.blocks.note1.text': Record<string, never>;
   'help:articles.conversation.blocks.keys': Record<string, never>;
@@ -4724,6 +4731,7 @@ export type Messages = {
   'help:articles.acp.blocks.list1.1': Record<string, never>;
   'help:articles.acp.blocks.list1.2': Record<string, never>;
   'help:articles.acp.blocks.list1.3': Record<string, never>;
+  'help:articles.acp.blocks.list1.4': Record<string, never>;
   'help:articles.acp.blocks.note1.title': Record<string, never>;
   'help:articles.acp.blocks.note1.text': Record<string, never>;
   'help:articles.quota.title': Record<string, never>;
@@ -5578,6 +5586,8 @@ export type Messages = {
   'session:empty.more': Record<string, never>;
   'session:toEnd': Record<string, never>;
   'session:textMenu': Record<string, never>;
+  'session:tasks.label': Record<string, never>;
+  'session:tasks.progress': { done: Value; count: Value };
   'session:composer.message': Record<string, never>;
   'session:composer.remove': Record<string, never>;
   'session:composer.compact': Record<string, never>;

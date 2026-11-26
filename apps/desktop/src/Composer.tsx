@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { isWindowsPath } from '@cc-desk-tunnel/protocol';
 import type {
+  Task,
   AccountQuota,
   Effort,
   NativeCapabilities,
@@ -24,6 +25,7 @@ import type {
 import { useT } from './i18n.ts';
 import { slashCommands } from './commands.ts';
 import ComposerControls from './ComposerControls.tsx';
+import TaskChecklist from './TaskChecklist.tsx';
 import MessageInput, { messageLimit } from './MessageInput.tsx';
 import type { MessageInputHandle } from './MessageInput.tsx';
 import PermissionMenu from './PermissionMenu.tsx';
@@ -79,6 +81,7 @@ export default function Composer({
   nativeSession,
   metrics,
   quota,
+  tasks,
   openAccount,
   send,
   resume,
@@ -111,6 +114,8 @@ export default function Composer({
   nativeSession: NativeSession | null;
   metrics: NativeMetrics | null;
   quota: AccountQuota | null;
+  // Claude Code's task list as the session's events leave it.
+  tasks: Task[];
   openAccount: () => void;
   // Sends the draft, or the text given instead of it.
   send: (text?: string) => void;
@@ -254,6 +259,7 @@ export default function Composer({
   }
   return (
     <div className="composer-area">
+      <TaskChecklist tasks={tasks} working={busy} />
       {menuShown && (
         <div
           className="slash-menu"

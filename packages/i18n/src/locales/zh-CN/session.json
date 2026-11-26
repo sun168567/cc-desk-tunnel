@@ -253,6 +253,10 @@
   },
   "toEnd": "回到底部",
   "textMenu": "对话文字操作",
+  "tasks": {
+    "label": "任务清单",
+    "progress": "任务 {{done}}/{{count}}"
+  },
   "composer": {
     "message": "消息",
     "remove": "移除",

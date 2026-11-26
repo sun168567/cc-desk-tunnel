@@ -45,6 +45,9 @@ const plan = {
 
 // The offline adapter: scripted replies and one fake tool, so the GUI and protocol can be exercised without a model,
 // a tunnel or any real command.
+// How many tasks the simulated model has made in each session, which Claude Code numbers on through a session.
+const created = new Map<string, number>();
+
 export async function simulate(
   run: Run,
   command: Extract<Command, { type: 'message.send' }>,
@@ -184,6 +187,46 @@ export async function simulate(
           : keepPlanning(decision?.feedback),
         exitCode: null,
       });
+      // Approved, it lists the steps of the plan as Claude Code's task list and starts on the first.
+      if (allowed) {
+        const steps = ['读现有结构', '按计划修改', '补测试'];
+        let first = '';
+        for (const subject of steps) {
+          const toolId = randomUUID();
+          emit({
+            type: 'tool.requested',
+            toolId,
+            name: 'TaskCreate',
+            input: JSON.stringify({ subject, description: subject, activeForm: `正在${subject}` }),
+            target: 'Windows (simulation)',
+          });
+          const id = String((created.get(run.sessionId) ?? 0) + 1);
+          created.set(run.sessionId, Number(id));
+          first ||= id;
+          emit({
+            type: 'tool.result',
+            toolId,
+            status: 'completed',
+            output: `Task #${id} created successfully: ${subject}`,
+            exitCode: null,
+          });
+        }
+        const toolId = randomUUID();
+        emit({
+          type: 'tool.requested',
+          toolId,
+          name: 'TaskUpdate',
+          input: JSON.stringify({ taskId: first, status: 'in_progress' }),
+          target: 'Windows (simulation)',
+        });
+        emit({
+          type: 'tool.result',
+          toolId,
+          status: 'completed',
+          output: `Updated task #${first} status`,
+          exitCode: null,
+        });
+      }
       await stream(
         allowed ? '按批准的计划开始执行（模拟，未改动文件）。' : '好的，按你的意见继续规划。',
       );

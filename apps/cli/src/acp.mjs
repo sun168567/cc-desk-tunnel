@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
-import { terminalStatuses } from '@cc-desk-tunnel/protocol';
+import { TaskList, terminalStatuses } from '@cc-desk-tunnel/protocol';
 import { Follow, catchUp, findSession } from './agent.mjs';
 import { t } from './i18n.mjs';
 
@@ -250,6 +250,16 @@ export async function serveAcp(context, { input = process.stdin, output = proces
   // none of it streamed, as when it is replayed or arrived while the connection was being made again.
   function translate(served, payload, live) {
     const id = served.id;
+    // Claude Code's task list is ACP's plan, given whole each time it changes.
+    if (served.tasks.apply(payload))
+      notify(id, {
+        sessionUpdate: 'plan',
+        entries: served.tasks.list.map((task) => ({
+          content: task.content,
+          priority: 'medium',
+          status: task.status,
+        })),
+      });
     switch (payload.type) {
       case 'message.user':
         if (!live)
@@ -397,6 +407,7 @@ export async function serveAcp(context, { input = process.stdin, output = proces
       id: session.id,
       follow: new Follow(session.id),
       streamed: new Set(),
+      tasks: new TaskList(),
       question: false,
       wake: undefined,
       mode: session.permissionMode ?? 'auto',
