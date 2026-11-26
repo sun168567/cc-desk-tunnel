@@ -8,12 +8,11 @@
 # instead, the one of the service; CCDT_DOWNLOAD_ONLY=1 only unpacks the checked package into the current directory.
 set -eu
 # What it says is in the system's language, Chinese or else English, as ccdt's: the locale
-# the terminal sets, else on a Mac the system's.
+# the terminal sets.
 locale=
 for tag in "${LC_ALL:-}" "${LC_MESSAGES:-}" "${LANG:-}"; do
   case "$tag" in '' | C | C.* | POSIX | POSIX.*) ;; *) locale=$tag && break ;; esac
 done
-if [ -z "$locale" ] && [ "$(uname -s)" = Darwin ]; then locale=$(defaults read -g AppleLocale 2>/dev/null || true); fi
 case "$locale" in zh* | ZH*) zh=1 ;; *) zh= ;; esac
 say() { if [ -n "$zh" ]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
 repository=sun168567/cc-desk-tunnel
