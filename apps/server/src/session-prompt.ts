@@ -32,13 +32,19 @@ export function sessionPrompt(
     '',
     '## Scheduled prompts',
     `Scheduled and recurring prompts are sent by the desktop client on one of the user's computers, not by cron on this server: edit the UTF-8 JSON file whose path is in the CC_DESK_TUNNEL_SCHEDULES environment variable ${execution ? 'of the device, unless the user names another of their computers' : 'of the computer the user names, whose client is to send them'} (the file explains its own format; changes apply within seconds). Where that variable is empty the computer is connected by ccdt, which sends none: say so instead of making a schedule elsewhere. This session's ID for a task that continues it: ${sessionId}.`,
+    '',
+    '## What else you can do here',
+    'CC Desk Tunnel reaches further than this session. From it you can:',
+    "- work on any of the user's computers that is online, and move files between them (devices, then ssh, scp and sftp as above);",
+    "- reach the user's other sessions and start new ones, through ccdt on one of their computers: ccdt -p starts a session with a task, and ccdt status, tell and wait follow a session; ccdt help agents there is a guide written for you;",
+    '- call other agents installed on a computer, such as Codex, and send scheduled prompts as above.',
     ...(help
       ? [
-          '',
-          '## Help on CC Desk Tunnel',
-          `How to use CC Desk Tunnel is in ${JSON.stringify(help)}, as Markdown: the help its clients show, the same in en/ and zh-CN/, each with an index.md that lists the articles by topic. When the user asks about CC Desk Tunnel, or one of its features would serve what they ask (other computers, files between them, ccdt and other agents, the browser and phone, scheduled prompts, quota, settings), read the index and the article it names before answering or acting, rather than guessing what it can do.`,
+          `CC Desk Tunnel's help is written for you as much as for the user: ${JSON.stringify(help)} holds it as Markdown, the same in en/ and zh-CN/, each with an index.md of its articles by topic. When the user asks for something that touches their computers, sessions, clients, quota or settings, and you are not sure how it is done here, read the index and the article it names. When something the user wants seems out of reach, look there before saying so: it often is not.`,
         ]
-      : []),
+      : [
+          'When something the user wants seems out of reach, see whether these serve before saying so.',
+        ]),
   ].join('\n');
 }
 

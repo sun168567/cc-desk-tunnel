@@ -78,7 +78,7 @@ ssh ── TCP ──▶ 服务的回环端口
 
 ## 关键决定
 
-- **提示词优先。** 原生的 Read / Edit / Bash 实际操作的是 CLI 所在的 Linux。项目不禁用或替换这些工具，而是用 Claude Code 给接入方的标准接口（SDK 的 `systemPrompt.append`、终端的 `--append-system-prompt`）在它自带的系统提示词之后追加一段（`apps/server/src/session-prompt.ts`）：CC Desk Tunnel 怎样把用户的电脑和各个入口连到同一个服务端、这个会话的项目在哪里、怎样经给定的 SSH 配置操作用户的电脑，并提供好用的远程调用方式。每个会话都有这一段，服务端自己的会话也能按名字操作在线的电脑。项目自身的功能不逐条写进提示词：构建服务端时，客户端的帮助另存一份 Markdown（`scripts/help-markdown.mjs`，中英两份，各带目录），提示词只指出它在哪里，Claude 需要时自己查阅；这个目录经 `additionalDirectories` / `--add-dir` 给出，读它不需要审批。人和 Claude 看到的是同一份帮助。偶尔的 Linux 本地操作被视为可接受的低风险偏差。
+- **提示词优先。** 原生的 Read / Edit / Bash 实际操作的是 CLI 所在的 Linux。项目不禁用或替换这些工具，而是用 Claude Code 给接入方的标准接口（SDK 的 `systemPrompt.append`、终端的 `--append-system-prompt`）在它自带的系统提示词之后追加一段（`apps/server/src/session-prompt.ts`）：CC Desk Tunnel 怎样把用户的电脑和各个入口连到同一个服务端、这个会话的项目在哪里、怎样经给定的 SSH 配置操作用户的电脑，并提供好用的远程调用方式。每个会话都有这一段，服务端自己的会话也能按名字操作在线的电脑。提示词还简要列出会话能做到的几件事（操作其他电脑、经 `ccdt` 进入或新建其他会话、调用其他 agent、定时任务），细节不逐条写进去：构建服务端时，客户端的帮助另存一份 Markdown（`scripts/help-markdown.mjs`，中英两份，各带目录），提示词说明它同样是写给 Claude 的、在哪里，并请它在觉得做不到时先查一查；这个目录经 `additionalDirectories` / `--add-dir` 给出，读它不需要审批。人和 Claude 看到的是同一份帮助。偶尔的 Linux 本地操作被视为可接受的低风险偏差。
 - **不做执行 MCP。** Claude 用它已经会的 `ssh`，不需要学习自定义工具；代理也不必维护一套远程执行协议。
 - **审批交给原生。** 新会话默认原生自动审批，可切换手动、计划、接受编辑。代理只把 CLI 实际发出的权限请求转给界面，并把用户的决定按官方结构返回，不自建风险判断。
 - **上下文只有一个权威。** 每个代理会话绑定一个原生会话 ID，首轮创建、之后恢复。代理的 SQLite 只是界面事件的镜像；原生记录缺失时明确报错，不用界面历史冒充。详见[原生运行与会话存储](native-runtime.md)。
