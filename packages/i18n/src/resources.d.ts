@@ -3278,6 +3278,10 @@ export type Resources = {
         name: '浏览器访问';
         words: 'Web 网页 证书 域名 两步验证 反向代理 浏览器登录';
       };
+      plugins: {
+        name: '插件';
+        words: '插件 通知 推送 事件 hooks 钩子';
+      };
       account: {
         name: '账号与额度';
         words: '登录 退出 订阅 用量 调用日志 重置 读取额度';
@@ -3551,6 +3555,51 @@ export type Resources = {
       lastActive: '最近活动 {{time}}';
       revokeOf: '退出 {{name}}';
       forwardedBy: '最近一次带客户端 IP 的请求来自 {{address}}，它不在上面的列表中。确认这是你的反向代理后再填写，不认识的地址不要加入。';
+    };
+    plugins: {
+      intro: '插件在服务端运行：等待审批、一轮结束、电脑上下线等事件发生时，运行插件的命令，比如把通知推送到手机。';
+      empty: '还没有插件。把插件的文件夹放进服务端数据目录下的 plugins 文件夹，片刻后就出现在这里。';
+      enable: '启用 {{title}}';
+      version: '版本 {{version}}';
+      author: '作者 {{name}}';
+      failed: '最近一次运行没有成功（{{time}}），见下方日志。';
+      show: '展开';
+      hide: '收起';
+      settings: '设置';
+      secretSet: '已设置，留空不变';
+      unset: '未设置';
+      clearValue: '清除';
+      try: {
+        heading: '试跑';
+        intro: '用示例事件运行插件的命令，和事件真的发生时一样。';
+        running: '正在运行…';
+      };
+      log: {
+        heading: '日志';
+        empty: '还没有运行记录。';
+        refresh: '刷新';
+        clear: '清空';
+        trial: '试跑';
+        ms: '{{ms, number}} 毫秒';
+        result: {
+          ok: '成功';
+          failed: '失败';
+          failedCode: '失败，退出码 {{code}}';
+          timeout: '超时';
+          unstarted: '没有启动';
+        };
+      };
+      event: {
+        ApprovalRequested: '等待审批';
+        QuestionAsked: 'Claude 提问';
+        TerminalWaiting: '终端等待确认';
+        WaitResolved: '等待已解除';
+        BackgroundOnly: '只剩后台任务';
+        RunError: '运行出错';
+        RunEnded: '一轮结束';
+        DeviceOnline: '电脑上线';
+        DeviceOffline: '电脑下线';
+      };
     };
     proxy: {
       domainFirst: '请先填写访问域名，再生成反代配置。';
@@ -5866,6 +5915,8 @@ export type Messages = {
   'settings:section.shell.words': Record<string, never>;
   'settings:section.web.name': Record<string, never>;
   'settings:section.web.words': Record<string, never>;
+  'settings:section.plugins.name': Record<string, never>;
+  'settings:section.plugins.words': Record<string, never>;
   'settings:section.account.name': Record<string, never>;
   'settings:section.account.words': Record<string, never>;
   'settings:section.claude.name': Record<string, never>;
@@ -6075,6 +6126,41 @@ export type Messages = {
   'settings:web.lastActive': { time: Value };
   'settings:web.revokeOf': { name: Value };
   'settings:web.forwardedBy': { address: Value };
+  'settings:plugins.intro': Record<string, never>;
+  'settings:plugins.empty': Record<string, never>;
+  'settings:plugins.enable': { title: Value };
+  'settings:plugins.version': { version: Value };
+  'settings:plugins.author': { name: Value };
+  'settings:plugins.failed': { time: Value };
+  'settings:plugins.show': Record<string, never>;
+  'settings:plugins.hide': Record<string, never>;
+  'settings:plugins.settings': Record<string, never>;
+  'settings:plugins.secretSet': Record<string, never>;
+  'settings:plugins.unset': Record<string, never>;
+  'settings:plugins.clearValue': Record<string, never>;
+  'settings:plugins.try.heading': Record<string, never>;
+  'settings:plugins.try.intro': Record<string, never>;
+  'settings:plugins.try.running': Record<string, never>;
+  'settings:plugins.log.heading': Record<string, never>;
+  'settings:plugins.log.empty': Record<string, never>;
+  'settings:plugins.log.refresh': Record<string, never>;
+  'settings:plugins.log.clear': Record<string, never>;
+  'settings:plugins.log.trial': Record<string, never>;
+  'settings:plugins.log.ms': { ms: Value };
+  'settings:plugins.log.result.ok': Record<string, never>;
+  'settings:plugins.log.result.failed': Record<string, never>;
+  'settings:plugins.log.result.failedCode': { code: Value };
+  'settings:plugins.log.result.timeout': Record<string, never>;
+  'settings:plugins.log.result.unstarted': Record<string, never>;
+  'settings:plugins.event.ApprovalRequested': Record<string, never>;
+  'settings:plugins.event.QuestionAsked': Record<string, never>;
+  'settings:plugins.event.TerminalWaiting': Record<string, never>;
+  'settings:plugins.event.WaitResolved': Record<string, never>;
+  'settings:plugins.event.BackgroundOnly': Record<string, never>;
+  'settings:plugins.event.RunError': Record<string, never>;
+  'settings:plugins.event.RunEnded': Record<string, never>;
+  'settings:plugins.event.DeviceOnline': Record<string, never>;
+  'settings:plugins.event.DeviceOffline': Record<string, never>;
   'settings:proxy.domainFirst': Record<string, never>;
   'settings:proxy.pathFirst': Record<string, never>;
   'settings:proxy.upstreamForm': Record<string, never>;
