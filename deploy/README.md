@@ -4,7 +4,7 @@ Ubuntu amd64 优先；arm64 为实验性支持：镜像构建、部署自测和�
 
 ## 准备
 
-最省事的方式是一条命令。脚本检查 Docker 等依赖（缺少时给出安装命令，不代为安装），从发布页下载最新的服务端程序包并校验，解压到 `/opt/cc-desk-tunnel`，随后进入下面的交互安装；已有部署时改为询问是否升级。程序目录可用环境变量 `CC_DESK_TUNNEL_DIR` 更改，`CC_DESK_TUNNEL_VERSION=X.Y.Z` 可指定版本（写在 `sudo env` 之后）。
+最省事的方式是一条命令。脚本检查 Docker 等依赖（缺少时给出安装命令，不代为安装），从发布页下载最新的服务端程序包并校验，解压到 `/opt/cc-desk-tunnel`，随后进入下面的交互安装；已有部署时改为询问是否升级。程序目录可用环境变量 `CC_DESK_TUNNEL_DIR` 更改，`CC_DESK_TUNNEL_VERSION=X.Y.Z` 可指定版本，`CC_DESK_TUNNEL_LANG=en` 让脚本和管理命令改说英文、之后的命令沿用（`=zh` 改回中文）；这些变量写在 `sudo env` 之后。
 
 ```sh
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"

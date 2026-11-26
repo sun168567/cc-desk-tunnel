@@ -126,10 +126,10 @@ This repository publishes all of its own client, server, build and deployment so
 On the server:
 
 ```sh
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+sudo env CC_DESK_TUNNEL_LANG=en bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
 ```
 
-Press Enter through the questions. At the end it prints what the client needs — **service address, certificate fingerprint, service token** — and the port to open in the firewall (TCP 8787 by default, the only one). From then on, the client's Settings → About and updates upgrades the service too, so you rarely need the server again.
+`CC_DESK_TUNNEL_LANG=en` has the script, and the `cc-desk-tunnel` command it leaves, speak English (Chinese without it); later commands keep it. Press Enter through the questions. At the end it prints what the client needs — **service address, certificate fingerprint, service token** — and the port to open in the firewall (TCP 8787 by default, the only one). From then on, the client's Settings → About and updates upgrades the service too, so you rarely need the server again.
 
 <details>
 <summary>What the script does · everyday commands</summary>
