@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeHelp } from './help-markdown.mjs';
 
 export function packageServer(root, output) {
   const local = join(root, '.local');
@@ -24,6 +25,7 @@ export function packageServer(root, output) {
       { cwd: root, windowsHide: true, stdio: 'inherit' },
     );
     if (!existsSync(join(web, 'index.html'))) throw new Error('Missing Web client build.');
+    writeHelp(join(staging, 'apps/server/help'));
     execFileSync(
       process.platform === 'win32' ? 'tar.exe' : 'tar',
       [
@@ -47,6 +49,7 @@ export function packageServer(root, output) {
         '-C',
         staging,
         'apps/server/web',
+        'apps/server/help',
       ],
       { cwd: root, windowsHide: true },
     );

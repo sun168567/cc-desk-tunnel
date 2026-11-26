@@ -9,6 +9,8 @@
 !apps/server/src/**
 !apps/server/web/
 !apps/server/web/**
+!apps/server/help/
+!apps/server/help/**
 !apps/desktop/
 !apps/desktop/package.json
 !apps/desktop/index.html
@@ -30,6 +32,7 @@
 !packages/protocol/src/**
 !scripts/
 !scripts/install-linux.sh
+!scripts/help-markdown.mjs
 !deploy/
 !deploy/docker/
 !deploy/docker/Dockerfile

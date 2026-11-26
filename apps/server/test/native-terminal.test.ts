@@ -179,6 +179,17 @@ test('a terminal launches the official CLI directly with remote guidance and no 
   );
   assert.ok(args.includes('--append-system-prompt'));
   assert.ok(args.some((arg) => arg.includes('D:\\\\项目')));
+  // The help is readable without asking where the build put it.
+  assert.ok(!args.includes('--add-dir'));
+  const helped = terminalArguments(
+    { executable: '/native/claude', help: '/app/apps/server/help' },
+    { id: 's', projectPath: 'D:\\test', permissionMode: 'auto' } as Session,
+    own,
+  );
+  assert.deepEqual(helped.slice(helped.indexOf('--add-dir'), helped.indexOf('--add-dir') + 2), [
+    '--add-dir',
+    '/app/apps/server/help',
+  ]);
   assert.ok(args.some((arg) => arg.includes('ssh device-pwsh')));
   assert.ok(args.includes('provider'));
   assert.ok(args.includes('high'));

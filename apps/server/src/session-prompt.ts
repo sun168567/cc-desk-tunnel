@@ -6,7 +6,13 @@ import type { Execution } from './device-terms.ts';
 // CC Desk Tunnel is, where the session's project is and how to work on the user's computers. `execution` is that of
 // the session's own computer; a session the service itself owns, whose project is on this server, has none. It stays
 // as it was first given until a compaction (see `Store.promptValues`), and `Store.notice` tells Claude what changed.
-export function sessionPrompt(projectPath: string, sessionId: string, execution?: Execution) {
+// `help` is where the help of CC Desk Tunnel is, as Markdown (scripts/help-markdown.mjs), when the build put it there.
+export function sessionPrompt(
+  projectPath: string,
+  sessionId: string,
+  execution?: Execution,
+  help?: string,
+) {
   return [
     '# CC Desk Tunnel',
     "This session runs in CC Desk Tunnel, which links the user's computers and every way they reach Claude through one service on this Linux server. The service keeps the sessions, their memory and the Claude account. The user's computers connect to it, and so do the desktop client, a browser or phone, ccdt in a terminal, and other agents through ccdt. A session is the same from all of them: the user may follow and steer it from any one, not necessarily the computer you work on, and from it you can work on any of their computers that are online.",
@@ -26,6 +32,13 @@ export function sessionPrompt(projectPath: string, sessionId: string, execution?
     '',
     '## Scheduled prompts',
     `Scheduled and recurring prompts are sent by the desktop client on one of the user's computers, not by cron on this server: edit the UTF-8 JSON file whose path is in the CC_DESK_TUNNEL_SCHEDULES environment variable ${execution ? 'of the device, unless the user names another of their computers' : 'of the computer the user names, whose client is to send them'} (the file explains its own format; changes apply within seconds). Where that variable is empty the computer is connected by ccdt, which sends none: say so instead of making a schedule elsewhere. This session's ID for a task that continues it: ${sessionId}.`,
+    ...(help
+      ? [
+          '',
+          '## Help on CC Desk Tunnel',
+          `How to use CC Desk Tunnel is in ${JSON.stringify(help)}, as Markdown: the help its clients show, the same in en/ and zh-CN/, each with an index.md that lists the articles by topic. When the user asks about CC Desk Tunnel, or one of its features would serve what they ask (other computers, files between them, ccdt and other agents, the browser and phone, scheduled prompts, quota, settings), read the index and the article it names before answering or acting, rather than guessing what it can do.`,
+        ]
+      : []),
   ].join('\n');
 }
 

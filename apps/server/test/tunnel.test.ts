@@ -622,6 +622,13 @@ test('the prompt lets the model look at a picture of the device by copying that 
   assert.match(prompt, /Do not use this server's Read\/Edit tools on project files/);
 });
 
+test('the prompt points to the help of CC Desk Tunnel where the build put it, and only then', () => {
+  const pointed = sessionPrompt('D:\\work', 'session', windows, '/app/apps/server/help');
+  assert.match(pointed, /^## Help on CC Desk Tunnel$/m);
+  assert.match(pointed, /"\/app\/apps\/server\/help", as Markdown/);
+  assert.doesNotMatch(sessionPrompt('D:\\work', 'session', windows), /Help on CC Desk Tunnel/);
+});
+
 test('every session is told what CC Desk Tunnel links, and one the service owns works here', () => {
   const own = sessionPrompt('D:\\work', 'session', windows);
   const here = sessionPrompt('/data/workspace/notes', 'session');

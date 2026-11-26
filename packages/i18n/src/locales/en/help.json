@@ -1117,5 +1117,15 @@
         ]
       }
     }
+  },
+  "model": {
+    "intro": "How to use CC Desk Tunnel: the same help as the clients’ Help, grouped by topic. Open the article you need.",
+    "here": "the user’s computer",
+    "settingsPage": "Settings → {{section}}",
+    "settingsLink": "{{words}} (Settings → {{section}})",
+    "shortcut": "the shortcut for “{{action}}”",
+    "keys": "Shortcuts can be seen and changed in Settings → Shortcuts; typing / in the input box opens the command menu.",
+    "desktopOnly": "Only in the desktop client, not in a browser.",
+    "related": "Related"
   }
 }
