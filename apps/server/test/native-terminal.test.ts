@@ -175,7 +175,6 @@ test('a terminal launches the official CLI directly with remote guidance and no 
       model: null,
       effort: 'high',
     } as Session,
-    { configPath: '/private/ssh.conf' },
     own,
   );
   assert.ok(args.includes('--append-system-prompt'));
@@ -190,7 +189,6 @@ test('a terminal launches the official CLI directly with remote guidance and no 
     const launched = terminalArguments(
       { executable: 'claude' },
       { id: 's', projectPath: 'D:\\test', permissionMode } as Session,
-      { configPath: '/ssh' },
       own,
     );
     return launched[launched.indexOf('--permission-mode') + 1];
@@ -207,16 +205,15 @@ test('a terminal resumes its session or creates it under the session ID, with it
   } as Session;
   const options = { executable: 'claude', settingsPath: '/private/provider.json' };
   const execution = { platform: 'win32' as const, shells: ['pwsh' as const] };
-  const resumed = terminalArguments(
-    options,
-    session,
-    { configPath: '/ssh' },
-    { resume: true, settingsPath: '/t.json', execution },
-  );
+  const resumed = terminalArguments(options, session, {
+    resume: true,
+    settingsPath: '/t.json',
+    execution,
+  });
   assert.deepEqual(resumed.slice(0, 2), ['--resume', session.id]);
   assert.deepEqual(resumed.slice(-2), ['--settings', '/t.json']);
   assert.ok(!resumed.includes('/private/provider.json'));
-  const created = terminalArguments(options, session, undefined, {
+  const created = terminalArguments(options, session, {
     resume: false,
     settingsPath: '/t.json',
     execution,

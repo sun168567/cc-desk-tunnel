@@ -13,6 +13,7 @@ import {
   terminalStatuses,
 } from '@cc-desk-tunnel/protocol';
 import { deviceTerms, systemShell } from './device-terms.ts';
+import { deviceSection } from './session-prompt.ts';
 import type { Execution } from './device-terms.ts';
 import { phrase } from '@cc-desk-tunnel/i18n';
 import { DomainError, said } from './errors.ts';
@@ -945,8 +946,9 @@ export class SessionStore {
   }
   // The text that tells Claude what its system prompt no longer has right, to go in front of the user's next
   // message: a project directory or a computer other than the one it knows, from the prompt or from an earlier
-  // notice, or other shells, or another one the user prefers. It is given out once.
-  notice(sessionId: string) {
+  // notice, or other shells, or another one the user prefers. It is given out once. `server` is the device ID of
+  // the sessions the service itself owns, whose project is on this server.
+  notice(sessionId: string, server: string) {
     const { session } = this.get(sessionId);
     const said = session.prompt;
     if (!said || said.compacted) return '';
@@ -955,9 +957,11 @@ export class SessionStore {
     const device = session.device?.id;
     const platform = platformOf(session.device);
     const execution = this.execution(device, platform);
-    // A notice from before shells were named in one is told again.
+    const here = device === server;
+    const wasHere = known.device === server;
+    // A notice from before shells were named in one is told again. The server has no shells to tell of.
     const sameShells = !!known.shells && known.shells.join() === execution.shells.join();
-    const samePreference = sameShells && known.shell === execution.shell;
+    const samePreference = here || (sameShells && known.shell === execution.shell);
     if (known.projectPath === session.projectPath && known.device === device && samePreference)
       return '';
     said.told = {
@@ -968,13 +972,19 @@ export class SessionStore {
       ...(execution.shell ? { shell: execution.shell } : {}),
     };
     this.save(session);
+    const paths = `The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(known.projectPath)}).`;
+    if (here)
+      return wasHere
+        ? `[CC Desk Tunnel: the user moved this session to another project on this server. ${paths} From now on use the new directory as the project directory, in place of the one given earlier.]\n\n`
+        : `[CC Desk Tunnel: the user moved this session to a project on this server. ${paths} From now on work on it here with your own tools: this session has no computer of its own, so device names none. What the earlier computer had is not here unless you find it here.]\n\n`;
+    if (wasHere)
+      return `[CC Desk Tunnel: the user moved this session to a project on one of their computers, ${JSON.stringify(session.device!.name)}, which is from now on this session's own computer, the device. ${paths} From now on: ${deviceSection(session.projectPath, execution).join(' ')}]\n\n`;
     const terms = deviceTerms(execution, session.projectPath);
     // The prompt's account of scripts and command lines holds for one system, its shells and the one preferred.
     const scripts =
       (known.platform ?? 'win32') === platform && samePreference
         ? ''
         : ` This replaces what was said of scripts and command lines: ${terms.script} ${terms.command}`;
-    const paths = `The project directory is now ${JSON.stringify(session.projectPath)} (it was ${JSON.stringify(known.projectPath)}).`;
     if (known.device !== device)
       return `[CC Desk Tunnel: the user now continues this session from another of their computers, ${JSON.stringify(session.device!.name)}. From now on the device is that computer: ${terms.name}. ${paths} What the earlier computer had, its files, paths and running processes, is not on this one unless you find it there.${scripts}]\n\n`;
     if (known.projectPath !== session.projectPath)

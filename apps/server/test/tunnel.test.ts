@@ -22,7 +22,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { TestContext } from 'node:test';
-import { remotePrompt, sshPath } from '../src/claude.ts';
+import { sshPath } from '../src/claude.ts';
+import { sessionPrompt } from '../src/session-prompt.ts';
 import type { Execution } from '../src/device-terms.ts';
 
 const windows: Execution = { platform: 'win32', shells: ['pwsh'] };
@@ -118,7 +119,7 @@ test('commands share one SSH connection where the platform and the length of the
   assert.doesNotMatch(config(`/srv/${'long-name/'.repeat(9)}connections/id`, 'linux'), /Control/);
 });
 test('context names the hosts of the device as plain SSH aliases without inventing execution tools', () => {
-  const prompt = remotePrompt(
+  const prompt = sessionPrompt(
     "D:\\中文 空格\\it's",
     '0d0c6a0e-6a53-4a0c-9d3a-2f6f5f3f7b11',
     windows,
@@ -141,14 +142,14 @@ test('context names the hosts of the device as plain SSH aliases without inventi
   );
   // A network path keeps its own two.
   assert.match(
-    remotePrompt('\\\\nas\\share\\x', 'session', windows),
+    sessionPrompt('\\\\nas\\share\\x', 'session', windows),
     /the project directory is "device:\/\/nas\/share\/x"/,
   );
   assert.match(prompt, /CC_DESK_TUNNEL_SCHEDULES/);
   // ccdt's device has no file of scheduled prompts, and the same words hold for it.
   assert.match(
     prompt,
-    /Where that variable is empty the device is connected by ccdt, which sends none/,
+    /Where that variable is empty the computer is connected by ccdt, which sends none/,
   );
   // Nothing of the device's own layout: where its programs and the client's files are is the device's to know.
   assert.doesNotMatch(prompt, /pwsh\.exe|APPDATA/);
@@ -173,7 +174,7 @@ test('a Windows device with Git Bash has a host for it, which Claude picks by th
     files.config,
     /^Host device-bash\n  RemoteCommand chcp\.com 65001 >nul & "%%CC_DESK_TUNNEL_BASH%%" -s\n  RequestTTY no$/m,
   );
-  const prompt = remotePrompt("D:\\中文 空格\\it's", 'session', gitBash);
+  const prompt = sessionPrompt("D:\\中文 空格\\it's", 'session', gitBash);
   assert.match(
     prompt,
     /ssh device-pwsh <<'PS' \.\.\. PS runs it in PowerShell 7, ssh device-bash <<'SH' \.\.\. SH in Git Bash/,
@@ -188,15 +189,15 @@ test('a Windows device with Git Bash has a host for it, which Claude picks by th
   );
   assert.match(prompt, /Use whichever suits the task\./);
   assert.match(
-    remotePrompt('D:\\work', 'session', { ...gitBash, shell: 'bash' }),
+    sessionPrompt('D:\\work', 'session', { ...gitBash, shell: 'bash' }),
     /The user prefers Git Bash: use it unless a task is better done in PowerShell\./,
   );
   assert.match(
-    remotePrompt('D:\\work', 'session', { ...gitBash, shell: 'pwsh' }),
+    sessionPrompt('D:\\work', 'session', { ...gitBash, shell: 'pwsh' }),
     /The user prefers PowerShell: use it unless a task is better done in Git Bash\./,
   );
   // A network path is written as Git Bash writes one.
-  assert.match(remotePrompt('\\\\nas\\share\\x', 'session', gitBash), /cd '\/\/nas\/share\/x'/);
+  assert.match(sessionPrompt('\\\\nas\\share\\x', 'session', gitBash), /cd '\/\/nas\/share\/x'/);
 });
 test('a device says which shells it has; those its system cannot have are passed over', () => {
   assert.deepEqual(shellsOf('win32', ['bash', 'zsh', 'bash']), ['pwsh', 'bash']);
@@ -349,6 +350,17 @@ test("the user's computers online are hosts of every session, each by a name of 
       '  hosts: device-a10000 device-a10000-pwsh device-a10000-bash\n' +
       'macOS "MacBook Pro ", reconnecting: a command waits up to a minute for it\n' +
       '  hosts: device-macbook-pro device-macbook-pro-zsh\n',
+  );
+  // A session the service owns reaches them by the same names, with none of them its own and no device.
+  const here = sessionSsh(directory, randomUUID(), undefined, mine);
+  assert.doesNotMatch(readFileSync(here.configPath, 'utf8'), /32001/);
+  assert.match(
+    execFileSync(join(here.bin!, 'ssh'), ['-G', 'device-a10000-bash'], { encoding: 'utf8' }),
+    /^port 32001$/m,
+  );
+  assert.doesNotMatch(
+    execFileSync(join(here.bin!, 'devices'), { encoding: 'utf8' }),
+    /this session's own computer/,
   );
 });
 test('the tunnel offers a secret of its own and compares it without leaking its length', async (t) => {
@@ -605,9 +617,41 @@ test('a device keeps one door: commands begun while it is away wait for its next
   assert.ok(Date.now() - began >= 300);
 });
 test('the prompt lets the model look at a picture of the device by copying that one file here', () => {
-  const prompt = remotePrompt('D:\\work', 'session', windows);
-  assert.match(prompt, /copy that one file with scp to a temporary file on this host/);
-  assert.match(prompt, /Do not use this host's Read\/Edit tools on project files/);
+  const prompt = sessionPrompt('D:\\work', 'session', windows);
+  assert.match(prompt, /copy that one file with scp to a temporary file on this server/);
+  assert.match(prompt, /Do not use this server's Read\/Edit tools on project files/);
+});
+
+test('every session is told what CC Desk Tunnel links, and one the service owns works here', () => {
+  const own = sessionPrompt('D:\\work', 'session', windows);
+  const here = sessionPrompt('/data/workspace/notes', 'session');
+  // The same account of the service opens both, in sections as Claude Code writes its own prompt.
+  for (const prompt of [own, here]) {
+    assert.match(
+      prompt,
+      /^# CC Desk Tunnel\nThis session runs in CC Desk Tunnel, which links the user's computers and every way they reach Claude through one service/,
+    );
+    assert.match(prompt, /^## This session's project$/m);
+    assert.match(prompt, /^## The user's computers$/m);
+    assert.match(prompt, /^## Scheduled prompts$/m);
+    assert.match(prompt, /run devices: it lists those online/);
+  }
+  assert.equal(own.split('\n')[1], here.split('\n')[1]);
+  // A session the service owns has its project here, no computer of its own, and still reaches the user's.
+  assert.match(
+    here,
+    /It is on this server, in "\/data\/workspace\/notes": work on it here with your own tools/,
+  );
+  assert.match(here, /so device names none/);
+  assert.match(
+    here,
+    /to the host ending in the name of the shell it is written for: pwsh is PowerShell 7/,
+  );
+  assert.doesNotMatch(here, /Project directory:|device-pwsh|never fall back|device always means/);
+  assert.match(
+    here,
+    /environment variable of the computer the user names, whose client is to send them/,
+  );
 });
 
 test('a device with a POSIX shell gets a script command and a prompt of its own', () => {
@@ -628,29 +672,29 @@ test('a device with a POSIX shell gets a script command and a prompt of its own'
   assert.match(files.config, /^Host device device-zsh$/m);
   assert.doesNotMatch(files.config, /CC_DESK_TUNNEL_PWSH/);
   const mac: Execution = { platform: 'darwin', shells: ['zsh'] };
-  const prompt = remotePrompt("/Users/me/my project/it's", 'session', mac);
+  const prompt = sessionPrompt("/Users/me/my project/it's", 'session', mac);
   assert.match(prompt, /Device: macOS\. Project directory: "\/Users\/me\/my project\/it's"\./);
   assert.match(prompt, /ssh device-zsh <<'SH' \.\.\. SH\. It runs in the user's own shell, zsh,/);
   assert.match(prompt, /Begin it with cd -- '\/Users\/me\/my project\/it'\\''s'\./);
   assert.match(prompt, /the project directory is "device:\/Users\/me\/my project\/it's"/);
   assert.doesNotMatch(prompt, /PowerShell|cmd\.exe|Windows|Set-Location/);
   assert.match(
-    remotePrompt('/work', 'session', { platform: 'linux', shells: ['bash'] }),
+    sessionPrompt('/work', 'session', { platform: 'linux', shells: ['bash'] }),
     /ssh device-bash <<'SH'/,
   );
   // Everything that does not depend on the system reads the same on both, line for line.
-  const onWindows = remotePrompt('D:\\work', 'session', windows).split('\n');
-  const onMac = remotePrompt('/work', 'session', mac).split('\n');
+  const onWindows = sessionPrompt('D:\\work', 'session', windows).split('\n');
+  const onMac = sessionPrompt('/work', 'session', mac).split('\n');
   assert.equal(onWindows.length, onMac.length);
   assert.deepEqual(
-    onWindows.flatMap((line, index) => (line === onMac[index] ? [] : [index])),
-    [1, 3, 4],
+    onWindows.flatMap((line: string, index: number) => (line === onMac[index] ? [] : [index])),
+    [4, 6, 7],
   );
   // So do they with Git Bash: only the lines of scripts and command lines differ.
-  const withBash = remotePrompt('D:\\work', 'session', gitBash).split('\n');
+  const withBash = sessionPrompt('D:\\work', 'session', gitBash).split('\n');
   assert.deepEqual(
-    onWindows.flatMap((line, index) => (line === withBash[index] ? [] : [index])),
-    [3],
+    onWindows.flatMap((line: string, index: number) => (line === withBash[index] ? [] : [index])),
+    [6],
   );
 });
 

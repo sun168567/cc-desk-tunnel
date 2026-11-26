@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { SessionStore } from '../src/store.ts';
 
 const device = { id: randomUUID(), name: '台式机' };
+// The device ID of the sessions the service owns.
+const server = randomUUID();
 function fixture(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), 'cc-desk-tunnel-move-'));
   let store = new SessionStore(directory);
@@ -40,7 +42,7 @@ function ran(store: SessionStore, sessionId: string) {
 test('a session that never ran simply changes its project', (t) => {
   const { store, session } = fixture(t);
   assert.equal(store.move(session.id, 'D:\\项目 乙', device).projectPath, 'D:\\项目 乙');
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   assert.equal(store.promptValues(session.id).projectPath, 'D:\\项目 乙');
 });
 
@@ -51,27 +53,33 @@ test('a move is told once with the next message, and the system prompt keeps its
   store.move(session.id, 'D:\\项目 丙', device);
   // Nothing compacted: the prompt is byte for byte what it was, whichever connection the run is on.
   assert.equal(ran(store, session.id), 'D:\\项目 甲');
-  const notice = store.notice(session.id);
+  const notice = store.notice(session.id, server);
   // The notice names where the session is now and the path Claude knew, not the stops in between.
   assert.match(notice, /is now "D:\\\\项目 丙" \(it was "D:\\\\项目 甲"\)/);
   assert.doesNotMatch(notice, /乙/);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   assert.equal(ran(store, session.id), 'D:\\项目 甲');
   // A later move is told against what Claude heard last, not against the prompt.
   store.move(session.id, 'D:\\项目 丁', device);
-  assert.match(store.notice(session.id), /is now "D:\\\\项目 丁" \(it was "D:\\\\项目 丙"\)/);
+  assert.match(
+    store.notice(session.id, server),
+    /is now "D:\\\\项目 丁" \(it was "D:\\\\项目 丙"\)/,
+  );
   store.move(session.id, 'D:\\项目 甲', device);
-  assert.match(store.notice(session.id), /is now "D:\\\\项目 甲" \(it was "D:\\\\项目 丁"\)/);
+  assert.match(
+    store.notice(session.id, server),
+    /is now "D:\\\\项目 甲" \(it was "D:\\\\项目 丁"\)/,
+  );
   store.move(session.id, 'D:\\项目 丙', device);
 
   // A compaction rewrites what follows the prompt; from the next run the prompt says the current path, and
   // there is nothing left to tell.
   store.compacted(session.id);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   assert.equal(ran(store, session.id), 'D:\\项目 丙');
   assert.equal(store.get(session.id).session.prompt?.compacted, undefined);
   assert.equal(store.get(session.id).session.prompt?.told, undefined);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
 });
 
 test('moving back before anything was said leaves nothing to tell, and a running session cannot move', (t) => {
@@ -79,7 +87,7 @@ test('moving back before anything was said leaves nothing to tell, and a running
   ran(store, session.id);
   store.move(session.id, 'D:\\项目 乙', device);
   store.move(session.id, 'D:\\项目 甲', device);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   store.append(session.id, randomUUID(), {
     type: 'run.status',
     status: 'awaiting_approval',
@@ -96,15 +104,45 @@ test('a session taken to another computer tells Claude of the computer and its d
   const laptop = { id: randomUUID(), name: '笔记本 "二"' };
   // The same path on another computer is still another place.
   store.move(session.id, 'D:\\项目 甲', laptop);
-  const notice = store.notice(session.id);
+  const notice = store.notice(session.id, server);
   assert.match(notice, /another of their computers, "笔记本 \\"二\\""/);
   assert.match(notice, /is now "D:\\\\项目 甲" \(it was "D:\\\\项目 甲"\)/);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   // A move on that computer afterwards is only a move.
   store.move(session.id, 'E:\\别处', laptop);
-  assert.doesNotMatch(store.notice(session.id), /computers/);
+  assert.doesNotMatch(store.notice(session.id, server), /computers/);
   store.move(session.id, 'D:\\项目 甲', device);
-  assert.match(store.notice(session.id), /"台式机"/);
+  assert.match(store.notice(session.id, server), /"台式机"/);
+});
+
+test('a session taken to a project on this server, and back to a computer, is told how to work there', (t) => {
+  const { store, session } = fixture(t);
+  ran(store, session.id);
+  const here = { id: server, name: 'server', platform: 'linux' as const };
+  store.move(session.id, '/data/workspace/笔记', here);
+  const toServer = store.notice(session.id, server);
+  assert.match(
+    toServer,
+    /to a project on this server\. The project directory is now "\/data\/workspace\/笔记"/,
+  );
+  assert.match(
+    toServer,
+    /work on it here with your own tools: this session has no computer of its own/,
+  );
+  assert.doesNotMatch(toServer, /device-pwsh|another of their computers/);
+  assert.equal(store.notice(session.id, server), '');
+  store.move(session.id, '/data/workspace/别处', here);
+  assert.match(store.notice(session.id, server), /to another project on this server/);
+  // Back on a computer, Claude is told all its prompt says of one, which a session here was not given.
+  store.move(session.id, 'D:\\项目 甲', device);
+  const toDevice = store.notice(session.id, server);
+  assert.match(
+    toDevice,
+    /one of their computers, "台式机", which is from now on this session's own computer/,
+  );
+  assert.match(toDevice, /ssh device-pwsh <<'PS'/);
+  assert.match(toDevice, /never fall back to this server/);
+  assert.equal(store.notice(session.id, server), '');
 });
 
 test('a session from before computers were told apart becomes that of the first to use it, unannounced', (t) => {
@@ -117,7 +155,7 @@ test('a session from before computers were told apart becomes that of the first 
   const store = made.reopen();
   assert.equal(store.get(session.id).session.device, undefined);
   assert.deepEqual(store.claim(session.id, device).device, device);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   // It is claimed once: the next computer has to take it over.
   const laptop = { id: randomUUID(), name: '笔记本' };
   assert.deepEqual(store.claim(session.id, laptop).device, device);
@@ -134,13 +172,13 @@ test('a session taken to a computer of another system is told how that one runs 
   assert.equal(store.promptValues(session.id).execution.platform, 'win32');
   const mac = { id: randomUUID(), name: 'MacBook', platform: 'darwin' as const };
   store.move(session.id, '/Users/me/项目', mac);
-  const notice = store.notice(session.id);
+  const notice = store.notice(session.id, server);
   assert.match(notice, /From now on the device is that computer: macOS\./);
   assert.match(notice, /is now "\/Users\/me\/项目" \(it was "D:\\\\项目 甲"\)/);
   assert.match(notice, /replaces what was said of scripts and command lines/);
   assert.match(notice, /Begin it with cd -- '\/Users\/me\/项目'\./);
   assert.doesNotMatch(notice, /PowerShell/);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   // The prompt stays what it was until a compaction: only then does it describe the Mac.
   assert.deepEqual(store.promptValues(session.id), {
     projectPath: 'D:\\项目 甲',
@@ -148,9 +186,12 @@ test('a session taken to a computer of another system is told how that one runs 
   });
   // A move on the Mac says nothing of systems again; the way back to Windows does.
   store.move(session.id, '/Users/me/别处', mac);
-  assert.doesNotMatch(store.notice(session.id), /scripts and command lines/);
+  assert.doesNotMatch(store.notice(session.id, server), /scripts and command lines/);
   store.move(session.id, 'D:\\项目 甲', device);
-  assert.match(store.notice(session.id), /that computer: Windows\..*Set-Location -LiteralPath/s);
+  assert.match(
+    store.notice(session.id, server),
+    /that computer: Windows\..*Set-Location -LiteralPath/s,
+  );
   store.compacted(session.id);
   store.move(session.id, '/Users/me/项目', mac);
   assert.deepEqual(store.promptValues(session.id).execution, {
@@ -162,39 +203,39 @@ test('a session taken to a computer of another system is told how that one runs 
 test('other shells on the device, or another one preferred, are told once with the next message', (t) => {
   const { store, session } = fixture(t);
   ran(store, session.id);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   // Git for Windows is installed: the device now has Git Bash as well.
   store.equip(device.id, ['pwsh', 'bash']);
-  const added = store.notice(session.id);
+  const added = store.notice(session.id, server);
   assert.match(
     added,
     /^\[CC Desk Tunnel: the shells the device runs scripts in changed\. This replaces/,
   );
   assert.match(added, /ssh device-bash <<'SH'/);
   assert.match(added, /Use whichever suits the task\./);
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   store.prefer(device.id, 'bash');
   assert.match(
-    store.notice(session.id),
+    store.notice(session.id, server),
     /the user now prefers Git Bash for scripts on the device\..*The user prefers Git Bash: use it/s,
   );
   store.prefer(device.id, null);
   assert.match(
-    store.notice(session.id),
+    store.notice(session.id, server),
     /no longer prefers a shell.*Use whichever suits the task/s,
   );
   // A preference for a shell the device does not have says nothing: there is nothing to choose between.
   store.equip(device.id, ['pwsh']);
-  assert.match(store.notice(session.id), /shells the device runs scripts in changed/);
+  assert.match(store.notice(session.id, server), /shells the device runs scripts in changed/);
   store.prefer(device.id, 'bash');
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   // The prompt stays what it was until a compaction, and names what is there then.
   assert.deepEqual(store.promptValues(session.id).execution, {
     platform: 'win32',
     shells: ['pwsh'],
   });
   store.equip(device.id, ['pwsh', 'bash']);
-  store.notice(session.id);
+  store.notice(session.id, server);
   store.compacted(session.id);
   assert.deepEqual(store.promptValues(session.id).execution, {
     platform: 'win32',
@@ -213,6 +254,6 @@ test('a prompt from before shells were named keeps naming those of its first run
   const store = made.reopen();
   store.equip(device.id, ['pwsh', 'bash']);
   // The prompt of its next run names Git Bash, so nothing is told.
-  assert.equal(store.notice(session.id), '');
+  assert.equal(store.notice(session.id, server), '');
   assert.deepEqual(store.promptValues(session.id).execution.shells, ['pwsh', 'bash']);
 });
