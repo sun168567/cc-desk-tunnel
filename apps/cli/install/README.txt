@@ -16,3 +16,27 @@ ccdt 的版本须与服务端相同。ccdt upgrade 升级服务端，再把 ccdt
 卸载：删除安装目录（Windows 为 %LOCALAPPDATA%\Programs\ccdt，并从用户 PATH 去掉它；
 macOS、Linux 为 ~/.local/share/ccdt 与 ~/.local/bin/ccdt，以及 shell 配置文件里标着 # ccdt 的一行）。设置与保存的登录在 %APPDATA%\ccdt（Windows）、
 ~/Library/Application Support/ccdt（macOS）或 ~/.config/ccdt（Linux）。
+
+----------------------------------------------------------------------------------------------------
+
+ccdt: the original Claude Code on a CC Desk Tunnel server, in your own terminal, sharing sessions with the
+desktop client.
+
+Install
+  Windows: in this folder, run  powershell -ExecutionPolicy Bypass -File install.ps1
+  macOS, Linux: in this folder, run  ./install.sh
+  You can also run ccdt.cmd (Windows) or bin/ccdt from here without installing.
+
+Get started
+  ccdt login          Sign in to the server (address and certificate fingerprint default to the desktop client's)
+  cd your-project
+  ccdt                Continue this project's latest session, or start one
+  ccdt -r             Pick one of this project's sessions
+  ccdt --help         All commands
+
+ccdt must be the same version as the server. ccdt upgrade upgrades the server, then replaces ccdt with the
+server's version.
+Uninstall: delete the install folder (on Windows %LOCALAPPDATA%\Programs\ccdt, and remove it from the user PATH;
+on macOS and Linux ~/.local/share/ccdt and ~/.local/bin/ccdt, and the line marked # ccdt in the shell's
+configuration file). Settings and saved sign-ins are in %APPDATA%\ccdt (Windows),
+~/Library/Application Support/ccdt (macOS) or ~/.config/ccdt (Linux).

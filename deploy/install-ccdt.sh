@@ -7,6 +7,15 @@
 # it in place with the install script the package carries. No root is needed. CCDT_VERSION=0.3.9 takes that release
 # instead, the one of the service; CCDT_DOWNLOAD_ONLY=1 only unpacks the checked package into the current directory.
 set -eu
+# What it says is in the system's language, Chinese or else English, as ccdt's: the locale
+# the terminal sets, else on a Mac the system's.
+locale=
+for tag in "${LC_ALL:-}" "${LC_MESSAGES:-}" "${LANG:-}"; do
+  case "$tag" in '' | C | C.* | POSIX | POSIX.*) ;; *) locale=$tag && break ;; esac
+done
+if [ -z "$locale" ] && [ "$(uname -s)" = Darwin ]; then locale=$(defaults read -g AppleLocale 2>/dev/null || true); fi
+case "$locale" in zh* | ZH*) zh=1 ;; *) zh= ;; esac
+say() { if [ -n "$zh" ]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
 repository=sun168567/cc-desk-tunnel
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) system=mac-arm64 ;;
@@ -14,7 +23,8 @@ case "$(uname -s)-$(uname -m)" in
   Linux-x86_64 | Linux-amd64) system=linux-x64 ;;
   Linux-aarch64 | Linux-arm64) system=linux-arm64 ;;
   *)
-    echo "没有这个系统（$(uname -s) $(uname -m)）的 ccdt 包。Windows 上请在 PowerShell 里运行 install-ccdt.ps1。" >&2
+    say "没有这个系统（$(uname -s) $(uname -m)）的 ccdt 包。Windows 上请在 PowerShell 里运行 install-ccdt.ps1。" \
+      "There is no ccdt package for this system ($(uname -s) $(uname -m)). On Windows, run install-ccdt.ps1 in PowerShell." >&2
     exit 1
     ;;
 esac
@@ -23,7 +33,8 @@ if [ -z "$version" ]; then
   version=$(curl -fsSL "https://api.github.com/repos/$repository/releases/latest" |
     sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
   if [ -z "$version" ]; then
-    echo "读不到最新的版本号；可以用 CCDT_VERSION 指定版本，例如 CCDT_VERSION=0.3.9。" >&2
+    say "读不到最新的版本号；可以用 CCDT_VERSION 指定版本，例如 CCDT_VERSION=0.3.9。" \
+      "Couldn’t read the newest version; CCDT_VERSION chooses one, for example CCDT_VERSION=0.3.9." >&2
     exit 1
   fi
 fi
@@ -32,12 +43,12 @@ name="ccdt-$version-$system.tar.gz"
 base="https://github.com/$repository/releases/download/v$version"
 folder=$(mktemp -d)
 trap 'rm -rf "$folder"' EXIT
-echo "正在下载 ccdt $version ……"
+say "正在下载 ccdt $version ……" "Downloading ccdt $version…"
 curl -fsSL -o "$folder/$name" "$base/$name"
 curl -fsSL -o "$folder/SHA256SUMS" "$base/SHA256SUMS"
 expected=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1; exit }' "$folder/SHA256SUMS")
 if [ -z "$expected" ]; then
-  echo "$version 的校验清单里没有 ${name}。" >&2
+  say "$version 的校验清单里没有 ${name}。" "${name} isn’t in the checksums of $version." >&2
   exit 1
 fi
 if command -v sha256sum >/dev/null 2>&1; then
@@ -46,12 +57,12 @@ else
   actual=$(shasum -a 256 "$folder/$name" | cut -d ' ' -f 1)
 fi
 if [ "$actual" != "$expected" ]; then
-  echo "下载的 $name 校验不符，没有安装。" >&2
+  say "下载的 $name 校验不符，没有安装。" "The downloaded $name doesn’t match its checksum; nothing was installed." >&2
   exit 1
 fi
 if [ -n "${CCDT_DOWNLOAD_ONLY:-}" ]; then
   tar -xzf "$folder/$name" -C .
-  echo "已校验并解压到 $(pwd)/ccdt，没有安装。"
+  say "已校验并解压到 $(pwd)/ccdt，没有安装。" "Checked and unpacked into $(pwd)/ccdt; not installed."
   exit 0
 fi
 tar -xzf "$folder/$name" -C "$folder"
