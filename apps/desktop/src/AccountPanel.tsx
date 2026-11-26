@@ -74,6 +74,8 @@ export default function AccountPanel({
   const [copied, setCopied] = useState(false);
   const signedOut = state?.loggedIn === false;
   const usesToken = state?.authMethod === 'oauth_token';
+  // The plan's name as the service writes it (pro, max): shown capitalised, while the words around it stay as written.
+  const plan = state?.subscriptionType ?? account?.subscriptionType;
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [log, setLog] = useState<string | null>(null);
   useEffect(() => {
@@ -139,13 +141,15 @@ export default function AccountPanel({
                     : (state?.email ?? account?.email ?? 'Claude Code')}
               </h2>
               <p>
-                {signedOut
-                  ? t('account:login.noneDetail')
-                  : usesToken
-                    ? t('account:login.tokenDetail')
-                    : (state?.subscriptionType ??
-                      account?.subscriptionType ??
-                      t('account:login.notRead'))}
+                {signedOut ? (
+                  t('account:login.noneDetail')
+                ) : usesToken ? (
+                  t('account:login.tokenDetail')
+                ) : plan ? (
+                  <span className="account-plan">{plan}</span>
+                ) : (
+                  t('account:login.notRead')
+                )}
               </p>
             </div>
             {signedOut && !state.login && !tokenOpen && (
