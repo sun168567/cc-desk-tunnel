@@ -84,7 +84,9 @@ import {
   terminalSettings,
   TerminalTranscript,
 } from './terminal-transcript.ts';
+import { Plugins } from './plugins.ts';
 import { inOrder } from './question.ts';
+import { ServiceEvents } from './service-events.ts';
 import { simulate } from './simulation.ts';
 import { SessionStore } from './store.ts';
 import { Throttle } from './throttle.ts';
@@ -176,6 +178,9 @@ export type Run = {
   // Approvals and questions answered already: a second answer, from another window or computer, came late.
   answered: Set<string>;
   cancelReason?: Words;
+  // The service's own compaction of an idle session, as long as nobody sends a message into it: plugins hear nothing
+  // of it.
+  unasked?: boolean;
   // Output still arriving in pieces: sent on as it comes, recorded once it is whole.
   open?: Fragment;
   input?: NativeInput;
@@ -228,6 +233,8 @@ const INTERRUPTS = new Set(['\x1b', '\x03', '\x1b[27u', '\x1b[99;5u']);
 // go through, and the wait that ends its runs if it stays away.
 type Seat = {
   device: string;
+  // The computer as its latest connection told of it.
+  place: Device;
   peers: Set<Peer>;
   door?: Door;
   opening?: Promise<void>;
@@ -298,6 +305,19 @@ export function createProxyServer(options: ServerOptions) {
     options.files === false ? undefined : new FileService(options.dataDir, options.files);
   // The file panel's connections of each control connection, which end with it.
   const fileConnections = new Map<string, Set<WebSocket>>();
+  // The service's events, made from what its sessions record and handed to the plugins (see docs/plugins.md).
+  const plugins = new Plugins(store.directory, () => {
+    if (!closing) broadcast({ type: 'plugins', plugins: plugins.list() });
+  });
+  const events = new ServiceEvents(
+    (sessionId) => ({
+      session: store.get(sessionId).session,
+      metrics: store.lastMetrics(sessionId),
+      quota: quotas.current(),
+    }),
+    () => plugins.any(),
+    (event) => plugins.dispatch(event),
+  );
   const compactions = new IdleCompactions(store.directory, compactIdle);
   armCompactions();
   const graceMs = options.graceMs ?? (options.claude ? 300_000 : 0);
@@ -665,7 +685,8 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     settle(run);
-    record(run.sessionId, run.id, payload);
+    const event = record(run.sessionId, run.id, payload);
+    if (!run.unasked) events.observe(event);
     if (payload.type === 'native.title' && store.get(run.sessionId).session.autoTitle)
       broadcast({
         type: 'session.updated',
@@ -1105,12 +1126,13 @@ export function createProxyServer(options: ServerOptions) {
           rmSync(settingsPath, { force: true });
           rmSync(hooksPath, { force: true });
           rmSync(statusPath, { force: true });
-          store.append(current.sessionId, current.id, {
+          const closed = store.append(current.sessionId, current.id, {
             type: 'run.status',
             status: 'completed',
             surface: 'terminal',
             connectionId: peer.id,
           });
+          events.observe(closed);
           updated(current.sessionId);
           if (current.owner)
             send(current.owner, {
@@ -1198,13 +1220,14 @@ export function createProxyServer(options: ServerOptions) {
         }
         if (ended || !activity || activity === continued.activity) return;
         continued.activity = activity;
-        record(terminal.sessionId, terminal.id, {
+        const event = record(terminal.sessionId, terminal.id, {
           type: 'run.status',
           status: 'running',
           surface: 'terminal',
           activity,
           connectionId: continued.connectionId,
         });
+        events.observe(event);
         updated(terminal.sessionId);
       })
       .catch(() => {});
@@ -1493,6 +1516,7 @@ export function createProxyServer(options: ServerOptions) {
         throw new DomainError('run_finishing', phrase('service:run.stopping'));
       active.input.assertWritable();
       peer?.subscriptions.add(command.sessionId);
+      active.unasked = false;
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
       active.input.submit(
         command.requestId,
@@ -1513,6 +1537,7 @@ export function createProxyServer(options: ServerOptions) {
       sessionId: command.sessionId,
       device,
       connectionId: peer?.id ?? serverDevice.id,
+      unasked: !peer,
       controller: new AbortController(),
       toolFinished: false,
       approvals: new Map(),
@@ -1695,6 +1720,26 @@ export function createProxyServer(options: ServerOptions) {
         }
         return undefined;
       }
+      case 'plugin.enable':
+        plugins.enable(command.id, command.enabled);
+        return undefined;
+      case 'plugin.configure':
+        plugins.configure(command.id, command.values);
+        return undefined;
+      case 'plugin.try':
+        send(peer, {
+          type: 'plugin.log',
+          requestId: command.requestId,
+          runs: await plugins.attempt(command.id, command.event),
+        });
+        return undefined;
+      case 'plugin.log':
+        send(peer, {
+          type: 'plugin.log',
+          requestId: command.requestId,
+          runs: plugins.logOf(command.id, command.clear),
+        });
+        return undefined;
       case 'compaction.get':
         send(peer, {
           type: 'compaction.state',
@@ -1969,6 +2014,7 @@ export function createProxyServer(options: ServerOptions) {
         },
       });
       send(peer, devices());
+      send(peer, { type: 'plugins', plugins: plugins.list() });
       return true;
     }
     const auth = authSchema.safeParse(value);
@@ -2023,6 +2069,7 @@ export function createProxyServer(options: ServerOptions) {
       ...(files?.state && auth.data.tunnel && options.tunnel ? { files: files.state } : {}),
     });
     send(peer, devices());
+    send(peer, { type: 'plugins', plugins: plugins.list() });
     // Every connection that asks has an execution channel of its own, to the computer it comes from.
     if (auth.data.tunnel && options.tunnel) {
       peer.tunnel = new Tunnel(
@@ -2217,11 +2264,13 @@ export function createProxyServer(options: ServerOptions) {
   }
   // The computer's place here, made when the first of its connections says which computer it is.
   function enter(peer: Peer) {
-    const device = deviceOf(peer).id;
+    const place = deviceOf(peer);
+    const device = place.id;
     let seat = seats.get(device);
     if (!seat) {
-      seat = { device, peers: new Set() };
+      seat = { device, place, peers: new Set() };
       seats.set(device, seat);
+      events.device('DeviceOnline', place);
       if (options.tunnel) {
         seat.door = new Door(options.tunnel, store.directory, device);
         seat.opening = seat.door.start();
@@ -2230,6 +2279,7 @@ export function createProxyServer(options: ServerOptions) {
     }
     clearTimeout(seat.away);
     seat.away = undefined;
+    seat.place = place;
     seat.peers.add(peer);
     return seat;
   }
@@ -2247,6 +2297,7 @@ export function createProxyServer(options: ServerOptions) {
     clearTimeout(seat.away);
     if (seats.get(seat.device) !== seat) return;
     seats.delete(seat.device);
+    events.device('DeviceOffline', seat.place);
     for (const run of runs.values()) if (run.device === seat.device) cancel(run, reason);
     for (const terminal of terminals.values())
       if (terminal.device === seat.device) {
@@ -2499,6 +2550,7 @@ export function createProxyServer(options: ServerOptions) {
       await releases.refresh();
       await files?.start();
       updates?.start();
+      plugins.start();
       if (usageReceiver)
         options.claude!.environment = telemetryEnvironment(await usageReceiver.listen());
       await new Promise<void>((resolve, reject) => {
@@ -2514,6 +2566,7 @@ export function createProxyServer(options: ServerOptions) {
     },
     async close() {
       closing = true;
+      plugins.close();
       web.close();
       updates?.stop();
       login?.process.cancel();

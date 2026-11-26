@@ -138,6 +138,23 @@ const said: [ReturnType<typeof phrase>, string][] = [
     phrase('service:update.notFinished', { version: '0.3.20', reason: 'npm ERR!' }),
     `升级没有完成，仍在运行 ${'0.3.20'}：${'npm ERR!'}`,
   ],
+  // Plugins came with phrases: what they say is said here as it reads.
+  [
+    phrase('service:plugins.broken', { file: 'hooks/hooks.json', reason: 'Unexpected token' }),
+    'hooks/hooks.json 有误：Unexpected token',
+  ],
+  [phrase('service:plugins.unset', { titles: ['令牌', '地址'] }), '要先设置：「令牌」「地址」'],
+  [phrase('service:plugins.option.unknown', { key: 'colour' }), '这个插件没有设置项 colour。'],
+  [phrase('service:plugins.option.string', { title: '地址' }), '“地址”应是文字。'],
+  [phrase('service:plugins.option.number', { title: '次数' }), '“次数”应是数字。'],
+  [phrase('service:plugins.option.boolean', { title: '开关' }), '“开关”应是开或关。'],
+  [phrase('service:plugins.option.choice', { title: '格式' }), '“格式”只能选列出的值。'],
+  [
+    phrase('service:plugins.option.choiceOfString', { title: '次数' }),
+    '“次数”不是文字，不能列出可选的值。',
+  ],
+  [phrase('service:plugins.option.min', { title: '次数', min: 0 }), '“次数”不能小于 0。'],
+  [phrase('service:plugins.option.max', { title: '次数', max: 1000 }), '“次数”不能大于 1,000。'],
 ];
 
 test('in Chinese the service says what it said before it sent phrases', () => {
