@@ -242,4 +242,26 @@ grep -q "PROXY_IMAGE='ghcr.io/sun168567/cc-desk-tunnel:1.4.0'" "$TEMP/installed/
 test "$(grep -c '^pull ' "$MOCK_LOG")" = 1
 bash "$CC_DESK_TUNNEL_COMMAND" uninstall > /dev/null
 test ! -e "$CC_DESK_TUNNEL_COMMAND"
-echo 'PASS: image choice, failures, release upgrade, backup and restore, language, installer, management command.'
+
+# The questions of a first install, on a terminal (script(1) gives it one), in each language: every answer is
+# checked as it is given and asked for again; the answers make the configuration.
+for language in zh en; do
+  export PROXY_DEPLOY_CONFIG="$TEMP/setup-$language.env"
+  printf '%s\n' 'bad!host' setup.example.com 4 1 80 '' relative "$TEMP/setup-$language" short '' \
+    | CC_DESK_TUNNEL_LANG=$language script -qec "bash '$DEPLOYED/deploy/manage.sh' setup" /dev/null > "$TEMP/setup.log"
+  if [[ "$language" = zh ]]; then
+    for said in '“bad!host”不是 IPv4 地址或域名' '请输入 1、2 或 3。' '端口应在 1024 到 65535 之间。' '请填写一个专用的绝对路径' \
+      '凭据需要 24 到 512 位' 'CC Desk Tunnel 部署汇总'; do grep -qF "$said" "$TEMP/setup.log"; done
+  else
+    for said in '“bad!host” is not an IPv4 address' 'Enter 1, 2 or 3.' 'The port must be between 1024 and 65535.' \
+      'Enter a dedicated absolute path' 'The token needs 24 to 512 characters' 'CC Desk Tunnel deployment summary'; do
+      grep -qF "$said" "$TEMP/setup.log"
+    done
+    ! chinese "$TEMP/setup.log"
+  fi
+  grep -qx "CONNECTION_URL='wss://setup.example.com:8787/ws'" "$PROXY_DEPLOY_CONFIG"
+  grep -qx "MODE='fingerprint'" "$PROXY_DEPLOY_CONFIG"
+  grep -qx "DATA_DIR='$TEMP/setup-$language'" "$PROXY_DEPLOY_CONFIG"
+  grep -qx "SCRIPT_LANG='$language'" "$PROXY_DEPLOY_CONFIG"
+done
+echo 'PASS: image choice, failures, release upgrade, backup and restore, language, installer, management command, setup questions.'
