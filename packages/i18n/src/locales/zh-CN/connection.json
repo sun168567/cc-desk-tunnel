@@ -145,6 +145,11 @@
     "failed": "没能从 GitHub 读到这一版的说明，可以到发布页查看。",
     "loading": "正在读取…",
     "help": "新功能怎么用",
-    "release": "在 GitHub 发布页查看"
+    "release": "在 GitHub 发布页查看",
+    "alert": {
+      "note": "提示",
+      "important": "重要",
+      "warning": "注意"
+    }
   }
 }

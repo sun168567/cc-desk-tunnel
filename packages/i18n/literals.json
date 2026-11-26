@@ -1,8 +1,5 @@
 {
-  "pending": {
-    "apps/desktop/src/CcdtDialog.tsx": 1,
-    "apps/desktop/src/notes.ts": 5
-  },
+  "pending": {},
   "kept": {
     "apps/server/src/simulation.ts": {
       "count": 36,
@@ -31,6 +28,10 @@
     "apps/cli/src/config.mjs": {
       "count": 1,
       "reason": "主连接 is the name earlier desktop versions gave the first connection: compared when reading its profile, not shown."
+    },
+    "apps/desktop/src/CcdtDialog.tsx": {
+      "count": 1,
+      "reason": "The anchor of a heading of the README, which is written in Chinese: an address, not text."
     }
   }
 }

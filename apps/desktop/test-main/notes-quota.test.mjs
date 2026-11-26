@@ -67,7 +67,10 @@ test('the quota beside the message box is the five hours and the fullest week', 
 
 test("GitHub's alerts in the notes open with their label in the program", () => {
   assert.equal(
-    alertLabels('概括\n\n> [!WARNING]\n> **版本变化**：从 A 到 B。\n\n> [!NOTE]\n> 可以暂缓。\n'),
+    alertLabels(
+      t,
+      '概括\n\n> [!WARNING]\n> **版本变化**：从 A 到 B。\n\n> [!NOTE]\n> 可以暂缓。\n',
+    ),
     '概括\n\n> **注意** · **版本变化**：从 A 到 B。\n\n> **提示** · 可以暂缓。\n',
   );
 });

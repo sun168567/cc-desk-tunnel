@@ -49,7 +49,7 @@ export default function ReleaseNotes({
         }}
       >
         {text ? (
-          <RichText text={alertLabels(text)} />
+          <RichText text={alertLabels(t, text)} />
         ) : (
           <p className="muted">
             {failed ? t('connection:notes.failed') : t('connection:notes.loading')}

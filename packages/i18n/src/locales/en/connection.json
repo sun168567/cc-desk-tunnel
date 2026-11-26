@@ -155,6 +155,11 @@
     "failed": "Couldn’t load this version’s notes from GitHub; see the release page.",
     "loading": "Loading…",
     "help": "How to use what’s new",
-    "release": "View on GitHub"
+    "release": "View on GitHub",
+    "alert": {
+      "note": "Note",
+      "important": "Important",
+      "warning": "Warning"
+    }
   }
 }

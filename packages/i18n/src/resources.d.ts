@@ -698,6 +698,11 @@ export type Resources = {
       loading: '正在读取…';
       help: '新功能怎么用';
       release: '在 GitHub 发布页查看';
+      alert: {
+        note: '提示';
+        important: '重要';
+        warning: '注意';
+      };
     };
   };
   desktop: {
@@ -4118,6 +4123,9 @@ export type Messages = {
   'connection:notes.loading': Record<string, never>;
   'connection:notes.help': Record<string, never>;
   'connection:notes.release': Record<string, never>;
+  'connection:notes.alert.note': Record<string, never>;
+  'connection:notes.alert.important': Record<string, never>;
+  'connection:notes.alert.warning': Record<string, never>;
   'desktop:dialog.addProject': Record<string, never>;
   'desktop:dialog.addFiles': Record<string, never>;
   'desktop:dialog.export': Record<string, never>;
