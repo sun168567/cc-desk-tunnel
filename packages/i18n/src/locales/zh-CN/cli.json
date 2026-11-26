@@ -151,7 +151,11 @@
     "onOffDefault": "{{title}}只能是 on 或 off，或 default。",
     "secondsRange": "{{title}}要填 {{min}}–{{max}} 之间的整数秒，或 default。",
     "options": "{{title}}可选：{{options}}。",
-    "connectFirst": "改服务端的设置要先连上服务端。"
+    "connectFirst": "改服务端的设置要先连上服务端。",
+    "language": {
+      "title": "ccdt 的语言",
+      "detail": "ccdt 输出的语言；跟随系统时按 LANG 等环境变量"
+    }
   },
   "sessions": {
     "device": "（{{name}}）",

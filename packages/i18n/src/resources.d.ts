@@ -344,6 +344,10 @@ export type Resources = {
       secondsRange: '{{title}}要填 {{min}}–{{max}} 之间的整数秒，或 default。';
       options: '{{title}}可选：{{options}}。';
       connectFirst: '改服务端的设置要先连上服务端。';
+      language: {
+        title: 'ccdt 的语言';
+        detail: 'ccdt 输出的语言；跟随系统时按 LANG 等环境变量';
+      };
     };
     sessions: {
       device: '（{{name}}）';
@@ -2756,6 +2760,8 @@ export type Messages = {
   'cli:settings.secondsRange': { title: Value; min: Value; max: Value };
   'cli:settings.options': { title: Value; options: Value };
   'cli:settings.connectFirst': Record<string, never>;
+  'cli:settings.language.title': Record<string, never>;
+  'cli:settings.language.detail': Record<string, never>;
   'cli:sessions.device': { name: Value };
   'cli:sessions.none': Record<string, never>;
   'cli:sessions.noneHere': Record<string, never>;

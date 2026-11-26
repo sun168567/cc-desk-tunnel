@@ -528,6 +528,22 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
   await save(named('connection.connect'), null, { config, service });
   await save(named('connection.ready'), 90, { config, service });
   assert.deepEqual(JSON.parse(readFileSync(config.path, 'utf8')).waits, { ready: 90 });
+  // ccdt's language is its own too, the system's until one is chosen, and is taken at once.
+  assert.equal(shown(named('ccdt.language')), '跟随系统');
+  assert.deepEqual(choices(named('ccdt.language')), [
+    [null, '跟随系统'],
+    ['zh-CN', '简体中文'],
+    ['en', 'English'],
+  ]);
+  assert.equal(parse(named('ccdt.language'), 'EN'), 'en');
+  assert.equal(parse(named('ccdt.language'), 'default'), null);
+  await save(named('ccdt.language'), 'en', { config, service });
+  assert.equal(new Config(config.paths).language, 'en');
+  assert.equal(shown(entries({ language: 'en' })[0]), 'English');
+  assert.equal(entries()[0].title, 'ccdt language');
+  await save(named('ccdt.language'), null, { config, service });
+  assert.equal(JSON.parse(readFileSync(config.path, 'utf8')).language, undefined);
+  assert.equal(entries()[0].title, 'ccdt 的语言');
   await save(named('compaction.afterMinutes'), 45, { config, service });
   await save(named('web.enabled'), false, { config, service });
   await save(named('cli.autoCompactEnabled'), null, { config, service });
@@ -541,7 +557,7 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
     entries({})
       .filter((entry) => entry.kind !== 'pending')
       .map((entry) => entry.name),
-    ['connection.connect', 'connection.ssh', 'connection.ready'],
+    ['ccdt.language', 'connection.connect', 'connection.ssh', 'connection.ready'],
   );
 });
 

@@ -8,6 +8,8 @@ export const systemLanguages = (env = process.env) =>
     (tag) => tag && !/^(C|POSIX)(\.|$)/i.test(tag),
   );
 followLanguage('system', systemLanguages());
+// The language ccdt's settings choose: one of the program's, else (none chosen) the system's.
+export const useLanguage = (choice) => followLanguage(choice ?? 'system', systemLanguages());
 // What a failure says, a phrase of the bridge's said in ccdt's language.
 export { failureText, followLanguage, t };
 // What the service said, as text: a phrase in ccdt's language, or the text of a version before phrases.

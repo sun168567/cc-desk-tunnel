@@ -6,7 +6,8 @@ import {
   waitFields,
   waitRange,
 } from '../../desktop/src/setting-fields.ts';
-import { t } from './i18n.mjs';
+import { languageNames, languages } from '@cc-desk-tunnel/i18n';
+import { t, useLanguage } from './i18n.mjs';
 
 // The settings ccdt changes, with the desktop client's words and choices: how this computer connects, which ccdt
 // keeps for itself, and the service's own and Claude Code's, which the service keeps for every client. Each has a
@@ -40,17 +41,32 @@ export async function readRemote(service) {
   return { compaction, cli, web, here };
 }
 
-// Every setting with its current value. `waits` are ccdt's own, in seconds, a missing one taking the default.
-export function entries({ waits = {}, compaction, cli, web, here } = {}) {
-  const rows = waitFields(t).map(({ step, title, detail }) => ({
-    name: `connection.${step}`,
-    group: t('cli:settings.here'),
-    title,
-    detail: t('cli:settings.waitDetail', { detail, seconds: connectionWaits[step] }),
-    kind: 'seconds',
-    value: waits[step] ?? null,
-    fallback: connectionWaits[step],
-  }));
+// Every setting with its current value. `waits` and `language` are ccdt's own: the waits in seconds, a missing one
+// taking the default, and the language it writes in, none for the system's. A language is named in itself, as the
+// desktop client's settings name it.
+export function entries({ waits = {}, language, compaction, cli, web, here } = {}) {
+  const rows = [
+    {
+      name: 'ccdt.language',
+      group: t('cli:settings.here'),
+      title: t('cli:settings.language.title'),
+      detail: t('cli:settings.language.detail'),
+      kind: 'choice',
+      value: language ?? null,
+      unset: t('common:language.system'),
+      options: languages.map((name) => [name, languageNames[name]]),
+      read: String,
+    },
+    ...waitFields(t).map(({ step, title, detail }) => ({
+      name: `connection.${step}`,
+      group: t('cli:settings.here'),
+      title,
+      detail: t('cli:settings.waitDetail', { detail, seconds: connectionWaits[step] }),
+      kind: 'seconds',
+      value: waits[step] ?? null,
+      fallback: connectionWaits[step],
+    })),
+  ];
   // On Windows: Git Bash is listed whether or not this computer has it, and saved once it does.
   if (here && (here.platform ?? 'win32') === 'win32') {
     const has = (shell) => !!here.shells?.includes(shell);
@@ -236,6 +252,12 @@ export async function save(entry, value, { config, service }) {
     entry.name.slice(0, entry.name.indexOf('.')),
     entry.name.slice(entry.name.indexOf('.') + 1),
   ];
+  if (scope === 'ccdt') {
+    config.language = value ?? undefined;
+    config.save();
+    useLanguage(config.language);
+    return;
+  }
   if (scope === 'connection') {
     const { [key]: _left, ...rest } = config.waits;
     config.waits = value === null ? rest : { ...rest, [key]: value };

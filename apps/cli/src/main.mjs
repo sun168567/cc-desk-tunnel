@@ -16,7 +16,7 @@ import { markOnline, onlineAt, stayOnline } from './online.mjs';
 import { FIRST_UPGRADABLE, download, install } from './upgrade.mjs';
 import { EXIT } from './agent.mjs';
 import { serveAcp } from './acp.mjs';
-import { failureText, t, wordsOf } from './i18n.mjs';
+import { failureText, t, useLanguage, wordsOf } from './i18n.mjs';
 import {
   answer,
   approve,
@@ -420,13 +420,16 @@ async function check(config, values) {
   return 0;
 }
 
+// The settings ccdt keeps in its own configuration.
+const ownSetting = (name) => /^(ccdt|connection)\./.test(name ?? '');
+
 // `ccdt config`: every setting with its value; with a name, that one; with a value too, sets it. In a terminal and
 // without a name the list is gone through with the arrow keys, each value chosen or typed there.
 async function configure(config, values, [name, ...words]) {
   let service;
   let remote = {};
-  // This computer's own settings need no service; the others are read from it.
-  if (!name?.startsWith('connection.'))
+  // ccdt's own settings need no service; the others are read from it.
+  if (!ownSetting(name))
     try {
       // Settings are no reason to log in: without a service only this computer's are shown.
       if (!config.servers.length) throw new Error(t('cli:config.notSignedIn'));
@@ -436,7 +439,7 @@ async function configure(config, values, [name, ...words]) {
       if (name) throw error;
       say(dim(t('cli:config.localOnly', { reason: failureText(error) })));
     }
-  const list = () => entries({ waits: config.waits, ...remote });
+  const list = () => entries({ waits: config.waits, language: config.language, ...remote });
   try {
     if (name) {
       const entry = list().find((item) => item.name === name);
@@ -447,7 +450,9 @@ async function configure(config, values, [name, ...words]) {
       }
       const value = parse(entry, words.join(' '));
       await save(entry, value, { config, service });
-      say(t('cli:config.value', { title: entry.title, value: shown({ ...entry, value }) }));
+      // Read again, in the language it may have just chosen.
+      const saved = list().find((item) => item.name === name);
+      say(t('cli:config.value', { title: saved.title, value: shown({ ...saved, value }) }));
       return 0;
     }
     if (!process.stdin.isTTY) {
@@ -507,7 +512,7 @@ async function configure(config, values, [name, ...words]) {
       }
       try {
         await save(entry, value, { config, service });
-        if (service && !entry.name.startsWith('connection.')) remote = await readRemote(service);
+        if (service && !ownSetting(entry.name)) remote = await readRemote(service);
       } catch (error) {
         say(t('cli:config.notSaved', { reason: failureText(error) }));
       }
@@ -809,6 +814,8 @@ async function commandFor(context, values, command, rest) {
 }
 
 export async function main(argv) {
+  const config = new Config();
+  useLanguage(config.language);
   let parsed;
   try {
     parsed = parseArgs({
@@ -849,7 +856,6 @@ export async function main(argv) {
   }
   const { values, positionals } = parsed;
   const [command, ...rest] = positionals;
-  const config = new Config();
   let service;
   try {
     if (values.help) return (say(values.print ? agentHelp() : help()), 0);
