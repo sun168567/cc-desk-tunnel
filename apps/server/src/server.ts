@@ -615,10 +615,18 @@ export function createProxyServer(options: ServerOptions) {
     broadcast({ type: 'session.updated', session: store.get(sessionId).session });
   }
 
-  // Stores an event and sends it to the session's subscribers.
-  function record(sessionId: string, runId: string, payload: EventPayload, createdAt?: string) {
-    const event = store.append(sessionId, runId, payload, createdAt);
-    broadcast({ type: 'session.event', event }, sessionId);
+  // Every record of a session is written here. It goes to the windows that watch the session, unless `quiet`, and to
+  // the service's events, which the plugins hear (docs/plugins.md), unless it is no news (`untold`): what is read back
+  // from Claude Code's own files, and what a run records that the service began by itself, nobody asking.
+  function record(
+    sessionId: string,
+    runId: string,
+    payload: EventPayload,
+    { at, quiet = false, untold = false }: { at?: string; quiet?: boolean; untold?: boolean } = {},
+  ) {
+    const event = store.append(sessionId, runId, payload, at);
+    if (!quiet) broadcast({ type: 'session.event', event }, sessionId);
+    if (!untold) events.observe(event);
     if (payload.type === 'native.metrics' && payload.cacheTtl)
       compactions.arm(sessionId, Date.parse(event.createdAt), payload);
     else if (payload.type === 'message.user' || payload.type === 'native.compact')
@@ -662,7 +670,7 @@ export function createProxyServer(options: ServerOptions) {
     const open = run.open;
     if (!open) return;
     run.open = undefined;
-    record(run.sessionId, run.id, open);
+    record(run.sessionId, run.id, open, { untold: run.unasked });
   }
   function emit(run: Run, payload: EventPayload) {
     // A background task's word of itself is for whoever is watching now.
@@ -685,8 +693,7 @@ export function createProxyServer(options: ServerOptions) {
       return;
     }
     settle(run);
-    const event = record(run.sessionId, run.id, payload);
-    if (!run.unasked) events.observe(event);
+    record(run.sessionId, run.id, payload, { untold: run.unasked });
     if (payload.type === 'native.title' && store.get(run.sessionId).session.autoTitle)
       broadcast({
         type: 'session.updated',
@@ -982,7 +989,7 @@ export function createProxyServer(options: ServerOptions) {
           resume || read.type !== 'native.metrics'
             ? read
             : { ...read, context: last?.context ?? null, usage: last?.usage ?? null };
-        const event = record(command.sessionId, command.requestId, payload);
+        const event = record(command.sessionId, command.requestId, payload, { untold: true });
         if (!peer.subscriptions.has(command.sessionId))
           send(peer, { type: 'session.event', event });
       }
@@ -1126,13 +1133,13 @@ export function createProxyServer(options: ServerOptions) {
           rmSync(settingsPath, { force: true });
           rmSync(hooksPath, { force: true });
           rmSync(statusPath, { force: true });
-          const closed = store.append(current.sessionId, current.id, {
-            type: 'run.status',
-            status: 'completed',
-            surface: 'terminal',
-            connectionId: peer.id,
-          });
-          events.observe(closed);
+          // The windows hear of it as the session is updated.
+          record(
+            current.sessionId,
+            current.id,
+            { type: 'run.status', status: 'completed', surface: 'terminal', connectionId: peer.id },
+            { quiet: true },
+          );
           updated(current.sessionId);
           if (current.owner)
             send(current.owner, {
@@ -1146,13 +1153,18 @@ export function createProxyServer(options: ServerOptions) {
           if (compactions.settings.enabled) armCompaction(current.sessionId);
         },
       );
-      store.append(command.sessionId, current.id, {
-        type: 'run.status',
-        status: 'running',
-        surface: 'terminal',
-        activity: current.continued.activity,
-        connectionId: peer.id,
-      });
+      record(
+        command.sessionId,
+        current.id,
+        {
+          type: 'run.status',
+          status: 'running',
+          surface: 'terminal',
+          activity: current.continued.activity,
+          connectionId: peer.id,
+        },
+        { quiet: true },
+      );
       updated(command.sessionId);
       watchFile(current.continued.hooksPath, { interval: 500 }, () => void heardTerminal(current));
       watchFile(current.continued.statusPath, { interval: 1000 }, () => terminalStatus(current));
@@ -1220,14 +1232,13 @@ export function createProxyServer(options: ServerOptions) {
         }
         if (ended || !activity || activity === continued.activity) return;
         continued.activity = activity;
-        const event = record(terminal.sessionId, terminal.id, {
+        record(terminal.sessionId, terminal.id, {
           type: 'run.status',
           status: 'running',
           surface: 'terminal',
           activity,
           connectionId: continued.connectionId,
         });
-        events.observe(event);
         updated(terminal.sessionId);
       })
       .catch(() => {});
@@ -1271,7 +1282,8 @@ export function createProxyServer(options: ServerOptions) {
     const now = new Date().toISOString();
     const time = at && !Number.isNaN(Date.parse(at)) ? new Date(at).toISOString() : now;
     continued.at = time < continued.at ? continued.at : time > now ? now : time;
-    record(terminal.sessionId, terminal.id, payload, continued.at);
+    // What the terminal's CLI wrote in its own record is read back: the terminal's waits are told as they happen.
+    record(terminal.sessionId, terminal.id, payload, { at: continued.at, untold: true });
   }
   // How full the context is, as the terminal's CLI last showed it in its status line.
   function terminalContext(terminal: Terminal) {
