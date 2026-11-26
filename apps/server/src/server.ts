@@ -751,23 +751,24 @@ export function createProxyServer(options: ServerOptions) {
     try {
       const { session } = store.get(run.sessionId);
       // The session's `ssh` is there whether or not its computer is (see `sessionSsh`): a compaction, which runs no
-      // command, reads the same prompt cache while it is away.
+      // command, reads the same prompt cache while it is away. A session the service owns has no computer of its own
+      // and reaches the user's computers by the same configuration.
       const door = seats.get(run.device)?.door?.ssh;
-      const ssh =
-        run.device === serverDevice.id
-          ? undefined
-          : door
-            ? sessionSsh(store.directory, run.sessionId, door, run.device)
-            : {
-                configPath: join(sessionSshPath(store.directory, run.sessionId), 'config'),
-                bin: join(sessionSshPath(store.directory, run.sessionId), 'bin'),
-              };
+      const own = run.device !== serverDevice.id;
+      const ssh = !own
+        ? sessionSsh(store.directory, run.sessionId, undefined)
+        : door
+          ? sessionSsh(store.directory, run.sessionId, door, run.device)
+          : {
+              configPath: join(sessionSshPath(store.directory, run.sessionId), 'config'),
+              bin: join(sessionSshPath(store.directory, run.sessionId), 'bin'),
+            };
       const said = store.promptValues(run.sessionId);
       const status = await runClaude(options.claude!, {
         sessionId: run.sessionId,
         nativeRoot: session.nativeRoot ?? session.id,
         projectPath: said.projectPath,
-        execution: said.execution,
+        ...(own ? { execution: said.execution } : {}),
         permissionMode: session.permissionMode,
         model: session.model,
         effort: session.effort,
@@ -1042,15 +1043,15 @@ export function createProxyServer(options: ServerOptions) {
       if (closing || peer.socket.readyState !== WebSocket.OPEN)
         throw new Error('Connection closed');
       completeOnboarding();
-      const reach = ssh
-        ? sessionSsh(store.directory, session.id, ssh, session.device?.id)
-        : undefined;
+      const reach = sessionSsh(store.directory, session.id, ssh, session.device?.id);
       current.process = new NativeTerminal(
         options.claude.executable,
-        terminalArguments(options.claude, session, reach, {
+        terminalArguments(options.claude, session, {
           resume,
           settingsPath: current.continued.settingsPath,
-          execution: store.execution(session.device?.id, platformOf(session.device)),
+          ...(device !== serverDevice.id
+            ? { execution: store.execution(session.device?.id, platformOf(session.device)) }
+            : {}),
         }),
         {
           cwd,
@@ -1493,7 +1494,10 @@ export function createProxyServer(options: ServerOptions) {
       active.input.assertWritable();
       peer?.subscriptions.add(command.sessionId);
       emit(active, { type: 'message.user', messageId: command.requestId, text, scenario });
-      active.input.submit(command.requestId, store.notice(command.sessionId) + text);
+      active.input.submit(
+        command.requestId,
+        store.notice(command.sessionId, serverDevice.id) + text,
+      );
       // A message sent while Claude waits on its question is the user's answer in the chat instead.
       for (const approvalId of [...active.questions])
         answerApproval(active, approvalId, false, undefined, 'replied_in_chat', peer?.id);
@@ -1530,7 +1534,7 @@ export function createProxyServer(options: ServerOptions) {
     emit(run, { type: 'run.status', status: 'running', connectionId: run.connectionId });
     // What Claude's system prompt no longer has right is told to it with this message; the transcript shows the
     // user's own text.
-    run.input?.submit(command.requestId, store.notice(command.sessionId) + text);
+    run.input?.submit(command.requestId, store.notice(command.sessionId, serverDevice.id) + text);
     track(
       options.claude
         ? native(run)

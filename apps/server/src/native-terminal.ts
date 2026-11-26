@@ -2,7 +2,8 @@ import { spawn as spawnPty } from 'node-pty';
 import type { IPty } from 'node-pty';
 import type { Session, TerminalActivity } from '@cc-desk-tunnel/protocol';
 import type { ClaudeOptions } from './claude.ts';
-import { remotePrompt, sshPath } from './claude.ts';
+import { sshPath } from './claude.ts';
+import { sessionPrompt } from './session-prompt.ts';
 import type { Execution } from './device-terms.ts';
 import type { SshConnection } from './tunnel.ts';
 import { readFileSync } from 'node:fs';
@@ -59,21 +60,19 @@ export type TerminalSpawner = (
 export function terminalArguments(
   options: ClaudeOptions,
   session: Session,
-  ssh: SshConnection | undefined,
   {
     resume,
     settingsPath,
     execution,
-  }: { resume: boolean; settingsPath: string; execution: Execution },
+  }: { resume: boolean; settingsPath: string; execution?: Execution },
 ) {
   return [
     resume ? '--resume' : '--session-id',
     session.id,
     '--permission-mode',
     session.permissionMode === 'default' ? 'manual' : session.permissionMode,
-    ...(ssh
-      ? ['--append-system-prompt', remotePrompt(session.projectPath, session.id, execution)]
-      : []),
+    '--append-system-prompt',
+    sessionPrompt(session.projectPath, session.id, execution),
     ...((session.model ?? options.model) ? ['--model', session.model ?? options.model!] : []),
     ...(session.effort ? ['--effort', session.effort] : []),
     '--settings',

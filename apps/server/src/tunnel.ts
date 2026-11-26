@@ -45,11 +45,12 @@ export function sessionSshPath(dataDir: string, sessionId: string) {
 }
 //
 // The user's other computers online are there too, by the host names `devices` lists (see `writeDevices`): the
-// script names the session's own computer among them.
+// script names the session's own computer among them. A session the service owns has no computer of its own, `ssh`
+// none, and reaches the user's computers all the same.
 export function sessionSsh(
   dataDir: string,
   sessionId: string,
-  ssh: SshConnection,
+  ssh: SshConnection | undefined,
   device?: string,
 ): SshConnection {
   const directory = sessionSshPath(dataDir, sessionId);
@@ -65,10 +66,14 @@ export function sessionSsh(
   };
   write(
     configPath,
-    `Include ${JSON.stringify(ssh.configPath)}\nInclude ${JSON.stringify(join(dataDir, 'devices', 'hosts'))}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
+    `${ssh ? `Include ${JSON.stringify(ssh.configPath)}\n` : ''}Include ${JSON.stringify(join(dataDir, 'devices', 'hosts'))}\nHost * !device !device-*\n  Include ~/.ssh/config /etc/ssh/ssh_config\n`,
     0o600,
   );
-  write(join(bin, 'devices'), devicesScript(join(dataDir, 'devices', 'list'), device), 0o700);
+  write(
+    join(bin, 'devices'),
+    devicesScript(join(dataDir, 'devices', 'list'), ssh ? device : undefined),
+    0o700,
+  );
   const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   for (const name of ['ssh', 'scp', 'sftp'])
     write(

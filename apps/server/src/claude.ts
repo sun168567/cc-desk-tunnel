@@ -10,8 +10,8 @@ import type {
   PlanMode,
 } from '@cc-desk-tunnel/protocol';
 import { phrase } from '@cc-desk-tunnel/i18n';
-import { deviceTerms } from './device-terms.ts';
 import { said } from './errors.ts';
+import { sessionPrompt } from './session-prompt.ts';
 import type { Execution } from './device-terms.ts';
 import { ClaudeStream } from './claude-stream.ts';
 import type { SshConnection } from './tunnel.ts';
@@ -57,8 +57,8 @@ export type ClaudeRun = {
   // The session whose Linux directory holds this session's native history; itself unless it is a fork.
   nativeRoot: string;
   projectPath: string;
-  // How commands run on the device, as the session's prompt has it.
-  execution: Execution;
+  // How commands run on the session's own computer, as its prompt has it; none for a session the service owns.
+  execution?: Execution;
   permissionMode: PermissionMode;
   model?: string | null;
   effort?: Effort | null;
@@ -79,7 +79,7 @@ export type ClaudeRun = {
     unanswered?: Unanswered;
     plan?: PlanDecision;
   }>;
-  // Absent only for a session owned by the service itself.
+  // The session's `ssh`, `scp` and `sftp`, which reach the user's computers (see `sessionSsh`).
   ssh?: SshConnection;
   // Told when Claude has finished its turn and the run goes on only for background tasks, and when it resumes.
   waiting: (background: boolean) => void;
@@ -159,23 +159,6 @@ export function sshPath(
   path = process.env.PATH ?? '',
 ): Record<string, string> {
   return ssh?.bin ? { PATH: path ? `${ssh.bin}${delimiter}${path}` : ssh.bin } : {};
-}
-
-// `sessionId` is the proxy's name for the session, which a scheduled task needs to continue it.
-export function remotePrompt(projectPath: string, sessionId: string, execution: Execution) {
-  const terms = deviceTerms(execution, projectPath);
-  return [
-    "The user's projects are on their own computer, the device, NOT on this Linux host, which only runs Claude Code and has no copy of them.",
-    `Device: ${terms.name}. Project directory: ${JSON.stringify(projectPath)}.`,
-    "Do all project reads, edits, searches and commands on the device with your native Bash tool over SSH: here ssh, scp and sftp know the device by the host names below, and reach any other host as they otherwise would. Do not use this host's Read/Edit tools on project files, and do not read or copy the keys these hosts sign in with.",
-    terms.script,
-    terms.command,
-    "device always means this session's own computer. Only when the user refers to another of their computers, run devices: it lists those online, each with host names used as device's are, the one ending in a shell's name taking a script in that shell. Do there only what the user asked, and confirm before changing anything.",
-    'If the device is unreachable, say so; never fall back to this host. After an interruption report results as unknown; do not repeat side effects on your own.',
-    'To look at a picture on the device, such as a pasted screenshot or an attached image, copy that one file with scp to a temporary file on this host, open it with the Read tool, and delete the copy afterwards. That is the only use of Read on this host for a file from the device.',
-    'Commands may run concurrently. One that blocks holds the turn until its Bash timeout: size the timeout to the work, and run anything long-lived, such as a dev server or watcher, as a background Bash task. Do not count on a process outliving the ssh command that started it, nor on ending the command to stop it: keep the command running for as long as the process is needed, and stop the process itself on the device.',
-    `Scheduled and recurring prompts are sent by the desktop client, not by cron on this host: edit the UTF-8 JSON file whose path is in the device's CC_DESK_TUNNEL_SCHEDULES environment variable (the file explains its own format; changes apply within seconds). Where that variable is empty the device is connected by ccdt, which sends none: say so instead of making a schedule elsewhere. This session's ID for a task that continues it: ${sessionId}.`,
-  ].join('\n');
 }
 
 // The Linux working directory of a session's project, which its sessions share as they would the project's own
@@ -260,9 +243,7 @@ export async function runClaude(
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          ...(run.ssh
-            ? { append: remotePrompt(run.projectPath, run.sessionId, run.execution) }
-            : {}),
+          append: sessionPrompt(run.projectPath, run.sessionId, run.execution),
           snapshot: false,
         },
         ...(run.resume ? { resume: run.sessionId } : { sessionId: run.sessionId }),
