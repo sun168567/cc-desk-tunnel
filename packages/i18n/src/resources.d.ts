@@ -1271,7 +1271,7 @@ export type Resources = {
           ];
           tip1: {
             title: '右键会话';
-            text: '置顶、重命名、导出 Markdown、用 `ccdt` 打开，都在会话的右键菜单（或 ⋯）里。';
+            text: '置顶、重命名、导出 Markdown、用 `ccdt` 打开，都在会话的右键菜单（或 ⋯）里。导出时可以只要问答，或只要最近几轮，长会话会快很多。';
           };
         };
         news: {
@@ -2942,6 +2942,29 @@ export type Resources = {
       tool: '工具 {{name}}';
       you: '你';
       untitled: '会话';
+    };
+    exportDialog: {
+      title: '导出 Markdown';
+      content: '内容';
+      answers: {
+        label: '只有问答';
+        detail: '你的问题和 Claude 的最终回答';
+      };
+      said: {
+        label: '问答和中途插话';
+        detail: '再加上 Claude 工作时你插进去的话';
+      };
+      all: {
+        label: '全部步骤';
+        detail: '再加上思考、工具调用及其输入输出';
+      };
+      range: '范围';
+      every: '全部';
+      recent: '最近';
+      turns: '轮数';
+      turnsUnit: '轮';
+      save: '导出';
+      reading: '正在读取…';
     };
     simulation: {
       scenario: '场景';
@@ -5649,6 +5672,21 @@ export type Messages = {
   'session:export.tool': { name: Value };
   'session:export.you': Record<string, never>;
   'session:export.untitled': Record<string, never>;
+  'session:exportDialog.title': Record<string, never>;
+  'session:exportDialog.content': Record<string, never>;
+  'session:exportDialog.answers.label': Record<string, never>;
+  'session:exportDialog.answers.detail': Record<string, never>;
+  'session:exportDialog.said.label': Record<string, never>;
+  'session:exportDialog.said.detail': Record<string, never>;
+  'session:exportDialog.all.label': Record<string, never>;
+  'session:exportDialog.all.detail': Record<string, never>;
+  'session:exportDialog.range': Record<string, never>;
+  'session:exportDialog.every': Record<string, never>;
+  'session:exportDialog.recent': Record<string, never>;
+  'session:exportDialog.turns': Record<string, never>;
+  'session:exportDialog.turnsUnit': Record<string, never>;
+  'session:exportDialog.save': Record<string, never>;
+  'session:exportDialog.reading': Record<string, never>;
   'session:simulation.scenario': Record<string, never>;
   'session:simulation.label': Record<string, never>;
   'session:simulation.chat': Record<string, never>;

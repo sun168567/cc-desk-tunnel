@@ -3276,6 +3276,30 @@ button.quota-period:hover {
   font-size: 12px;
   color: var(--muted);
 }
+/* The choices of a Markdown export (ExportDialog.tsx). */
+.export-dialog .export-field {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.export-dialog .export-field > span {
+  font-weight: 600;
+}
+.export-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.export-range label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.export-range input {
+  width: 72px;
+}
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;

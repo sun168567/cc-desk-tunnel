@@ -400,6 +400,54 @@ test('earlier pages prepend in one batch while preserving the newest reconnect c
   );
 });
 
+test('earlier pages read for an export come page by page and are shown nowhere', async (t) => {
+  const { client, socket, sessions, snapshot } = fixture(t);
+  const session = sessions[0];
+  client.select(session.id);
+  snapshot(session, [event(session.id, 100)], {
+    firstSequence: 51,
+    lastSequence: 100,
+    hasEarlier: true,
+  });
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const pages = client.earlierPages(session.id, 51);
+  const first = pages.next();
+  await tick();
+  assert.equal(socket.sent.at(-1).type, 'session.history');
+  assert.equal(socket.sent.at(-1).beforeSequence, 51);
+  snapshot(session, [event(session.id, 40), event(session.id, 50)], {
+    mode: 'prepend',
+    firstSequence: 40,
+    lastSequence: 50,
+    hasEarlier: true,
+  });
+  assert.deepEqual(
+    (await first).value.map((read) => read.sequence),
+    [40, 50],
+  );
+  const second = pages.next();
+  await tick();
+  assert.equal(socket.sent.at(-1).beforeSequence, 40);
+  snapshot(session, [event(session.id, 1)], {
+    mode: 'prepend',
+    firstSequence: 1,
+    lastSequence: 1,
+    hasEarlier: false,
+  });
+  assert.deepEqual(
+    (await second).value.map((read) => read.sequence),
+    [1],
+  );
+  assert.equal((await pages.next()).done, true);
+  // The conversation shown is as it was.
+  assert.deepEqual(
+    client.state.events[session.id].map((shown) => shown.sequence),
+    [100],
+  );
+  assert.equal(client.state.history[session.id].firstSequence, 51);
+  assert.equal(client.state.history[session.id].hasEarlier, true);
+});
+
 test('late responses cannot restore an evicted session or seed a cursor from unseen history', (t) => {
   const { client, socket, sessions, snapshot } = fixture(t);
   client.select(sessions[0].id);

@@ -234,7 +234,7 @@
         ],
         "tip1": {
           "title": "Right-click a session",
-          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯)."
+          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯). An export can hold only the questions and answers, or only the last few turns, which is much quicker for a long session."
         }
       },
       "news": {
