@@ -634,8 +634,16 @@ test('every session knows what else CC Desk Tunnel lets it do, and its help wher
     assert.match(prompt, /^## What else you can do here$/m);
     // Another session is reached through ccdt, which a session once told the user it could not do.
     assert.match(prompt, /reach the user's other sessions and start new ones, through ccdt/);
-    // The server is a place to work as well, not only somewhere the project is not.
-    assert.match(prompt, /use this server itself, a place to work as well/);
+    // The server is a place to work as well, not only somewhere the project is not; a change to a project on a
+    // computer is still done only there.
+    assert.match(
+      prompt,
+      /use this server itself: your own tools act here, and its environment is yours to use/,
+    );
+    assert.match(
+      prompt,
+      /a change is done only once it is there: work left on this server is not finished/,
+    );
     assert.match(
       prompt,
       /seems out of reach, (look there|see whether these serve) before saying so/,
