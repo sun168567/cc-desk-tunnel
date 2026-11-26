@@ -165,7 +165,7 @@
         },
         "tip2": {
           "title": "The server is a place to work too",
-          "text": "A plain session started in a browser or on a phone runs on the server, which suits plain conversation. The server can also be a relay and a workbench: files can wait there on their way to your computers, or work can be done there first and then sent out to run on them."
+          "text": "A plain session started in a browser or on a phone runs on the server, which suits plain conversation. The server can also keep and pass things on: notes and to-dos that don’t belong in Git can live there, for Claude to read from whichever computer you switch to; files can go through it to your computers; and work can be done there first, then sent out to run on them."
         }
       }
     },
