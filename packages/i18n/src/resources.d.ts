@@ -947,6 +947,13 @@ export type Resources = {
       tooMany: '最多保存 {{max}} 个连接。';
       stillOpen: '这个连接的窗口还开着，请先退出它。';
     };
+    macos: {
+      desktop: '访问你选择的桌面项目，让 Claude 经执行通道读取和修改其中的文件。';
+      documents: '访问你选择的文稿项目，让 Claude 经执行通道读取和修改其中的文件。';
+      downloads: '访问你选择的下载项目，让 Claude 经执行通道读取和修改其中的文件。';
+      removable: '访问你选择的外接磁盘项目，让 Claude 经执行通道读取和修改其中的文件。';
+      network: '访问你选择的网络磁盘项目，让 Claude 经执行通道读取和修改其中的文件。';
+    };
   };
   files: {
     newFolder: '新建文件夹';
@@ -4305,6 +4312,11 @@ export type Messages = {
   'desktop:connections.nameTaken': Record<string, never>;
   'desktop:connections.tooMany': { max: Value };
   'desktop:connections.stillOpen': Record<string, never>;
+  'desktop:macos.desktop': Record<string, never>;
+  'desktop:macos.documents': Record<string, never>;
+  'desktop:macos.downloads': Record<string, never>;
+  'desktop:macos.removable': Record<string, never>;
+  'desktop:macos.network': Record<string, never>;
   'files:newFolder': Record<string, never>;
   'files:rename': Record<string, never>;
   'files:delete.title': Record<string, never>;

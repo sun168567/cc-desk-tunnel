@@ -17,6 +17,7 @@ const folders = [
   'apps/server/src',
   'packages/protocol/src',
   'packages/i18n/src',
+  'scripts',
 ];
 function sources(folder) {
   return readdirSync(folder).flatMap((name) => {

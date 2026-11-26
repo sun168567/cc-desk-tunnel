@@ -239,5 +239,12 @@
     "nameTaken": "A connection with that name already exists.",
     "tooMany": "At most {{max}} connections can be saved.",
     "stillOpen": "This connection’s window is still open; quit it first."
+  },
+  "macos": {
+    "desktop": "Access the projects you choose in your Desktop folder, so Claude can read and change their files through the execution channel.",
+    "documents": "Access the projects you choose in your Documents folder, so Claude can read and change their files through the execution channel.",
+    "downloads": "Access the projects you choose in your Downloads folder, so Claude can read and change their files through the execution channel.",
+    "removable": "Access the projects you choose on removable volumes, so Claude can read and change their files through the execution channel.",
+    "network": "Access the projects you choose on network volumes, so Claude can read and change their files through the execution channel."
   }
 }
