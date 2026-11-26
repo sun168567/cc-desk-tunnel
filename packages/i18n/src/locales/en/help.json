@@ -161,7 +161,11 @@
         },
         "note1": {
           "title": "Now and then it creates files on the server",
-          "text": "When a path in the steps starts with `/data/state/native/`, Claude is working on the server. Tell it “do it on my computer instead”."
+          "text": "When the project is on your computer but a path in the steps starts with `/data/state/native/`, Claude is working on the server. Tell it “do it on my computer instead”."
+        },
+        "tip2": {
+          "title": "The server is a place to work too",
+          "text": "A plain session started in a browser or on a phone runs on the server, which suits plain conversation. The server can also be a relay and a workbench: files can wait there on their way to your computers, or work can be done there first and then sent out to run on them."
         }
       }
     },
@@ -1099,7 +1103,7 @@
           {
             "q": "Claude created files on the server?",
             "a": [
-              "That happens when the paths in the steps start with `/data/state/native/`. Tell it “do it on my computer instead”."
+              "That happens when the project is on your computer but the paths in the steps start with `/data/state/native/`. Tell it “do it on my computer instead”."
             ]
           },
           {

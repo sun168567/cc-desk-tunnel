@@ -1198,7 +1198,11 @@ export type Resources = {
           };
           note1: {
             title: '偶尔会把文件建在服务器上';
-            text: '步骤里的路径以 `/data/state/native/` 开头时，Claude 是在服务器上操作的。告诉它“改在我的电脑上做”即可。';
+            text: '项目在你电脑上，步骤里的路径却以 `/data/state/native/` 开头时，Claude 是在服务器上操作了。告诉它“改在我的电脑上做”即可。';
+          };
+          tip2: {
+            title: '服务器本身也能用';
+            text: '在浏览器或手机上新建的普通会话就在服务器上运行，适合纯聊天。服务器也能做中转和工作台：文件先放在这里再分给各台电脑，或在这里先做好，再派到各台电脑上运行。';
           };
         };
       };
@@ -2107,7 +2111,7 @@ export type Resources = {
             {
               q: 'Claude 把文件建在了服务器上？';
               a: readonly [
-                '步骤里的路径以 `/data/state/native/` 开头时是这样。告诉它“改在我的电脑上做”。',
+                '项目在你电脑上，步骤里的路径却以 `/data/state/native/` 开头时是这样。告诉它“改在我的电脑上做”。',
               ];
             },
             {
@@ -4510,6 +4514,8 @@ export type Messages = {
   'help:articles.how-it-works.blocks.tip1.text': Record<string, never>;
   'help:articles.how-it-works.blocks.note1.title': Record<string, never>;
   'help:articles.how-it-works.blocks.note1.text': Record<string, never>;
+  'help:articles.how-it-works.blocks.tip2.title': Record<string, never>;
+  'help:articles.how-it-works.blocks.tip2.text': Record<string, never>;
   'help:articles.first-steps.title': Record<string, never>;
   'help:articles.first-steps.lead': Record<string, never>;
   'help:articles.first-steps.words': Record<string, never>;

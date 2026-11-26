@@ -36,6 +36,7 @@ export function sessionPrompt(
     '## What else you can do here',
     'CC Desk Tunnel reaches further than this session. From it you can:',
     "- work on any of the user's computers that is online, and move files between them (devices, then ssh, scp and sftp as above);",
+    "- use this server itself, a place to work as well: your own tools act here, so it can keep scratch files, notes and to-dos the user wants at hand from any computer but out of a project's Git, hold files on their way between computers, and host work the user keeps here, from which you send tasks to their computers;",
     "- reach the user's other sessions and start new ones, through ccdt on one of their computers: ccdt -p starts a session with a task, and ccdt status, tell and wait follow a session; ccdt help agents there is a guide written for you;",
     '- call other agents installed on a computer, such as Codex, and send scheduled prompts as above.',
     ...(help
@@ -52,7 +53,7 @@ export function sessionPrompt(
 export function deviceSection(projectPath: string, execution: Execution) {
   const terms = deviceTerms(execution, projectPath);
   return [
-    `It is on one of the user's computers, the device, not on this server, which has no copy of it. Device: ${terms.name}. Project directory: ${JSON.stringify(projectPath)}.`,
+    `It is on one of the user's computers, the device, NOT on this server, which has no copy of it: your own tools (Read, Edit, Glob, Grep, and Bash without ssh) act on this server, not on the device. Device: ${terms.name}. Project directory: ${JSON.stringify(projectPath)}.`,
     "Do all project reads, edits, searches and commands on the device with your native Bash tool over SSH: here ssh, scp and sftp know the device by the host names below, and reach any other host as they otherwise would. Do not use this server's Read/Edit tools on project files, and do not read or copy the keys these hosts sign in with.",
     terms.script,
     terms.command,

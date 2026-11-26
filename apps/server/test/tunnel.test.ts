@@ -620,6 +620,11 @@ test('the prompt lets the model look at a picture of the device by copying that 
   const prompt = sessionPrompt('D:\\work', 'session', windows);
   assert.match(prompt, /copy that one file with scp to a temporary file on this server/);
   assert.match(prompt, /Do not use this server's Read\/Edit tools on project files/);
+  // The environment Claude Code describes is this server's; the project is not there, and its tools act there.
+  assert.match(
+    prompt,
+    /the device, NOT on this server, which has no copy of it: your own tools .* act on this server/,
+  );
 });
 
 test('every session knows what else CC Desk Tunnel lets it do, and its help where the build put it', () => {
@@ -629,6 +634,8 @@ test('every session knows what else CC Desk Tunnel lets it do, and its help wher
     assert.match(prompt, /^## What else you can do here$/m);
     // Another session is reached through ccdt, which a session once told the user it could not do.
     assert.match(prompt, /reach the user's other sessions and start new ones, through ccdt/);
+    // The server is a place to work as well, not only somewhere the project is not.
+    assert.match(prompt, /use this server itself, a place to work as well/);
     assert.match(
       prompt,
       /seems out of reach, (look there|see whether these serve) before saying so/,
