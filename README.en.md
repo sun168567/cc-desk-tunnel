@@ -86,7 +86,7 @@ If you have one computer and Claude Code runs well on it locally, the local vers
 | | |
 | --- | --- |
 | 🖥️ **Several computers** | Projects and sessions of every computer in one list, offline ones included; start a session on another online computer or move one there; a session reaches your other online computers by name; `ccdt online` keeps a machine without a desktop online |
-| 🗂️ **Projects and sessions** | Projects are registered on the service and shared by every client; rename or remove them; create, search, fork, export to Markdown; edit and resend any of your own messages |
+| 🗂️ **Projects and sessions** | Projects are registered on the server and shared by every client; rename or remove them; create, search, fork, export to Markdown; edit and resend any of your own messages |
 | 💬 **The conversation** | Streaming replies, thinking summaries, tool calls with their input and results; add messages during a run, stop at any time; plans shown as documents you can edit before they run |
 | 🎛️ **Native controls** | Model, reasoning effort, approval mode, context usage and manual compaction, common Claude Code settings; open the current session in `ccdt` with one click |
 | ⌨️ **Terminal client** | `ccdt` opens the official Claude Code in your own terminal, sharing sessions, context and usage statistics with the desktop client; it uses less of the 5-hour quota (see [Your account](docs/account.en.md)) |
@@ -95,8 +95,9 @@ If you have one computer and Claude Code runs well on it locally, the local vers
 | 📱 **Browser and phone** | Optional: work on sessions of online computers, or start plain sessions that run on the server; install it as an app on a phone; adds no port or container |
 | 📊 **Account and usage** | Sign the server's Claude account in or out from the client; see quota, reset times and usage statistics; compact automatically before the prompt cache expires |
 | ⏰ **Scheduled tasks** | The client sends a prepared prompt to a session, or a new one, at a set time; Claude can set these up for you |
-| ⬆️ **Upgrades and backups** | Upgrade the service and the Windows client with one click in the client, without logging in to the server; back up and restore the service with one command |
+| ⬆️ **Upgrades and backups** | Upgrade the server and the Windows client with one click in the client, without logging in to the server machine; back up and restore the server with one command |
 | 🧩 **Convenience** | Runs in the tray, remembers the sign-in, keeps unsent text per session |
+| 🌐 **Languages** | Simplified Chinese and English, following the system or chosen in the settings; the whole help and `ccdt` speak both |
 
 ## ⚙️ How it works
 
