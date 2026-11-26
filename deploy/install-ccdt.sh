@@ -42,7 +42,7 @@ name="ccdt-$version-$system.tar.gz"
 base="https://github.com/$repository/releases/download/v$version"
 folder=$(mktemp -d)
 trap 'rm -rf "$folder"' EXIT
-say "正在下载 ccdt $version ……" "Downloading ccdt $version…"
+say "正在下载 ccdt $version ……" "Downloading ccdt ${version}…"
 curl -fsSL -o "$folder/$name" "$base/$name"
 curl -fsSL -o "$folder/SHA256SUMS" "$base/SHA256SUMS"
 expected=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1; exit }' "$folder/SHA256SUMS")
