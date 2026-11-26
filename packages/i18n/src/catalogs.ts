@@ -6,6 +6,7 @@ import zhCli from './locales/zh-CN/cli.json' with { type: 'json' };
 import zhConnection from './locales/zh-CN/connection.json' with { type: 'json' };
 import zhDesktop from './locales/zh-CN/desktop.json' with { type: 'json' };
 import zhFiles from './locales/zh-CN/files.json' with { type: 'json' };
+import zhHelp from './locales/zh-CN/help.json' with { type: 'json' };
 import zhNav from './locales/zh-CN/nav.json' with { type: 'json' };
 import zhSchedules from './locales/zh-CN/schedules.json' with { type: 'json' };
 import zhService from './locales/zh-CN/service.json' with { type: 'json' };
@@ -17,6 +18,7 @@ import enCli from './locales/en/cli.json' with { type: 'json' };
 import enConnection from './locales/en/connection.json' with { type: 'json' };
 import enDesktop from './locales/en/desktop.json' with { type: 'json' };
 import enFiles from './locales/en/files.json' with { type: 'json' };
+import enHelp from './locales/en/help.json' with { type: 'json' };
 import enNav from './locales/en/nav.json' with { type: 'json' };
 import enSchedules from './locales/en/schedules.json' with { type: 'json' };
 import enService from './locales/en/service.json' with { type: 'json' };
@@ -29,6 +31,7 @@ import enSettings from './locales/en/settings.json' with { type: 'json' };
 // connection: connecting and signing in, requests and their failures
 // desktop: the desktop program outside its page: menus, tray, dialogs, and what the main process and the connection bridge say
 // files: the file panel
+// help: the help: its articles, pictures and pages, the prompts it offers
 // nav: the window frame: sidebar, rail, title bar, notifications
 // schedules: scheduled tasks: their file, editor and runs
 // service: what the service says, sent as phrases (see src/phrase.ts)
@@ -41,6 +44,7 @@ export const namespaces = [
   'connection',
   'desktop',
   'files',
+  'help',
   'nav',
   'schedules',
   'service',
@@ -55,6 +59,7 @@ export const catalogs = {
     connection: zhConnection,
     desktop: zhDesktop,
     files: zhFiles,
+    help: zhHelp,
     nav: zhNav,
     schedules: zhSchedules,
     service: zhService,
@@ -68,6 +73,7 @@ export const catalogs = {
     connection: enConnection,
     desktop: enDesktop,
     files: enFiles,
+    help: enHelp,
     nav: enNav,
     schedules: enSchedules,
     service: enService,

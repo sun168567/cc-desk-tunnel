@@ -1027,6 +1027,1092 @@ export type Resources = {
     changed: '已更改';
     moreLines_other: '还有 {{count}} 行未显示';
   };
+  help: {
+    groups: {
+      start: '开始使用';
+      daily: '日常使用';
+      devices: '多台电脑';
+      agents: '终端与 agent';
+      account: '额度与账号';
+      settings: '设置';
+      care: '维护与安全';
+      faq: '遇到问题';
+    };
+    seeArticle: '见“{{title}}”';
+    starters: {
+      disks: '看看 {device} 上各个磁盘还剩多少空间';
+      explain: '这个项目是做什么的？读一遍目录结构，用三句话告诉我';
+      transfer: '把这台电脑上的 dist/app.zip 传到 {device} 的桌面';
+      run: '把这个项目跑起来，遇到报错就修';
+      report: '每周五下午 5 点，总结这周的提交写成周报草稿';
+      review: '用 codex exec 让 Codex 独立审一遍这次的改动，把它的意见和你的对比给我';
+    };
+    suggestions: {
+      explain: '这个项目是做什么的？读一遍目录结构，用三句话告诉我';
+      run: '把这个项目跑起来，遇到报错就修';
+      otherTests: '在 {{other}} 上把这个仓库拉下来，跑一遍测试';
+      commits: '看看最近一周的 git 提交，总结改了什么';
+      disks: '看看这台电脑各个磁盘还剩多少空间，哪些文件夹最占地方';
+      otherVersions: '对比这台和 {{other}} 上 node、git、python 的版本';
+      tools: '列出这台电脑上装了哪些开发工具和版本';
+      report: '每周五下午 5 点提醒我写周报，帮我设好定时任务';
+    };
+    anotherComputer: '另一台电脑';
+    page: {
+      search: '搜索帮助';
+      clearSearch: '清除搜索';
+      contents: '帮助目录';
+      home: '首页';
+      news: '这一版新增';
+      newTag: '新';
+      changed: '这一版有新内容';
+      changedTag: '更新';
+      kicker: 'CC Desk Tunnel 帮助';
+      hero: {
+        line1: 'Claude Code 住在服务器上，';
+        line2: '你的每台电脑都是它的手';
+        text: '会话、记忆和账号集中在服务端；项目、文件和命令留在各自的电脑上。';
+      };
+      bannerTitle: '{{version}} 新增了什么';
+      bannerText_other: '{{count}} 项新功能，点开看怎么用';
+      start: {
+        title: '三步开始';
+        addProject: {
+          title: '添加项目';
+          text: '选电脑上的一个文件夹，Claude 在那里干活。';
+        };
+        task: {
+          title: '说出任务';
+          text: '新建会话，像在终端里用 Claude Code 一样说话。';
+        };
+        watch: {
+          title: '看着它做';
+          text: '每一步折成一行；要动手时按审批模式问你。';
+        };
+      };
+      try: {
+        title: '试试这样说';
+        hint: '点“试试”放进新会话的输入框，改好再发';
+        button: '试试';
+        tip: '新建一个会话，把这句话放进输入框';
+        more: '说明';
+      };
+      browse: '按主题浏览';
+      homepage: '项目主页与完整文档';
+      crumbs: '位置';
+      newsTitle: '{{version}} 新增';
+      newsLead: '这一版带来的新功能，点开看怎么用。';
+      howTo: '看怎么用';
+      changes: {
+        title: '完整的变更';
+        text: '每一项改动与修复见[关于与更新](settings:about)里的“更新内容”。文中标着“新”的段落，是这一版加的。';
+      };
+      toc: '本页内容';
+      related: '相关';
+      previous: '上一篇';
+      next: '下一篇';
+      commandMenu: '命令菜单（在输入框里）';
+      query: '“{{query}}”';
+      found_other: '{{count}} 篇';
+      notFound: '没有找到';
+      searchHint: '换个说法试试，比如“额度”“其他电脑”“连不上”。';
+    };
+    figures: {
+      anotherComputer: '另一台电脑';
+      runsOn: '在 {{device}} 上执行';
+      default: '默认';
+      terminal: {
+        title: '终端';
+        session: '项目 web-app · 会话「修复登录页」';
+        you: '> 接着把登录页的测试补上';
+        claude: '好的，先看看现有的测试……';
+      };
+      agents: {
+        inbound: '其他 agent 把任务交给 Claude';
+        callers: '其他 agent · 脚本 · 编辑器';
+        callersExamples: 'Codex、Gemini CLI、Zed……';
+        server: '服务端上的 Claude';
+        serverNote: '普通会话，这里看得到';
+        outbound: 'Claude 调用其他 agent';
+        inSession: '在你的会话里';
+        local: '电脑上的命令行 agent';
+        localNote: '一次性完成的子任务';
+      };
+      cache: {
+        last: '最后一条消息';
+        compact: '空闲 50 分钟 · 自动压缩';
+        expire: '约 1 小时 · 缓存过期';
+        note: '过期后的第一条消息，要按全价重读整段上下文。';
+      };
+      quota: {
+        title: '同样的用量，计入 5 小时额度（社区实测）';
+        desktop: '图形客户端';
+        double: '约 2×';
+        note: '每周额度不受影响。';
+      };
+      devices: {
+        heading: '其他设备';
+        folder: '项目文件夹';
+        session: '它的会话';
+        more_other: '还有 {{count}} 台';
+        tip: '悬停项目点 +，会话就在那台电脑上执行';
+      };
+      map: {
+        server: '你的服务器';
+        serverNote: 'Claude Code · 会话 · 记忆 · 账号';
+        channel: '加密通道';
+        hereNote: '这台电脑 · 项目和命令在这里';
+        more_other: '还有 {{count}} 台在线';
+        otherNote: '装客户端，登录同一个服务端';
+        phone: '手机 · 浏览器';
+        thisBrowser: '这个浏览器';
+        phoneNote: '看进度、审批、追加指示';
+      };
+    };
+    articles: {
+      'how-it-works': {
+        title: '它是怎么工作的';
+        lead: 'Claude Code 住在你的服务器上，你的每台电脑都是它的手。';
+        words: '原理 架构 服务器 执行通道 ssh 隧道 上传';
+        blocks: {
+          list1: readonly [
+            '**会话和记忆在服务端**：关掉客户端、换一台电脑、拿起手机，接着的都是同一个会话。',
+            '**文件和命令在你的电脑上**：Claude 经一条加密通道，在你的电脑上读写文件、运行命令。项目不用搬到服务器，也不会被上传。',
+            '**电脑主动连出**：不需要公网 IP，不开入站端口；断开后，这次连接的通道和临时密钥随即作废。',
+          ];
+          tip1: {
+            title: '步骤里出现 ssh device-… 是正常的';
+            text: '这就是 Claude 在操作你的电脑：`device` 指会话所在的那台，`device-<名字>` 是你其他在线的电脑。';
+          };
+          note1: {
+            title: '偶尔会把文件建在服务器上';
+            text: '步骤里的路径以 `/data/state/native/` 开头时，Claude 是在服务器上操作的。告诉它“改在我的电脑上做”即可。';
+          };
+        };
+      };
+      'first-steps': {
+        title: '第一次使用';
+        lead: '加一个项目，说出任务，看着它做。';
+        words: '入门 开始 上手 新手 教程 添加项目 新建会话';
+        blocks: {
+          steps1: readonly [
+            {
+              title: '登录 Claude 账号';
+              text: '服务端登录一次，所有电脑、浏览器和 `ccdt` 共用。';
+              action: '账号与额度';
+            },
+            {
+              title: '添加项目';
+              text: '选电脑上的一个文件夹。会话按项目分组，Claude 就在这个文件夹里干活。';
+              action: '添加项目';
+            },
+            {
+              title: '新建会话，说出任务';
+              text: '和在终端里用 Claude Code 一样说话。悬停项目点 + 就在这个项目里新建。';
+              action: '新建会话';
+            },
+            {
+              title: '看着它做';
+              text: '每一步折叠成一行，点开看命令和输出。要动手时，按[审批模式](#approval)问你。';
+            },
+          ];
+          prompts1: {
+            title: '第一句可以这样说';
+            items: readonly [
+              {
+                text: '这个项目是做什么的？读一遍目录结构，用三句话告诉我';
+              },
+              {
+                text: '把这个项目跑起来，遇到报错就修';
+              },
+              {
+                text: '看看最近一周的 git 提交，总结改了什么';
+              },
+            ];
+          };
+          tip1: {
+            title: '临时问点什么，不用建项目';
+            text: '直接点“新建会话”，得到一个普通会话，列在“最近”。';
+          };
+        };
+      };
+      sessions: {
+        title: '项目与会话';
+        lead: '项目是电脑上的一个文件夹；会话是一段对话，上下文和记忆都在服务端。';
+        words: '项目 文件夹 分叉 编辑重发 置顶 重命名 导出 移除 普通会话 最近';
+        blocks: {
+          list1: readonly [
+            '**项目**：左栏“项目”旁点 + 添加，可以改名。在 `ccdt` 里开会话，也会把那个文件夹登记为项目。',
+            '**普通会话**：点“新建会话”得到，不属于项目，列在“最近”。工作目录默认在“文档\\CC Desk Tunnel”下，可在[常规](settings:general)里更换。',
+          ];
+          list2: readonly [
+            '**各端同一份项目**：项目由服务端登记，每台电脑、浏览器和 `ccdt` 看到的一样，离线电脑的项目也在；改名各端一致。',
+            '**移除项目**：只是不再列为项目。文件夹、会话和项目记忆都不动，其中的会话变成普通会话；再添加同一个文件夹，就都回来了。',
+          ];
+          list3: readonly [
+            '**移到别处**：点输入框上方的项目标签，把会话移到另一个项目或另一台在线电脑。聊过的会话移走后，仍沿用原项目的记忆。',
+            '**编辑重发**：鼠标移到自己的消息上点“编辑重发”，从那条消息之前分叉出新会话。原会话保留，已经做过的文件改动不会撤回。',
+          ];
+          tip1: {
+            title: '右键会话';
+            text: '置顶、重命名、导出 Markdown、用 `ccdt` 打开，都在会话的右键菜单（或 ⋯）里。';
+          };
+        };
+        news: {
+          list2: '项目由服务端保存，各端看到同一份';
+        };
+      };
+      conversation: {
+        title: '对话技巧';
+        lead: '和用 Claude Code 一样说话，这里多了几样顺手的东西。';
+        words: '追加 停止 继续 斜杠 命令 skills 附件 截图 图片 粘贴 模型 推理强度 快捷键 查找';
+        blocks: {
+          list1: readonly [
+            '**运行中也能说**：Claude 在做时直接发消息，会加进正在进行的这一轮，用来纠偏或补充。',
+            '**停止与继续**：输入框右下角停止这一轮。停止或断线后点“继续”接着做，不用再写一句话。',
+            '**命令菜单**：输入 `/` 或 `\\`：压缩上下文，以及 Claude Code 的命令和 skills。',
+            '**给它文件和截图**：点 +，或拖入、粘贴。消息里放的是文件在你电脑上的路径，Claude 去那里读，不上传。',
+            '**大改动先出计划**：切到[计划模式](#approval)，它写出计划，你改好、批准后再动手。',
+            '**模型与推理强度**：在输入框下方切换，只影响这个会话。',
+          ];
+          note1: {
+            title: '状态点停下、写着多久没有输出';
+            text: '只说明这段时间没有新消息传来，不代表出了问题；跑长命令时常这样。';
+          };
+          keys: '快捷键';
+        };
+      };
+      approval: {
+        title: '审批模式';
+        lead: '决定 Claude 动手前问不问你，在输入框左下角切换。';
+        words: '审批 权限 允许 拒绝 自动 手动 计划 接受编辑 绕过 bypass 安全拦截';
+        blocks: {
+          list1: readonly [
+            '**大多数时候用自动审批**（默认）：由 Claude Code 自己判断风险，只在必要时问你。',
+            '**无人值守时用自动审批**：别的模式会停在审批处一直等人。自动审批偶尔也会问，搭配[“不等审批，直接拒绝”](#unattended#deny)就不会停。',
+            '**切换**：点输入框左下角，或按 [[cycleMode]] 轮换。',
+            '**要问你时**，对话里出现审批卡片，写着要做什么、在哪台电脑上做。手机和浏览器里也能批准。',
+          ];
+          approval: '审批卡片：允许一次，或拒绝并说明原因。';
+          note1: {
+            title: '“Claude Code 安全拦截”在任何模式下都会问';
+            text: '有些操作，Claude Code 自己的安全检查一定会请你确认，自动审批、绕过权限也一样。这类卡片上标着“Claude Code 安全拦截”。';
+          };
+          warn1: {
+            title: '绕过权限';
+            text: '除了安全拦截，什么都不问，包括删除文件和在你的电脑上执行任意命令。默认不出现，要先在[常规](settings:general)里允许；只建议在测试机或虚拟机上用。';
+          };
+        };
+      };
+      files: {
+        title: '文件面板';
+        lead: '本机、服务端和每台在线电脑的文件，在一个面板里浏览、预览、互相复制。';
+        words: '文件 浏览 上传 下载 复制 粘贴 预览 SFTP';
+        blocks: {
+          steps1: readonly [
+            {
+              title: '打开';
+              text: '标题栏右侧的文件按钮，或按 [[toggleFiles]]。';
+              action: '打开文件面板';
+            },
+            {
+              title: '切换位置';
+              text: '左上角选本机、服务端或其他在线电脑。';
+            },
+            {
+              title: '预览、上传下载、复制粘贴';
+              text: '在不同位置之间复制粘贴，就是在电脑之间传文件。';
+            },
+          ];
+          list1: readonly ['给 Claude 文件不用经过面板：拖进输入框即可。'];
+          list2: readonly [
+            '服务端上以编号命名的文件夹是会话的工作目录，旁边标出它属于哪个项目或会话。',
+          ];
+          prompts1: {
+            title: '也可以直接让 Claude 搬';
+            items: readonly [
+              {
+                text: '把这台电脑桌面上的 report.pdf 复制到 {device} 的桌面';
+              },
+            ];
+          };
+        };
+        news: {
+          list2: '文件面板标出服务端工作目录属于哪个会话';
+        };
+      };
+      schedules: {
+        title: '定时任务';
+        lead: '到点自动给会话发一条消息，让 Claude 去做。';
+        words: '定时 计划任务 每天 每周 cron 周报 自动';
+        blocks: {
+          prompts1: {
+            title: '最简单的办法：直接跟 Claude 说';
+            items: readonly [
+              {
+                text: '每个工作日早上 9 点，在这个会话里检查依赖有没有安全更新';
+              },
+              {
+                text: '每周五下午 5 点，总结这周的提交，写成周报草稿';
+              },
+            ];
+          };
+          steps1: readonly [
+            {
+              title: '或者自己建';
+              text: '左侧的日历图标打开定时任务，点“新建任务”。';
+              action: '打开定时任务';
+            },
+            {
+              title: '选会话和时间';
+              text: '发给哪个会话（或每次新建）、几点、怎么重复。';
+            },
+            {
+              title: '写提示词';
+              text: '到点发送的内容，像平时说话一样写。';
+            },
+          ];
+          list1: readonly [
+            '由这台电脑上的客户端到点发送：客户端要开着并已连接。关窗口只是收到托盘，不影响。',
+            '晚了 10 分钟还发不出的那一次跳过，并通知你。',
+            '用自动审批，否则会停在审批处等人；怎么让它一路做完见[让任务自己跑完](#unattended)。',
+          ];
+        };
+      };
+      devices: {
+        title: '多台电脑';
+        lead: '登录同一个服务端的每台电脑，都列在“其他设备”下。';
+        words: '其他设备 多台 另一台 电脑 移动 离线 在线 分叉 新建 项目';
+        blocks: {
+          list1: readonly [
+            '**接入**：在另一台电脑上装图形客户端，登录同一个服务端。没有图形界面的机器用 [ccdt online](#always-online)。',
+            '**那台离线时**：会话只能查看，可以接到本机继续，或分叉到本机。',
+          ];
+          list2: readonly [
+            '**在那台电脑上开会话**：它在线时，悬停它的项目点 +，会话就在那台电脑上执行。',
+            '**把会话移过去**：点输入框上方的项目标签，“移到项目…”按电脑列出。运行中的会话不能移到另一台电脑。',
+          ];
+          'no-project': '那台电脑上还没有项目';
+          p1: '这里只能在别的电脑已有的项目里开会话。它还没有项目时，两种办法：';
+          list3: readonly [
+            '**在那台电脑上添加**：在它的客户端里添加项目，或在它的项目文件夹里运行一次 `ccdt`。之后这里就能在它的项目里开会话。',
+            '**不建项目，直接让 Claude 过去做**：在这台电脑的任何会话里说出那台电脑的名字。',
+          ];
+          prompts1: {
+            items: readonly [
+              {
+                text: '看看 {device} 的 D:\\work 下有哪些项目，挑最近改过的那个跑一遍测试';
+              },
+            ];
+          };
+        };
+        news: {
+          list2: '在另一台电脑的项目里开会话，或把会话移过去';
+        };
+      };
+      'remote-ops': {
+        title: '让 Claude 操作其他电脑';
+        lead: '在任何会话里说出电脑的名字，Claude 就到那台电脑上执行命令，或在两台电脑之间传文件。';
+        words: '远程 其他电脑 ssh scp 传文件 devices 多台';
+        blocks: {
+          prompts1: {
+            title: '试试这样说';
+            items: readonly [
+              {
+                text: '看看 {device} 上各个磁盘还剩多少空间';
+                note: 'Claude 先运行 `devices` 找到它，再 `ssh` 过去查。';
+              },
+              {
+                text: '把这台电脑上的 dist/app.zip 传到 {device} 的桌面';
+                note: '用 `scp` 在两台电脑之间直接传。';
+              },
+              {
+                text: '在 {device} 上把这个仓库拉下来，装好依赖，跑一遍测试';
+              },
+              {
+                text: '对比这台和 {device} 上 node、git、python 的版本';
+              },
+            ];
+          };
+          'remote-approval': '到别的电脑上改动前，卡片写明是哪一台。';
+          list1: readonly [
+            '你提到别的电脑时它才过去；没说时，命令都在会话自己的那台电脑上执行。',
+            '在那边只做你要求的事，改动前先问你。',
+            '那台电脑要在线：图形客户端开着（收在托盘也算），或运行着 `ccdt online`。',
+            '名字写出能区分的一段就行。不确定时问它“现在哪些电脑在线”。',
+          ];
+        };
+      };
+      'always-online': {
+        title: '无界面的机器保持在线';
+        lead: 'NAS、服务器、树莓派这类没有图形界面的机器，用 ccdt online 一直在线，Claude 随时能过去。';
+        words: 'ccdt online 在线 NAS 服务器 树莓派 后台 systemd 无界面 headless';
+        blocks: {
+          steps1: readonly [
+            {
+              title: '在那台机器上安装 ccdt';
+              text: '只为当前用户安装，不需要管理员权限。';
+            },
+            {
+              title: '登录';
+              text: '运行 `ccdt login`，填服务地址、证书指纹和服务凭据。';
+            },
+            {
+              title: '保持在线';
+              text: '运行 `ccdt online`，断线自动重连，Ctrl+C 结束。';
+            },
+          ];
+          code1: {
+            label: 'Linux、macOS 安装';
+            text: 'curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh';
+          };
+          code2: {
+            label: '放到后台运行';
+            text: 'nohup ccdt online >> ~/ccdt-online.log 2>&1 &';
+          };
+          p1: '开机自动在线（systemd 用户服务）和 Windows 的写法见[终端客户端文档](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/cli.md#保持在线)。';
+          prompts1: {
+            title: '然后在任何会话里';
+            items: readonly [
+              {
+                text: '看看 nas 上的 docker 容器都在不在跑，挂掉的告诉我原因';
+              },
+            ];
+          };
+          note1: {
+            title: '装了图形客户端的电脑不需要它';
+            text: '客户端开着（包括收在托盘）时就在线。';
+          };
+        };
+      };
+      browser: {
+        title: '浏览器与手机';
+        lead: '离开电脑时，用手机看进度、批准、追加指示。';
+        words: '手机 浏览器 网页 Web 远程 外出 两步验证 主屏幕';
+        blocks: {
+          steps1: readonly [
+            {
+              title: '开启浏览器访问';
+              text: '在桌面客户端的设置里打开，默认关闭。';
+              action: '浏览器访问';
+            },
+            {
+              title: '登录';
+              text: '打开显示的地址，用服务凭据登录。建议开启两步验证。';
+            },
+            {
+              title: '装到手机上';
+              text: '浏览器菜单里“添加到主屏幕”，像应用一样打开。';
+            },
+          ];
+          list1: readonly [
+            '浏览器本身不执行命令：它操作在线电脑上的会话，或新建在服务端执行的普通会话。',
+            '不用时保持关闭。',
+          ];
+        };
+      };
+      ccdt: {
+        title: '终端客户端 ccdt';
+        lead: '在自己的终端里用原版 Claude Code，和这里共用同一批会话。';
+        words: 'ccdt 终端 命令行 CLI 原版 terminal 额度 省';
+        blocks: {
+          workflow: '推荐用法：在 ccdt 里干活，在客户端里看';
+          steps1: readonly [
+            {
+              title: '在客户端里建好项目和会话';
+              text: '项目和会话一目了然，之后在哪一端都能接着。';
+              action: '添加项目';
+            },
+            {
+              title: '会话右键“用 ccdt 打开”';
+              text: '直接在终端里接着这个会话，不用再登录。';
+            },
+            {
+              title: '一边在 ccdt 里做，一边在客户端里看';
+              text: '终端里的请求更省 5 小时额度；客户端同步显示它做了什么，折叠排版更好读。';
+            },
+          ];
+          note1: {
+            title: '同一个会话同时只在一处输入';
+            text: '终端开着时，客户端里显示它在做什么，输入框变灰；关掉终端就能接着在客户端里聊。';
+          };
+          commands: '常用命令';
+          table1: {
+            head: readonly ['命令', '作用'];
+            rows: readonly [
+              readonly ['`ccdt`', '在项目文件夹里运行：接着最近的会话，没有就新建'],
+              readonly ['`ccdt -r`', '从这个项目的会话里选一个'],
+              readonly ['`ccdt new`', '新建会话'],
+              readonly ['`ccdt usage`', '额度与调用统计'],
+              readonly ['`ccdt config`', '查看和修改设置'],
+              readonly ['`ccdt upgrade`', '升级服务端和 ccdt'],
+            ];
+          };
+          list1: readonly [
+            '**已经装好了**：图形客户端自带 `ccdt`，随它升级，新开一个终端窗口就能用。macOS 要先把应用放进“应用程序”打开一次。',
+          ];
+        };
+        news: {
+          list1: '图形客户端自带 ccdt';
+        };
+      };
+      agents: {
+        title: '与其他 agent 协作';
+        lead: 'Claude 能调用你电脑上的 Codex 等 agent；其他 agent 和脚本也能把任务交给 Claude。';
+        words: 'agent Codex Gemini 脚本 ccdt -p 派发 自动化 退出码';
+        blocks: {
+          'call-others': '让 Claude 调用其他 agent';
+          prompts1: {
+            items: readonly [
+              {
+                text: '用 codex exec 让 Codex 独立审一遍这次的改动，把它的意见和你的对比给我';
+                note: '电脑上装了 Codex、Gemini CLI 等命令行 agent 就行，不用配置。';
+              },
+            ];
+          };
+          'called-by-others': '让其他 agent 调用 Claude';
+          p1: '其他 agent 或脚本在电脑上运行 `ccdt -p`，写法与 `claude -p` 相同。派出的任务就是普通会话，这里看得到、能插话、能审批。';
+          code1: {
+            label: '派发';
+            text: 'ccdt -p "修复登录页的报错" --output-format json';
+          };
+          table1: {
+            head: readonly ['跟进', '作用'];
+            rows: readonly [
+              readonly ['`ccdt status <会话>`', '在做什么、在等什么'],
+              readonly ['`ccdt tell <会话> "…"`', '中途追加指示'],
+              readonly ['`ccdt wait <会话>`', '等到这一轮结束'],
+              readonly ['`ccdt approve` · `deny`', 'Claude 要批准时（退出码 2），由调用方回答'],
+            ];
+          };
+          tip1: {
+            title: '把用法交给你的 agent';
+            text: '告诉它“运行 `ccdt help agents`，按里面的说明把任务交给 Claude”。那是写给模型看的完整说明。';
+          };
+        };
+      };
+      acp: {
+        title: '在编辑器里用（ACP）';
+        lead: 'Zed、JetBrains、acpx 等支持 ACP 的工具，把 ccdt acp 配成 agent，就能在编辑器里用服务端上的 Claude。';
+        words: 'ACP Zed JetBrains acpx 编辑器 IDE';
+        blocks: {
+          code1: {
+            label: 'Zed：settings.json';
+            text: '{ "agent_servers": { "CC Desk Tunnel": { "type": "custom", "command": "ccdt", "args": ["acp"] } } }';
+          };
+          code2: {
+            label: 'acpx：项目里的 .acpxrc.json';
+            text: '{ "agents": { "ccdt": { "argv": ["ccdt", "acp"] } } }';
+          };
+          list1: readonly [
+            '会话建在编辑器打开的文件夹对应的项目里，这里同样看得到。',
+            '审批变成编辑器里的权限请求；模型、推理强度和审批模式在编辑器里直接选。',
+            'ACP 没有“提问”：Claude 的问题作为回复显示，下一条消息就是回答。',
+            '不能往进行中的一轮追加内容，要纠偏就取消后重发。',
+          ];
+          note1: {
+            title: '会话建在运行它的那台电脑上';
+            text: '要用另一台电脑，在那台电脑上的编辑器里接入；或者载入它已有的会话。';
+          };
+        };
+      };
+      quota: {
+        title: '额度与用量';
+        lead: '5 小时和每周额度在“账号与额度”里看，也可以显示在输入框旁。';
+        words: '额度 用量 5 小时 每周 限额 费用 token 调用日志 省';
+        blocks: {
+          list1: readonly [
+            '**5 小时额度紧张时用 `ccdt`**：图形客户端经官方 Agent SDK 运行。据社区实测，同样的用量，计入 5 小时额度的比例约为交互式 CLI 的两倍；每周额度不受影响。见 [ccdt 的推荐用法](#ccdt)。',
+            '**输入框旁显示额度**：在[外观](settings:appearance)里打开。',
+            '**快速模式不走套餐额度**：订阅账号开了它，直接从额外用量扣费，见[快速模式](#model-settings#fast)。',
+            '**调用日志**：每次请求的模型、Token 和等价费用；金额按 API 价格估算，不是账单。',
+            '**额度是空的**：它来自 Claude Code 的一次运行，发一条消息，或在账号页里刷新。',
+          ];
+          actions1: readonly ['账号与额度'];
+        };
+      };
+      account: {
+        title: 'Claude 账号';
+        lead: '账号登录在服务端，所有电脑、浏览器和 ccdt 共用。';
+        words: '登录 退出 账号 setup token 订阅 授权';
+        blocks: {
+          list1: readonly [
+            '**普通登录**：打开官方授权页，把页面给出的代码粘贴回来。',
+            '**Setup token**：由服务端生成，或粘贴已有的；这种方式可能看不到邮箱、订阅类型和完整额度。',
+            '**退出登录**：移除服务端保存的令牌，保留会话记录。在 `ccdt` 里执行官方的 `/logout` 不会移除它。',
+          ];
+          warn1: {
+            title: '服务器所在地就是你的使用地点';
+            text: '请求都从服务器发出。请用位于支持地区、来源正常的服务器，见[账号须知](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/account.md)。';
+          };
+          actions1: readonly ['账号与额度'];
+        };
+      };
+      settings: {
+        title: '设置指南';
+        lead: '设置项多，大多数保持默认就好。先看想达到什么效果，再去改对应的几项；几项合起来才起作用的，下面各篇讲清楚怎么搭配。';
+        words: '设置 选项 配置 本机 服务端 Claude Code CLI config 默认 ccdt';
+        blocks: {
+          table1: {
+            head: readonly ['想要', '看这里'];
+            rows: readonly [
+              readonly ['离开一两个小时，回来接着聊也不贵', '[缓存与压缩](#context)'],
+              readonly ['夜里、出门时让任务自己跑完', '[让任务自己跑完](#unattended)'],
+              readonly [
+                '看到 Claude 在想什么；更快；主模型忙时不中断',
+                '[思考、速度与备用模型](#model-settings)',
+              ],
+              readonly ['Claude 记住我的习惯，照我的规矩提交代码', '[记忆与说明](#memory)'],
+              readonly [
+                '命令输出被截断、连接总超时、脚本用哪种 Shell',
+                '[在你电脑上执行](#execution)',
+              ],
+              readonly ['限制 Claude 能改什么', '[权限相关的开关](#permissions)'],
+            ];
+          };
+          tip1: {
+            title: '找设置';
+            text: '设置页左上角的搜索框按功能找，比如“托盘”“额度”“压缩”。难懂的设置旁有 ?，点开就是讲它的那一段。';
+          };
+          scopes: '设置分三组';
+          table2: {
+            head: readonly ['分组', '改了影响谁'];
+            rows: readonly [
+              readonly ['**本机**', '只影响这台电脑上的这个客户端'],
+              readonly ['**服务端**', '连到这个服务端的所有电脑（Shell 只对这台电脑）'],
+              readonly [
+                '**Claude Code**',
+                '服务器上 Claude Code 自己的设置，所有会话和 `ccdt` 共用',
+              ],
+            ];
+          };
+          cli: '有几项 CLI 设置只在 ccdt 里起作用';
+          p1: 'CLI 设置和 Claude Code 的 `/config` 是同一份，从下一次运行起生效。其中几项是官方终端界面的功能，图形客户端里的会话用不上：';
+          table3: {
+            head: readonly ['设置', '在图形客户端里'];
+            rows: readonly [
+              readonly [
+                '额度用尽后自动继续',
+                '这一轮随额度用尽结束；可以[到点发一句“继续”](#unattended#limit)',
+              ],
+              readonly ['提问无人回答时', '提问卡片一直等你回答'],
+              readonly ['文件检查点', '不记录；图形客户端里没有 `/rewind`'],
+              readonly ['触发安全拦截时换模型（关闭时）', '不会暂停让你选，这一轮出错结束'],
+            ];
+          };
+          actions1: readonly ['打开 CLI 设置'];
+        };
+      };
+      context: {
+        title: '缓存与压缩';
+        lead: 'Claude 每一轮都要把整个会话重读一遍。有缓存时重读很便宜；缓存过期或被打断，下一轮就按全价重读。好几项设置都围绕这件事。';
+        words: '缓存 过期 压缩 compact 上下文 空闲 1 小时 5 分钟 ttl 提示缓存 自动压缩 窗口 缓存读取 缓存写入 省';
+        blocks: {
+          how: '缓存是怎么回事';
+          p1: '每发一条消息，Claude Code 都把系统提示、说明文件、之前的每条消息和工具结果整段再发一遍。和上一轮相同的前半段从缓存里读，价格约为正常输入的十分之一；缓存没了，这一整段就要重新处理、重新写入。会话越长，离开后回来的第一轮越慢、越贵。';
+          list1: readonly [
+            '**缓存会过期**：最后一次请求后 5 分钟或 1 小时没有新请求，就过期。每次请求都重新计时。',
+            '**这些操作会让缓存作废**：换模型、开关快速模式、接入或移除 MCP 服务、压缩。老一些的模型换推理强度也会。模型最好在会话开头选定。',
+            '**改说明文件不会**，但正在进行的会话也读不到新内容，压缩或新建会话后才用上。',
+          ];
+          ttl: '缓存时长：5 分钟还是 1 小时';
+          p2: '1 小时的缓存撑得过午饭、开会这样的空档，代价是写入更贵：按 API 价格，写入 1 小时缓存是正常输入的 2 倍，5 分钟的是 1.25 倍。一直连续对话、从不停下超过 5 分钟的，1 小时只是多花。';
+          table1: {
+            head: readonly ['请求', '默认'];
+            rows: readonly [
+              readonly ['订阅账号的主对话', '1 小时'],
+              readonly ['订阅账号的子代理、工作流、压缩等', '5 分钟'],
+              readonly ['API Key、第三方接口', '都是 5 分钟'],
+            ];
+          };
+          note1: {
+            title: '套餐额度用完后，默认会变成 5 分钟';
+            text: '超出套餐额度、开始用额外用量（usage credits）付费时，Claude Code 把主对话改用 5 分钟缓存。想这时也保留 1 小时，把[“提示缓存时长”](settings:claude)明确设为 1 小时。';
+          };
+          p3: '“子任务的提示缓存时长”管子代理、工作流、压缩这些主对话之外的请求，一般保持默认。';
+          idle: '离开前自动压缩';
+          p4: '压缩把长长的会话换成一份摘要，之后每轮重读的只是摘要。趁缓存还在时压缩，读的是缓存，便宜；过期后再压缩，就得按全价读一遍。[上下文与缓存](settings:context)里的自动压缩就是替你抢在过期前做这件事：会话空闲到设定时间，服务端自己压缩，你的电脑和客户端不用在线。';
+          list2: readonly [
+            '**默认关**，在[上下文与缓存](settings:context)里打开。',
+            '**只对 1 小时缓存的会话有效**。“提示缓存时长”设成 5 分钟，或用 API Key 登录时，缓存等不到压缩就过期了，自动压缩不会发生。',
+            '**空闲多久后压缩**：默认 50 分钟。越接近 60 分钟，你中途回来、压缩白做的可能越小，但留给它的余量也越少。',
+            '**上下文至少**：小会话就算全价重读也不贵，不值得压缩。',
+            '**压缩是一次真实请求**，计入额度，摘要也会丢掉细节。离开一会儿就回来的，用不着它。',
+            '**关掉时**，快过期时在会话里提醒你，压不压你来定。已经过期的长会话，先切到便宜些的模型再压缩，或者干脆新开一个。',
+            '`ccdt` 里的会话由 Claude Code 自己压缩：开关和上下文大小用这里的，时间固定在约 54 分钟。',
+          ];
+          window: '上下文快满时的压缩';
+          p5: '这是另一回事：会话长到接近模型的上下文上限时，Claude Code 自动压缩后接着做。由 [CLI 设置](settings:claude)里的“自动压缩上下文”控制，默认开。';
+          list3: readonly [
+            '**自动压缩窗口**：上下文到多大就压缩，最小 10 万。设小一些，每轮重读的少，更省、Claude 也更专注；代价是更常压缩、丢细节。1M 上下文的模型可以设在 30 万～50 万，免得会话越聊越贵。',
+            '**提前准备压缩摘要**：后台先把摘要算好，到压缩时少等一会儿。',
+            '**关掉“自动压缩上下文”**，上下文满了只能手动压缩或新开会话；`ccdt` 里的空闲压缩也随之关闭。',
+          ];
+          tip1: {
+            title: '手动压缩挑时机';
+            text: '在两件事之间输入 `/compact`，比做到一半被自动压缩好。走错了路、想整段放弃时，新开一个会话比压缩更干净。';
+          };
+          numbers: '从数字看缓存';
+          p6: '回复小结和会话栏可以显示“缓存读取”和“缓存写入”，在[外观](settings:appearance)里选。';
+          list4: readonly [
+            '**读取远大于写入**：缓存在起作用。',
+            '**某一轮写入特别大**：缓存刚作废，通常是离开太久、换了模型或刚压缩过。',
+            '**每一轮写入都很大**：有什么在不断打断缓存，比如来回换模型。',
+          ];
+          actions1: readonly ['打开上下文与缓存', '打开 CLI 设置'];
+        };
+      };
+      unattended: {
+        title: '让任务自己跑完';
+        lead: '长任务、夜里的任务、定时任务，最怕停在一个问题上干等。几项设置配合起来，任务能自己走到底。';
+        words: '无人值守 夜里 长任务 定时 自动 不等审批 直接拒绝 提问 超时 额度用尽 继续 睡眠';
+        blocks: {
+          stops: '任务会停在哪里';
+          table1: {
+            head: readonly ['停在', '怎么办'];
+            rows: readonly [
+              readonly [
+                '等你审批',
+                '用**自动审批**，再打开[“不等审批，直接拒绝”](#unattended#deny)',
+              ],
+              readonly ['Claude 提问', '在任务里写明不要提问，见[下文](#unattended#question)'],
+              readonly ['额度用尽', '[到点发一句“继续”](#unattended#limit)'],
+              readonly [
+                '你的电脑睡了或断了',
+                '客户端开着时电脑不会自动睡眠；离线超过 5 分钟任务才停下',
+              ],
+            ];
+          };
+          deny: '不等审批，直接拒绝';
+          list1: readonly [
+            '[CLI 设置](settings:claude)里打开后，要你批准的调用不再等你，立即拒绝；Claude 知道被拒，会换个做法，或者在最后告诉你。',
+            '**和自动审批一起用**：允许规则和自动审批照常先判断，自动审批放行它认为安全的，剩下的才被拒绝。手动审批下几乎什么都做不成。',
+            '**对所有会话生效**，包括 `ccdt`。任务跑完记得关掉，不然你在旁边时它也不会再问你。',
+          ];
+          question: 'Claude 提问';
+          p1: '图形客户端里的提问卡片会一直等你回答。无人值守的任务，在提示词里说清楚做到哪一步、不要提问：';
+          prompts1: {
+            items: readonly [
+              {
+                text: '把 docs 目录里过时的说明都改掉，改完再停。中途不要问我，拿不准的按最保守的做法，最后把这些地方列给我。';
+              },
+            ];
+          };
+          p2: '`ccdt` 里还可以用 CLI 设置“提问无人回答时”：过一会儿带着已选的选项自己继续。';
+          limit: '额度用尽';
+          p3: '图形客户端里，额度用尽这一轮就结束了。想让它在额度重置后接着做，直接跟 Claude 说，它会建一个[定时任务](#schedules)：';
+          prompts2: {
+            items: readonly [
+              {
+                text: '额度重置以后，在这个会话里发一句“继续刚才的任务”';
+              },
+            ];
+          };
+          p4: '重置时间在[账号与额度](settings:account)里看。`ccdt` 里不用这样做：CLI 设置“额度用尽后自动继续”默认开，终端会等到重置后接着做。';
+          recipe: '一套可靠的搭配';
+          steps1: readonly [
+            {
+              title: '审批模式选自动审批';
+              text: '在输入框左下角切换。';
+            },
+            {
+              title: '打开“不等审批，直接拒绝”';
+              text: '跑完记得关掉。';
+              action: 'CLI 设置';
+            },
+            {
+              title: '提示词说清终点';
+              text: '做到哪一步为止，拿不准时怎么办，最后汇报什么。';
+            },
+            {
+              title: '客户端开着';
+              text: '关窗口只是收到托盘；完成和失败的通知开着，回来一眼看到结果。';
+              action: '通知设置';
+            },
+          ];
+        };
+      };
+      'model-settings': {
+        title: '思考、速度与备用模型';
+        lead: '这几项决定 Claude 想多深、跑多快、主模型忙时怎么办。最容易误会的两点：新模型上关掉“思考”没有用；订阅账号的快速模式要另外付费。';
+        words: '思考 thinking 推理强度 effort 显示思考 快速模式 fast 额外用量 usage credits 备用模型 fallback 安全拦截 换模型';
+        blocks: {
+          thinking: '思考';
+          list1: readonly [
+            '**思考**：只对老一些的模型有用。Opus 5.5、Sonnet 5.5、Haiku 5.5 和 Fable 系列总会思考，关掉也照样想。',
+            '**想让它少想、快一点**：在输入框左下角的“模型与推理强度”里调低强度，每个会话可以不同。',
+            '**显示思考过程**：只决定你看不看得到思考的摘要，Claude 想多少、用多少额度都不变。想知道它为什么这样做时打开，对话里会多出可以展开的思考。',
+          ];
+          fast: '快速模式';
+          list2: readonly [
+            '输出明显更快，每个 Token 也更贵。只有部分模型支持，比如 Opus 5.5、Fable 5.2。',
+            '**订阅账号不走套餐额度**：快速模式直接从额外用量（usage credits）扣费，套餐额度还有剩也一样；没开通额外用量就用不了。',
+            '中途开关会让下一轮全价重读。要用，就在会话开头打开。',
+            '额外用量用完时，自动退回普通速度继续。',
+          ];
+          fallback: '主模型忙或出问题时';
+          list3: readonly [
+            '**备用模型**：主模型过载或不可用时，按顺序换下一个，把这一轮做完；下一条消息又先试主模型。不填时只重试主模型，还不行就报错。',
+            '最多 3 个，用逗号分开，比如 `sonnet, haiku`。换过去的那一轮没有缓存，会贵一些。',
+            '**触发安全拦截时换模型**：Claude Code 的安全检查偶尔会拦下一条请求，默认换一个模型继续。关掉后，图形客户端里这一轮出错结束；`ccdt` 里会暂停，让你选换模型还是改提示词。',
+          ];
+          actions1: readonly ['打开 CLI 设置'];
+        };
+      };
+      memory: {
+        title: '记忆与说明';
+        lead: 'Claude 的每个会话都从空白开始，靠说明文件和自动记忆知道你的习惯。它们放在哪里，决定了 Claude 记得什么。';
+        words: '记忆 memory 自动记忆 CLAUDE.md AGENTS.md 全局说明 说明文件 记住 忘掉 回复语言 中文 署名 git 提交 PR';
+        blocks: {
+          table1: {
+            head: readonly ['', '在哪里，谁会读'];
+            rows: readonly [
+              readonly [
+                '**全局说明**',
+                '服务器上的用户级 `CLAUDE.md`，每个会话开头都读。在[全局说明](settings:instructions)里编辑',
+              ],
+              readonly [
+                '**项目里的 `CLAUDE.md`、`AGENTS.md`**',
+                '在你电脑的项目文件夹里。Claude Code 在服务器上，**不会自动读**',
+              ],
+              readonly ['**自动记忆**', 'Claude 自己记的笔记，在服务器上按项目保存'],
+            ];
+          };
+          project: '让 Claude 读你项目里的说明';
+          p1: '省事的做法是在全局说明里写一句，以后每个会话都会照做：';
+          code1: {
+            label: '写进全局说明';
+            text: '进入一个项目后，先读项目根目录的 CLAUDE.md 或 AGENTS.md（如果有），按其中的约定工作。';
+          };
+          auto: '自动记忆';
+          list1: readonly [
+            'Claude 在工作中记下你纠正过的做法、偏好和项目情况，下次会话开头读入。',
+            '**按项目分开**：同一台电脑上同一个项目文件夹的会话共用一份；普通会话各有各的。聊过的会话移到别的项目，仍用原来项目的记忆。',
+            '想让它记住什么，直接说“记住：……”；记错了，说“把关于……的记忆删掉”。',
+            '“后台整理记忆”在空闲时归并、整理已有的记忆。关掉“自动记忆”，Claude 既不读也不写这些笔记。',
+          ];
+          note1: {
+            title: '改了说明什么时候生效';
+            text: '说明在会话开头读一次。中途改了，正在进行的会话读不到，压缩或新建会话后才用上。';
+          };
+          habits: '回复语言与 Git 习惯';
+          list2: readonly [
+            '**回复语言**：原样交给 Claude，作为“总是用这种语言回复”的要求，写 `chinese` 或 `中文` 都行。',
+            '**提交与 PR 的署名**：默认在提交信息和 PR 描述里加上 Claude 的署名，选“不加署名”去掉。',
+            '**内置的提交与 PR 流程说明**：官方附带的提交、开 PR 的做法和仓库状态。有自己的规范时关掉它，把规范写进全局说明。',
+          ];
+          actions1: readonly ['打开全局说明', '打开 CLI 设置'];
+        };
+      };
+      execution: {
+        title: '在你电脑上执行';
+        lead: 'Claude 在你电脑上读文件、改文件、跑构建，都是经执行通道运行命令完成的。Shell、命令输出上限和连接等待时间，决定这条路走得顺不顺。';
+        words: 'shell powershell git bash 命令输出 截断 上限 工具搜索 mcp artifact 连接等待 超时 域控制器 安全软件';
+        blocks: {
+          shell: 'Shell：PowerShell 还是 Git Bash';
+          list1: readonly [
+            '不指定时 Claude 按任务选。选了也只是优先，任务明显适合另一种时它仍会换。',
+            '**PowerShell**：操作 Windows 本身（服务、注册表、进程）更顺。',
+            '**Git Bash**：熟悉 Linux 命令、项目里多是 shell 脚本时。先装 Git for Windows，重新连接后才能选。',
+            'PowerShell 7 随客户端自带。这一项每台 Windows 电脑分别设置，从每个会话的下一条消息起生效。',
+          ];
+          actions1: readonly ['打开 Shell'];
+          output: '命令输出上限';
+          list2: readonly [
+            '一条命令的输出超过上限，多出的部分存成文件，Claude 只看到开头和文件位置，要再去读。',
+            '构建日志、测试结果常被截断、Claude 反复去翻文件时调大。上限越大，每次输出占的上下文越多，会话更快变长。',
+            '范围 4K～128K 字符，默认 30K。',
+          ];
+          tools: '工具搜索与 Artifact';
+          list3: readonly [
+            '**工具搜索**：工具的说明不再每次全部发出，用到时再查。接了很多 MCP 工具时能省下大量上下文。官方账号默认开；第三方接口要支持才能开。',
+            '**Artifact 网页**：Claude 可以把文档、方案、图表发布成 claude.ai 上只有你能看的网页，需要时再分享。用不上可以关掉。',
+          ];
+          waits: '连接等待时间';
+          list4: readonly [
+            '连上服务器、启动本机的 SSH 服务、执行通道就绪，三步各有时限，超时就重试。',
+            '**大多数电脑不用改**。公司域账号连不上域控制器，或安全软件扫描很慢时，第二步会久一些；总是超时才调大。',
+            '“执行通道就绪”至少比“本机 SSH 服务启动”多 35 秒。只影响这台电脑。',
+          ];
+          actions2: readonly ['打开连接'];
+        };
+      };
+      permissions: {
+        title: '权限相关的开关';
+        lead: '问不问你由审批模式决定。下面几个开关各管一小块，容易高估它们的作用。';
+        words: '权限 绕过 bypass 工作目录 写文件 检查点 rewind 撤回 拦截';
+        blocks: {
+          bypass: '允许绕过权限';
+          p1: '在[常规](settings:general)里打开后，审批模式里才出现“绕过权限”，只影响这台电脑。选了它，除了 Claude Code 安全拦截，什么都不问，包括删除文件、在你电脑上执行任意命令。只在测试机或虚拟机上用。';
+          writes: '禁止在工作目录外写文件';
+          list1: readonly [
+            '它限制的是 Claude Code 的写文件、编辑工具，这些工具只作用于**服务器上的文件**。',
+            '**它挡不住对你电脑的修改**：Claude 在你电脑上改文件经命令完成，不受这个开关限制。要防误改，靠审批模式。',
+            '开启后，这些工具也不能改 Claude Code 自己的设置文件；Claude 的记忆和计划文件不受影响。',
+          ];
+          checkpoints: '文件检查点';
+          p2: '编辑前留快照，供 `/rewind` 撤回。只在 `ccdt` 里有用，也只覆盖服务器上用编辑工具改的文件。你电脑上的项目用 Git 管理更可靠。';
+          note1: {
+            title: '还有两条';
+            text: '“不等审批，直接拒绝”见[让任务自己跑完](#unattended#deny)。Claude Code 安全拦截在任何模式下都会问，见[审批模式](#approval)。';
+          };
+          actions1: readonly ['打开 CLI 设置'];
+        };
+      };
+      background: {
+        title: '后台、通知与断线';
+        lead: '关掉窗口不会断开；任务完成或要你处理时会通知你。';
+        words: '托盘 后台 通知 断线 重连 睡眠 多个服务端 窗口';
+        blocks: {
+          list1: readonly [
+            '**关窗口只是收到托盘**：连接和任务照常进行，托盘图标右键“退出”才断开。连接期间电脑不会自动睡眠。',
+            '**通知**：窗口不在前台时，完成、失败、等待审批、Claude 提问都会通知，每一类可以单独关掉。',
+            '**断网不用管**：客户端自己重连，任务在服务端继续。电脑离线超过 5 分钟任务才停下，回来点“继续”。',
+            '**多个服务端**：每个服务端一个窗口，凭据、草稿和定时任务各自保存。',
+          ];
+          actions1: readonly ['通知设置'];
+        };
+      };
+      upgrade: {
+        title: '升级';
+        lead: '客户端、ccdt 和服务端要同一版本；在客户端里点一下就能升级，不用登录服务器。';
+        words: '升级 更新 版本 不一致 新版本';
+        blocks: {
+          steps1: readonly [
+            {
+              title: '看到新版本';
+              text: '左侧出现下载图标，或到“关于与更新”里检查。';
+              action: '关于与更新';
+            },
+            {
+              title: '先升级服务端';
+              text: '约一分钟后自动重连。有会话正在运行时会提示。';
+            },
+            {
+              title: '再升级客户端';
+              text: 'Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载；macOS、Linux 重新下载安装。';
+            },
+          ];
+          list1: readonly ['自带的 `ccdt` 随图形客户端升级；单独安装的运行 `ccdt upgrade`。'];
+        };
+      };
+      safety: {
+        title: '安全须知';
+        lead: '服务器能以你的身份在每台已连接的电脑上执行命令。它必须是你自己控制、可信的机器。';
+        words: '安全 凭据 token 泄漏 沙箱 风险 隐私';
+        blocks: {
+          list1: readonly [
+            '**服务凭据等于完全控制权**：不要截图、不要贴到聊天和 issue 里。泄漏后在服务器上运行 `sudo cc-desk-tunnel token` 更换。',
+            '**不是沙箱**：Claude 能访问你的用户在那台电脑上能访问的一切，也能连到你其他在线的电脑。',
+            '**数据会离开本机**：读到的文件片段和命令输出，经服务器发往模型服务。',
+            '**浏览器访问**不用时关掉，开启时用两步验证。',
+          ];
+          p1: '完整说明见[安全须知](https://github.com/sun168567/cc-desk-tunnel#安全须知)。';
+        };
+      };
+      troubleshoot: {
+        title: '连不上';
+        lead: '看登录窗口红字的第一行，那是原因。';
+        words: '连不上 连接失败 证书 指纹 凭据 杀毒 sshd 执行通道 代理 日志';
+        blocks: {
+          table1: {
+            head: readonly ['提示', '怎么办'];
+            rows: readonly [
+              readonly [
+                '连接超时、拒绝连接、无法解析',
+                '核对服务地址和端口，确认服务器在线、端口已放行',
+              ],
+              readonly [
+                '证书不受信任、指纹不匹配',
+                '自签证书填安装时给出的 SHA256 指纹；服务端换过证书要重新填',
+              ],
+              readonly ['服务凭据不正确', '核对凭据；连续失败多次会被暂时拒绝'],
+              readonly ['版本不一致', '按提示升级其中一端'],
+              readonly [
+                'SSH 服务没能启动、被拦截',
+                '多半是杀毒软件隔离了自带的 sshd.exe 或 PowerShell，先看它的保护记录',
+              ],
+              readonly ['执行通道没有就绪', '经代理连接时，确认代理允许同一地址的多条连接'],
+            ];
+          };
+          p1: '要查是哪一段断的：[关于与更新](settings:about)里“打开日志文件夹”，看 `client.log`。更多见[常见问题与排查](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/troubleshooting.md)。';
+        };
+      };
+      faq: {
+        title: '常见问题';
+        lead: '用的时候最常见的疑问。';
+        words: '问题 疑问 为什么';
+        blocks: {
+          faq1: readonly [
+            {
+              q: 'Claude 为什么一直在运行 ssh？';
+              a: readonly [
+                '它就是这样操作你的电脑的：Claude Code 跑在服务器上，经 `ssh device-…` 到你的电脑上执行。见[它是怎么工作的](#how-it-works)。',
+              ];
+            },
+            {
+              q: '我的文件会被上传吗？';
+              a: readonly [
+                '不会整份上传。Claude 在你的电脑上读文件，读到的片段和命令输出经服务器发给模型，和本地用 Claude Code 一样。',
+              ];
+            },
+            {
+              q: '5 小时额度掉得很快？';
+              a: readonly [
+                '图形客户端经 Agent SDK 运行，计入 5 小时额度约为交互式 CLI 的两倍。长任务放到 `ccdt` 里做。见[额度与用量](#quota)。',
+              ];
+            },
+            {
+              q: '提示“缓存过期”是什么意思？';
+              a: readonly [
+                '空闲约 1 小时后，下一条消息要按全价重读上下文。开启自动压缩可以省下这一次。见[上下文与缓存](#context)。',
+              ];
+            },
+            {
+              q: '任务停在那里不动了？';
+              a: readonly [
+                '先看是不是在等你审批或回答问题。状态点写着多久没有输出，只是这段时间没有新消息，长命令常这样。',
+              ];
+            },
+            {
+              q: '电脑睡眠或断网了，任务会怎样？';
+              a: readonly [
+                '任务在服务端继续，命令等电脑连回来再执行。离线超过 5 分钟任务才停下，回来点“继续”。',
+              ];
+            },
+            {
+              q: '怎么让 Claude 少问我？';
+              a: readonly [
+                '用自动审批；只想让它直接改文件、命令仍先问，用接受编辑。见[审批模式](#approval)。',
+              ];
+            },
+            {
+              q: '在另一台电脑上开不了会话？';
+              a: readonly [
+                '那台电脑要在线，而且要有项目。没有项目时，在任何会话里让 Claude 连过去做。见[多台电脑](#devices#no-project)。',
+              ];
+            },
+            {
+              q: 'Claude 把文件建在了服务器上？';
+              a: readonly [
+                '步骤里的路径以 `/data/state/native/` 开头时是这样。告诉它“改在我的电脑上做”。',
+              ];
+            },
+            {
+              q: '额度、模型列表是空的？';
+              a: readonly ['它们来自 Claude Code 的一次运行：发一条消息，或在账号页里刷新。'];
+            },
+            {
+              q: '两个窗口同时在一个文件夹里改东西？';
+              a: readonly [
+                '两个连接的会话同时在同一个文件夹里运行时会提示，两边的改动可能互相覆盖。',
+              ];
+            },
+          ];
+        };
+      };
+    };
+  };
   nav: {
     activity: {
       background: '后台任务';
@@ -3279,6 +4365,621 @@ export type Messages = {
   'files:changes': Record<string, never>;
   'files:changed': Record<string, never>;
   'files:moreLines': { count: number };
+  'help:groups.start': Record<string, never>;
+  'help:groups.daily': Record<string, never>;
+  'help:groups.devices': Record<string, never>;
+  'help:groups.agents': Record<string, never>;
+  'help:groups.account': Record<string, never>;
+  'help:groups.settings': Record<string, never>;
+  'help:groups.care': Record<string, never>;
+  'help:groups.faq': Record<string, never>;
+  'help:seeArticle': { title: Value };
+  'help:starters.disks': Record<string, never>;
+  'help:starters.explain': Record<string, never>;
+  'help:starters.transfer': Record<string, never>;
+  'help:starters.run': Record<string, never>;
+  'help:starters.report': Record<string, never>;
+  'help:starters.review': Record<string, never>;
+  'help:suggestions.explain': Record<string, never>;
+  'help:suggestions.run': Record<string, never>;
+  'help:suggestions.otherTests': { other: Value };
+  'help:suggestions.commits': Record<string, never>;
+  'help:suggestions.disks': Record<string, never>;
+  'help:suggestions.otherVersions': { other: Value };
+  'help:suggestions.tools': Record<string, never>;
+  'help:suggestions.report': Record<string, never>;
+  'help:anotherComputer': Record<string, never>;
+  'help:page.search': Record<string, never>;
+  'help:page.clearSearch': Record<string, never>;
+  'help:page.contents': Record<string, never>;
+  'help:page.home': Record<string, never>;
+  'help:page.news': Record<string, never>;
+  'help:page.newTag': Record<string, never>;
+  'help:page.changed': Record<string, never>;
+  'help:page.changedTag': Record<string, never>;
+  'help:page.kicker': Record<string, never>;
+  'help:page.hero.line1': Record<string, never>;
+  'help:page.hero.line2': Record<string, never>;
+  'help:page.hero.text': Record<string, never>;
+  'help:page.bannerTitle': { version: Value };
+  'help:page.bannerText': { count: number };
+  'help:page.start.title': Record<string, never>;
+  'help:page.start.addProject.title': Record<string, never>;
+  'help:page.start.addProject.text': Record<string, never>;
+  'help:page.start.task.title': Record<string, never>;
+  'help:page.start.task.text': Record<string, never>;
+  'help:page.start.watch.title': Record<string, never>;
+  'help:page.start.watch.text': Record<string, never>;
+  'help:page.try.title': Record<string, never>;
+  'help:page.try.hint': Record<string, never>;
+  'help:page.try.button': Record<string, never>;
+  'help:page.try.tip': Record<string, never>;
+  'help:page.try.more': Record<string, never>;
+  'help:page.browse': Record<string, never>;
+  'help:page.homepage': Record<string, never>;
+  'help:page.crumbs': Record<string, never>;
+  'help:page.newsTitle': { version: Value };
+  'help:page.newsLead': Record<string, never>;
+  'help:page.howTo': Record<string, never>;
+  'help:page.changes.title': Record<string, never>;
+  'help:page.changes.text': Record<string, never>;
+  'help:page.toc': Record<string, never>;
+  'help:page.related': Record<string, never>;
+  'help:page.previous': Record<string, never>;
+  'help:page.next': Record<string, never>;
+  'help:page.commandMenu': Record<string, never>;
+  'help:page.query': { query: Value };
+  'help:page.found': { count: number };
+  'help:page.notFound': Record<string, never>;
+  'help:page.searchHint': Record<string, never>;
+  'help:figures.anotherComputer': Record<string, never>;
+  'help:figures.runsOn': { device: Value };
+  'help:figures.default': Record<string, never>;
+  'help:figures.terminal.title': Record<string, never>;
+  'help:figures.terminal.session': Record<string, never>;
+  'help:figures.terminal.you': Record<string, never>;
+  'help:figures.terminal.claude': Record<string, never>;
+  'help:figures.agents.inbound': Record<string, never>;
+  'help:figures.agents.callers': Record<string, never>;
+  'help:figures.agents.callersExamples': Record<string, never>;
+  'help:figures.agents.server': Record<string, never>;
+  'help:figures.agents.serverNote': Record<string, never>;
+  'help:figures.agents.outbound': Record<string, never>;
+  'help:figures.agents.inSession': Record<string, never>;
+  'help:figures.agents.local': Record<string, never>;
+  'help:figures.agents.localNote': Record<string, never>;
+  'help:figures.cache.last': Record<string, never>;
+  'help:figures.cache.compact': Record<string, never>;
+  'help:figures.cache.expire': Record<string, never>;
+  'help:figures.cache.note': Record<string, never>;
+  'help:figures.quota.title': Record<string, never>;
+  'help:figures.quota.desktop': Record<string, never>;
+  'help:figures.quota.double': Record<string, never>;
+  'help:figures.quota.note': Record<string, never>;
+  'help:figures.devices.heading': Record<string, never>;
+  'help:figures.devices.folder': Record<string, never>;
+  'help:figures.devices.session': Record<string, never>;
+  'help:figures.devices.more': { count: number };
+  'help:figures.devices.tip': Record<string, never>;
+  'help:figures.map.server': Record<string, never>;
+  'help:figures.map.serverNote': Record<string, never>;
+  'help:figures.map.channel': Record<string, never>;
+  'help:figures.map.hereNote': Record<string, never>;
+  'help:figures.map.more': { count: number };
+  'help:figures.map.otherNote': Record<string, never>;
+  'help:figures.map.phone': Record<string, never>;
+  'help:figures.map.thisBrowser': Record<string, never>;
+  'help:figures.map.phoneNote': Record<string, never>;
+  'help:articles.how-it-works.title': Record<string, never>;
+  'help:articles.how-it-works.lead': Record<string, never>;
+  'help:articles.how-it-works.words': Record<string, never>;
+  'help:articles.how-it-works.blocks.list1.0': Record<string, never>;
+  'help:articles.how-it-works.blocks.list1.1': Record<string, never>;
+  'help:articles.how-it-works.blocks.list1.2': Record<string, never>;
+  'help:articles.how-it-works.blocks.tip1.title': Record<string, never>;
+  'help:articles.how-it-works.blocks.tip1.text': Record<string, never>;
+  'help:articles.how-it-works.blocks.note1.title': Record<string, never>;
+  'help:articles.how-it-works.blocks.note1.text': Record<string, never>;
+  'help:articles.first-steps.title': Record<string, never>;
+  'help:articles.first-steps.lead': Record<string, never>;
+  'help:articles.first-steps.words': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.0.action': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.1.action': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.2.action': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.3.title': Record<string, never>;
+  'help:articles.first-steps.blocks.steps1.3.text': Record<string, never>;
+  'help:articles.first-steps.blocks.prompts1.title': Record<string, never>;
+  'help:articles.first-steps.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.first-steps.blocks.prompts1.items.1.text': Record<string, never>;
+  'help:articles.first-steps.blocks.prompts1.items.2.text': Record<string, never>;
+  'help:articles.first-steps.blocks.tip1.title': Record<string, never>;
+  'help:articles.first-steps.blocks.tip1.text': Record<string, never>;
+  'help:articles.sessions.title': Record<string, never>;
+  'help:articles.sessions.lead': Record<string, never>;
+  'help:articles.sessions.words': Record<string, never>;
+  'help:articles.sessions.blocks.list1.0': Record<string, never>;
+  'help:articles.sessions.blocks.list1.1': Record<string, never>;
+  'help:articles.sessions.blocks.list2.0': Record<string, never>;
+  'help:articles.sessions.blocks.list2.1': Record<string, never>;
+  'help:articles.sessions.blocks.list3.0': Record<string, never>;
+  'help:articles.sessions.blocks.list3.1': Record<string, never>;
+  'help:articles.sessions.blocks.tip1.title': Record<string, never>;
+  'help:articles.sessions.blocks.tip1.text': Record<string, never>;
+  'help:articles.sessions.news.list2': Record<string, never>;
+  'help:articles.conversation.title': Record<string, never>;
+  'help:articles.conversation.lead': Record<string, never>;
+  'help:articles.conversation.words': Record<string, never>;
+  'help:articles.conversation.blocks.list1.0': Record<string, never>;
+  'help:articles.conversation.blocks.list1.1': Record<string, never>;
+  'help:articles.conversation.blocks.list1.2': Record<string, never>;
+  'help:articles.conversation.blocks.list1.3': Record<string, never>;
+  'help:articles.conversation.blocks.list1.4': Record<string, never>;
+  'help:articles.conversation.blocks.list1.5': Record<string, never>;
+  'help:articles.conversation.blocks.note1.title': Record<string, never>;
+  'help:articles.conversation.blocks.note1.text': Record<string, never>;
+  'help:articles.conversation.blocks.keys': Record<string, never>;
+  'help:articles.approval.title': Record<string, never>;
+  'help:articles.approval.lead': Record<string, never>;
+  'help:articles.approval.words': Record<string, never>;
+  'help:articles.approval.blocks.list1.0': Record<string, never>;
+  'help:articles.approval.blocks.list1.1': Record<string, never>;
+  'help:articles.approval.blocks.list1.2': Record<string, never>;
+  'help:articles.approval.blocks.list1.3': Record<string, never>;
+  'help:articles.approval.blocks.approval': Record<string, never>;
+  'help:articles.approval.blocks.note1.title': Record<string, never>;
+  'help:articles.approval.blocks.note1.text': Record<string, never>;
+  'help:articles.approval.blocks.warn1.title': Record<string, never>;
+  'help:articles.approval.blocks.warn1.text': Record<string, never>;
+  'help:articles.files.title': Record<string, never>;
+  'help:articles.files.lead': Record<string, never>;
+  'help:articles.files.words': Record<string, never>;
+  'help:articles.files.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.files.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.files.blocks.steps1.0.action': Record<string, never>;
+  'help:articles.files.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.files.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.files.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.files.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.files.blocks.list1.0': Record<string, never>;
+  'help:articles.files.blocks.list2.0': Record<string, never>;
+  'help:articles.files.blocks.prompts1.title': Record<string, never>;
+  'help:articles.files.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.files.news.list2': Record<string, never>;
+  'help:articles.schedules.title': Record<string, never>;
+  'help:articles.schedules.lead': Record<string, never>;
+  'help:articles.schedules.words': Record<string, never>;
+  'help:articles.schedules.blocks.prompts1.title': Record<string, never>;
+  'help:articles.schedules.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.schedules.blocks.prompts1.items.1.text': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.0.action': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.schedules.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.schedules.blocks.list1.0': Record<string, never>;
+  'help:articles.schedules.blocks.list1.1': Record<string, never>;
+  'help:articles.schedules.blocks.list1.2': Record<string, never>;
+  'help:articles.devices.title': Record<string, never>;
+  'help:articles.devices.lead': Record<string, never>;
+  'help:articles.devices.words': Record<string, never>;
+  'help:articles.devices.blocks.list1.0': Record<string, never>;
+  'help:articles.devices.blocks.list1.1': Record<string, never>;
+  'help:articles.devices.blocks.list2.0': Record<string, never>;
+  'help:articles.devices.blocks.list2.1': Record<string, never>;
+  'help:articles.devices.blocks.no-project': Record<string, never>;
+  'help:articles.devices.blocks.p1': Record<string, never>;
+  'help:articles.devices.blocks.list3.0': Record<string, never>;
+  'help:articles.devices.blocks.list3.1': Record<string, never>;
+  'help:articles.devices.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.devices.news.list2': Record<string, never>;
+  'help:articles.remote-ops.title': Record<string, never>;
+  'help:articles.remote-ops.lead': Record<string, never>;
+  'help:articles.remote-ops.words': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.title': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.items.0.note': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.items.1.text': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.items.1.note': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.items.2.text': Record<string, never>;
+  'help:articles.remote-ops.blocks.prompts1.items.3.text': Record<string, never>;
+  'help:articles.remote-ops.blocks.remote-approval': Record<string, never>;
+  'help:articles.remote-ops.blocks.list1.0': Record<string, never>;
+  'help:articles.remote-ops.blocks.list1.1': Record<string, never>;
+  'help:articles.remote-ops.blocks.list1.2': Record<string, never>;
+  'help:articles.remote-ops.blocks.list1.3': Record<string, never>;
+  'help:articles.always-online.title': Record<string, never>;
+  'help:articles.always-online.lead': Record<string, never>;
+  'help:articles.always-online.words': Record<string, never>;
+  'help:articles.always-online.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.always-online.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.always-online.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.always-online.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.always-online.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.always-online.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.always-online.blocks.code1.label': Record<string, never>;
+  'help:articles.always-online.blocks.code1.text': Record<string, never>;
+  'help:articles.always-online.blocks.code2.label': Record<string, never>;
+  'help:articles.always-online.blocks.code2.text': Record<string, never>;
+  'help:articles.always-online.blocks.p1': Record<string, never>;
+  'help:articles.always-online.blocks.prompts1.title': Record<string, never>;
+  'help:articles.always-online.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.always-online.blocks.note1.title': Record<string, never>;
+  'help:articles.always-online.blocks.note1.text': Record<string, never>;
+  'help:articles.browser.title': Record<string, never>;
+  'help:articles.browser.lead': Record<string, never>;
+  'help:articles.browser.words': Record<string, never>;
+  'help:articles.browser.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.browser.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.browser.blocks.steps1.0.action': Record<string, never>;
+  'help:articles.browser.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.browser.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.browser.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.browser.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.browser.blocks.list1.0': Record<string, never>;
+  'help:articles.browser.blocks.list1.1': Record<string, never>;
+  'help:articles.ccdt.title': Record<string, never>;
+  'help:articles.ccdt.lead': Record<string, never>;
+  'help:articles.ccdt.words': Record<string, never>;
+  'help:articles.ccdt.blocks.workflow': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.0.action': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.ccdt.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.ccdt.blocks.note1.title': Record<string, never>;
+  'help:articles.ccdt.blocks.note1.text': Record<string, never>;
+  'help:articles.ccdt.blocks.commands': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.head.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.head.1': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.4.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.4.1': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.5.0': Record<string, never>;
+  'help:articles.ccdt.blocks.table1.rows.5.1': Record<string, never>;
+  'help:articles.ccdt.blocks.list1.0': Record<string, never>;
+  'help:articles.ccdt.news.list1': Record<string, never>;
+  'help:articles.agents.title': Record<string, never>;
+  'help:articles.agents.lead': Record<string, never>;
+  'help:articles.agents.words': Record<string, never>;
+  'help:articles.agents.blocks.call-others': Record<string, never>;
+  'help:articles.agents.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.agents.blocks.prompts1.items.0.note': Record<string, never>;
+  'help:articles.agents.blocks.called-by-others': Record<string, never>;
+  'help:articles.agents.blocks.p1': Record<string, never>;
+  'help:articles.agents.blocks.code1.label': Record<string, never>;
+  'help:articles.agents.blocks.code1.text': Record<string, never>;
+  'help:articles.agents.blocks.table1.head.0': Record<string, never>;
+  'help:articles.agents.blocks.table1.head.1': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.agents.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.agents.blocks.tip1.title': Record<string, never>;
+  'help:articles.agents.blocks.tip1.text': Record<string, never>;
+  'help:articles.acp.title': Record<string, never>;
+  'help:articles.acp.lead': Record<string, never>;
+  'help:articles.acp.words': Record<string, never>;
+  'help:articles.acp.blocks.code1.label': Record<string, never>;
+  'help:articles.acp.blocks.code1.text': Record<string, never>;
+  'help:articles.acp.blocks.code2.label': Record<string, never>;
+  'help:articles.acp.blocks.code2.text': Record<string, never>;
+  'help:articles.acp.blocks.list1.0': Record<string, never>;
+  'help:articles.acp.blocks.list1.1': Record<string, never>;
+  'help:articles.acp.blocks.list1.2': Record<string, never>;
+  'help:articles.acp.blocks.list1.3': Record<string, never>;
+  'help:articles.acp.blocks.note1.title': Record<string, never>;
+  'help:articles.acp.blocks.note1.text': Record<string, never>;
+  'help:articles.quota.title': Record<string, never>;
+  'help:articles.quota.lead': Record<string, never>;
+  'help:articles.quota.words': Record<string, never>;
+  'help:articles.quota.blocks.list1.0': Record<string, never>;
+  'help:articles.quota.blocks.list1.1': Record<string, never>;
+  'help:articles.quota.blocks.list1.2': Record<string, never>;
+  'help:articles.quota.blocks.list1.3': Record<string, never>;
+  'help:articles.quota.blocks.list1.4': Record<string, never>;
+  'help:articles.quota.blocks.actions1.0': Record<string, never>;
+  'help:articles.account.title': Record<string, never>;
+  'help:articles.account.lead': Record<string, never>;
+  'help:articles.account.words': Record<string, never>;
+  'help:articles.account.blocks.list1.0': Record<string, never>;
+  'help:articles.account.blocks.list1.1': Record<string, never>;
+  'help:articles.account.blocks.list1.2': Record<string, never>;
+  'help:articles.account.blocks.warn1.title': Record<string, never>;
+  'help:articles.account.blocks.warn1.text': Record<string, never>;
+  'help:articles.account.blocks.actions1.0': Record<string, never>;
+  'help:articles.settings.title': Record<string, never>;
+  'help:articles.settings.lead': Record<string, never>;
+  'help:articles.settings.words': Record<string, never>;
+  'help:articles.settings.blocks.table1.head.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.head.1': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.4.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.4.1': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.5.0': Record<string, never>;
+  'help:articles.settings.blocks.table1.rows.5.1': Record<string, never>;
+  'help:articles.settings.blocks.tip1.title': Record<string, never>;
+  'help:articles.settings.blocks.tip1.text': Record<string, never>;
+  'help:articles.settings.blocks.scopes': Record<string, never>;
+  'help:articles.settings.blocks.table2.head.0': Record<string, never>;
+  'help:articles.settings.blocks.table2.head.1': Record<string, never>;
+  'help:articles.settings.blocks.table2.rows.0.0': Record<string, never>;
+  'help:articles.settings.blocks.table2.rows.0.1': Record<string, never>;
+  'help:articles.settings.blocks.table2.rows.1.0': Record<string, never>;
+  'help:articles.settings.blocks.table2.rows.1.1': Record<string, never>;
+  'help:articles.settings.blocks.table2.rows.2.0': Record<string, never>;
+  'help:articles.settings.blocks.table2.rows.2.1': Record<string, never>;
+  'help:articles.settings.blocks.cli': Record<string, never>;
+  'help:articles.settings.blocks.p1': Record<string, never>;
+  'help:articles.settings.blocks.table3.head.0': Record<string, never>;
+  'help:articles.settings.blocks.table3.head.1': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.0.0': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.0.1': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.1.0': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.1.1': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.2.0': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.2.1': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.3.0': Record<string, never>;
+  'help:articles.settings.blocks.table3.rows.3.1': Record<string, never>;
+  'help:articles.settings.blocks.actions1.0': Record<string, never>;
+  'help:articles.context.title': Record<string, never>;
+  'help:articles.context.lead': Record<string, never>;
+  'help:articles.context.words': Record<string, never>;
+  'help:articles.context.blocks.how': Record<string, never>;
+  'help:articles.context.blocks.p1': Record<string, never>;
+  'help:articles.context.blocks.list1.0': Record<string, never>;
+  'help:articles.context.blocks.list1.1': Record<string, never>;
+  'help:articles.context.blocks.list1.2': Record<string, never>;
+  'help:articles.context.blocks.ttl': Record<string, never>;
+  'help:articles.context.blocks.p2': Record<string, never>;
+  'help:articles.context.blocks.table1.head.0': Record<string, never>;
+  'help:articles.context.blocks.table1.head.1': Record<string, never>;
+  'help:articles.context.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.context.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.context.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.context.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.context.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.context.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.context.blocks.note1.title': Record<string, never>;
+  'help:articles.context.blocks.note1.text': Record<string, never>;
+  'help:articles.context.blocks.p3': Record<string, never>;
+  'help:articles.context.blocks.idle': Record<string, never>;
+  'help:articles.context.blocks.p4': Record<string, never>;
+  'help:articles.context.blocks.list2.0': Record<string, never>;
+  'help:articles.context.blocks.list2.1': Record<string, never>;
+  'help:articles.context.blocks.list2.2': Record<string, never>;
+  'help:articles.context.blocks.list2.3': Record<string, never>;
+  'help:articles.context.blocks.list2.4': Record<string, never>;
+  'help:articles.context.blocks.list2.5': Record<string, never>;
+  'help:articles.context.blocks.list2.6': Record<string, never>;
+  'help:articles.context.blocks.window': Record<string, never>;
+  'help:articles.context.blocks.p5': Record<string, never>;
+  'help:articles.context.blocks.list3.0': Record<string, never>;
+  'help:articles.context.blocks.list3.1': Record<string, never>;
+  'help:articles.context.blocks.list3.2': Record<string, never>;
+  'help:articles.context.blocks.tip1.title': Record<string, never>;
+  'help:articles.context.blocks.tip1.text': Record<string, never>;
+  'help:articles.context.blocks.numbers': Record<string, never>;
+  'help:articles.context.blocks.p6': Record<string, never>;
+  'help:articles.context.blocks.list4.0': Record<string, never>;
+  'help:articles.context.blocks.list4.1': Record<string, never>;
+  'help:articles.context.blocks.list4.2': Record<string, never>;
+  'help:articles.context.blocks.actions1.0': Record<string, never>;
+  'help:articles.context.blocks.actions1.1': Record<string, never>;
+  'help:articles.unattended.title': Record<string, never>;
+  'help:articles.unattended.lead': Record<string, never>;
+  'help:articles.unattended.words': Record<string, never>;
+  'help:articles.unattended.blocks.stops': Record<string, never>;
+  'help:articles.unattended.blocks.table1.head.0': Record<string, never>;
+  'help:articles.unattended.blocks.table1.head.1': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.unattended.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.unattended.blocks.deny': Record<string, never>;
+  'help:articles.unattended.blocks.list1.0': Record<string, never>;
+  'help:articles.unattended.blocks.list1.1': Record<string, never>;
+  'help:articles.unattended.blocks.list1.2': Record<string, never>;
+  'help:articles.unattended.blocks.question': Record<string, never>;
+  'help:articles.unattended.blocks.p1': Record<string, never>;
+  'help:articles.unattended.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.unattended.blocks.p2': Record<string, never>;
+  'help:articles.unattended.blocks.limit': Record<string, never>;
+  'help:articles.unattended.blocks.p3': Record<string, never>;
+  'help:articles.unattended.blocks.prompts2.items.0.text': Record<string, never>;
+  'help:articles.unattended.blocks.p4': Record<string, never>;
+  'help:articles.unattended.blocks.recipe': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.1.action': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.3.title': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.3.text': Record<string, never>;
+  'help:articles.unattended.blocks.steps1.3.action': Record<string, never>;
+  'help:articles.model-settings.title': Record<string, never>;
+  'help:articles.model-settings.lead': Record<string, never>;
+  'help:articles.model-settings.words': Record<string, never>;
+  'help:articles.model-settings.blocks.thinking': Record<string, never>;
+  'help:articles.model-settings.blocks.list1.0': Record<string, never>;
+  'help:articles.model-settings.blocks.list1.1': Record<string, never>;
+  'help:articles.model-settings.blocks.list1.2': Record<string, never>;
+  'help:articles.model-settings.blocks.fast': Record<string, never>;
+  'help:articles.model-settings.blocks.list2.0': Record<string, never>;
+  'help:articles.model-settings.blocks.list2.1': Record<string, never>;
+  'help:articles.model-settings.blocks.list2.2': Record<string, never>;
+  'help:articles.model-settings.blocks.list2.3': Record<string, never>;
+  'help:articles.model-settings.blocks.fallback': Record<string, never>;
+  'help:articles.model-settings.blocks.list3.0': Record<string, never>;
+  'help:articles.model-settings.blocks.list3.1': Record<string, never>;
+  'help:articles.model-settings.blocks.list3.2': Record<string, never>;
+  'help:articles.model-settings.blocks.actions1.0': Record<string, never>;
+  'help:articles.memory.title': Record<string, never>;
+  'help:articles.memory.lead': Record<string, never>;
+  'help:articles.memory.words': Record<string, never>;
+  'help:articles.memory.blocks.table1.head.0': Record<string, never>;
+  'help:articles.memory.blocks.table1.head.1': Record<string, never>;
+  'help:articles.memory.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.memory.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.memory.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.memory.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.memory.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.memory.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.memory.blocks.project': Record<string, never>;
+  'help:articles.memory.blocks.p1': Record<string, never>;
+  'help:articles.memory.blocks.code1.label': Record<string, never>;
+  'help:articles.memory.blocks.code1.text': Record<string, never>;
+  'help:articles.memory.blocks.auto': Record<string, never>;
+  'help:articles.memory.blocks.list1.0': Record<string, never>;
+  'help:articles.memory.blocks.list1.1': Record<string, never>;
+  'help:articles.memory.blocks.list1.2': Record<string, never>;
+  'help:articles.memory.blocks.list1.3': Record<string, never>;
+  'help:articles.memory.blocks.note1.title': Record<string, never>;
+  'help:articles.memory.blocks.note1.text': Record<string, never>;
+  'help:articles.memory.blocks.habits': Record<string, never>;
+  'help:articles.memory.blocks.list2.0': Record<string, never>;
+  'help:articles.memory.blocks.list2.1': Record<string, never>;
+  'help:articles.memory.blocks.list2.2': Record<string, never>;
+  'help:articles.memory.blocks.actions1.0': Record<string, never>;
+  'help:articles.memory.blocks.actions1.1': Record<string, never>;
+  'help:articles.execution.title': Record<string, never>;
+  'help:articles.execution.lead': Record<string, never>;
+  'help:articles.execution.words': Record<string, never>;
+  'help:articles.execution.blocks.shell': Record<string, never>;
+  'help:articles.execution.blocks.list1.0': Record<string, never>;
+  'help:articles.execution.blocks.list1.1': Record<string, never>;
+  'help:articles.execution.blocks.list1.2': Record<string, never>;
+  'help:articles.execution.blocks.list1.3': Record<string, never>;
+  'help:articles.execution.blocks.actions1.0': Record<string, never>;
+  'help:articles.execution.blocks.output': Record<string, never>;
+  'help:articles.execution.blocks.list2.0': Record<string, never>;
+  'help:articles.execution.blocks.list2.1': Record<string, never>;
+  'help:articles.execution.blocks.list2.2': Record<string, never>;
+  'help:articles.execution.blocks.tools': Record<string, never>;
+  'help:articles.execution.blocks.list3.0': Record<string, never>;
+  'help:articles.execution.blocks.list3.1': Record<string, never>;
+  'help:articles.execution.blocks.waits': Record<string, never>;
+  'help:articles.execution.blocks.list4.0': Record<string, never>;
+  'help:articles.execution.blocks.list4.1': Record<string, never>;
+  'help:articles.execution.blocks.list4.2': Record<string, never>;
+  'help:articles.execution.blocks.actions2.0': Record<string, never>;
+  'help:articles.permissions.title': Record<string, never>;
+  'help:articles.permissions.lead': Record<string, never>;
+  'help:articles.permissions.words': Record<string, never>;
+  'help:articles.permissions.blocks.bypass': Record<string, never>;
+  'help:articles.permissions.blocks.p1': Record<string, never>;
+  'help:articles.permissions.blocks.writes': Record<string, never>;
+  'help:articles.permissions.blocks.list1.0': Record<string, never>;
+  'help:articles.permissions.blocks.list1.1': Record<string, never>;
+  'help:articles.permissions.blocks.list1.2': Record<string, never>;
+  'help:articles.permissions.blocks.checkpoints': Record<string, never>;
+  'help:articles.permissions.blocks.p2': Record<string, never>;
+  'help:articles.permissions.blocks.note1.title': Record<string, never>;
+  'help:articles.permissions.blocks.note1.text': Record<string, never>;
+  'help:articles.permissions.blocks.actions1.0': Record<string, never>;
+  'help:articles.background.title': Record<string, never>;
+  'help:articles.background.lead': Record<string, never>;
+  'help:articles.background.words': Record<string, never>;
+  'help:articles.background.blocks.list1.0': Record<string, never>;
+  'help:articles.background.blocks.list1.1': Record<string, never>;
+  'help:articles.background.blocks.list1.2': Record<string, never>;
+  'help:articles.background.blocks.list1.3': Record<string, never>;
+  'help:articles.background.blocks.actions1.0': Record<string, never>;
+  'help:articles.upgrade.title': Record<string, never>;
+  'help:articles.upgrade.lead': Record<string, never>;
+  'help:articles.upgrade.words': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.0.action': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.upgrade.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.upgrade.blocks.list1.0': Record<string, never>;
+  'help:articles.safety.title': Record<string, never>;
+  'help:articles.safety.lead': Record<string, never>;
+  'help:articles.safety.words': Record<string, never>;
+  'help:articles.safety.blocks.list1.0': Record<string, never>;
+  'help:articles.safety.blocks.list1.1': Record<string, never>;
+  'help:articles.safety.blocks.list1.2': Record<string, never>;
+  'help:articles.safety.blocks.list1.3': Record<string, never>;
+  'help:articles.safety.blocks.p1': Record<string, never>;
+  'help:articles.troubleshoot.title': Record<string, never>;
+  'help:articles.troubleshoot.lead': Record<string, never>;
+  'help:articles.troubleshoot.words': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.head.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.head.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.4.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.4.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.5.0': Record<string, never>;
+  'help:articles.troubleshoot.blocks.table1.rows.5.1': Record<string, never>;
+  'help:articles.troubleshoot.blocks.p1': Record<string, never>;
+  'help:articles.faq.title': Record<string, never>;
+  'help:articles.faq.lead': Record<string, never>;
+  'help:articles.faq.words': Record<string, never>;
+  'help:articles.faq.blocks.faq1.0.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.0.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.1.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.1.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.2.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.2.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.3.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.3.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.4.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.4.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.5.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.5.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.6.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.6.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.7.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.7.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.8.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.8.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.9.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.9.a.0': Record<string, never>;
+  'help:articles.faq.blocks.faq1.10.q': Record<string, never>;
+  'help:articles.faq.blocks.faq1.10.a.0': Record<string, never>;
   'nav:activity.background': Record<string, never>;
   'nav:activity.running': Record<string, never>;
   'nav:activity.question': Record<string, never>;

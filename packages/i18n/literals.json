@@ -1,9 +1,6 @@
 {
   "pending": {
     "apps/desktop/src/CcdtDialog.tsx": 1,
-    "apps/desktop/src/help-content.ts": 522,
-    "apps/desktop/src/HelpCenter.tsx": 58,
-    "apps/desktop/src/HelpFigures.tsx": 52,
     "apps/desktop/src/notes.ts": 5
   },
   "kept": {

@@ -42,26 +42,30 @@ export function resolveLanguage(
 
 // A made-up language for development: the English text with its letters accented and a third longer, between
 // brackets. Text that does not change with it was never taken from a catalog, and a layout that holds it holds
-// the longer words of other languages too. Placeholders and markup are left as they are.
+// the longer words of other languages too. Placeholders and markup are left as they are, the help's too: a link's
+// target, a shortcut's [[action]] and a {name} it fills in.
 export const pseudoLanguage = 'en-XA';
 const accents: Record<string, string> = Object.fromEntries(
   [...'aeiouycnAEIOUYCN'].map((letter, index) => [letter, 'åéîöüýçñÅÉÎÖÜÝÇÑ'[index]]),
 );
 export function pseudo(text: string) {
-  const parts = text.split(/(\{\{[^}]+\}\}|<[^>]+>|\$t\([^)]+\))/);
+  const parts = text.split(/(\{\{[^}]+\}\}|<[^>]+>|\$t\([^)]+\)|\]\([^)]+\)|\[\[\w+\]\]|\{\w+\})/);
   const body = parts
     .map((part, index) => (index % 2 ? part : part.replace(/[A-Za-z]/g, (c) => accents[c] ?? c)))
     .join('');
   return `[${body}${'~'.repeat(Math.ceil(text.length / 3))}]`;
 }
-type Tree = { [key: string]: string | Tree };
+// A catalog: messages by key, in groups and in lists (the help's).
+type Node = string | readonly Node[] | Tree;
+type Tree = { [key: string]: Node };
+const mapNode = (node: Node, change: (text: string) => string): Node =>
+  typeof node === 'string'
+    ? change(node)
+    : Array.isArray(node)
+      ? node.map((item: Node) => mapNode(item, change))
+      : mapTree(node as Tree, change);
 const mapTree = (tree: Tree, change: (text: string) => string): Tree =>
-  Object.fromEntries(
-    Object.entries(tree).map(([key, value]) => [
-      key,
-      typeof value === 'string' ? change(value) : mapTree(value, change),
-    ]),
-  );
+  Object.fromEntries(Object.entries(tree).map(([key, value]) => [key, mapNode(value, change)]));
 
 // The made-up language formats dates and numbers as English does: `common:locale` is a tag, not text.
 const pseudoCatalogs = mapTree(catalogs.en as unknown as Tree, pseudo);

@@ -2033,7 +2033,7 @@ export function App({
               suggestions={
                 !selected || controlsDisabled || away || inputDisabled
                   ? undefined
-                  : suggestions({
+                  : suggestions(t, {
                       project: !!projectIn(selected!),
                       other: onlineOthers[0],
                       schedules: host.schedules,

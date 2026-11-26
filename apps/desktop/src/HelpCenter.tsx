@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import changelog from '../../../CHANGELOG.md?raw';
 import { useT } from './i18n.ts';
-import { articles, freshness, groups, newsOf, starters } from './help-content.ts';
+import { freshness, groupName, groups, helpArticles, newsOf, starters } from './help-content.ts';
 import type { Article, Block, News, Prompt, Target } from './help-content.ts';
 import Figure from './HelpFigures.tsx';
 import { CopyButton } from './copy.tsx';
@@ -30,6 +30,8 @@ import './help.css';
 type Context = {
   here: string;
   others: string[];
+  // What another computer is called when none is online.
+  stand: string;
   browser: boolean;
   version: string;
   go: (article?: string) => void;
@@ -60,13 +62,19 @@ export default function HelpCenter({
   run: (target: Target) => void;
   tryPrompt?: (text: string) => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [id, anchor] = (place ?? '').split('#');
-  const shown = useMemo(() => articles.filter((item) => !browser || !item.desktop), [browser]);
-  const news = useMemo(() => newsOf(version, shown), [version, shown]);
+  const articles = useMemo(() => helpArticles(t), [t]);
+  const shown = useMemo(
+    () => articles.filter((item) => !browser || !item.desktop),
+    [articles, browser],
+  );
+  const news = useMemo(() => newsOf(t, version, shown), [t, version, shown]);
   const current = shown.find((item) => item.id === id);
-  const context: Context = { here, others, browser, version, go, run, tryPrompt };
-  const found = useMemo(() => search(shown, query, context), [shown, query, here, others]);
+  const stand = t('help:anotherComputer');
+  const context: Context = { here, others, stand, browser, version, go, run, tryPrompt };
+  const found = useMemo(() => search(shown, query, context), [shown, query, here, others, stand]);
   const page = useRef<HTMLElement>(null);
   // An article opens at its top, or at the heading asked for, which is flashed to be found.
   useEffect(() => {
@@ -101,29 +109,29 @@ export default function HelpCenter({
     <>
       <aside className="sidebar help-side">
         <div className="sidebar-brand">
-          <span className="brand">帮助</span>
+          <span className="brand">{t('nav:page.help')}</span>
         </div>
         <label className="session-search">
           <Search />
           <input
-            aria-label="搜索帮助"
+            aria-label={t('help:page.search')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.key === 'Escape' && setQuery('')}
-            placeholder="搜索帮助"
+            placeholder={t('help:page.search')}
           />
           {query && (
             <button
               type="button"
               className="help-search-clear"
-              aria-label="清除搜索"
+              aria-label={t('help:page.clearSearch')}
               onClick={() => setQuery('')}
             >
               <X />
             </button>
           )}
         </label>
-        <nav className="session-list help-nav" aria-label="帮助目录">
+        <nav className="session-list help-nav" aria-label={t('help:page.contents')}>
           <button
             type="button"
             className="side-action"
@@ -131,7 +139,7 @@ export default function HelpCenter({
             onClick={() => open()}
           >
             <House />
-            首页
+            {t('help:page.home')}
           </button>
           {news.length > 0 && (
             <button
@@ -141,7 +149,7 @@ export default function HelpCenter({
               onClick={() => open(NEWS)}
             >
               <Sparkles />
-              <span className="help-nav-name">这一版新增</span>
+              <span className="help-nav-name">{t('help:page.news')}</span>
               <span className="help-count">{news.length}</span>
             </button>
           )}
@@ -150,7 +158,7 @@ export default function HelpCenter({
             if (!members.length) return null;
             return (
               <Fragment key={group.id}>
-                <div className="list-heading">{group.name}</div>
+                <div className="list-heading">{groupName(t, group.id)}</div>
                 {members.map(item)}
               </Fragment>
             );
@@ -158,7 +166,7 @@ export default function HelpCenter({
         </nav>
       </aside>
       <main className="workspace">
-        <section className="page help-page" aria-label="帮助" ref={page}>
+        <section className="page help-page" aria-label={t('nav:page.help')} ref={page}>
           <div className="page-body help-body">
             {query.trim() ? (
               <Results query={query} found={found} open={open} />
@@ -179,13 +187,14 @@ export default function HelpCenter({
 const anchorId = (anchor: string) => `help-${anchor}`;
 
 function Fresh({ kind }: { kind: 'new' | 'changed' }) {
+  const t = useT();
   return kind === 'new' ? (
-    <span className="help-new" title="这一版新增">
-      新
+    <span className="help-new" title={t('help:page.news')}>
+      {t('help:page.newTag')}
     </span>
   ) : (
-    <span className="help-new changed" title="这一版有新内容">
-      更新
+    <span className="help-new changed" title={t('help:page.changed')}>
+      {t('help:page.changedTag')}
     </span>
   );
 }
@@ -199,28 +208,29 @@ function summary(version: string) {
 
 // The front page: what this is in one picture, how to begin, what to try, and every subject.
 function Home({ list, news, context }: { list: Article[]; news: News[]; context: Context }) {
+  const t = useT();
   const { here, others, go, run, version } = context;
-  const offered = starters.filter(
+  const offered = starters(t).filter(
     (item) => (!item.device || others.length > 0) && list.some((a) => a.id === item.article),
   );
   return (
     <>
       <header className="help-hero">
         <div className="help-hero-text">
-          <span className="help-kicker">CC Desk Tunnel 帮助</span>
+          <span className="help-kicker">{t('help:page.kicker')}</span>
           <h1>
-            Claude Code 住在服务器上，
+            {t('help:page.hero.line1')}
             <br />
-            你的每台电脑都是它的手
+            {t('help:page.hero.line2')}
           </h1>
-          <p>会话、记忆和账号集中在服务端；项目、文件和命令留在各自的电脑上。</p>
+          <p>{t('help:page.hero.text')}</p>
           <div className="help-hero-actions">
             <button type="button" className="button primary" onClick={() => go('first-steps')}>
-              第一次使用
+              {t('help:articles.first-steps.title')}
               <ArrowRight />
             </button>
             <button type="button" className="button" onClick={() => go('how-it-works')}>
-              它是怎么工作的
+              {t('help:articles.how-it-works.title')}
             </button>
           </div>
         </div>
@@ -230,43 +240,31 @@ function Home({ list, news, context }: { list: Article[]; news: News[]; context:
         <button type="button" className="help-banner" onClick={() => go(NEWS)}>
           <Sparkles />
           <span>
-            <strong>{version} 新增了什么</strong>
-            <small>{summary(version) || `${news.length} 项新功能，点开看怎么用`}</small>
+            <strong>{t('help:page.bannerTitle', { version })}</strong>
+            <small>{summary(version) || t('help:page.bannerText', { count: news.length })}</small>
           </span>
           <ChevronRight />
         </button>
       )}
       <section className="help-section">
-        <h2 className="help-section-title">三步开始</h2>
+        <h2 className="help-section-title">{t('help:page.start.title')}</h2>
         <div className="help-start">
           {[
-            {
-              title: '添加项目',
-              text: '选电脑上的一个文件夹，Claude 在那里干活。',
-              target: { doing: 'addProject' } as Target,
-            },
-            {
-              title: '说出任务',
-              text: '新建会话，像在终端里用 Claude Code 一样说话。',
-              target: { doing: 'newSession' } as Target,
-            },
-            {
-              title: '看着它做',
-              text: '每一步折成一行；要动手时按审批模式问你。',
-              target: { article: 'approval' } as Target,
-            },
+            { key: 'addProject' as const, target: { doing: 'addProject' } as Target },
+            { key: 'task' as const, target: { doing: 'newSession' } as Target },
+            { key: 'watch' as const, target: { article: 'approval' } as Target },
           ].map((step, index) => (
             <button
               type="button"
               className="help-start-step"
-              key={step.title}
+              key={step.key}
               onClick={() =>
                 'article' in step.target ? go(step.target.article) : run(step.target)
               }
             >
               <span className="help-step-number">{index + 1}</span>
-              <strong>{step.title}</strong>
-              <small>{step.text}</small>
+              <strong>{t(`help:page.start.${step.key}.title`)}</strong>
+              <small>{t(`help:page.start.${step.key}.text`)}</small>
             </button>
           ))}
         </div>
@@ -274,8 +272,8 @@ function Home({ list, news, context }: { list: Article[]; news: News[]; context:
       {offered.length > 0 && (
         <section className="help-section">
           <h2 className="help-section-title">
-            试试这样说
-            <small>点“试试”放进新会话的输入框，改好再发</small>
+            {t('help:page.try.title')}
+            <small>{t('help:page.try.hint')}</small>
           </h2>
           <div className="help-prompts">
             {offered.slice(0, 4).map((item) => (
@@ -285,7 +283,7 @@ function Home({ list, news, context }: { list: Article[]; news: News[]; context:
         </section>
       )}
       <section className="help-section">
-        <h2 className="help-section-title">按主题浏览</h2>
+        <h2 className="help-section-title">{t('help:page.browse')}</h2>
         <div className="help-groups">
           {groups.map((group) => {
             const members = list.filter((item) => item.group === group.id);
@@ -294,7 +292,7 @@ function Home({ list, news, context }: { list: Article[]; news: News[]; context:
               <div className="help-group-card" key={group.id}>
                 <div className="help-group-head">
                   <group.icon />
-                  <strong>{group.name}</strong>
+                  <strong>{groupName(t, group.id)}</strong>
                 </div>
                 {members.map((item) => {
                   const fresh = freshness(item, version);
@@ -318,7 +316,7 @@ function Home({ list, news, context }: { list: Article[]; news: News[]; context:
       <footer className="help-foot">
         {project.url && (
           <button type="button" className="text-link" onClick={openProject}>
-            项目主页与完整文档
+            {t('help:page.homepage')}
             <ExternalLink />
           </button>
         )}
@@ -329,15 +327,16 @@ function Home({ list, news, context }: { list: Article[]; news: News[]; context:
 
 // What the program's version brought, each with the way to its article.
 function NewsView({ news, context }: { news: News[]; context: Context }) {
+  const t = useT();
   const { version, go } = context;
   return (
     <article className="help-article">
-      <nav className="help-crumbs" aria-label="位置">
+      <nav className="help-crumbs" aria-label={t('help:page.crumbs')}>
         <button type="button" className="text-link" onClick={() => go()}>
-          帮助
+          {t('nav:page.help')}
         </button>
         <ChevronRight />
-        <span>开始使用</span>
+        <span>{groupName(t, 'start')}</span>
       </nav>
       <header className="help-article-head">
         <span className="help-article-icon">
@@ -345,9 +344,9 @@ function NewsView({ news, context }: { news: News[]; context: Context }) {
         </span>
         <div>
           <div className="help-title-row">
-            <h1>{version} 新增</h1>
+            <h1>{t('help:page.newsTitle', { version })}</h1>
           </div>
-          <p className="help-lead">{summary(version) || '这一版带来的新功能，点开看怎么用。'}</p>
+          <p className="help-lead">{summary(version) || t('help:page.newsLead')}</p>
         </div>
       </header>
       <div className="help-news">
@@ -366,7 +365,7 @@ function NewsView({ news, context }: { news: News[]; context: Context }) {
               <Inline text={item.text} context={context} />
             </small>
             <span className="help-news-more">
-              看怎么用
+              {t('help:page.howTo')}
               <ArrowRight />
             </span>
           </button>
@@ -375,11 +374,9 @@ function NewsView({ news, context }: { news: News[]; context: Context }) {
       <aside className="help-callout note">
         <Info />
         <div>
-          <strong>完整的变更</strong>
+          <strong>{t('help:page.changes.title')}</strong>
           <p>
-            每一项改动与修复见
-            <InlineLink words="关于与更新" to="settings:about" context={context} />
-            里的“更新内容”。文中标着“新”的段落，是这一版加的。
+            <Inline text={t('help:page.changes.text')} context={context} />
           </p>
         </div>
       </aside>
@@ -396,8 +393,8 @@ function ArticleView({
   list: Article[];
   context: Context;
 }) {
+  const t = useT();
   const { go, version } = context;
-  const group = groups.find((item) => item.id === article.group);
   const index = list.indexOf(article);
   const previous = list[index - 1];
   const next = list[index + 1];
@@ -407,16 +404,16 @@ function ArticleView({
   const fresh = freshness(article, version);
   // A long article lists its headings at the top, each a way to it.
   const headings = article.blocks.flatMap((block) =>
-    block.kind === 'heading' ? [{ text: block.text, id: block.id ?? block.text }] : [],
+    block.kind === 'heading' ? [{ text: block.text, id: block.id }] : [],
   );
   return (
     <article className="help-article">
-      <nav className="help-crumbs" aria-label="位置">
+      <nav className="help-crumbs" aria-label={t('help:page.crumbs')}>
         <button type="button" className="text-link" onClick={() => go()}>
-          帮助
+          {t('nav:page.help')}
         </button>
         <ChevronRight />
-        <span>{group?.name}</span>
+        <span>{groupName(t, article.group)}</span>
       </nav>
       <header className="help-article-head">
         <span className="help-article-icon">
@@ -433,7 +430,7 @@ function ArticleView({
         </div>
       </header>
       {headings.length >= 4 && (
-        <nav className="help-toc" aria-label="本页内容">
+        <nav className="help-toc" aria-label={t('help:page.toc')}>
           {headings.map((heading) => (
             <button
               type="button"
@@ -449,7 +446,7 @@ function ArticleView({
         // Within an article that is new as a whole, nothing more is marked.
         block.since === version && fresh !== 'new' ? (
           <div className="help-fresh" key={at}>
-            <span className="help-fresh-tag">{version} 新增</span>
+            <span className="help-fresh-tag">{t('help:page.newsTitle', { version })}</span>
             <BlockView block={block} context={context} />
           </div>
         ) : (
@@ -458,7 +455,7 @@ function ArticleView({
       )}
       {related.length > 0 && (
         <section className="help-related">
-          <h2>相关</h2>
+          <h2>{t('help:page.related')}</h2>
           <div className="help-related-list">
             {related.map((item) => (
               <button
@@ -482,7 +479,7 @@ function ArticleView({
           <button type="button" onClick={() => go(previous.id)}>
             <ArrowLeft />
             <span>
-              <small>上一篇</small>
+              <small>{t('help:page.previous')}</small>
               {previous.title}
             </span>
           </button>
@@ -492,7 +489,7 @@ function ArticleView({
         {next && (
           <button type="button" className="next" onClick={() => go(next.id)}>
             <span>
-              <small>下一篇</small>
+              <small>{t('help:page.next')}</small>
               {next.title}
             </span>
             <ArrowRight />
@@ -504,6 +501,7 @@ function ArticleView({
 }
 
 function BlockView({ block, context }: { block: Block; context: Context }) {
+  const t = useT();
   const { here, others } = context;
   switch (block.kind) {
     case 'p':
@@ -514,7 +512,7 @@ function BlockView({ block, context }: { block: Block; context: Context }) {
       );
     case 'heading':
       return (
-        <h2 className="help-h2" id={anchorId(block.id ?? block.text)}>
+        <h2 className="help-h2" id={anchorId(block.id)}>
           {block.text}
         </h2>
       );
@@ -588,7 +586,7 @@ function BlockView({ block, context }: { block: Block; context: Context }) {
         <div className="help-code">
           <div className="help-code-head">
             <span>{block.label}</span>
-            <CopyButton text={block.text} label="复制" />
+            <CopyButton text={block.text} label={t('common:copy.copy')} />
           </div>
           <pre>
             <code>{block.text}</code>
@@ -681,6 +679,7 @@ function PromptCard({
   context: Context;
   more?: string;
 }) {
+  const t = useT();
   const text = fill(prompt.text, context);
   return (
     <div className="help-prompt">
@@ -695,17 +694,17 @@ function PromptCard({
           <button
             type="button"
             className="help-try"
-            title="新建一个会话，把这句话放进输入框"
+            title={t('help:page.try.tip')}
             onClick={() => context.tryPrompt!(text)}
           >
             <MessageSquarePlus />
-            试试
+            {t('help:page.try.button')}
           </button>
         )}
-        <CopyButton text={text} label="复制" />
+        <CopyButton text={text} label={t('common:copy.copy')} />
         {more && (
           <button type="button" className="text-link help-more" onClick={() => context.go(more)}>
-            说明
+            {t('help:page.try.more')}
           </button>
         )}
       </div>
@@ -727,7 +726,7 @@ function Keys({ browser }: { browser: boolean }) {
     .filter(([, keys]) => keys);
   return (
     <div className="help-keys">
-      {[['命令菜单（在输入框里）', '/'], ...rows].map(([name, keys]) => (
+      {[[t('help:page.commandMenu'), '/'], ...rows].map(([name, keys]) => (
         <div className="help-key" key={name}>
           <span>{name}</span>
           <span className="help-key-combo">
@@ -750,10 +749,14 @@ function Results({
   found: { article: Article; snippet: string }[];
   open: (id: string) => void;
 }) {
+  const t = useT();
   return (
     <section className="help-results">
       <h1 className="help-results-title">
-        “{query.trim()}”<small>{found.length ? `${found.length} 篇` : '没有找到'}</small>
+        {t('help:page.query', { query: query.trim() })}
+        <small>
+          {found.length ? t('help:page.found', { count: found.length }) : t('help:page.notFound')}
+        </small>
       </h1>
       {found.map(({ article, snippet }) => (
         <button
@@ -765,19 +768,19 @@ function Results({
           <article.icon />
           <span>
             <strong>{article.title}</strong>
-            <small>{groups.find((group) => group.id === article.group)?.name}</small>
+            <small>{groupName(t, article.group)}</small>
             <em>{snippet}</em>
           </span>
           <ChevronRight />
         </button>
       ))}
-      {!found.length && <p className="muted">换个说法试试，比如“额度”“其他电脑”“连不上”。</p>}
+      {!found.length && <p className="muted">{t('help:page.searchHint')}</p>}
     </section>
   );
 }
 
-const fill = (text: string, { here, others }: { here: string; others: string[] }) =>
-  text.replaceAll('{device}', others[0] ?? '另一台电脑').replaceAll('{here}', here);
+const fill = (text: string, { here, others, stand }: Pick<Context, 'here' | 'others' | 'stand'>) =>
+  text.replaceAll('{device}', others[0] ?? stand).replaceAll('{here}', here);
 // Text without its marks, for a line under a title and for the search.
 const plain = (text: string, context: Context) =>
   fill(text, context)

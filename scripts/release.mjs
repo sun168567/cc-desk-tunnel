@@ -42,7 +42,7 @@ if (
   )
 )
   console.log(
-    `Note: the help marks nothing as new in ${version}. If it brings features, write how to use them in apps/desktop/src/help-content.ts and mark them with since: '${version}'.`,
+    `Note: the help marks nothing as new in ${version}. If it brings features, write how to use them in the help (its structure in apps/desktop/src/help-content.ts, its text in each language's packages/i18n/src/locales/*/help.json) and mark them with since: '${version}'.`,
   );
 // The help's articles that changed parts of the window point to, since the last release: their text may need to follow.
 // Only what changed is named, so a release that touches none of them says nothing.

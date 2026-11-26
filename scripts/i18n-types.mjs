@@ -15,9 +15,12 @@ const source = join(root, 'packages/i18n/src/locales/zh-CN');
 export const typesFile = join(root, 'packages/i18n/src/resources.d.ts');
 
 const literal = (value) => JSON.stringify(value);
+// A list, such as the items of a list in the help, is a tuple of its messages.
 function typeOf(value, indent) {
   if (typeof value === 'string') return literal(value);
   const inner = `${indent}  `;
+  if (Array.isArray(value))
+    return `readonly [\n${value.map((child) => `${inner}${typeOf(child, inner)},`).join('\n')}\n${indent}]`;
   const fields = Object.entries(value).map(
     ([key, child]) => `${inner}${literal(key)}: ${typeOf(child, inner)};`,
   );

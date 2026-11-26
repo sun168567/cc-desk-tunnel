@@ -73,7 +73,12 @@ test('no language but Chinese holds Chinese text', () => {
   for (const language of languages.filter((item) => !item.startsWith('zh')))
     for (const namespace of namespaces)
       for (const [key, text] of flat(catalogs[language][namespace]))
-        assert.doesNotMatch(text, /[㐀-鿿]/, `${language} ${namespace}:${key}`);
+        // Where a link goes is an address, not text: the docs' headings are Chinese.
+        assert.doesNotMatch(
+          text.replace(/\]\([^)]+\)/g, ']'),
+          /[㐀-鿿]/,
+          `${language} ${namespace}:${key}`,
+        );
 });
 
 test('the catalogs’ types are up to date', async () => {
@@ -95,6 +100,11 @@ test('the language follows the choice, else the first of the system’s it speak
 
 test('the made-up language keeps placeholders and markup, and shows a missing message by its key', () => {
   assert.equal(pseudo('Open {{name}} <0>now</0>'), '[Öpéñ {{name}} <0>ñöw</0>~~~~~~~~]');
+  // The help's marks: where a link goes, a shortcut's action, a name it fills in.
+  assert.equal(
+    pseudo('See [modes](#approval), [[cycleMode]], {device}'),
+    '[Séé [mödés](#approval), [[cycleMode]], {device}~~~~~~~~~~~~~~~~]',
+  );
   const i18n = createI18n(pseudoLanguage);
   assert.match(i18n.t('language.system'), /^\[Üsé sýstém séttîñg~+\]$/);
   assert.equal(createI18n('en').t('language.nothing'), 'language.nothing');
