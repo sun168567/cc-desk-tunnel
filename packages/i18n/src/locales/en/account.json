@@ -82,7 +82,8 @@
     },
     "short": {
       "hour": "5-hour",
-      "week": "Weekly"
+      "week": "Weekly",
+      "modelWeek": "{{model}} weekly"
     },
     "none": "No quota read yet",
     "openUsage": "View plan usage",
