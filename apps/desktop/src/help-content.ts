@@ -152,6 +152,11 @@ const shapes: ArticleShape[] = [
         key: 'note1',
         tone: 'note',
       },
+      {
+        kind: 'callout',
+        key: 'tip2',
+        tone: 'tip',
+      },
     ],
     related: ['first-steps', 'remote-ops', 'safety'],
   },
