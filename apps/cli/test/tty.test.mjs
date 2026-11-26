@@ -136,8 +136,11 @@ test(
     };
     await until(/ccdt 设置/);
     assert.match(screen, /只能改本机的设置/);
-    child.write('\x1b[B');
-    await new Promise((r) => setTimeout(r, 200));
+    // Down past ccdt's language and the wait for the server, to the wait for this computer's SSH service.
+    for (let i = 0; i < 2; i++) {
+      child.write('\x1b[B');
+      await new Promise((r) => setTimeout(r, 200));
+    }
     child.write('\r');
     await until(/本机 SSH 服务启动（写 default/);
     child.write('30');
