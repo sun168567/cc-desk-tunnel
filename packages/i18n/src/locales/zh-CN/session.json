@@ -270,7 +270,9 @@
     "continue": "接着上一轮继续",
     "send": "发送消息",
     "contextUsed": "已使用 {{percent}}%",
-    "tooLong": "消息超过 {{limit}} 字，删减后再发送"
+    "tooLong": "消息超过 {{limit}} 字，删减后再发送",
+    "sync": "同步项目说明与技能",
+    "syncDetail": "让服务器上的 Claude Code 读到项目的 CLAUDE.md、skills"
   },
   "picture": {
     "title": "图片",
@@ -437,7 +439,30 @@
     "move": "移到项目…",
     "ccdt": "用 ccdt 打开",
     "refresh": "刷新状态",
-    "delete": "删除"
+    "delete": "删除",
+    "sync": "同步项目说明与技能…"
   },
-  "closeError": "关闭错误提示"
+  "closeError": "关闭错误提示",
+  "sync": {
+    "title": "同步“{{name}}”的说明与技能",
+    "intro": "同步 CLAUDE.md、CLAUDE.local.md 和 .claude/ 下的 rules、skills、commands、agents。服务器上的 Claude Code 只读服务端这一份，下一条消息起生效。项目设置和 MCP 不同步，它们会在服务器上运行。",
+    "direction": "方向",
+    "up": "电脑 → 服务端",
+    "down": "服务端 → 电脑",
+    "server": "服务端 · {{path}}",
+    "comparing": "正在比较…",
+    "none": "项目里没有这些文件",
+    "added_other": "新文件 {{count}} 个",
+    "differ_other": "内容不同 {{count}} 个",
+    "same_other": "已相同 {{count}} 个",
+    "more_other": "等 {{count}} 个",
+    "replace_other": "也覆盖内容不同的 {{count}} 个",
+    "merge": "复制合并提示词",
+    "copied": "已复制。粘贴到这个项目的会话里发给 Claude，它会对比两边并合并。",
+    "mergePrompt": "这个项目的说明和技能在电脑和服务端各有一份，下面这些文件两边内容不同：\n{{files}}\n\n电脑上：{{computer}}\n服务端：{{server}}\n\n请逐个对比两边的内容，合并成一份，写回两处。服务端那份是 Claude Code 加载的。",
+    "run_other": "同步 {{count}} 个文件",
+    "copying": "正在同步…",
+    "done_other": "已同步 {{count}} 个文件，下一条消息起生效。",
+    "separator": "、"
+  }
 }

@@ -3298,6 +3298,43 @@ button.quota-period:hover {
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
+/* Syncing a project's instructions and skills (SyncDialog.tsx). */
+.sync-dialog {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+.sync-dialog > p {
+  margin: 0;
+}
+.sync-route {
+  font-size: 12px;
+  word-break: break-all;
+}
+.sync-found {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sync-found li {
+  display: grid;
+  gap: 2px;
+}
+.sync-found span {
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+.sync-dialog .check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sync-dialog .dialog-actions {
+  justify-self: stretch;
+}
 .usage-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

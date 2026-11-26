@@ -907,6 +907,14 @@ const shapes: ArticleShape[] = [
       },
       {
         kind: 'p',
+        key: 'p0',
+      },
+      {
+        kind: 'list',
+        key: 'list0',
+      },
+      {
+        kind: 'p',
         key: 'p1',
       },
       {

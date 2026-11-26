@@ -1889,13 +1889,19 @@ export type Resources = {
               ],
               readonly [
                 '**项目里的 `CLAUDE.md`、`AGENTS.md`**',
-                '在你电脑的项目文件夹里。Claude Code 在服务器上，**不会自动读**',
+                '在你电脑的项目文件夹里。Claude Code 在服务器上，**不会自动读**；[同步](#memory#project)到服务端后就会读',
               ],
               readonly ['**自动记忆**', 'Claude 自己记的笔记，在服务器上按项目保存'],
             ];
           };
           project: '让 Claude 读你项目里的说明';
-          p1: '省事的做法是在全局说明里写一句，以后每个会话都会照做：';
+          p0: '两种办法。一是同步到服务端：Claude Code 读服务端那一份，下一条消息起生效。';
+          list0: readonly [
+            '在会话的右键菜单（或 ⋯）、侧栏的项目菜单、输入框的 `/`，或[全局说明](settings:instructions)里，选“同步项目说明与技能”。',
+            '同步 `CLAUDE.md`、`CLAUDE.local.md` 和 `.claude/` 下的 rules、skills、commands、agents。项目设置和 MCP 不同步，它们会在服务器上运行。',
+            '先对比两边：新文件直接复制；内容不同的可以覆盖，或复制一段提示词让 Claude 对比后合并。也能从服务端同步回电脑。',
+          ];
+          p1: '二是让每个会话自己去读，在全局说明里写一句：';
           code1: {
             label: '写进全局说明';
             text: '进入一个项目后，先读项目根目录的 CLAUDE.md 或 AGENTS.md（如果有），按其中的约定工作。';
@@ -2870,6 +2876,8 @@ export type Resources = {
       send: '发送消息';
       contextUsed: '已使用 {{percent}}%';
       tooLong: '消息超过 {{limit}} 字，删减后再发送';
+      sync: '同步项目说明与技能';
+      syncDetail: '让服务器上的 Claude Code 读到项目的 CLAUDE.md、skills';
     };
     picture: {
       title: '图片';
@@ -3037,8 +3045,31 @@ export type Resources = {
       ccdt: '用 ccdt 打开';
       refresh: '刷新状态';
       delete: '删除';
+      sync: '同步项目说明与技能…';
     };
     closeError: '关闭错误提示';
+    sync: {
+      title: '同步“{{name}}”的说明与技能';
+      intro: '同步 CLAUDE.md、CLAUDE.local.md 和 .claude/ 下的 rules、skills、commands、agents。服务器上的 Claude Code 只读服务端这一份，下一条消息起生效。项目设置和 MCP 不同步，它们会在服务器上运行。';
+      direction: '方向';
+      up: '电脑 → 服务端';
+      down: '服务端 → 电脑';
+      server: '服务端 · {{path}}';
+      comparing: '正在比较…';
+      none: '项目里没有这些文件';
+      added_other: '新文件 {{count}} 个';
+      differ_other: '内容不同 {{count}} 个';
+      same_other: '已相同 {{count}} 个';
+      more_other: '等 {{count}} 个';
+      replace_other: '也覆盖内容不同的 {{count}} 个';
+      merge: '复制合并提示词';
+      copied: '已复制。粘贴到这个项目的会话里发给 Claude，它会对比两边并合并。';
+      mergePrompt: '这个项目的说明和技能在电脑和服务端各有一份，下面这些文件两边内容不同：\n{{files}}\n\n电脑上：{{computer}}\n服务端：{{server}}\n\n请逐个对比两边的内容，合并成一份，写回两处。服务端那份是 Claude Code 加载的。';
+      run_other: '同步 {{count}} 个文件';
+      copying: '正在同步…';
+      done_other: '已同步 {{count}} 个文件，下一条消息起生效。';
+      separator: '、';
+    };
   };
   settings: {
     wait: {
@@ -3467,6 +3498,11 @@ export type Resources = {
       intro: '云端 Claude Code 的用户级 CLAUDE.md，这个服务上的每个会话都会读取，下一次运行起生效。用户级不读 AGENTS.md；你电脑上项目里的 CLAUDE.md、AGENTS.md 也不会自动读取，需要时让 Claude 去读。';
       placeholder: '例如：回复用中文；提交信息用中文。';
       reload: '重新载入';
+      project: {
+        title: '项目的说明与技能';
+        detail: '项目文件夹里的 CLAUDE.md、skills 等在你的电脑上，服务器上的 Claude Code 不会自动加载。同步到服务端后，下一条消息起生效。';
+        run: '同步“{{name}}”…';
+      };
     };
     web: {
       credential: '服务凭据';
@@ -4895,6 +4931,10 @@ export type Messages = {
   'help:articles.memory.blocks.table1.rows.2.0': Record<string, never>;
   'help:articles.memory.blocks.table1.rows.2.1': Record<string, never>;
   'help:articles.memory.blocks.project': Record<string, never>;
+  'help:articles.memory.blocks.p0': Record<string, never>;
+  'help:articles.memory.blocks.list0.0': Record<string, never>;
+  'help:articles.memory.blocks.list0.1': Record<string, never>;
+  'help:articles.memory.blocks.list0.2': Record<string, never>;
   'help:articles.memory.blocks.p1': Record<string, never>;
   'help:articles.memory.blocks.code1.label': Record<string, never>;
   'help:articles.memory.blocks.code1.text': Record<string, never>;
@@ -5595,6 +5635,8 @@ export type Messages = {
   'session:composer.send': Record<string, never>;
   'session:composer.contextUsed': { percent: Value };
   'session:composer.tooLong': { limit: Value };
+  'session:composer.sync': Record<string, never>;
+  'session:composer.syncDetail': Record<string, never>;
   'session:picture.title': Record<string, never>;
   'session:picture.enlarge': Record<string, never>;
   'session:picture.note': { type: Value; size: Value };
@@ -5720,7 +5762,28 @@ export type Messages = {
   'session:action.ccdt': Record<string, never>;
   'session:action.refresh': Record<string, never>;
   'session:action.delete': Record<string, never>;
+  'session:action.sync': Record<string, never>;
   'session:closeError': Record<string, never>;
+  'session:sync.title': { name: Value };
+  'session:sync.intro': Record<string, never>;
+  'session:sync.direction': Record<string, never>;
+  'session:sync.up': Record<string, never>;
+  'session:sync.down': Record<string, never>;
+  'session:sync.server': { path: Value };
+  'session:sync.comparing': Record<string, never>;
+  'session:sync.none': Record<string, never>;
+  'session:sync.added': { count: number };
+  'session:sync.differ': { count: number };
+  'session:sync.same': { count: number };
+  'session:sync.more': { count: number };
+  'session:sync.replace': { count: number };
+  'session:sync.merge': Record<string, never>;
+  'session:sync.copied': Record<string, never>;
+  'session:sync.mergePrompt': { files: Value; computer: Value; server: Value };
+  'session:sync.run': { count: number };
+  'session:sync.copying': Record<string, never>;
+  'session:sync.done': { count: number };
+  'session:sync.separator': Record<string, never>;
   'settings:wait.connect.title': Record<string, never>;
   'settings:wait.connect.detail': Record<string, never>;
   'settings:wait.ssh.title': Record<string, never>;
@@ -5992,6 +6055,9 @@ export type Messages = {
   'settings:instructions.intro': Record<string, never>;
   'settings:instructions.placeholder': Record<string, never>;
   'settings:instructions.reload': Record<string, never>;
+  'settings:instructions.project.title': Record<string, never>;
+  'settings:instructions.project.detail': Record<string, never>;
+  'settings:instructions.project.run': { name: Value };
   'settings:web.credential': Record<string, never>;
   'settings:web.currentCode': Record<string, never>;
   'settings:web.saving': Record<string, never>;

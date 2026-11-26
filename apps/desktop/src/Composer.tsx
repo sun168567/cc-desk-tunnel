@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Shrink,
+  FolderSync,
   Square,
   SquareSlash,
 } from 'lucide-react';
@@ -86,6 +87,7 @@ export default function Composer({
   refresh,
   configure,
   stop,
+  syncInstructions,
 }: {
   session: Session;
   // Absent for a session that belongs to no project.
@@ -124,6 +126,8 @@ export default function Composer({
     permissionMode?: PermissionMode;
   }) => Promise<void>;
   stop: () => void;
+  // Opens the sync of the project's instructions and skills with the service, where it can be done.
+  syncInstructions?: () => void;
 }) {
   const t = useT();
   const input = useRef<MessageInputHandle>(null);
@@ -176,6 +180,22 @@ export default function Composer({
               : '/compact',
             disabled: controlsDisabled || !canCompact,
             run: compact,
+          },
+        ]
+      : []),
+    ...(syncInstructions && 'sync'.startsWith(typed)
+      ? [
+          {
+            key: 'sync',
+            icon: <FolderSync />,
+            title: t('session:composer.sync'),
+            detail: t('session:composer.syncDetail'),
+            disabled: false,
+            run: () => {
+              setSlashOpen(false);
+              setDraft('');
+              syncInstructions();
+            },
           },
         ]
       : []),

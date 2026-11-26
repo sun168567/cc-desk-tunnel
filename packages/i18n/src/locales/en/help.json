@@ -873,13 +873,19 @@
             ],
             [
               "**`CLAUDE.md` and `AGENTS.md` in the project**",
-              "In the project folder on your computer. Claude Code is on the server and **doesn’t read them on its own**"
+              "In the project folder on your computer. Claude Code is on the server and **doesn’t read them on its own**; [synced](#memory#project) to the server, they are read"
             ],
             ["**Auto memory**", "Notes Claude keeps itself, saved on the server by project"]
           ]
         },
         "project": "Having Claude read your project’s instructions",
-        "p1": "The easy way is a line in the global instructions, which every session will follow from then on:",
+        "p0": "There are two ways. One is to sync them to the server: Claude Code reads the server’s copy, from the next message on.",
+        "list0": [
+          "Choose “Sync project instructions and skills” in the session’s context menu (or ⋯), the project’s menu in the sidebar, after `/` in the input box, or in [Global instructions](settings:instructions).",
+          "It syncs `CLAUDE.md`, `CLAUDE.local.md`, and the rules, skills, commands and agents under `.claude/`. The project’s settings and MCP servers are not synced: they would run on the server.",
+          "Both sides are compared first: new files are copied; ones that differ can be replaced, or handed to Claude with a prompt to compare and merge them. It works from the server back to the computer too."
+        ],
+        "p1": "The other is to have each session read them, with a line in the global instructions:",
         "code1": {
           "label": "Put in the global instructions",
           "text": "On entering a project, first read CLAUDE.md or AGENTS.md at the project’s root (if there is one), and work by what it says."
