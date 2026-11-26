@@ -174,7 +174,7 @@ test('a phrase is said in English too, with its plural and lists', () => {
         ],
       }),
     ),
-    '“A” and “B” are running; the Claude account is signing in. Upgrading restarts the service and interrupts them: upgrade when they are done, or force the upgrade.',
+    '“A” and “B” are running; the Claude account is signing in. Upgrading restarts the server and interrupts them: upgrade when they are done, or force the upgrade.',
   );
   assert.equal(
     wordsText(en.t, phrase('service:stopped.offline', { count: 1 })),

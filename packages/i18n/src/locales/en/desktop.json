@@ -10,10 +10,10 @@
     "plainFolder": "Folder for plain sessions"
   },
   "error": {
-    "notSignedIn": "Not signed in to a service yet.",
+    "notSignedIn": "Not signed in to a server yet.",
     "imageTooLarge": "Only images up to 20 MB can be pasted.",
     "notFolder": "Not a folder.",
-    "notConnected": "Not connected to the service yet.",
+    "notConnected": "Not connected to the server yet.",
     "noToken": "Enter the service token.",
     "windowExited": "The connection window quit unexpectedly. Please try again.",
     "connectionGone": "This connection no longer exists.",
@@ -32,7 +32,7 @@
     "fromSource": "A run from source can’t upgrade itself; build and install a package.",
     "unsupported": "The client on this system can’t upgrade in the app; download the new version from the release page.",
     "already": "The client is already upgrading.",
-    "connectFirst": "Connect to the service first.",
+    "connectFirst": "Connect to the server first.",
     "othersOpen": "Windows of other connections didn’t quit; quit them first, then upgrade.",
     "title": "Upgrading CC Desk Tunnel",
     "body": "It opens again once installed."
@@ -64,16 +64,16 @@
   "bridge": {
     "badPin": "Enter the SHA256 certificate fingerprint from the trusted install details, or leave it empty to verify with a CA.",
     "pinMismatch": "The service certificate fingerprint doesn’t match; the service token wasn’t sent.",
-    "pinMismatchCheck": "The service certificate fingerprint doesn’t match; the service token wasn’t sent.\nCheck that the “Service certificate fingerprint” is the one given at install; after the service changes its certificate, enter the new fingerprint. If neither changed, this isn’t your server.",
+    "pinMismatchCheck": "The service certificate fingerprint doesn’t match; the service token wasn’t sent.\nCheck that the “Service certificate fingerprint” is the one given at install; after the server changes its certificate, enter the new fingerprint. If neither changed, this isn’t your server.",
     "wssOnly": "Native mode needs a WSS address without credentials.",
-    "noAnswer": "The service didn’t finish answering within {{seconds}} s.\nCheck that the network is stable, or try again later; if it keeps happening, check the service log.",
+    "noAnswer": "The server didn’t finish answering within {{seconds}} s.\nCheck that the network is stable, or try again later; if it keeps happening, check the server log.",
     "channelPinMismatch": "The execution channel reached a service certificate whose fingerprint doesn’t match; no credentials were sent.\nAfter the control connection was verified, the same address answered with another certificate: make sure the address isn’t hijacked or pointing at several servers.",
-    "silent": "Nothing has come from the service for {{seconds}} s; the connection is gone.\nA network, proxy or reverse proxy on the way cut it without telling this computer.",
+    "silent": "Nothing has come from the server for {{seconds}} s; the connection is gone.\nA network, proxy or reverse proxy on the way cut it without telling this computer.",
     "badClientMessage": "A client message was malformed.",
-    "badServiceMessage": "A message from the service wasn’t recognized.\nThe client and service may be different versions; upgrade both to the same one.",
+    "badServiceMessage": "A message from the server wasn’t recognized.\nThe client and server may be different versions; upgrade both to the same one.",
     "tunnelMismatch": "The tunnel connection ID doesn’t match.",
     "readyMismatch": "The tunnel ready ID doesn’t match.",
-    "notReady": "Not connected to the service yet, or the execution channel isn’t ready.",
+    "notReady": "Not connected to the server yet, or the execution channel isn’t ready.",
     "closed": "The connection has closed.",
     "channelRefused": "The execution channel wasn’t authorized.\nReconnect; if it keeps happening, make sure the address doesn’t point at another deployment."
   },
@@ -81,7 +81,7 @@
     "lines": "{{what}}\n{{check}}",
     "via": "\nThis connection went through the system proxy {{proxy}}; make sure the proxy works too.",
     "tooLong": "The session history exceeds the WebSocket receive limit.",
-    "tooMany": "Too many failed sign-ins: the service is refusing this computer for now. Try again later.",
+    "tooMany": "Too many failed sign-ins: the server is refusing this computer for now. Try again later.",
     "proxyRefused": {
       "what": "The system proxy refused to forward the connection to {{target}}.",
       "whatNamed": "The system proxy {{proxy}} refused to forward the connection to {{target}}.",
@@ -93,7 +93,7 @@
     },
     "refused": {
       "what": "{{target}} refused the connection.",
-      "check": "The service may not be running, or the port isn’t its control port; behind nginx, make sure nginx is running.{{via}}"
+      "check": "The server may not be running, or the port isn’t its control port; behind nginx, make sure nginx is running.{{via}}"
     },
     "timeout": {
       "what": "Connecting to {{target}} timed out.",
@@ -117,19 +117,19 @@
     },
     "notTls": {
       "what": "{{target}} didn’t answer with TLS.",
-      "check": "The address should start with wss:// and point at the service’s control port; check the port.{{via}}"
+      "check": "The address should start with wss:// and point at the server’s control port; check the port.{{via}}"
     },
     "gateway": {
-      "what": "The reverse proxy at {{target}} answered {{status}}: the service behind it isn’t running or can’t be reached.",
+      "what": "The reverse proxy at {{target}} answered {{status}}: the server behind it isn’t running or can’t be reached.",
       "check": "Check on the server that the service is running."
     },
     "http": {
-      "what": "{{target}} answered HTTP {{status}}; it isn’t this service’s entry point.",
+      "what": "{{target}} answered HTTP {{status}}; it isn’t this server’s entry point.",
       "check": "Check the service address; behind nginx, check that WebSocket (the Upgrade header) is forwarded."
     },
     "reset": {
       "what": "The connection to {{target}} was cut.",
-      "check": "This usually means the port isn’t this service, or a network device in between cut it; check the address and try again.{{via}}"
+      "check": "This usually means the port isn’t this server, or a network device in between cut it; check the address and try again.{{via}}"
     },
     "other": {
       "what": "Can’t connect to {{target}}.",
@@ -141,8 +141,8 @@
     }
   },
   "channel": {
-    "failed": "The execution channel wasn’t ready within {{seconds}} s.\nThe service token was accepted, but connecting again to the service for the execution channel failed: {{cause}}\nThe execution channel uses the same address as the control connection, one more connection for each SSH connection: make sure no reverse proxy, system proxy or firewall limits concurrent connections to it.",
-    "noAnswer": "The execution channel wasn’t ready within {{seconds}} s.\nThe service token was accepted and this computer’s SSH service started, but the service’s probe command got no answer. {{slow}}, raise the wait time in Settings → Connection.",
+    "failed": "The execution channel wasn’t ready within {{seconds}} s.\nThe service token was accepted, but connecting again to the server for the execution channel failed: {{cause}}\nThe execution channel uses the same address as the control connection, one more connection for each SSH connection: make sure no reverse proxy, system proxy or firewall limits concurrent connections to it.",
+    "noAnswer": "The execution channel wasn’t ready within {{seconds}} s.\nThe service token was accepted and this computer’s SSH service started, but the server’s probe command got no answer. {{slow}}, raise the wait time in Settings → Connection.",
     "slow": "If the computer or network is slow",
     "slowShell": "If the login shell’s startup scripts or the network are slow"
   },
@@ -190,41 +190,41 @@
     "noEnvironment": "The login shell didn’t return a valid environment; check the zsh or bash startup scripts."
   },
   "download": {
-    "noInstaller": "The service doesn’t provide a client installer.",
-    "serverFailed": "Downloading the installer from the service failed ({{reason}}).\nTry again, or download from the GitHub release page instead.",
+    "noInstaller": "The server doesn’t provide a client installer.",
+    "serverFailed": "Downloading the installer from the server failed ({{reason}}).\nTry again, or download from the GitHub release page instead.",
     "noResponse": "no response for {{seconds}} s",
     "noData": "no data for {{seconds}} s",
-    "notYet": "the service doesn’t have this installer yet",
+    "notYet": "the server doesn’t have this installer yet",
     "badHash": "The installer failed verification; the upgrade was abandoned.",
     "cancelled": "Cancelled.",
     "badVersion": "The version number is invalid.",
-    "noManifest": "Can’t read the release details of {{version}} ({{reason}}).\nCheck that this computer can reach github.com, or get the installer from the service instead.",
+    "noManifest": "Can’t read the release details of {{version}} ({{reason}}).\nCheck that this computer can reach github.com, or get the installer from the server instead.",
     "notInManifest": "The release details have no installer for this version.",
-    "otherFile": "The installer on the release page isn’t the file the service provides; the upgrade was abandoned.",
-    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or get the installer from the service instead.",
+    "otherFile": "The installer on the release page isn’t the file the server provides; the upgrade was abandoned.",
+    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or get the installer from the server instead.",
     "nothing": "the connection sent no data",
     "httpFailed": "Downloading the installer failed ({{status}}).",
     "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned."
   },
   "service": {
-    "refused": "The service refused the connection.",
-    "tooOld": "Service {{service}} is too old: run the install command on the server again to upgrade it (see “Quick start” in the project README).",
-    "upgradeRefused": "The service refused the upgrade.",
-    "declined": "The service wasn’t upgraded.",
-    "upgradeFailed": "The service upgrade failed.",
-    "manual": "Service {{version}} needs a new image: run sudo cc-desk-tunnel upgrade on the server; older deployments without that command run the install command again.",
-    "noNewer": "The service found no newer release.",
-    "closed": "The connection to the service was lost; reconnect in a moment to see whether it has upgraded.",
-    "unreachable": "Can’t reach the service: {{reason}}"
+    "refused": "The server refused the connection.",
+    "tooOld": "Server {{service}} is too old: run the install command on the server again to upgrade it (see “Quick start” in the project README).",
+    "upgradeRefused": "The server refused the upgrade.",
+    "declined": "The server wasn’t upgraded.",
+    "upgradeFailed": "The server upgrade failed.",
+    "manual": "Server {{version}} needs a new image: run sudo cc-desk-tunnel upgrade on the server; older deployments without that command run the install command again.",
+    "noNewer": "The server found no newer release.",
+    "closed": "The connection to the server was lost; reconnect in a moment to see whether it has upgraded.",
+    "unreachable": "Can’t reach the server: {{reason}}"
   },
   "files": {
     "cancelled": "Cancelled",
     "missing": "The file or folder doesn’t exist.",
-    "protected": "Permission denied. The service’s keys, sign-in credentials and data are protected and can’t be read or changed.",
+    "protected": "Permission denied. The server’s keys, sign-in credentials and data are protected and can’t be read or changed.",
     "denied": "No permission to access this location.",
     "exists": "A file or folder with that name is already there.",
     "closed": "The file connection is closed.",
-    "noServer": "The service doesn’t provide file access.",
+    "noServer": "The server doesn’t provide file access.",
     "unreachable": "This computer can’t be reached now: it may be offline, or its execution channel isn’t ready."
   },
   "ccdt": {

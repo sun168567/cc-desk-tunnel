@@ -213,7 +213,7 @@
     },
     "connection": {
       "name": "Connection",
-      "words": "remember credentials auto sign-in multiple connections signed-in services nickname window server wait timeout SSH execution channel"
+      "words": "remember credentials auto sign-in multiple connections signed-in servers nickname window server wait timeout SSH execution channel"
     },
     "notifications": {
       "name": "Notifications",
