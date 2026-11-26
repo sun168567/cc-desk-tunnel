@@ -361,11 +361,6 @@ export type Resources = {
       pickHere: '选择 {{here}} 的会话：';
     };
     usage: {
-      window: {
-        five_hour: '5 小时';
-        seven_day: '7 天';
-        seven_day_opus: '7 天 Opus';
-      };
       line_other: '{{name}} 已用 {{used}} · {{count}} 次请求 · 约 ${{cost}}';
       lineReset_other: '{{name}} 已用 {{used}}，{{reset}} 重置 · {{count}} 次请求 · 约 ${{cost}}';
       none: '没有订阅额度数据：使用 API Key 或第三方接口时没有额度，用量见图形客户端的统计页。';
@@ -3884,9 +3879,6 @@ export type Messages = {
   'cli:sessions.noneToPick': Record<string, never>;
   'cli:sessions.pick': Record<string, never>;
   'cli:sessions.pickHere': { here: Value };
-  'cli:usage.window.five_hour': Record<string, never>;
-  'cli:usage.window.seven_day': Record<string, never>;
-  'cli:usage.window.seven_day_opus': Record<string, never>;
   'cli:usage.line': { count: number; name: Value; used: Value; cost: Value };
   'cli:usage.lineReset': { count: number; name: Value; used: Value; reset: Value; cost: Value };
   'cli:usage.none': Record<string, never>;

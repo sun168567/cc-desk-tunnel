@@ -3,6 +3,26 @@ import type { T } from './i18n.ts';
 
 type Window = NonNullable<AccountQuota['rateLimits']>['windows'][number];
 
+// The quota windows the account's plan reports, by name (account:quota.window.<name>), as the clients and ccdt call
+// them. The last is read from a long-lived token's replies, which do not name the models it counts.
+const quotaWindows = [
+  'five_hour',
+  'seven_day',
+  'seven_day_opus',
+  'seven_day_sonnet',
+  'seven_day_oauth_apps',
+  'seven_day_overage_included',
+] as const;
+const isQuotaWindow = (name: string): name is (typeof quotaWindows)[number] =>
+  (quotaWindows as readonly string[]).includes(name);
+// The service names a per-model weekly window `seven_day:<model>`, as the account's plan reports it.
+export const quotaName = (t: T, name: string) =>
+  isQuotaWindow(name)
+    ? t(`account:quota.window.${name}`)
+    : name.startsWith('seven_day:')
+      ? t('account:quota.window.model', { model: name.slice(10) })
+      : undefined;
+
 // The model a weekly window counts apart: `/usage` names it (`seven_day:<model>`, a Max plan's Fable), the response
 // headers name Opus and Sonnet. None for the account's whole week.
 function modelOf(name: string) {

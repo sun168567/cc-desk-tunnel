@@ -170,11 +170,6 @@
     "pickHere": "Pick a session of {{here}}:"
   },
   "usage": {
-    "window": {
-      "five_hour": "5 hours",
-      "seven_day": "7 days",
-      "seven_day_opus": "7 days Opus"
-    },
     "line_one": "{{name}} {{used}} used · {{count}} request · about ${{cost}}",
     "line_other": "{{name}} {{used}} used · {{count}} requests · about ${{cost}}",
     "lineReset_one": "{{name}} {{used}} used, resets {{reset}} · {{count}} request · about ${{cost}}",

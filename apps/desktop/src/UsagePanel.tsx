@@ -4,29 +4,11 @@ import type { UsagePage, UsageSummary } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import { Trans } from 'react-i18next';
 import { localeOf, type T, useT } from './i18n.ts';
+import { quotaName } from './quota.ts';
 import { IconButton } from './ui.tsx';
 import { ModelBreakdown, TokenTrend, cacheHitRate, percent } from './UsageCharts.tsx';
 
 const pageSize = 50;
-// The quota windows the account's plan reports, by name (account:quota.window.<name>). The last is read from a
-// long-lived token's replies, which do not name the models it counts.
-const quotaWindows = [
-  'five_hour',
-  'seven_day',
-  'seven_day_opus',
-  'seven_day_sonnet',
-  'seven_day_oauth_apps',
-  'seven_day_overage_included',
-] as const;
-const isQuotaWindow = (name: string): name is (typeof quotaWindows)[number] =>
-  (quotaWindows as readonly string[]).includes(name);
-// The service names a per-model weekly window `seven_day:<model>`, as the account's plan reports it.
-export const quotaName = (t: T, name: string) =>
-  isQuotaWindow(name)
-    ? t(`account:quota.window.${name}`)
-    : name.startsWith('seven_day:')
-      ? t('account:quota.window.model', { model: name.slice(10) })
-      : undefined;
 // Large counts in the language's short form (12K, 1.2万); a formatter for each language shown.
 const compacts = new Map<string, Intl.NumberFormat>();
 const compactOf = (locale: string) => {
