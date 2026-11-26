@@ -481,7 +481,7 @@
           }
         ],
         "list1": [
-          "The browser runs no commands itself: it works with sessions on computers that are online, or starts plain sessions that run on the server.",
+          "The browser runs no commands itself: it works with sessions on computers that are online, or starts plain sessions that run on the server, where Claude can still work on your online computers by name.",
           "Keep it off while you don’t use it."
         ]
       }

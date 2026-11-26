@@ -10,11 +10,11 @@
 
 模型列表来自 CLI 初始化，桌面端不维护型号名单。CLI 按账号和提供方使用官方动态目录或内置目录；SDK 的 `supportedModels()` 返回初始化快照。空闲时“刷新模型列表”启动新的 CLI 读取状态。动态目录可带来新型号，内置目录和能力支持仍随 CLI 版本更新。
 
-代理有意变化限于外层：稳定 cwd / session ID、Windows SSH 提示词、用户选择的审批模式、可选的提供方 settings、公开增量输出、思考摘要显示（无界面运行不读 `showThinkingSummaries`，该项开启时代为传 `--thinking-display summarized`，未设置时与交互式 CLI 一样不显示）和官方持久化 / 恢复。不设置禁用遥测的变量，不默认限制任务轮数。自动更新关闭（`DISABLE_AUTOUPDATER=1`）：CLI 版本随服务端发布固定，交互式 CLI 不再在 ccdt 里提示更新、也不再自己执行 `npm install -g`。服务读完自身配置后即从进程环境删除 `PROXY_*` / `FRPS_*` 与四个服务专用的 `CLAUDE_*` 变量，原生 CLI、其 shell 与控制终端继承到的只有宿主环境本身（容器内为 `HOME`、`PATH` 等），不含代理 token 或部署配置；用户有意放进环境的其他变量原样保留。这只避免无意带出：CLI 与服务同属一个 Linux 用户，配置文件仍可被读取，不构成多用户隔离。对“内层完全不变”的工程解释是同一原生可执行与 agent 引擎，不是声称 headless / SDK 和终端 TTY 环境或未公开服务端判断逐项相同。
+代理有意变化限于外层：稳定 cwd / session ID、追加的会话提示词、用户选择的审批模式、可选的提供方 settings、公开增量输出、思考摘要显示（无界面运行不读 `showThinkingSummaries`，该项开启时代为传 `--thinking-display summarized`，未设置时与交互式 CLI 一样不显示）和官方持久化 / 恢复。不设置禁用遥测的变量，不默认限制任务轮数。自动更新关闭（`DISABLE_AUTOUPDATER=1`）：CLI 版本随服务端发布固定，交互式 CLI 不再在 ccdt 里提示更新、也不再自己执行 `npm install -g`。服务读完自身配置后即从进程环境删除 `PROXY_*` / `FRPS_*` 与四个服务专用的 `CLAUDE_*` 变量，原生 CLI、其 shell 与控制终端继承到的只有宿主环境本身（容器内为 `HOME`、`PATH` 等），不含代理 token 或部署配置；用户有意放进环境的其他变量原样保留。这只避免无意带出：CLI 与服务同属一个 Linux 用户，配置文件仍可被读取，不构成多用户隔离。对“内层完全不变”的工程解释是同一原生可执行与 agent 引擎，不是声称 headless / SDK 和终端 TTY 环境或未公开服务端判断逐项相同。
 
 后台任务（后台 Bash 命令、子代理）活在 CLI 进程里，任务结束时 CLI 自己开始下一轮。一轮结束时若还有后台任务，服务端不关闭 CLI：运行状态改为“等待后台任务”，界面把这一轮视为已完成，列出任务并可逐个结束，期间可以继续发消息。任务结束后 CLI 开始的那一轮照常显示；任务全部结束且没有新的一轮时运行结束。停止运行会结束 CLI，后台任务随之终止。任务列表取自 SDK 的 `background_tasks_changed` 消息，不计标记为 ambient 的任务；结束单个任务用 SDK 的 `stopTask`。
 
-`ccdt` 的终端另外用 node-pty 启动同一 CLI 交互式入口，不走 SDK、不设置 SDK 入口标记、不启动通用 shell。正常 flags / 私有提供方 env / Windows SSH 提示词属于外层配置；用户已有 settings.env 原样复用。键盘与画面经 WSS 接至用户自己的终端，不解释 OAuth 内容或存储终端日志。终端接着会话的原生会话（`--resume`，或以会话 ID 新建）。hooks 报告终端在做什么，也给出 CLI 记录的位置：服务端跟着读记录新写的行，分段记入会话；每一轮结束再经 SDK 完整读一遍，补上遗漏并发现回退。轮次结束时按状态行和本轮的 usage 记下上下文与缓存时长，供空闲提醒使用。
+`ccdt` 的终端另外用 node-pty 启动同一 CLI 交互式入口，不走 SDK、不设置 SDK 入口标记、不启动通用 shell。正常 flags / 私有提供方 env / 追加的会话提示词属于外层配置；用户已有 settings.env 原样复用。键盘与画面经 WSS 接至用户自己的终端，不解释 OAuth 内容或存储终端日志。终端接着会话的原生会话（`--resume`，或以会话 ID 新建）。hooks 报告终端在做什么，也给出 CLI 记录的位置：服务端跟着读记录新写的行，分段记入会话；每一轮结束再经 SDK 完整读一遍，补上遗漏并发现回退。轮次结束时按状态行和本轮的 usage 记下上下文与缓存时长，供空闲提醒使用。
 
 浏览器登录由服务端驱动官方 `claude auth login`，授权链接与回填代码经桌面端转交，原生凭据只由 CLI 自己读写；setup token 使用官方用户设置，见下节。状态由官方 `claude auth status` 读取。官方 `auth login` 不记下首次引导已完成（2.1.286 实测），交互式终端因此会让已登录账号重走主题与登录。
 
@@ -29,7 +29,7 @@
 会话可以改指另一个项目目录，也可以从使用者的另一台电脑接过去。系统提示词不在原生记录里，每次启动 CLI 时由 `systemPrompt.append` 给出，它一变，模型侧的提示缓存从它之后全部失效。为了不让更换项目和重连白白丢掉提示缓存，一个会话的系统提示词在压缩之前逐字不变：
 
 - 更换之后，系统提示词继续写原来的路径；变更由下一条用户消息前面的一段说明告诉 Claude（`[CC Desk Tunnel: the user moved this session …]`），界面只显示用户自己写的内容。
-- 换电脑同理：会话被另一台设备接过去之后，说明里写明换了电脑、那台电脑的名字和它上面的项目目录（`[CC Desk Tunnel: the user now continues this session from another of their computers …]`）。
+- 换电脑同理：会话被另一台设备接过去之后，说明里写明换了电脑、那台电脑的名字和它上面的项目目录（`[CC Desk Tunnel: the user now continues this session from another of their computers …]`）。会话在服务端的项目和电脑上的项目之间移动时，说明写明项目现在在哪里、怎样操作它（`[CC Desk Tunnel: the user moved this session to a project on this server …]`、`[… to a project on one of their computers …]`）。
 - 设备能用的 shell 变了（装上或卸掉 Git for Windows），或用户在“设置 → Shell”里改了偏好，也由下一条消息前的说明告诉 Claude，连同新的脚本写法（`[CC Desk Tunnel: the shells the device runs scripts in changed …]`、`[CC Desk Tunnel: the user now prefers …]`）。
 - 重连不需要说明：会话的 `ssh` 读会话固定的配置（见下文“存储”），不随连接变化；提示词里不写服务端或设备上任何程序和文件的位置，PowerShell、Git Bash 和定时任务文件由设备上的环境变量 `CC_DESK_TUNNEL_PWSH`、`CC_DESK_TUNNEL_BASH`、`CC_DESK_TUNNEL_SCHEDULES` 指明，客户端装在哪里都一样。
 - 系统提示词在缓存前缀本来就要失效的时刻跟上当前值：观察到压缩事件之后的下一轮。
