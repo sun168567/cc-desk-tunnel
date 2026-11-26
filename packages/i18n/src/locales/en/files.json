@@ -5,7 +5,7 @@
     "title": "Delete",
     "confirm": "Delete",
     "one": "Delete “{{name}}”?",
-    "oneRemote": "Delete “{{name}}”? Files deleted on the server and remote computers can't be recovered.",
+    "oneRemote": "Delete “{{name}}”? Files deleted on the server and remote computers can’t be recovered.",
     "many_one": "Delete this {{count}} item?",
     "many_other": "Delete these {{count}} items?"
   },
@@ -35,7 +35,7 @@
   "readFull": "Read full screen",
   "truncated": "The file is large; only its start is shown.",
   "choosePreview": "Choose a file to preview",
-  "noPreview": "Can't preview",
+  "noPreview": "Can’t preview",
   "place": {
     "label": "Location",
     "local": "This computer"
@@ -48,9 +48,9 @@
   "current": "Current location",
   "up": "Up one level",
   "landlock": {
-    "detail": "The kernel doesn't support Landlock: sign-in credentials, setup tokens and the like can be read and changed",
+    "detail": "The kernel doesn’t support Landlock: sign-in credentials, setup tokens and the like can be read and changed",
     "title": "Sensitive files unprotected",
-    "dismiss": "Don't show again"
+    "dismiss": "Don’t show again"
   },
   "closeNotice": "Close",
   "oldImage": {

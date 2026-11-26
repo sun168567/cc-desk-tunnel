@@ -1,6 +1,6 @@
 {
   "interrupted": {
-    "read": "The connection broke before the read finished. Try again once it's back.",
+    "read": "The connection broke before the read finished. Try again once it’s back.",
     "request": "The connection broke and the request was not confirmed. The task may still be running; check the session history for the result. It is not sent again."
   },
   "restored": {
@@ -11,10 +11,10 @@
   "loopbackOnly": "The offline prototype only connects to a loopback service.",
   "tokenTooShort": "The service token is at least 24 characters.",
   "browserSameService": "The browser can only connect to this service.",
-  "retrying": "Can't reach the service for now. Retrying.",
+  "retrying": "Can’t reach the service for now. Retrying.",
   "localFailed": "Preparing the local connection failed.",
-  "incompatibleMessage": "A message from the service is in a format this client doesn't read; disconnected.",
-  "incompatibleHistory": "The history is in a format this client doesn't read; disconnected.",
+  "incompatibleMessage": "A message from the service is in a format this client doesn’t read; disconnected.",
+  "incompatibleHistory": "The history is in a format this client doesn’t read; disconnected.",
   "requestFailed": "The request failed.",
   "serviceRestarting": "The service was upgraded to {{version}} and is restarting. It will reconnect shortly.",
   "nativeEnded": "The native connection has ended. Connect again.",
@@ -47,7 +47,7 @@
     "forgetConfirm": "Remove the sign-in record of “{{name}}”? The token, drafts and scheduled tasks saved for it on this computer are removed too; sessions on the service are not affected.",
     "forgetLabel": "Remove the sign-in record of {{name}}",
     "otherWindow": "“{{name}}” is already signed in in another window; switched to that window.",
-    "failed": "Couldn't connect to the service. Try again."
+    "failed": "Couldn’t connect to the service. Try again."
   },
   "upgrade": {
     "serviceForceConfirm": "Sessions are running on the service {{service}}. Forcing the upgrade restarts the service: replies, commands and approvals waiting for you are interrupted and may need to start over. Continue?",
@@ -61,12 +61,12 @@
     "fromGithubInstead": "Download {{version}} from GitHub releases instead",
     "fromGithub": "Download and upgrade to {{version}} from GitHub releases",
     "client": "Upgrade the client to {{version}}",
-    "notes": "What's new in {{version}}",
-    "notRestarted": "The service hasn't finished restarting. Click “Connect” in a moment.",
+    "notes": "What’s new in {{version}}",
+    "notRestarted": "The service hasn’t finished restarting. Click “Connect” in a moment.",
     "clientNewer": "This client is newer. Upgrade the service first.",
-    "manualClient": "On this system the client is upgraded by hand: download the installer of the service's version from GitHub releases.",
-    "preparing": "The service is downloading the installer of this version ({{percent}}%). An upgrade button appears here once it's ready; you can also download it from GitHub releases.",
-    "refetching": "The service doesn't have this version's installer yet and is downloading it again; you can also download it from GitHub releases."
+    "manualClient": "On this system the client is upgraded by hand: download the installer of the service’s version from GitHub releases.",
+    "preparing": "The service is downloading the installer of this version ({{percent}}%). An upgrade button appears here once it’s ready; you can also download it from GitHub releases.",
+    "refetching": "The service doesn’t have this version’s installer yet and is downloading it again; you can also download it from GitHub releases."
   },
   "clientUpgrade": {
     "connecting": {
@@ -97,9 +97,9 @@
   },
   "web": {
     "selfSigned": "This service uses a self-signed certificate; make sure the address can be trusted. Import a proper certificate in the desktop client under “Settings → Browser access”, or let a reverse proxy provide HTTPS.",
-    "stateFailed": "Couldn't read the sign-in state.",
+    "stateFailed": "Couldn’t read the sign-in state.",
     "ended": "The sign-in has ended. Sign in again.",
-    "logoutFailed": "Couldn't sign out. Try again.",
+    "logoutFailed": "Couldn’t sign out. Try again.",
     "title": "Sign in to the service workbench",
     "connecting": "Connecting to the service…",
     "failed": "Sign-in failed.",
@@ -138,7 +138,7 @@
     "github": "Download from GitHub and upgrade to {{version}}",
     "githubWorking_one": "Download from GitHub and upgrade to {{version}} ({{count}} session running)",
     "githubWorking_other": "Download from GitHub and upgrade to {{version}} ({{count}} sessions running)",
-    "notes": "What's new in {{version}}",
+    "notes": "What’s new in {{version}}",
     "clientAvailable": "Client upgrade to {{version}} available"
   },
   "reconnect": {
@@ -148,7 +148,7 @@
     "waiting": "Connection lost, waiting for it to come back",
     "leave": "Disconnect and return to sign-in"
   },
-  "connectFailed": "Couldn't connect.",
+  "connectFailed": "Couldn’t connect.",
   "connecting": "Connecting…",
   "notes": {
     "title": "What’s new in {{version}}",

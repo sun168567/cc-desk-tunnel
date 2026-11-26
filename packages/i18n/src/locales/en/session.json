@@ -136,7 +136,7 @@
     }
   },
   "plan": {
-    "label": "Claude's plan",
+    "label": "Claude’s plan",
     "title": "Plan",
     "copy": "Copy plan",
     "read": "Read full screen",
@@ -169,21 +169,21 @@
     "open": "Open",
     "showInFiles": "Show in file panel",
     "elsewhere": {
-      "share": "This path is on a network share, so it isn't opened directly.",
-      "partial": "This path isn't complete, so where it leads can't be told.",
-      "server": "This path is on the server; this computer doesn't have the file.",
-      "windows": "This is a Windows path, not on this session's computer.",
-      "browser": "A browser can't open files on a computer.",
-      "away": "This session's project is on another computer."
+      "share": "This path is on a network share, so it isn’t opened directly.",
+      "partial": "This path isn’t complete, so where it leads can’t be told.",
+      "server": "This path is on the server; this computer doesn’t have the file.",
+      "windows": "This is a Windows path, not on this session’s computer.",
+      "browser": "A browser can’t open files on a computer.",
+      "away": "This session’s project is on another computer."
     },
-    "openFailed": "Couldn't open this link.",
+    "openFailed": "Couldn’t open this link.",
     "openLink": "Open link",
     "copyLink": "Copy link",
     "copyPath": "Copy path",
-    "actionFailed": "That didn't work, try again.",
+    "actionFailed": "That didn’t work, try again.",
     "reveal": "Show in folder",
-    "missing": "This path isn't on this computer",
-    "runs": "It would run a program, so it isn't opened directly",
+    "missing": "This path isn’t on this computer",
+    "runs": "It would run a program, so it isn’t opened directly",
     "openFolder": "Open folder",
     "openIn": "Open in {{editor}}",
     "openInAt": "Open in {{editor}} (line {{line}})",
@@ -203,7 +203,7 @@
   "compact": {
     "before": "{{tokens}} tokens before",
     "running": "Compacting the context",
-    "unfinished": "Context compaction didn't finish",
+    "unfinished": "Context compaction didn’t finish",
     "auto": "Context compacted automatically",
     "done": "Context compacted"
   },
@@ -220,13 +220,13 @@
     "title": "Background tasks · Claude has answered and carries on once they end",
     "count_one": "{{count}} background task · Claude has answered and carries on once it ends",
     "count_other": "{{count}} background tasks · Claude has answered and carries on once they end",
-    "locked": "Until the tasks end, the model, effort and approval mode can't be changed, and the session can't be renamed, forked or edited and resent.",
-    "lockedSend": "Until the tasks end, the model, effort and approval mode can't be changed, and the session can't be renamed, forked or edited and resent; messages can be sent as usual.",
+    "locked": "Until the tasks end, the model, effort and approval mode can’t be changed, and the session can’t be renamed, forked or edited and resent.",
+    "lockedSend": "Until the tasks end, the model, effort and approval mode can’t be changed, and the session can’t be renamed, forked or edited and resent; messages can be sent as usual.",
     "end": "End",
     "endAll": "End all"
   },
   "approval": {
-    "safetyHint": "Claude Code's own safety check, which asks in every approval mode",
+    "safetyHint": "Claude Code’s own safety check, which asks in every approval mode",
     "safety": "Claude Code safety check",
     "evenBypassing": "Asks even when bypassing",
     "deny": "Deny",
@@ -236,12 +236,12 @@
     "terminalHint": "Asked in a terminal; recorded in this session as the terminal goes on",
     "terminal": "Terminal",
     "edit": "Edit and resend",
-    "editUnsent": "Edit and resend: this message never reached Claude Code, so it goes back into this session's input box, without a fork",
+    "editUnsent": "Edit and resend: this message never reached Claude Code, so it goes back into this session’s input box, without a fork",
     "editFork": "Edit and resend: forks a new session from before this message; this one is kept",
-    "draftFirst": "There's a draft in the input box; send or clear it before editing this undelivered message."
+    "draftFirst": "There’s a draft in the input box; send or clear it before editing this undelivered message."
   },
   "history": {
-    "earlierFailed": "Couldn't load earlier messages, try again",
+    "earlierFailed": "Couldn’t load earlier messages, try again",
     "loading": "Loading",
     "loadEarlier": "Load earlier messages",
     "syncing": "Syncing session"
@@ -271,9 +271,9 @@
     "refresh": "Refresh Claude Code status",
     "refreshDetail": "Context and plan quota",
     "commands": "Session commands",
-    "project": "The session's project",
+    "project": "The session’s project",
     "plain": "Plain session",
-    "branch": "The project's current git branch",
+    "branch": "The project’s current git branch",
     "inTerminal": "The session is open in a terminal; once the terminal is closed, carry on here",
     "placeholder": "Ask anything…",
     "addFiles": "Add files: put their paths in the message",
@@ -299,21 +299,21 @@
     "displayName": "Display name",
     "addTitle": "Add project",
     "add": "Add",
-    "renameHint": "Changes only the name, not the folder <code>{{path}}</code>; leave it empty for the folder's name.",
+    "renameHint": "Changes only the name, not the folder <code>{{path}}</code>; leave it empty for the folder’s name.",
     "pathHere": "Project folder on this computer",
     "rename": "Change display name",
     "changeFolder": "Change folder…",
     "openFolder": "Open folder",
     "remove": "Remove project",
     "otherFolder": "Other folder…",
-    "moveHint": "The next message tells Claude the project or computer changed; a session already talked in keeps the old project's memory",
+    "moveHint": "The next message tells Claude the project or computer changed; a session already talked in keeps the old project’s memory",
     "changeFolderTitle": "Change project folder",
     "change": "Change"
   },
   "delete": {
     "title": "Delete session",
     "native": "The Claude Code session and its records here will be deleted; the project files on this computer stay as they are.",
-    "plain": "The session's records will be deleted; the project files stay as they are.",
+    "plain": "The session’s records will be deleted; the project files stay as they are.",
     "confirm": "Delete",
     "question": "Delete “{{title}}”?"
   },
@@ -335,17 +335,17 @@
     "session": "Session stats",
     "tokens": "Token usage",
     "details": "Usage details",
-    "turn": "This turn's usage",
-    "partial": "Some model requests haven't been recorded yet, so these figures may be low.",
-    "since": "The call log starts on {{date}}; earlier requests aren't counted.",
+    "turn": "This turn’s usage",
+    "partial": "Some model requests haven’t been recorded yet, so these figures may be low.",
+    "since": "The call log starts on {{date}}; earlier requests aren’t counted.",
     "lifetimes": "Of the cache writes the CLI reports, {{hour}} tokens went to the 1-hour cache and {{minutes}} to the 5-minute cache; a 1-hour cache write costs 1.6 times as much.",
     "both": "{{lifetimes}} {{since}}"
   },
   "question": {
-    "label": "Claude's question",
+    "label": "Claude’s question",
     "multiple": "Pick any",
     "other": "Other (write your own)",
-    "skip": "Don't answer",
+    "skip": "Don’t answer",
     "submit": "Submit answer",
     "otherFor": "Other answer: {{question}}"
   },
@@ -392,14 +392,14 @@
   },
   "command": {
     "review": "Review the code changes",
-    "security-review": "Check the current branch's changes for security issues",
+    "security-review": "Check the current branch’s changes for security issues",
     "context": "Show context usage",
     "usage": "Show usage and quota",
     "init": "Write a CLAUDE.md for the project"
   },
   "context": {
     "title": "Context window",
-    "waiting": "Waiting for Claude Code's status",
+    "waiting": "Waiting for Claude Code’s status",
     "category": {
       "system_prompt": "System prompt",
       "system_tools": "System tools",
@@ -414,28 +414,28 @@
     "window": "Window",
     "left": "Left",
     "model": "Model",
-    "measured": "{{time}} · Claude Code's summary",
+    "measured": "{{time}} · Claude Code’s summary",
     "percent": "Context {{percent}}%",
     "usedLeft": "{{used}}% used ({{left}}% left)"
   },
   "elsewhere": {
-    "beside": "Sessions in this folder are also running in the connections {{names, series}}; changing files from both sides at once may overwrite each other's changes.",
+    "beside": "Sessions in this folder are also running in the connections {{names, series}}; changing files from both sides at once may overwrite each other’s changes.",
     "remote": "This session is on the device “{{device}}”, in the project folder <code>{{path}}</code>. The conversation, approvals and stopping here act on that computer, and commands run there.",
     "offline": "This session is on the device “{{device}}”, in the project folder <code>{{path}}</code>. That computer is offline, so it can only be read here; once it is online it can be worked on directly.",
-    "notConnected": "The device “{{device}}” isn't connected; the session can only be read for now.",
+    "notConnected": "The device “{{device}}” isn’t connected; the session can only be read for now.",
     "takeOver": "Continue on this computer…",
     "forkHere": "Fork to this computer…"
   },
   "files": {
-    "offline": "The computer this path is on is offline, so the file panel can't open it.",
+    "offline": "The computer this path is on is offline, so the file panel can’t open it.",
     "title": "Files",
     "resize": "Resize the file panel"
   },
-  "statusFailed": "Couldn't read Claude Code's status",
+  "statusFailed": "Couldn’t read Claude Code’s status",
   "newTitle": "New session",
   "schedule": {
     "targetGone": "The target session no longer exists",
-    "createFailed": "Couldn't create the new session"
+    "createFailed": "Couldn’t create the new session"
   },
   "fork": {
     "title": "{{title}} (fork)"

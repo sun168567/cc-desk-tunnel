@@ -32,7 +32,7 @@
   "minutes": "{{m}} min",
   "copy": {
     "done": "Copied",
-    "failed": "Couldn't copy, try again",
+    "failed": "Couldn’t copy, try again",
     "copy": "Copy",
     "code": "Copy code",
     "message": "Copy message",
@@ -42,7 +42,7 @@
   "yesterday": "Yesterday",
   "save": "Save",
   "gotIt": "Got it",
-  "failed": "That didn't work.",
+  "failed": "That didn’t work.",
   "help": "Help",
   "helpFor": "Help: {{subject}}",
   "close": "Close"

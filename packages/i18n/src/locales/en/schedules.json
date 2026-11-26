@@ -41,7 +41,15 @@
     "hours_one": "Every hour",
     "hours_other": "Every {{count}} hours"
   },
-  "weekday": { "1": "Mon", "2": "Tue", "3": "Wed", "4": "Thu", "5": "Fri", "6": "Sat", "7": "Sun" },
+  "weekday": {
+    "1": "Mon",
+    "2": "Tue",
+    "3": "Wed",
+    "4": "Thu",
+    "5": "Fri",
+    "6": "Sat",
+    "7": "Sun"
+  },
   "dayBox": "{{day}}",
   "message": "[Scheduled task “{{name}}” · due {{time}}]",
   "outcome": {
@@ -56,14 +64,22 @@
     "prompt": "Prompt",
     "repeat": "Repeat",
     "repeatLabel": "Repeat rule",
-    "kind": { "once": "Once", "daily": "Daily", "weekly": "Weekly", "interval": "At an interval" },
+    "kind": {
+      "once": "Once",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "interval": "At an interval"
+    },
     "time": "Time",
     "timeLabel": "Run time",
     "interval": "Interval (minutes)",
     "intervalLabel": "Interval in minutes",
     "days": "Days",
     "target": "Send to",
-    "targetKind": { "session": "An existing session", "new": "A new session each time" },
+    "targetKind": {
+      "session": "An existing session",
+      "new": "A new session each time"
+    },
     "session": "Session",
     "sessionLabel": "Target session",
     "sessionGone": "(session no longer exists)",
@@ -84,7 +100,10 @@
   "list": "Task list",
   "heading": "Tasks",
   "empty": "No tasks scheduled",
-  "where": { "new": "New session · {{folder}}", "gone": "Session no longer exists" },
+  "where": {
+    "new": "New session · {{folder}}",
+    "gone": "Session no longer exists"
+  },
   "row": {
     "enable": "Enable {{name}}",
     "next": "Next {{time}}",
