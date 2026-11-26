@@ -51,6 +51,9 @@ export type ClaudeOptions = {
   contextRetentionDays?: number;
   // Added to the CLI's inherited environment; set by the service for its usage collector.
   environment?: Record<string, string>;
+  // The help of CC Desk Tunnel as Markdown (scripts/help-markdown.mjs), where the build put it: the prompt points
+  // Claude to it, and it may read it there without asking.
+  help?: string;
 };
 export type ClaudeRun = {
   sessionId: string;
@@ -243,9 +246,10 @@ export async function runClaude(
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
-          append: sessionPrompt(run.projectPath, run.sessionId, run.execution),
+          append: sessionPrompt(run.projectPath, run.sessionId, run.execution, options.help),
           snapshot: false,
         },
+        ...(options.help ? { additionalDirectories: [options.help] } : {}),
         ...(run.resume ? { resume: run.sessionId } : { sessionId: run.sessionId }),
         model: run.model ?? options.model,
         effort: run.effort ?? undefined,

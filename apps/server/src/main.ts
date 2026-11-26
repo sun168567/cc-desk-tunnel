@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createProxyServer } from './server.ts';
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { clearServiceVariables, environmentConfig } from './config.ts';
 import { removeFrpLeftovers } from './legacy.ts';
 
@@ -9,6 +9,9 @@ const { options, native, port } = environmentConfig(
   process.env,
   fileURLToPath(new URL('../../../.local/sessions', import.meta.url)),
 );
+// The help, as Markdown, where the image and the server bundle put it (scripts/help-markdown.mjs).
+const help = fileURLToPath(new URL('../help', import.meta.url));
+if (options.claude && existsSync(join(help, 'en', 'index.md'))) options.claude.help = help;
 const programDir = process.env.PROXY_PROGRAM_DIR;
 if (native) removeFrpLeftovers();
 clearServiceVariables(process.env);

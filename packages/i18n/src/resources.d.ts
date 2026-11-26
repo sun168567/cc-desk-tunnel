@@ -2124,6 +2124,16 @@ export type Resources = {
         };
       };
     };
+    model: {
+      intro: 'CC Desk Tunnel 的使用帮助，与客户端“帮助”里的内容相同，按主题分组。需要时打开对应的文章。';
+      here: '用户的这台电脑';
+      settingsPage: '设置 → {{section}}';
+      settingsLink: '{{words}}（设置 → {{section}}）';
+      shortcut: '“{{action}}”的快捷键';
+      keys: '快捷键可在“设置 → 快捷键”里查看和修改；在输入框里输入 / 打开命令菜单。';
+      desktopOnly: '只在桌面客户端里有，浏览器里没有。';
+      related: '相关文章';
+    };
   };
   nav: {
     activity: {
@@ -5000,6 +5010,14 @@ export type Messages = {
   'help:articles.faq.blocks.faq1.9.a.0': Record<string, never>;
   'help:articles.faq.blocks.faq1.10.q': Record<string, never>;
   'help:articles.faq.blocks.faq1.10.a.0': Record<string, never>;
+  'help:model.intro': Record<string, never>;
+  'help:model.here': Record<string, never>;
+  'help:model.settingsPage': { section: Value };
+  'help:model.settingsLink': { words: Value; section: Value };
+  'help:model.shortcut': { action: Value };
+  'help:model.keys': Record<string, never>;
+  'help:model.desktopOnly': Record<string, never>;
+  'help:model.related': Record<string, never>;
   'nav:activity.background': Record<string, never>;
   'nav:activity.running': Record<string, never>;
   'nav:activity.question': Record<string, never>;

@@ -20,6 +20,8 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   test ! -d /app/node_modules/electron
   test -z "$(find /app /opt/runtime -type f \( -name "CC-Desk-Tunnel-Setup-*.exe" -o -name "*.dmg" -o -name "*.deb" \) -print -quit)"
   test -s /app/apps/server/web/index.html
+  test -s /app/apps/server/help/en/index.md
+  test -s /app/apps/server/help/zh-CN/index.md
 '
 manage init --host 127.0.0.1 --mode nginx --data "$TEMP/data" --control-port 19874
 seed_old_data() {

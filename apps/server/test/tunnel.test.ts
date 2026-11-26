@@ -622,6 +622,22 @@ test('the prompt lets the model look at a picture of the device by copying that 
   assert.match(prompt, /Do not use this server's Read\/Edit tools on project files/);
 });
 
+test('every session knows what else CC Desk Tunnel lets it do, and its help where the build put it', () => {
+  const pointed = sessionPrompt('D:\\work', 'session', windows, '/app/apps/server/help');
+  const bare = sessionPrompt('/data/workspace/notes', 'session');
+  for (const prompt of [pointed, bare]) {
+    assert.match(prompt, /^## What else you can do here$/m);
+    // Another session is reached through ccdt, which a session once told the user it could not do.
+    assert.match(prompt, /reach the user's other sessions and start new ones, through ccdt/);
+    assert.match(
+      prompt,
+      /seems out of reach, (look there|see whether these serve) before saying so/,
+    );
+  }
+  assert.match(pointed, /"\/app\/apps\/server\/help" holds it as Markdown/);
+  assert.doesNotMatch(bare, /index\.md/);
+});
+
 test('every session is told what CC Desk Tunnel links, and one the service owns works here', () => {
   const own = sessionPrompt('D:\\work', 'session', windows);
   const here = sessionPrompt('/data/workspace/notes', 'session');

@@ -144,12 +144,12 @@ wait_healthy() {
 }
 # A release archive brings the Web client built, and the image uses it over any sources beside it: an archive
 # unpacked into a git checkout leaves the checkout's older client sources in place. A checkout that has moved
-# on since drops the unpacked client, so that the image builds the client from the sources again.
+# on since drops the unpacked client and the help made with it, so that the image builds both from the sources again.
 build_image() {
   local web="$ROOT/apps/server/web/index.html" commit
   if [[ -f "$web" && -d "$ROOT/.git" ]] && command -v git >/dev/null; then
     commit="$(git -c safe.directory="$ROOT" -C "$ROOT" log -1 --format=%ct 2>/dev/null || echo 0)"
-    if ((commit > $(stat -c %Y "$web"))); then rm -rf -- "$ROOT/apps/server/web"; fi
+    if ((commit > $(stat -c %Y "$web"))); then rm -rf -- "$ROOT/apps/server/web" "$ROOT/apps/server/help"; fi
   fi
   PROXY_IMAGE=cc-desk-tunnel:local docker compose --env-file "$CONFIG" -p "$PROJECT_NAME" \
     -f "$ROOT/deploy/docker/compose.yaml" build --pull

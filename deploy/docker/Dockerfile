@@ -38,15 +38,19 @@ FROM build AS web-build
 COPY --chown=ccdesktunnel:ccdesktunnel CHANGELOG.md ./
 COPY --chown=ccdesktunnel:ccdesktunnel apps/desktop apps/desktop
 COPY --chown=ccdesktunnel:ccdesktunnel apps/server apps/server
+COPY --chown=ccdesktunnel:ccdesktunnel scripts scripts
+# The help goes with the client, as Markdown for Claude to read (scripts/help-markdown.mjs).
 RUN if [ ! -s apps/server/web/index.html ] && [ -f apps/desktop/src/main.tsx ]; then \
       ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --include=dev --workspace=@cc-desk-tunnel/desktop --workspace=@cc-desk-tunnel/i18n --workspace=@cc-desk-tunnel/protocol \
-      && node node_modules/vite/bin/vite.js build --config apps/desktop/vite.config.ts --outDir ../server/web --emptyOutDir; \
-    fi && test -s apps/server/web/index.html
+      && node node_modules/vite/bin/vite.js build --config apps/desktop/vite.config.ts --outDir ../server/web --emptyOutDir \
+      && if [ -f scripts/help-markdown.mjs ]; then node scripts/help-markdown.mjs apps/server/help; fi; \
+    fi && test -s apps/server/web/index.html && mkdir -p apps/server/help
 
 FROM base
 COPY --from=build --chown=root:root /home/ccdesktunnel/runtime /opt/runtime
 COPY --from=build --chown=root:root /app /app
 COPY --from=web-build --chown=root:root /app/apps/server/web /app/apps/server/web
+COPY --from=web-build --chown=root:root /app/apps/server/help /app/apps/server/help
 COPY deploy/docker/entrypoint.sh /usr/local/bin/proxy-entrypoint
 COPY deploy/docker/healthcheck.mjs /app/healthcheck.mjs
 # What a release needs from this image; a program installed from the client must not ask for more.
