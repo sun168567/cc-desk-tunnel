@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { INSTRUCTIONS_LIMIT } from '@cc-desk-tunnel/protocol';
+import { useT } from './i18n.ts';
 import type { ProxyClient } from './client.ts';
 import { Page } from './ui.tsx';
 
@@ -7,6 +8,7 @@ import { Page } from './ui.tsx';
 // host. A save goes through only over the version that was read, so a change made meanwhile in the terminal is not
 // lost; the text being edited stays for the user to compare after reloading.
 export default function GlobalInstructions({ client }: { client: ProxyClient }) {
+  const t = useT();
   const [saved, setSaved] = useState<{ text: string; version: string } | null>(null);
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
@@ -20,7 +22,7 @@ export default function GlobalInstructions({ client }: { client: ProxyClient }) 
       setSaved({ text, version });
       setText(text);
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : '读取失败。');
+      setFailure(error instanceof Error ? error.message : t('settings:instructions.readFailed'));
     }
   }
   useEffect(() => {
@@ -39,28 +41,25 @@ export default function GlobalInstructions({ client }: { client: ProxyClient }) 
       });
       setSaved({ text: reply.text, version: reply.version });
       setText(reply.text);
-      setStatus('已保存，从下一次运行起生效');
+      setStatus(t('settings:instructions.saved'));
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : '保存失败。');
+      setFailure(error instanceof Error ? error.message : t('settings:saveFailed'));
     } finally {
       setSaving(false);
     }
   }
   return (
-    <Page
-      title="全局说明"
-      intro="云端 Claude Code 的用户级 CLAUDE.md，这个服务上的每个会话都会读取，下一次运行起生效。用户级不读 AGENTS.md；你电脑上项目里的 CLAUDE.md、AGENTS.md 也不会自动读取，需要时让 Claude 去读。"
-    >
+    <Page title={t('settings:section.instructions.name')} intro={t('settings:instructions.intro')}>
       <div className="card instructions-card">
         <textarea
-          aria-label="全局说明"
+          aria-label={t('settings:section.instructions.name')}
           className="instructions-editor"
           value={text}
           disabled={!saved || saving}
           maxLength={INSTRUCTIONS_LIMIT}
           spellCheck={false}
           rows={12}
-          placeholder="例如：回复用中文；提交信息用中文。"
+          placeholder={t('settings:instructions.placeholder')}
           onChange={(event) => {
             setText(event.target.value);
             setStatus('');
@@ -76,7 +75,7 @@ export default function GlobalInstructions({ client }: { client: ProxyClient }) 
             {status}
           </span>
           <button type="button" className="button" disabled={saving} onClick={() => void load()}>
-            重新载入
+            {t('settings:instructions.reload')}
           </button>
           <button
             type="button"
@@ -84,7 +83,7 @@ export default function GlobalInstructions({ client }: { client: ProxyClient }) 
             disabled={!saved || saving || text === saved.text}
             onClick={() => void save()}
           >
-            保存
+            {t('common:save')}
           </button>
         </div>
       </div>

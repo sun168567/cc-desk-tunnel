@@ -14,9 +14,12 @@ import { openChannels } from './tunnel-channels.mjs';
 import { httpProxy, openSocket } from './system-proxy.mjs';
 import { channelFailure, controlFailure, passing } from './connect-errors.mjs';
 import { cancelled } from './release-download.mjs';
+import { failure, phrase } from './failure.cjs';
+import { say } from './words.mjs';
 // Loaded by the main process from here, so that the package's bundle of this module holds it.
 export { probeService, upgradeService } from './service-upgrade.mjs';
 export { createFiles, gitChanges } from './files.mjs';
+export { failureText, followLanguage, say, t } from './words.mjs';
 
 // The SSH service of a connection. The two are started and closed alike and give the same credentials; what
 // is behind them differs with the system: see each module.
@@ -30,7 +33,7 @@ export function certificateMatches(observed, trusted) {
 export function controlTlsOptions(config) {
   if (!config.fingerprint) return { rejectUnauthorized: true };
   if (!certificateMatches(config.fingerprint, config.fingerprint))
-    throw new Error('请输入可信安装信息中的 SHA256 证书指纹，或留空使用 CA 验证。');
+    throw failure('desktop:bridge.badPin');
   return { rejectUnauthorized: false };
 }
 // The waits of connecting, in milliseconds. Whatever is not a sensible number of seconds takes the default, and
@@ -78,7 +81,7 @@ export async function authorizedGet(address, config, path, token, resolveProxy) 
         !certificateMatches(socket.getPeerCertificate().fingerprint256, config.fingerprint)
       ) {
         socket.destroy();
-        reject(new Error('服务证书指纹不匹配；未发送服务凭据。'));
+        reject(failure('desktop:bridge.pinMismatch'));
       } else resolve();
     });
     socket.once('error', reject);
@@ -111,7 +114,7 @@ export async function openProxyBridge(
     address.search ||
     address.hash
   )
-    throw new Error('原生模式需要不含凭据的 WSS 地址。');
+    throw failure('desktop:bridge.wssOnly');
   // A malformed pin is refused here, before anything listens or connects.
   controlTlsOptions(config);
   const waits = connectionWaits(config.waits);
@@ -186,7 +189,7 @@ export async function openProxyBridge(
         fail(
           offerReceived
             ? channelFailure(waits.ready / 1000, current.channels?.lastError, target, route.proxy)
-            : `服务端在 ${waits.ready / 1000} 秒内没有完成应答。\n请检查网络是否稳定，或稍后重试；反复出现时查看服务端日志。`,
+            : phrase('desktop:bridge.noAnswer', { seconds: waits.ready / 1000 }),
           'connection_lost',
         ),
       waits.ready,
@@ -219,24 +222,25 @@ export async function openProxyBridge(
             )
           ) {
             channel.terminate();
-            reject(
-              Object.assign(
-                new Error(
-                  '执行通道连到的服务证书指纹不匹配；未发送任何凭据。\n控制连接校验通过之后，同一地址应答了另一张证书：请确认服务地址没有被劫持或指向多台服务器。',
-                ),
-                { fatal: true },
-              ),
-            );
+            reject(failure('desktop:bridge.channelPinMismatch', undefined, { fatal: true }));
           } else resolve(channel);
         });
       });
     }
     // `connection_lost` is a fault on the way, which the window may try again; `client_failed` is something
-    // that trying again does not change.
-    function fail(message, code = 'client_failed') {
+    // that trying again does not change. `words` are a phrase (failure.cjs), or text from elsewhere.
+    function fail(words, code = 'client_failed') {
+      const message = say(words);
       if (!closed) log(`Connection given up: ${message}`);
       if (local.readyState === WebSocket.OPEN)
-        local.send(JSON.stringify({ type: 'connection.error', code, message }));
+        local.send(
+          JSON.stringify({
+            type: 'connection.error',
+            code,
+            message,
+            ...(typeof words === 'object' && { phrase: words }),
+          }),
+        );
       clearTimeout(timer);
       void close(true);
     }
@@ -245,9 +249,7 @@ export async function openProxyBridge(
         config.fingerprint &&
         !certificateMatches(remote._socket.getPeerCertificate().fingerprint256, config.fingerprint)
       ) {
-        fail(
-          '服务证书指纹不匹配；未发送服务凭据。\n请核对“服务证书指纹”是否与安装时给出的一致；服务端更换过证书后需要填新的指纹。若两者都没变，说明连到的不是你的服务器。',
-        );
+        fail(phrase('desktop:bridge.pinMismatchCheck'));
         return;
       }
       verified = true;
@@ -261,7 +263,7 @@ export async function openProxyBridge(
         // periods of silence.
         if (silent > heartbeatMs * 2.5)
           fail(
-            `已有 ${Math.round(silent / 1000)} 秒没有收到服务端的任何数据，连接已经断开。\n途中的网络、代理或反向代理中断了这条连接而没有通知本机。`,
+            phrase('desktop:bridge.silent', { seconds: Math.round(silent / 1000) }),
             'connection_lost',
           );
         else if (remote.readyState === WebSocket.OPEN) remote.ping();
@@ -289,7 +291,7 @@ export async function openProxyBridge(
         if (verified && remote.readyState === WebSocket.OPEN) remote.send(JSON.stringify(message));
         else queue.push(JSON.stringify(message));
       } catch {
-        fail('客户端消息格式错误。');
+        fail(phrase('desktop:bridge.badClientMessage'));
       }
     });
     remote.on('message', (raw) => {
@@ -298,7 +300,7 @@ export async function openProxyBridge(
       try {
         message = serverMessageSchema.parse(JSON.parse(raw.toString('utf8')));
       } catch {
-        fail('服务端的消息无法识别。\n客户端与服务端的版本可能不一致，请把两者升级到同一版本。');
+        fail(phrase('desktop:bridge.badServiceMessage'));
         return;
       }
       if (message.type === 'web.settings.state')
@@ -309,7 +311,7 @@ export async function openProxyBridge(
         log(`The service refused or ended the connection: ${message.code}.`);
       if (message.type === 'tunnel.offer') {
         if (offerReceived || !nativeReady || nativeReady.connectionId !== message.connectionId) {
-          fail('隧道连接标识不匹配。');
+          fail(phrase('desktop:bridge.tunnelMismatch'));
           return;
         }
         offerReceived = true;
@@ -328,7 +330,7 @@ export async function openProxyBridge(
             current.channels = openChannels(message, ssh.port, dialChannel, fail);
             remote.send(JSON.stringify(ssh.credentials));
           })
-          .catch((error) => fail(error.message));
+          .catch((error) => fail(error.phrase ?? error.message));
       } else if (message.type === 'tunnel.open') {
         // Only ever follows the credentials, which are sent once the channels can be opened.
         if (message.connectionId === nativeReady?.connectionId)
@@ -342,7 +344,7 @@ export async function openProxyBridge(
         release = message.client;
       } else if (message.type === 'tunnel.ready') {
         if (!offerReceived || message.connectionId !== nativeReady?.connectionId) {
-          fail('隧道就绪标识不匹配。');
+          fail(phrase('desktop:bridge.readyMismatch'));
           return;
         }
         clearTimeout(timer);
@@ -426,17 +428,13 @@ export async function openProxyBridge(
     { progress = () => {}, signal, stall = 30_000 } = {},
   ) {
     // The service holds the Windows installer only.
-    if (process.platform !== 'win32')
-      throw new Error('这个系统上的客户端不能在应用内升级，请到发布页下载新版本。');
-    if (!release || !token) throw new Error('服务端没有提供客户端安装包。');
+    if (process.platform !== 'win32') throw failure('desktop:upgrade.unsupported');
+    if (!release || !token) throw failure('desktop:download.noInstaller');
     const expected = release;
     const target = join(directory, `CC-Desk-Tunnel-Setup-${expected.version}-x64.exe`);
-    const seconds = `${Math.round(stall / 1000)} 秒`;
-    const failed = (reason) =>
-      Object.assign(
-        new Error(`从服务端下载安装包失败（${reason}）。\n可以重试，或改从 GitHub 发布页下载。`),
-        { told: true },
-      );
+    const seconds = Math.round(stall / 1000);
+    // `reason` is a phrase, or what a failure from elsewhere said.
+    const failed = (reason) => failure('desktop:download.serverFailed', { reason }, { told: true });
     if (signal?.aborted) throw cancelled();
     const asked = authorizedGet(address, config, '/client/installer', token, binaries.resolveProxy);
     let quiet;
@@ -444,10 +442,13 @@ export async function openProxyBridge(
     let response;
     try {
       response = await new Promise((resolve, reject) => {
-        quiet = setTimeout(() => reject(failed(`${seconds}没有响应`)), stall);
+        quiet = setTimeout(
+          () => reject(failed(phrase('desktop:download.noResponse', { seconds }))),
+          stall,
+        );
         stop = () => reject(cancelled());
         signal?.addEventListener('abort', stop);
-        asked.then(resolve, (error) => reject(failed(error.message)));
+        asked.then(resolve, (error) => reject(failed(error.phrase ?? error.message)));
       });
     } catch (error) {
       // A reply that comes after all is not read.
@@ -463,14 +464,19 @@ export async function openProxyBridge(
     if (response.statusCode !== 200) {
       response.resume();
       throw failed(
-        response.statusCode === 404 ? '服务端还没有这个安装包' : `HTTP ${response.statusCode}`,
+        response.statusCode === 404
+          ? phrase('desktop:download.notYet')
+          : `HTTP ${response.statusCode}`,
       );
     }
     const hash = createHash('sha256');
     let received = 0;
     const watch = () => {
       clearTimeout(quiet);
-      quiet = setTimeout(() => response.destroy(failed(`${seconds}没有收到数据`)), stall);
+      quiet = setTimeout(
+        () => response.destroy(failed(phrase('desktop:download.noData', { seconds }))),
+        stall,
+      );
     };
     stop = () => response.destroy(cancelled());
     signal?.addEventListener('abort', stop);
@@ -483,12 +489,11 @@ export async function openProxyBridge(
     });
     try {
       await pipeline(response, createWriteStream(target));
-      if (hash.digest('hex') !== expected.sha256) throw new Error('安装包校验失败，已放弃升级。');
+      if (hash.digest('hex') !== expected.sha256)
+        throw failure('desktop:download.badHash', undefined, { told: true });
     } catch (error) {
       await rm(target, { force: true });
-      throw error.told || error.cancelled || error.message === '安装包校验失败，已放弃升级。'
-        ? error
-        : failed(error.message);
+      throw error.told || error.cancelled ? error : failed(error.phrase ?? error.message);
     } finally {
       clearTimeout(quiet);
       signal?.removeEventListener('abort', stop);
@@ -500,12 +505,11 @@ export async function openProxyBridge(
   // stream of its bytes. Like a channel it is asked for a sign of life and given up after two missed answers.
   async function openFiles(heartbeatMs = 15000) {
     const current = pair;
-    if (closed || !current?.offer || !current.dial)
-      throw new Error('还没有连上服务，或执行通道尚未就绪。');
+    if (closed || !current?.offer || !current.dial) throw failure('desktop:bridge.notReady');
     const channel = await current.dial();
     if (closed) {
       channel.terminate();
-      throw new Error('连接已经断开。');
+      throw failure('desktop:bridge.closed');
     }
     channel.send(JSON.stringify({ type: 'files.attach', ...current.offer }));
     // The stream takes over the connection's frames from here, in the same tick, so no bytes are missed.

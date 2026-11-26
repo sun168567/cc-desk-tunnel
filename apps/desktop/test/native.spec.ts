@@ -88,7 +88,12 @@ test('official subscription: account metrics, Windows execution, running input, 
   const profile = resolve('.local/ui-test/profile-native');
   const start = (fresh = false) =>
     _electron.launch({
-      args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile, fresh)],
+      args: [
+        resolve('apps/desktop'),
+        '--smoke-test',
+        '--lang=zh-CN',
+        ...connectionArgs(profile, fresh),
+      ],
       env,
     });
   let app = await start(true);

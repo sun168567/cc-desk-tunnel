@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { INSTRUCTIONS_LIMIT } from '@cc-desk-tunnel/protocol';
+import { phrase } from '@cc-desk-tunnel/i18n';
 import { DomainError } from './errors.ts';
 
 // The official CLI's user instructions, CLAUDE.md in its configuration directory, which every session on this service
@@ -22,7 +23,7 @@ export function readInstructions(path = instructionsPath()) {
   if (text.length > INSTRUCTIONS_LIMIT)
     throw new DomainError(
       'instructions_too_long',
-      `全局说明超过 ${INSTRUCTIONS_LIMIT} 字，请在 ccdt 里用 /memory 编辑。`,
+      phrase('service:instructions.tooLong', { count: INSTRUCTIONS_LIMIT }),
     );
   return { text, version: createHash('sha256').update(text).digest('hex') };
 }
@@ -31,7 +32,7 @@ export function readInstructions(path = instructionsPath()) {
 // is removed, as if it had never been written.
 export function writeInstructions(text: string, version: string, path = instructionsPath()) {
   if (readInstructions(path).version !== version)
-    throw new DomainError('instructions_changed', '全局说明已在别处修改，请重新载入后再改。');
+    throw new DomainError('instructions_changed', phrase('service:instructions.changed'));
   if (!text.trim()) rmSync(path, { force: true });
   else {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });

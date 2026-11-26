@@ -1,4 +1,5 @@
 import { readKeys } from './keys.mjs';
+import { t } from './i18n.mjs';
 
 // How many columns of the terminal a character takes: East Asian ones two.
 const columnsOf = (character) =>
@@ -48,9 +49,9 @@ export async function pick(
   entries,
   input = process.stdin,
   output = process.stderr,
-  { at: first = 0, hint = '↑↓ 选择 · Enter 打开 · Esc 取消', clear = false } = {},
+  { at: first = 0, hint = t('cli:picker.hint'), clear = false } = {},
 ) {
-  if (!input.isTTY) throw new Error('选择会话需要在终端里运行；也可以用 ccdt open <会话 ID>。');
+  if (!input.isTTY) throw new Error(t('cli:picker.notTty'));
   let at = Math.min(first, entries.length - 1);
   const window = Math.max(3, Math.min(entries.length, (output.rows || 24) - 4));
   let drawn = 0;

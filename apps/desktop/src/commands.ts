@@ -1,4 +1,5 @@
 import type { NativeCapabilities } from '@cc-desk-tunnel/protocol';
+import type { T } from './i18n.ts';
 
 // A Claude Code command offered after "/" in the message box. It is sent as the message itself, as the CLI takes it.
 export type SlashCommand = { name: string; description: string; argumentHint: string };
@@ -24,18 +25,16 @@ const hidden = new Set([
   'quit',
   'workflow-launch-exec',
 ]);
-// The everyday ones come first and are said in Chinese; the rest keep Claude Code's own words.
-const everyday: Record<string, string> = {
-  review: '审查代码改动',
-  'security-review': '检查当前分支改动里的安全问题',
-  context: '查看上下文占用',
-  usage: '查看用量与额度',
-  init: '为项目写一份 CLAUDE.md',
-};
+// The everyday ones come first and are said in the window's words (session:command.*); the rest keep Claude Code's
+// own.
+const everyday = ['review', 'security-review', 'context', 'usage', 'init'] as const;
+const isEveryday = (name: string): name is (typeof everyday)[number] =>
+  (everyday as readonly string[]).includes(name);
 
 // The commands whose name, or one of whose other names, starts with what follows the slash; then those that only
 // contain it.
 export function slashCommands(
+  t: T,
   capabilities: NativeCapabilities | null,
   typed: string,
 ): SlashCommand[] {
@@ -48,8 +47,7 @@ export function slashCommands(
       argumentHint: '',
       aliases: undefined,
     }));
-  const order = Object.keys(everyday);
-  const rank = (name: string) => (order.includes(name) ? order.indexOf(name) : order.length);
+  const rank = (name: string) => (isEveryday(name) ? everyday.indexOf(name) : everyday.length);
   const found = details
     .filter((command) => !hidden.has(command.name) && !command.name.startsWith('__'))
     .map((command) => {
@@ -71,7 +69,9 @@ export function slashCommands(
     )
     .map(({ command }) => ({
       name: command.name,
-      description: everyday[command.name] ?? command.description,
+      description: isEveryday(command.name)
+        ? t(`session:command.${command.name}`)
+        : command.description,
       argumentHint: command.argumentHint,
     }));
 }

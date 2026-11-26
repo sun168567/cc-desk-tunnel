@@ -1,3 +1,4 @@
+import type { T } from './i18n.ts';
 export type ToolPicture = { type: string; data: string };
 
 // A tool that looked at a picture (Read on an image, a screenshot an MCP tool took) answers with content blocks,
@@ -35,5 +36,8 @@ export function toolPictures(output: string) {
 }
 export const pictureUrl = (picture: ToolPicture) => `data:${picture.type};base64,${picture.data}`;
 // What stands for a picture in text: its type and about how large it is.
-export const pictureNote = (picture: ToolPicture) =>
-  `[图片 ${picture.type} · ${Math.max(1, Math.round((picture.data.length * 3) / 4 / 1024))} KB]`;
+export const pictureNote = (t: T, picture: ToolPicture) =>
+  t('session:picture.note', {
+    type: picture.type,
+    size: Math.max(1, Math.round((picture.data.length * 3) / 4 / 1024)),
+  });

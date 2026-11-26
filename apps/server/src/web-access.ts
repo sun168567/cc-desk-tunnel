@@ -21,7 +21,8 @@ import type {
   WebSession,
   WebSettingsState,
 } from '@cc-desk-tunnel/protocol';
-import { DomainError } from './errors.ts';
+import { phrase, type Words } from '@cc-desk-tunnel/i18n';
+import { DomainError, said } from './errors.ts';
 import { Throttle } from './throttle.ts';
 import { WebCertificates } from './web-certificate.ts';
 import { escapeMarkup, webAppIcon } from './web-app-icon.ts';
@@ -79,8 +80,13 @@ const ip = (address: string) =>
       ? new URL(`http://[${address}]`).hostname.slice(1, -1)
       : address;
 const loopback = (address: string) => address === '::1' || /^127(?:\.\d{1,3}){3}$/.test(address);
-const fail = (code: string, message: string): never => {
-  throw new DomainError(code, message);
+const fail = (code: string, words: Words): never => {
+  throw new DomainError(code, words);
+};
+// The body of a refused request of the Web entry: the text in the source language, and its phrase.
+const failed = (words: Words) => {
+  const { message, phrase } = said(words);
+  return { error: message, ...(phrase && { phrase }) };
 };
 const statuses: Record<string, number> = { web_unauthorized: 401, web_rate_limited: 429 };
 const types: Record<string, string> = {
@@ -380,7 +386,7 @@ export class WebAccess {
   // The service token, and the authenticator code once two-step verification is on.
   private proof(proof: WebProof | undefined, address: string) {
     if (this.throttle.blocked(address, this.now()))
-      fail('web_rate_limited', '尝试过于频繁，请稍后重试。');
+      fail('web_rate_limited', phrase('service:web.rateLimited'));
     const row = this.record();
     const passwordOK =
       proof &&
@@ -390,7 +396,7 @@ export class WebAccess {
       : undefined;
     if (!passwordOK || (row.totp_secret && step === undefined)) {
       this.throttle.fail(address, this.now());
-      fail('web_unauthorized', '密码或动态码不正确，或动态码已被使用。');
+      fail('web_unauthorized', phrase('service:web.wrongProof'));
     }
     if (step !== undefined)
       this.options.database.prepare('UPDATE web_settings SET totp_last = ? WHERE id = 1').run(step);
@@ -405,7 +411,7 @@ export class WebAccess {
     const command = webCommandSchema.parse(input);
     const { requestId } = command;
     if (!context.desktop && (!context.sessionId || !this.active(context.sessionId)))
-      fail('web_unauthorized', '登录已失效，请重新登录。');
+      fail('web_unauthorized', phrase('service:web.signedOut'));
     switch (command.type) {
       case 'web.settings.get':
         break;
@@ -434,7 +440,8 @@ export class WebAccess {
       case 'web.certificate.get':
       case 'web.certificate.set':
       case 'web.certificate.reset':
-        if (!context.desktop) fail('web_desktop_only', '请在桌面客户端管理证书。');
+        if (!context.desktop)
+          fail('web_desktop_only', phrase('service:web.certificateDesktopOnly'));
         if (command.type === 'web.certificate.set')
           this.certificates.set({
             domain: this.settings.domain,
@@ -448,16 +455,17 @@ export class WebAccess {
   }
   private update(values: Partial<Settings>, proof: WebProof | undefined, context: WebContext) {
     if (!context.desktop && Object.keys(values).some((key) => key !== 'path'))
-      fail('web_desktop_only', '此设置需要在桌面客户端修改。');
+      fail('web_desktop_only', phrase('service:web.settingDesktopOnly'));
     this.reauthenticate(proof, context);
     const next = { ...this.settings, ...values };
     this.certificates.validateDomain(next.domain);
     const proxies = next.trustedProxies.map(ip);
     if (proxies.some((value) => !isIP(value)) || (next.proxyEnabled && !proxies.length))
-      fail('web_invalid_settings', '请填写可信反向代理的 IP 地址。');
+      fail('web_invalid_settings', phrase('service:web.proxyAddress'));
     if (next.enabled && !this.https && !loopback(this.options.host ?? '127.0.0.1'))
-      fail('web_https_required', '公网 Web 访问需要 HTTPS。');
-    if (next.domain && !this.https) fail('web_https_required', '域名访问需要 HTTPS。');
+      fail('web_https_required', phrase('service:web.publicNeedsHttps'));
+    if (next.domain && !this.https)
+      fail('web_https_required', phrase('service:web.domainNeedsHttps'));
     next.trustedProxies = [...new Set(proxies)];
     const moved = next.domain !== this.settings.domain || next.path !== this.settings.path;
     this.options.database
@@ -479,7 +487,7 @@ export class WebAccess {
   // A new secret is kept for ten minutes, waiting for one correct code to turn it on.
   private setupTotp(proof: WebProof | undefined, context: WebContext) {
     this.reauthenticate(proof, context);
-    if (this.record().totp_secret) fail('web_totp_enabled', '请先关闭现有二次验证。');
+    if (this.record().totp_secret) fail('web_totp_enabled', phrase('service:web.totpEnabled'));
     const secret = totpSecret();
     const expires = this.now() + 600_000;
     this.options.database
@@ -495,7 +503,7 @@ export class WebAccess {
   // Only who passed setup has seen the pending secret, so its code alone confirms it.
   private enableTotp(code: string, context: WebContext) {
     if (this.throttle.blocked(context.address, this.now()))
-      fail('web_rate_limited', '尝试过于频繁，请稍后重试。');
+      fail('web_rate_limited', phrase('service:web.rateLimited'));
     const row = this.record();
     const step =
       row.pending_secret && row.pending_expires! > this.now()
@@ -503,7 +511,7 @@ export class WebAccess {
         : undefined;
     if (step === undefined) {
       this.throttle.fail(context.address, this.now());
-      fail('web_totp_invalid', '动态码不正确或设置已过期，请重新设置。');
+      fail('web_totp_invalid', phrase('service:web.totpInvalid'));
     }
     this.options.database
       .prepare(
@@ -542,20 +550,20 @@ export class WebAccess {
   }
   private async body(request: IncomingMessage) {
     if (!/^application\/json(?:\s*;|$)/i.test(String(request.headers['content-type'] ?? '')))
-      fail('web_bad_request', '请使用 JSON 请求。');
+      fail('web_bad_request', phrase('service:web.jsonOnly'));
     const chunks: Buffer[] = [];
     let size = 0;
     const timeout = setTimeout(() => request.destroy(), 10_000);
     try {
       for await (const chunk of request) {
         size += chunk.length;
-        if (size > 4096) fail('web_bad_request', '请求内容过长。');
+        if (size > 4096) fail('web_bad_request', phrase('service:web.tooLong'));
         chunks.push(Buffer.from(chunk));
       }
       try {
         return JSON.parse(Buffer.concat(chunks).toString('utf8'));
       } catch {
-        return fail('web_bad_request', '请求格式无效。');
+        return fail('web_bad_request', phrase('service:connection.invalidCommand'));
       }
     } finally {
       clearTimeout(timeout);
@@ -603,11 +611,11 @@ export class WebAccess {
     const wait = this.throttle.blocked(address, this.now());
     if (wait || !this.throttle.enter(address)) {
       response.setHeader('Retry-After', String(wait || 5));
-      return this.json(response, 429, { error: '尝试过于频繁，请稍后重试。' });
+      return this.json(response, 429, failed(phrase('service:web.rateLimited')));
     }
     try {
       const body = webLoginSchema.safeParse(await this.body(request));
-      if (!body.success) fail('web_bad_request', '登录请求格式无效。');
+      if (!body.success) fail('web_bad_request', phrase('service:web.badLogin'));
       this.proof(body.data, address);
       this.sweep();
       // Signing in again replaces this browser's login instead of adding one.
@@ -615,13 +623,13 @@ export class WebAccess {
       const { count } = this.options.database
         .prepare('SELECT COUNT(*) AS count FROM web_sessions')
         .get() as { count: number };
-      if (count >= 128 && !previous)
-        fail('web_session_limit', '登录会话数量已达上限，请先撤销不用的会话。');
+      if (count >= 128 && !previous) fail('web_session_limit', phrase('service:web.sessionLimit'));
       const now = this.now();
       const secret = randomBytes(32).toString('hex');
       const row: StoredSession = {
         id: randomUUID(),
-        name: String(request.headers['user-agent'] ?? '浏览器').slice(0, 120),
+        // A browser that does not say what it is goes unnamed; the client calls it a browser.
+        name: String(request.headers['user-agent'] ?? '').slice(0, 120),
         secret_hash: hash(secret),
         token_hash: this.tokenHash,
         created: now,
@@ -639,7 +647,9 @@ export class WebAccess {
     } catch (error) {
       const known = error instanceof DomainError;
       return this.json(response, (known && statuses[error.code]) || 400, {
-        error: known ? error.message : '登录暂时不可用。',
+        ...(known
+          ? { error: error.message, ...(error.phrase && { phrase: error.phrase }) }
+          : failed(phrase('service:web.loginUnavailable'))),
         code: known ? error.code : 'web_login_failed',
       });
     } finally {

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from './i18n.ts';
+import type { T } from './i18n.ts';
 
 // A step of the client's upgrade, as the main process tells it (see `update:install` in electron/main.cjs): asking
 // for the installer, its bytes coming in, a connection given up and tried again, the file being checked, the other
@@ -14,8 +16,7 @@ export type UpgradeStep = {
   reason?: string;
 };
 
-export const messageOf = (failure: unknown) =>
-  String((failure as Error)?.message ?? failure).replace(/^.*?'[\w:]+': (Error: )?/, '');
+export const messageOf = (failure: unknown) => String((failure as Error)?.message ?? failure);
 
 export const megabytes = (bytes: number) => `${(bytes / 1048576).toFixed(1)} MB`;
 const share = (step: UpgradeStep) =>
@@ -23,25 +24,34 @@ const share = (step: UpgradeStep) =>
 
 // One line for where the upgrade is. `quiet` is how many seconds it has gone without news, said once it is long
 // enough to look like a hang: the line then tells that it is still waiting, and for how long.
-export function upgradeText(step: UpgradeStep, quiet = 0) {
-  // A Latin name stands apart from the Chinese around it.
-  const gap = step.source === 'service' ? '' : ' ';
-  const from = step.source === 'service' ? '服务端' : 'GitHub';
+export function upgradeText(t: T, step: UpgradeStep, quiet = 0) {
+  const { source } = step;
+  const waited = quiet >= 5;
   switch (step.phase) {
     case 'connecting':
-      return `正在连接${gap}${from}${quiet >= 5 ? `，已等 ${quiet} 秒` : '…'}`;
+      return waited
+        ? t(`connection:clientUpgrade.connectingWaited.${source}`, { count: quiet })
+        : t(`connection:clientUpgrade.connecting.${source}`);
     case 'downloading':
-      return `正在从${gap}${from}${gap}下载 ${share(step)}${quiet >= 5 ? `，${quiet} 秒没有新数据` : ''}`;
+      return waited
+        ? t(`connection:clientUpgrade.downloadingQuiet.${source}`, {
+            share: share(step),
+            count: quiet,
+          })
+        : t(`connection:clientUpgrade.downloading.${source}`, { share: share(step) });
     case 'retrying':
       return step.attempt
-        ? `网络中断，正在重新连接（第 ${step.attempt}/${step.attempts} 次）`
-        : '连接中断，正在续传…';
+        ? t('connection:clientUpgrade.retrying', {
+            attempt: step.attempt,
+            attempts: step.attempts ?? 0,
+          })
+        : t('connection:clientUpgrade.resuming');
     case 'verifying':
-      return '正在校验安装包…';
+      return t('connection:clientUpgrade.verifying');
     case 'closing':
-      return '正在关闭其他连接的窗口…';
+      return t('connection:clientUpgrade.closing');
     case 'installing':
-      return '正在安装，完成后客户端会自动打开';
+      return t('connection:clientUpgrade.installing');
   }
 }
 
@@ -50,6 +60,7 @@ export type ClientUpgrade = ReturnType<typeof useClientUpgrade>;
 // The client's upgrade as a window follows it: `start` fetches the service's installer, or the given version's from
 // the release page, and runs it; `cancel` stops the download. A failure goes to `failed`; a cancelled one ends quietly.
 export function useClientUpgrade(failed: (message: string) => void) {
+  const t = useT();
   const [step, setStep] = useState<UpgradeStep | null>(null);
   const [quiet, setQuiet] = useState(0);
   const heard = useRef(0);
@@ -98,7 +109,7 @@ export function useClientUpgrade(failed: (message: string) => void) {
     step,
     start,
     cancel,
-    text: step ? upgradeText(step, quiet) : null,
+    text: step ? upgradeText(t, step, quiet) : null,
     cancellable: !!step && ['connecting', 'downloading', 'retrying'].includes(step.phase),
   };
 }

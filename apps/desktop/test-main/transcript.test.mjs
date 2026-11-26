@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { conversation } from '../src/transcript.ts';
+import { conversation as convert } from '../src/transcript.ts';
+import { t } from '../src/i18n.ts';
+
+const conversation = (events) => convert(events, t);
 
 let sequence = 0;
 const at = (second) => new Date(Date.UTC(2026, 9, 26, 12, 0, second)).toISOString();

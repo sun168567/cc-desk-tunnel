@@ -1,3 +1,5 @@
+import { phrase } from '@cc-desk-tunnel/i18n';
+
 // Days left of a sign-in that ends at `expiresAt`, rounded up; null for no date.
 export function daysLeft(expiresAt: string | undefined, now = Date.now()) {
   const at = expiresAt ? Date.parse(expiresAt) : NaN;
@@ -12,8 +14,9 @@ export function loginExpiryWarnings() {
     const today = new Date(now).toISOString().slice(0, 10);
     if (days === null || days > 10 || warnedOn === today) return null;
     warnedOn = today;
+    const date = expiresAt!.slice(0, 10);
     return days > 0
-      ? `Claude Code 的登录约 ${days} 天后到期（${expiresAt!.slice(0, 10)}），到期后要在“账号与额度”里重新登录。`
-      : `Claude Code 的登录可能已经到期（${expiresAt!.slice(0, 10)}）；如果请求开始失败，请在“账号与额度”里重新登录。`;
+      ? phrase('service:notice.loginExpiring', { count: days, date })
+      : phrase('service:notice.loginExpired', { date });
   };
 }

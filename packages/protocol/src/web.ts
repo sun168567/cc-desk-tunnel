@@ -21,7 +21,7 @@ export const webDomainSchema = z
       (value.includes('.') &&
         /^[a-z]/.test(value.split('.').at(-1)!) &&
         value.split('.').every((part) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(part))),
-    '请填写域名，不含协议、端口或路径。',
+    'A domain name, without scheme, port or path.',
   );
 export const webPathSchema = z
   .string()
@@ -29,7 +29,7 @@ export const webPathSchema = z
   .regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)?$/)
   .refine(
     (value) => !['ws', 'health', 'client', 'assets', 'api'].includes(value),
-    '此路径已保留。',
+    'This path is reserved.',
   );
 export const webProofSchema = z
   .object({

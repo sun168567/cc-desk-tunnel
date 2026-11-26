@@ -6,14 +6,8 @@ export type TranscriptView = { mode: ViewMode };
 
 export const defaultView: TranscriptView = { mode: 'standard' };
 
-export const viewModes: { mode: ViewMode; label: string; detail: string }[] = [
-  { mode: 'standard', label: '标准', detail: '运行中按连续的操作分组，结束后折成“用时 …”' },
-  {
-    mode: 'expanded',
-    label: '全部展开',
-    detail: '命令和思考一条条平铺，不分组，也不自动收起；思考显示第一行',
-  },
-];
+// Each is named and told about by settings:view.<mode>.
+export const viewModes: ViewMode[] = ['standard', 'expanded'];
 
 // The first line that says something, without the Markdown around it. Only a list marker is taken off the start, so
 // a line that begins with a number keeps it.

@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  channelFailure,
-  componentFailure,
-  unsupportedShell,
-  controlFailure,
-  missingComponent,
-} from '../electron/connect-errors.mjs';
+import * as errors from '../electron/connect-errors.mjs';
+import { say } from '../electron/words.mjs';
+
+// What each failure says, in the catalogs' source language.
+const said =
+  (make) =>
+  (...args) =>
+    say(make(...args));
+const channelFailure = said(errors.channelFailure);
+const componentFailure = said(errors.componentFailure);
+const controlFailure = said(errors.controlFailure);
+const missingComponent = said(errors.missingComponent);
+const unsupportedShell = said(errors.unsupportedShell);
 
 const failure = (code, message = '') => Object.assign(new Error(message), { code });
 

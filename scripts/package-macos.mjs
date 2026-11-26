@@ -11,6 +11,7 @@ import {
   stageCcdt,
   stageDesktop,
 } from './package-desktop.mjs';
+import { usageDescriptions, usageResources } from './macos-usage.mjs';
 
 // Builds the macOS package: a disk image to install from and a ZIP of the same application. It is not signed
 // with a Developer ID and not notarized, so macOS asks the user to allow it on first start (see docs/macos.md),
@@ -46,7 +47,6 @@ const electron = JSON.parse(readFileSync(join(root, 'node_modules/electron/packa
 const electronDist = join(root, 'node_modules/electron/dist');
 const useInstalledElectron =
   architecture === process.arch && existsSync(join(electronDist, 'Electron.app'));
-const folder = (what) => `访问你选择的${what}项目，让 Claude 经执行通道读取和修改其中的文件。`;
 // electron-builder leaves a pull request's build unsigned, lest a fork reach a certificate. The signature here is
 // ad hoc and uses none, and a build left without it fails the check below: it is signed as any other.
 process.env.CSC_FOR_PULL_REQUEST = 'true';
@@ -63,7 +63,10 @@ const results = await electronBuild({
     npmRebuild: false,
     asar: true,
     files: ['package.json', 'electron/**', 'dist/**', 'node_modules/**'],
-    extraResources: [ccdtResource(ccdt)],
+    extraResources: [
+      ccdtResource(ccdt),
+      ...usageResources(join(root, `.local/macos-package/${architecture}/strings`)),
+    ],
     // Electron ships its notices beside Electron.app. Preserve those for the target architecture
     // before electron-builder renames the bundle and removes the standalone files.
     afterExtract({ appOutDir }) {
@@ -92,12 +95,8 @@ const results = await electronBuild({
       extendInfo: {
         // The page talks to the bridge of its own main process over a loopback WebSocket.
         NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
-        // What the system shows when a command first reaches into one of these places.
-        NSDesktopFolderUsageDescription: folder('桌面'),
-        NSDocumentsFolderUsageDescription: folder('文稿'),
-        NSDownloadsFolderUsageDescription: folder('下载'),
-        NSRemovableVolumesUsageDescription: folder('外接磁盘'),
-        NSNetworkVolumesUsageDescription: folder('网络磁盘'),
+        // What the system shows when a command first reaches into one of these places (macos-usage.mjs).
+        ...usageDescriptions('en'),
       },
     },
     dmg: { sign: false },

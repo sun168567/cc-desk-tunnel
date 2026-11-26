@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useT } from './i18n.ts';
 import { setPrefs, usePrefs } from './prefs.ts';
-import { actions, comboOf, keyFor, show, usable } from './shortcuts.ts';
+import { actionName, actions, comboOf, keyFor, show, usable } from './shortcuts.ts';
 import type { Action } from './shortcuts.ts';
 import { Page, Switch } from './ui.tsx';
 
 export default function ShortcutSettings() {
+  const t = useT();
   const prefs = usePrefs();
   const { enabled } = prefs.shortcuts;
   // The action whose next key press becomes its shortcut.
@@ -21,18 +23,15 @@ export default function ShortcutSettings() {
   };
   const listed = actions.filter((action) => !action.desktop || window.desktop);
   return (
-    <Page
-      title="快捷键"
-      intro="快捷键只在本窗口处于前台时起作用，不向系统注册全局热键；对话框打开时，按键原样交给它。"
-    >
+    <Page title={t('settings:section.shortcuts.name')} intro={t('settings:shortcut.intro')}>
       <div className="card">
         <div className="setting-row">
           <span>
-            <strong>启用快捷键</strong>
-            <small>关闭后下面的组合键全部不再响应，菜单里的功能照常可用</small>
+            <strong>{t('settings:shortcut.enabled')}</strong>
+            <small>{t('settings:shortcut.enabledDetail')}</small>
           </span>
           <Switch
-            label="启用快捷键"
+            label={t('settings:shortcut.enabled')}
             checked={enabled}
             onChange={(value) => {
               stop();
@@ -44,19 +43,17 @@ export default function ShortcutSettings() {
           />
         </div>
       </div>
-      <h2 className="page-heading">组合键</h2>
-      <p className="muted">
-        点一项后按下新的组合键（需要包含 Ctrl、Alt 或 Command，或是功能键）；按 Esc 取消，按
-        Backspace 去掉这一项的快捷键。
-      </p>
+      <h2 className="page-heading">{t('settings:shortcut.heading')}</h2>
+      <p className="muted">{t('settings:shortcut.howTo')}</p>
       {failure && (
         <p className="error-text" role="alert">
           {failure}
         </p>
       )}
       <div className="card">
-        {listed.map(({ id, name }) => {
+        {listed.map(({ id }) => {
           const combo = keyFor(prefs, id);
+          const name = actionName(t, id);
           return (
             <div className="setting-row" key={id}>
               <span>
@@ -65,7 +62,7 @@ export default function ShortcutSettings() {
               <button
                 type="button"
                 className={`key-button ${recording === id ? 'recording' : ''}`}
-                aria-label={`修改快捷键：${name}`}
+                aria-label={t('settings:shortcut.change', { name })}
                 disabled={!enabled}
                 onClick={() => {
                   setFailure(null);
@@ -84,18 +81,26 @@ export default function ShortcutSettings() {
                   const pressed = comboOf(event);
                   if (!pressed) return;
                   if (!usable(pressed))
-                    return setFailure(
-                      `${show(pressed)} 会妨碍正常输入；请加上 Ctrl、Alt 或 Command。`,
-                    );
+                    return setFailure(t('settings:shortcut.typing', { combo: show(t, pressed) }));
                   const taken = listed.find(
                     (other) => other.id !== id && keyFor(prefs, other.id) === pressed,
                   );
-                  if (taken) return setFailure(`${show(pressed)} 已被“${taken.name}”使用。`);
+                  if (taken)
+                    return setFailure(
+                      t('settings:shortcut.taken', {
+                        combo: show(t, pressed),
+                        name: actionName(t, taken.id),
+                      }),
+                    );
                   set(id, pressed);
                   stop();
                 }}
               >
-                {recording === id ? '按下新的组合键…' : combo ? show(combo) : '未设置'}
+                {recording === id
+                  ? t('settings:shortcut.recording')
+                  : combo
+                    ? show(t, combo)
+                    : t('settings:shortcut.unset')}
               </button>
             </div>
           );
@@ -109,7 +114,7 @@ export default function ShortcutSettings() {
           setPrefs((value) => ({ ...value, shortcuts: { ...value.shortcuts, keys: {} } }));
         }}
       >
-        恢复默认组合键
+        {t('settings:shortcut.reset')}
       </button>
     </Page>
   );

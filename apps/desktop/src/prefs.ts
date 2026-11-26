@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react';
+import { isLanguageChoice } from '@cc-desk-tunnel/i18n';
+import type { LanguageChoice } from '@cc-desk-tunnel/i18n';
 import { onSharedChange, saveShared, shareOnce, shared } from './shared.ts';
 import { defaultView, viewModes } from './transcriptView.ts';
 import type { TranscriptView } from './transcriptView.ts';
@@ -13,12 +15,8 @@ export { connectionWaits, waitRange };
 export type { ConnectionWaits };
 // The colours: the system's light or dark, or always one of them. The page shows the choice as `data-theme` on
 // its root (see main.tsx and the top of style.css), and the desktop window's own parts follow it (main.cjs).
-export const themes = [
-  { theme: 'system', label: '跟随系统' },
-  { theme: 'light', label: '浅色' },
-  { theme: 'dark', label: '深色' },
-] as const;
-export type Theme = (typeof themes)[number]['theme'];
+export const themes = ['system', 'light', 'dark'] as const;
+export type Theme = (typeof themes)[number];
 export type Prefs = {
   pinnedSessions: string[];
   // Projects are named by pathKey().
@@ -50,6 +48,8 @@ export type Prefs = {
   // The strip under the input box with the whole session's figures; chosen the same way.
   sessionBar: { enabled: boolean; summary: Record<string, boolean> };
   theme: Theme;
+  // The language of the window, its menus and dialogs: the system's, or one chosen here (see i18n.ts).
+  language: LanguageChoice;
   // The file panel beside the conversation: whether it is open, and how wide the user made it.
   filePanel: { open: boolean; width: number };
 };
@@ -80,6 +80,7 @@ const defaults: Prefs = {
   view: defaultView,
   sessionBar: { enabled: false, summary: {} },
   theme: 'system',
+  language: 'system',
   filePanel: { open: false, width: 420 },
 };
 
@@ -125,7 +126,7 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
       quota: saved.quota === true,
       quotaReads: saved.quotaReads !== false,
       view: {
-        mode: viewModes.find((entry) => entry.mode === saved.view?.mode)?.mode ?? defaultView.mode,
+        mode: viewModes.find((mode) => mode === saved.view?.mode) ?? defaultView.mode,
       },
       stats: {
         enabled: saved.stats?.enabled === true,
@@ -143,7 +144,8 @@ function read(saved: any = shared('prefs') ?? stored()): Prefs {
           ),
         ),
       },
-      theme: themes.find((entry) => entry.theme === saved.theme)?.theme ?? defaults.theme,
+      theme: themes.find((theme) => theme === saved.theme) ?? defaults.theme,
+      language: isLanguageChoice(saved.language) ? saved.language : defaults.language,
       filePanel: {
         open: saved.filePanel?.open === true,
         width:

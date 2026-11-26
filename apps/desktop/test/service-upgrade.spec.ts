@@ -31,6 +31,7 @@ async function connect(page: Page, version: string, sessions: Session[]) {
         return send({
           type: 'ready',
           protocolVersion: PROTOCOL_VERSION,
+          serverDeviceId: '00000000-0000-4000-8000-000000000001',
           version,
           connectionId: randomUUID(),
           adapter: 'claude-code',

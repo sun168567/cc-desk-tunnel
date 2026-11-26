@@ -181,9 +181,31 @@ if manage restore "$archive" --yes > /dev/null 2>&1; then echo 'A newer backup w
 # A host is checked before anything else is done; underscores are fine (see the installer below).
 if manage init --host https://example.com --data "$TEMP/none" > /dev/null 2>&1; then echo 'A URL was taken for a host.' >&2; exit 1; fi
 
+# What the scripts say is in Chinese, or in English once CC_DESK_TUNNEL_LANG=en asks for it, which the commands
+# after it keep, and an upgrade too; =zh goes back. Nothing in English is left in Chinese.
+chinese() { LC_ALL=C.UTF-8 grep -qP '[\x{3000}-\x{9fff}\x{ff00}-\x{ffef}]' "$@"; }
+deployment 1.2.3
+if manage frob > /dev/null 2> "$TEMP/said"; then echo 'An unknown command was taken.' >&2; exit 1; fi
+grep -qx '未知命令：frob' "$TEMP/said"
+manage help | grep -qx '用法：'
+CC_DESK_TUNNEL_LANG=en manage status > /dev/null
+grep -qx "SCRIPT_LANG='en'" "$PROXY_DEPLOY_CONFIG"
+manage frob > "$TEMP/said" 2>&1 || true
+grep -qx 'Unknown command: frob' "$TEMP/said"
+! chinese "$TEMP/said"
+release 1.3.0
+manage upgrade > "$TEMP/said" 2>&1
+grep -q 'Downloading cc-desk-tunnel-server-1.3.0.tar.gz' "$TEMP/said"
+grep -q 'CC Desk Tunnel deployment summary' "$TEMP/said"
+! chinese "$TEMP/said"
+CC_DESK_TUNNEL_LANG=zh manage status > /dev/null
+grep -qx "SCRIPT_LANG='zh'" "$PROXY_DEPLOY_CONFIG"
+manage frob > "$TEMP/said" 2>&1 || true
+grep -qx '未知命令：frob' "$TEMP/said"
+
 # The one-line installer, as root on Linux: a first install, then the command it leaves, then an upgrade.
 if [[ "$(uname -s)" != Linux ]]; then
-  echo 'PASS: image choice, failures, release upgrade, backup and restore. SKIP: the installer, which needs Linux.'
+  echo 'PASS: image choice, failures, release upgrade, backup and restore, language. SKIP: the installer, which needs Linux.'
   exit 0
 fi
 for tool in id chown uname openssl; do
@@ -201,17 +223,45 @@ export CC_DESK_TUNNEL_DIR="$TEMP/installed"
 release 1.3.0
 : > "$MOCK_LOG"
 tr -d '\r' < "$ROOT/deploy/install.sh" > "$TEMP/install.sh"
-printf 'y\n' | bash "$TEMP/install.sh" init --host my_box.example.com --mode nginx --data "$TEMP/installed-data" > "$TEMP/install.log"
+# In English, which the installation keeps for the installer run again.
+printf 'y\n' | CC_DESK_TUNNEL_LANG=en bash "$TEMP/install.sh" init --host my_box.example.com --mode nginx \
+  --data "$TEMP/installed-data" > "$TEMP/install.log" 2>&1
+! chinese "$TEMP/install.log"
 grep -q '"version": "1.3.0"' "$TEMP/installed/apps/desktop/package.json"
 grep -q "CONNECTION_URL='wss://my_box.example.com/ws'" "$TEMP/installed/.local/docker.env"
+grep -qx "SCRIPT_LANG='en'" "$TEMP/installed/.local/docker.env"
 grep -q "deploy/manage.sh" "$CC_DESK_TUNNEL_COMMAND"
 MISSING_IMAGE=1 bash "$CC_DESK_TUNNEL_COMMAND" up > /dev/null
 grep -q "PROXY_IMAGE='ghcr.io/sun168567/cc-desk-tunnel:1.3.0'" "$TEMP/installed/.local/docker.env"
 release 1.4.0
 : > "$MOCK_LOG"
-printf 'y\n' | bash "$TEMP/install.sh" > "$TEMP/reinstall.log"
+printf 'y\n' | bash "$TEMP/install.sh" > "$TEMP/reinstall.log" 2>&1
+grep -q 'Found a deployment' "$TEMP/reinstall.log"
+! chinese "$TEMP/reinstall.log"
 grep -q "PROXY_IMAGE='ghcr.io/sun168567/cc-desk-tunnel:1.4.0'" "$TEMP/installed/.local/docker.env"
 test "$(grep -c '^pull ' "$MOCK_LOG")" = 1
 bash "$CC_DESK_TUNNEL_COMMAND" uninstall > /dev/null
 test ! -e "$CC_DESK_TUNNEL_COMMAND"
-echo 'PASS: image choice, failures, release upgrade, backup and restore, installer, management command.'
+
+# The questions of a first install, on a terminal (script(1) gives it one), in each language: every answer is
+# checked as it is given and asked for again; the answers make the configuration.
+for language in zh en; do
+  export PROXY_DEPLOY_CONFIG="$TEMP/setup-$language.env"
+  printf '%s\n' 'bad!host' setup.example.com 4 1 80 '' relative "$TEMP/setup-$language" short '' \
+    | CC_DESK_TUNNEL_LANG=$language script -qec "bash '$DEPLOYED/deploy/manage.sh' setup" /dev/null > "$TEMP/setup.log"
+  if [[ "$language" = zh ]]; then
+    for said in '“bad!host”不是 IPv4 地址或域名' '请输入 1、2 或 3。' '端口应在 1024 到 65535 之间。' '请填写一个专用的绝对路径' \
+      '凭据需要 24 到 512 位' 'CC Desk Tunnel 部署汇总'; do grep -qF "$said" "$TEMP/setup.log"; done
+  else
+    for said in '“bad!host” is not an IPv4 address' 'Enter 1, 2 or 3.' 'The port must be between 1024 and 65535.' \
+      'Enter a dedicated absolute path' 'The token needs 24 to 512 characters' 'CC Desk Tunnel deployment summary'; do
+      grep -qF "$said" "$TEMP/setup.log"
+    done
+    ! chinese "$TEMP/setup.log"
+  fi
+  grep -qx "CONNECTION_URL='wss://setup.example.com:8787/ws'" "$PROXY_DEPLOY_CONFIG"
+  grep -qx "MODE='fingerprint'" "$PROXY_DEPLOY_CONFIG"
+  grep -qx "DATA_DIR='$TEMP/setup-$language'" "$PROXY_DEPLOY_CONFIG"
+  grep -qx "SCRIPT_LANG='$language'" "$PROXY_DEPLOY_CONFIG"
+done
+echo 'PASS: image choice, failures, release upgrade, backup and restore, language, installer, management command, setup questions.'

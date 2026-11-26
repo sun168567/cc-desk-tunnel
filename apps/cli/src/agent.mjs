@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { terminalStatuses } from '@cc-desk-tunnel/protocol';
+import { t, wordsOf } from './i18n.mjs';
 
 // What ccdt does for programs and other agents rather than for a person at a terminal: a message sent to a session
 // and its run followed until it stops for someone. Everything goes through the service's own conversation, as the
@@ -26,13 +27,13 @@ export function findSession(sessions, ref) {
   const key = String(ref ?? '')
     .trim()
     .toLowerCase();
-  if (!key) throw said('要写会话 ID（可只写开头几位）：ccdt sessions --json 列出这个目录的会话。');
+  if (!key) throw said(t('cli:session.idNeeded'));
   const found = sessions.filter((session) => session.id.startsWith(key));
   if (found.length === 1) return found[0];
   throw said(
     found.length
-      ? `有 ${found.length} 个会话以 ${ref} 开头，请多写几位。`
-      : `没有会话 ${ref}：ccdt sessions --all --json 列出全部会话。`,
+      ? t('cli:session.ambiguous', { count: found.length, ref })
+      : t('cli:session.none', { ref }),
   );
 }
 
@@ -48,7 +49,7 @@ export function subscribe(service, sessionId) {
       if (error) reject(error);
       else resolve(snapshot);
     };
-    const ended = () => finish(said('连接已关闭。', EXIT.connection));
+    const ended = () => finish(said(t('cli:connection.closed'), EXIT.connection));
     const listen = (message) => {
       if (message.requestId !== requestId) return;
       if (message.type === 'session.snapshot') finish(undefined, message);
@@ -61,7 +62,14 @@ export function subscribe(service, sessionId) {
             JSON.parse(parts).find((part) => part.type === 'session.snapshot'),
           );
       } else if (message.type === 'response' && !message.ok)
-        finish(said(message.message ?? '读取会话失败。'));
+        finish(
+          said(
+            wordsOf(
+              message.phrase ?? message.message ?? t('cli:session.readFailed'),
+              message.message,
+            ),
+          ),
+        );
     };
     service.on('message', listen);
     service.once('end', ended);
@@ -276,7 +284,7 @@ export async function follow(service, follow, { deadline, past, onEvent } = {}) 
           deadline === undefined
             ? undefined
             : setTimeout(resolve, Math.max(0, deadline - Date.now()));
-        const ended = () => reject(said('连接已关闭。', EXIT.connection));
+        const ended = () => reject(said(t('cli:connection.closed'), EXIT.connection));
         wake = () => {
           clearTimeout(timer);
           service.off('end', ended);

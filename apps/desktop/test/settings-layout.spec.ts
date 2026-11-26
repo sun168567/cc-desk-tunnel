@@ -47,6 +47,7 @@ async function serve(page: Page, url: string, shells?: string[], chosen: unknown
         send({
           type: 'ready',
           protocolVersion: PROTOCOL_VERSION,
+          serverDeviceId: '00000000-0000-4000-8000-000000000001',
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
@@ -262,7 +263,7 @@ test('Electron: this computer’s settings as the desktop client shows them', as
   const profile = resolve('.local/ui-test/profile-settings-layout');
   rmSync(profile, { recursive: true, force: true });
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...connectionArgs(profile)],
     env,
   });
   try {

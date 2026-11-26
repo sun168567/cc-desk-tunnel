@@ -122,6 +122,7 @@ test("a terminal's turns fold as a chat's do, each once its CLI waits for the ne
         return send({
           type: 'ready',
           protocolVersion: PROTOCOL_VERSION,
+          serverDeviceId: '00000000-0000-4000-8000-000000000001',
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',

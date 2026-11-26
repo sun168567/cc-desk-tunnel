@@ -1,7 +1,9 @@
+import type { T } from '@cc-desk-tunnel/i18n';
 import type { DeviceShell, NativeSettings } from '@cc-desk-tunnel/protocol';
 
 // Settings described once for every client that shows them: the desktop and browser pages, and ccdt in a terminal.
-// Nothing here draws; each client shows the same choices with the same words in its own way. A detail is one short
+// Nothing here draws; each client shows the same choices with the same words in its own way, in its language: what
+// says them takes the client's `t` (catalog namespace `settings`). A detail is one short
 // line; what takes more words, and how settings work together, is in the help, at the place `help` names
 // (an article of help-content.ts, or `article#heading`).
 
@@ -10,52 +12,57 @@ import type { DeviceShell, NativeSettings } from '@cc-desk-tunnel/protocol';
 export type ConnectionWaits = { connect: number; ssh: number; ready: number };
 export const connectionWaits: ConnectionWaits = { connect: 15, ssh: 10, ready: 45 };
 export const waitRange = { min: 5, max: 600 };
-export const waitFields: { step: keyof ConnectionWaits; title: string; detail: string }[] = [
-  { step: 'connect', title: '连接服务器', detail: '与服务端建立网络连接' },
+export const waitFields = (
+  t: T,
+): { step: keyof ConnectionWaits; title: string; detail: string }[] => [
+  {
+    step: 'connect',
+    title: t('settings:wait.connect.title'),
+    detail: t('settings:wait.connect.detail'),
+  },
   {
     step: 'ssh',
-    title: '本机 SSH 服务启动',
-    detail: '域账号连不上域控制器、或安全软件扫描较慢时，启动会久一些',
+    title: t('settings:wait.ssh.title'),
+    detail: t('settings:wait.ssh.detail'),
   },
   {
     step: 'ready',
-    title: '执行通道就绪',
-    detail: '从连上服务端到隧道接通的总时间；至少比上一项多 35 秒',
+    title: t('settings:wait.ready.title'),
+    detail: t('settings:wait.ready.detail'),
   },
 ];
 
 // The service's idle compaction: what each value means and the choices offered for it.
-export const idleCompactionFields = {
+export const idleCompactionFields = (t: T) => ({
   enabled: {
-    title: '自动压缩',
-    detail: '只对 1 小时缓存的会话生效，订阅账号默认如此',
+    title: t('settings:idle.enabled.title'),
+    detail: t('settings:idle.enabled.detail'),
   },
   afterMinutes: {
-    title: '空闲多久后压缩',
-    detail: '从最后一轮结束算起；关闭自动压缩时，到点提醒',
+    title: t('settings:idle.after.title'),
+    detail: t('settings:idle.after.detail'),
     options: [30, 40, 45, 50, 55],
   },
   minTokens: {
-    title: '上下文至少',
-    detail: '更小的会话不压缩，也不提醒',
+    title: t('settings:idle.minTokens.title'),
+    detail: t('settings:idle.minTokens.detail'),
     options: [50_000, 100_000, 150_000, 200_000, 300_000],
   },
-};
+});
 
 // The shell Claude is told the user prefers for scripts on a Windows computer. The choice is kept by the service for
 // this computer alone; Git Bash is offered once the computer has it.
-export const shellField = {
-  title: '偏好的 Shell',
-  detail: '不指定时由 Claude 按任务选；选了也只是优先',
+export const shellField = (t: T) => ({
+  title: t('settings:shell.title'),
+  detail: t('settings:shell.detail'),
   help: 'execution#shell',
-  unset: '不指定',
-  missing:
-    '没有检测到 Git Bash：安装 Git for Windows（https://git-scm.com/download/win）后重新连接，就可以选择它。',
+  unset: t('settings:shell.unset'),
+  missing: t('settings:shell.missing'),
   options: [
     ['pwsh', 'PowerShell 7'],
     ['bash', 'Git Bash'],
   ] as [DeviceShell, string][],
-};
+});
 
 export type CliKey = keyof NativeSettings;
 export type CliValue = NativeSettings[CliKey];
@@ -77,32 +84,33 @@ const sizes = (values: number[], current: unknown, name: (value: number) => stri
     .map((value): [string, string] => [String(value), name(value)]);
 const tokens = (value: number) =>
   `${value >= 1_000_000 ? `${value / 1_000_000}M` : `${value / 1000}K`} tokens`;
-const ttl: [string, string][] = [
-  ['5m', '5 分钟'],
-  ['1h', '1 小时'],
+const ttl = (t: T): [string, string][] => [
+  ['5m', t('settings:cli.ttl.5m')],
+  ['1h', t('settings:cli.ttl.1h')],
 ];
 
 // The official CLI's settings in the order they are shown, under the heading they belong to.
 export const cliSettingGroups = (
+  t: T,
   values: NativeSettings,
 ): { name: string; fields: CliField[] }[] => [
   {
-    name: '上下文与记忆',
+    name: t('settings:cli.group.context'),
     fields: [
       {
         key: 'autoCompactEnabled',
         kind: 'toggle',
-        title: '自动压缩上下文',
-        detail: '上下文快满时自动摘要并接着做',
-        unset: '默认（开启）',
+        title: t('settings:cli.autoCompactEnabled.title'),
+        detail: t('settings:cli.autoCompactEnabled.detail'),
+        unset: t('settings:default.on'),
       },
       {
         key: 'autoCompactWindow',
         kind: 'choice',
-        title: '自动压缩窗口',
-        detail: '上下文到这么大就压缩，不超过模型自身的窗口',
+        title: t('settings:cli.autoCompactWindow.title'),
+        detail: t('settings:cli.autoCompactWindow.detail'),
         help: 'context#window',
-        unset: '默认（自动）',
+        unset: t('settings:default.auto'),
         options: sizes(
           [100_000, 200_000, 300_000, 400_000, 500_000, 750_000, 1_000_000],
           values.autoCompactWindow,
@@ -113,69 +121,69 @@ export const cliSettingGroups = (
       {
         key: 'precomputeCompactionEnabled',
         kind: 'toggle',
-        title: '提前准备压缩摘要',
-        detail: '后台先算好摘要，压缩时少等；需开启自动压缩',
-        unset: '默认（自动）',
+        title: t('settings:cli.precomputeCompactionEnabled.title'),
+        detail: t('settings:cli.precomputeCompactionEnabled.detail'),
+        unset: t('settings:default.auto'),
       },
       {
         key: 'autoMemoryEnabled',
         kind: 'toggle',
-        title: '自动记忆',
-        detail: 'Claude 自己记笔记，下次会话还记得',
+        title: t('settings:cli.autoMemoryEnabled.title'),
+        detail: t('settings:cli.autoMemoryEnabled.detail'),
         help: 'memory#auto',
-        unset: '默认（开启）',
+        unset: t('settings:default.on'),
       },
       {
         key: 'autoDreamEnabled',
         kind: 'toggle',
-        title: '后台整理记忆',
-        detail: '空闲时归并、整理已有的记忆',
-        unset: '默认（自动）',
+        title: t('settings:cli.autoDreamEnabled.title'),
+        detail: t('settings:cli.autoDreamEnabled.detail'),
+        unset: t('settings:default.auto'),
       },
       {
         key: 'fileCheckpointingEnabled',
         kind: 'toggle',
-        title: '文件检查点',
-        detail: '编辑前留快照，供 /rewind 撤回；只在 ccdt 里有用',
+        title: t('settings:cli.fileCheckpointingEnabled.title'),
+        detail: t('settings:cli.fileCheckpointingEnabled.detail'),
         help: 'permissions#checkpoints',
-        unset: '默认（开启）',
+        unset: t('settings:default.on'),
       },
     ],
   },
   {
-    name: '模型与额度',
+    name: t('settings:cli.group.model'),
     fields: [
       {
         key: 'alwaysThinkingEnabled',
         kind: 'toggle',
-        title: '思考',
-        detail: '只对老一些的模型有用，新模型总会思考',
+        title: t('settings:cli.alwaysThinkingEnabled.title'),
+        detail: t('settings:cli.alwaysThinkingEnabled.detail'),
         help: 'model-settings#thinking',
-        unset: '默认（开启）',
+        unset: t('settings:default.on'),
       },
       {
         key: 'showThinkingSummaries',
         kind: 'toggle',
-        title: '显示思考过程',
-        detail: '对话里显示思考的摘要，不改变思考多少',
+        title: t('settings:cli.showThinkingSummaries.title'),
+        detail: t('settings:cli.showThinkingSummaries.detail'),
         help: 'model-settings#thinking',
-        unset: '默认（关闭）',
+        unset: t('settings:default.off'),
       },
       {
         key: 'fastMode',
         kind: 'toggle',
-        title: '快速模式',
-        detail: '输出更快、更贵；订阅账号从额外用量扣费',
+        title: t('settings:cli.fastMode.title'),
+        detail: t('settings:cli.fastMode.detail'),
         help: 'model-settings#fast',
-        unset: '默认（关闭）',
+        unset: t('settings:default.off'),
       },
       {
         key: 'fallbackModel',
         kind: 'text',
-        title: '备用模型',
-        detail: '主模型过载或不可用时依次换用；逗号分隔，最多 3 个',
+        title: t('settings:cli.fallbackModel.title'),
+        detail: t('settings:cli.fallbackModel.detail'),
         help: 'model-settings#fallback',
-        placeholder: '例如 sonnet, haiku',
+        placeholder: t('settings:cli.fallbackModel.placeholder'),
         write: (value) => (Array.isArray(value) ? value.join(', ') : ''),
         read: (text) => {
           const names = text.split(/[,，\s]+/).filter(Boolean);
@@ -185,48 +193,48 @@ export const cliSettingGroups = (
       {
         key: 'autoContinueAtUsageLimit',
         kind: 'toggle',
-        title: '额度用尽后自动继续',
-        detail: '等额度重置后接着做；只在 ccdt 里有用',
+        title: t('settings:cli.autoContinueAtUsageLimit.title'),
+        detail: t('settings:cli.autoContinueAtUsageLimit.detail'),
         help: 'unattended#limit',
-        unset: '默认（开启）',
+        unset: t('settings:default.on'),
       },
       {
         key: 'switchModelsOnFlag',
         kind: 'toggle',
-        title: '触发安全拦截时换模型',
-        detail: '请求被拦下时换模型继续；关闭则这一轮出错结束',
+        title: t('settings:cli.switchModelsOnFlag.title'),
+        detail: t('settings:cli.switchModelsOnFlag.detail'),
         help: 'model-settings#fallback',
-        unset: '默认（开启）',
+        unset: t('settings:default.on'),
       },
       {
         key: 'promptCacheTtl',
         kind: 'choice',
-        title: '提示缓存时长',
-        detail: '主对话的缓存保留多久',
+        title: t('settings:cli.promptCacheTtl.title'),
+        detail: t('settings:cli.promptCacheTtl.detail'),
         help: 'context#ttl',
-        unset: '默认（自动）',
-        options: ttl,
+        unset: t('settings:default.auto'),
+        options: ttl(t),
         read: (text) => text as CliValue,
       },
       {
         key: 'subagentPromptCacheTtl',
         kind: 'choice',
-        title: '子任务的提示缓存时长',
-        detail: '子代理、压缩等主对话之外的请求',
-        unset: '默认（自动）',
-        options: ttl,
+        title: t('settings:cli.subagentPromptCacheTtl.title'),
+        detail: t('settings:cli.subagentPromptCacheTtl.detail'),
+        unset: t('settings:default.auto'),
+        options: ttl(t),
         read: (text) => text as CliValue,
       },
     ],
   },
   {
-    name: '行为',
+    name: t('settings:cli.group.behavior'),
     fields: [
       {
         key: 'language',
         kind: 'text',
-        title: '回复语言',
-        detail: '例如 chinese、japanese；留空由 CLI 决定',
+        title: t('settings:cli.language.title'),
+        detail: t('settings:cli.language.detail'),
         placeholder: '',
         write: (value) => (typeof value === 'string' ? value : ''),
         read: (text) => text || null,
@@ -234,67 +242,67 @@ export const cliSettingGroups = (
       {
         key: 'askUserQuestionTimeout',
         kind: 'choice',
-        title: '提问无人回答时',
-        detail: '提问等多久后自己继续；只在 ccdt 里有用',
+        title: t('settings:cli.askUserQuestionTimeout.title'),
+        detail: t('settings:cli.askUserQuestionTimeout.detail'),
         help: 'unattended#question',
-        unset: '默认（一直等）',
+        unset: t('settings:default.wait'),
         options: [
-          ['60s', '60 秒后继续'],
-          ['5m', '5 分钟后继续'],
-          ['10m', '10 分钟后继续'],
-          ['never', '一直等'],
+          ['60s', t('settings:cli.askUserQuestionTimeout.60s')],
+          ['5m', t('settings:cli.askUserQuestionTimeout.5m')],
+          ['10m', t('settings:cli.askUserQuestionTimeout.10m')],
+          ['never', t('settings:cli.askUserQuestionTimeout.never')],
         ],
         read: (text) => text as CliValue,
       },
       {
         key: 'bashOutputMaxChars',
         kind: 'choice',
-        title: '命令输出上限',
-        detail: '超出的部分存成文件，Claude 只看到开头',
+        title: t('settings:cli.bashOutputMaxChars.title'),
+        detail: t('settings:cli.bashOutputMaxChars.detail'),
         help: 'execution#output',
-        unset: '默认（30K）',
+        unset: t('settings:default.chars'),
         options: sizes(
           [10_000, 30_000, 60_000, 100_000, 128_000],
           values.bashOutputMaxChars,
-          (value) => `${value / 1000}K 字符`,
+          (value) => t('settings:cli.bashOutputMaxChars.chars', { n: value / 1000 }),
         ),
         read: Number,
       },
       {
         key: 'toolSearch',
         kind: 'toggle',
-        title: '工具搜索',
-        detail: '工具说明用到时再查，接了 MCP 时省上下文',
+        title: t('settings:cli.toolSearch.title'),
+        detail: t('settings:cli.toolSearch.detail'),
         help: 'execution#tools',
-        unset: '默认（自动）',
+        unset: t('settings:default.auto'),
       },
       {
         key: 'enableArtifact',
         kind: 'toggle',
-        title: 'Artifact 网页',
-        detail: 'Claude 可以把文档、图表发布成 claude.ai 上的网页',
-        unset: '默认（自动）',
+        title: t('settings:cli.enableArtifact.title'),
+        detail: t('settings:cli.enableArtifact.detail'),
+        unset: t('settings:default.auto'),
       },
     ],
   },
   {
-    name: '权限',
+    name: t('settings:cli.group.permissions'),
     fields: [
       {
         key: 'denyInsteadOfPrompting',
         kind: 'toggle',
-        title: '不等审批，直接拒绝',
-        detail: '要你批准的调用直接拒绝，所有会话都不再弹审批',
+        title: t('settings:cli.denyInsteadOfPrompting.title'),
+        detail: t('settings:cli.denyInsteadOfPrompting.detail'),
         help: 'unattended#deny',
-        unset: '默认（关闭）',
+        unset: t('settings:default.off'),
       },
       {
         key: 'blockWritesOutsideWorkingDirectories',
         kind: 'toggle',
-        title: '禁止在工作目录外写文件',
-        detail: '只管服务器上的写文件工具，挡不住对你电脑的修改',
+        title: t('settings:cli.blockWritesOutsideWorkingDirectories.title'),
+        detail: t('settings:cli.blockWritesOutsideWorkingDirectories.detail'),
         help: 'permissions#writes',
-        unset: '默认（关闭）',
+        unset: t('settings:default.off'),
       },
     ],
   },
@@ -304,18 +312,18 @@ export const cliSettingGroups = (
       {
         key: 'attribution',
         kind: 'choice',
-        title: '提交与 PR 的署名',
-        detail: '默认在提交信息和 PR 描述里加上 Claude 的署名',
-        unset: '默认（加署名）',
-        options: [['false', '不加署名']],
+        title: t('settings:cli.attribution.title'),
+        detail: t('settings:cli.attribution.detail'),
+        unset: t('settings:default.attribution'),
+        options: [['false', t('settings:cli.attribution.false')]],
         read: () => false,
       },
       {
         key: 'includeGitInstructions',
         kind: 'toggle',
-        title: '内置的提交与 PR 流程说明',
-        detail: '官方的提交、开 PR 做法；按自己的流程时关掉',
-        unset: '默认（开启）',
+        title: t('settings:cli.includeGitInstructions.title'),
+        detail: t('settings:cli.includeGitInstructions.detail'),
+        unset: t('settings:default.on'),
       },
     ],
   },

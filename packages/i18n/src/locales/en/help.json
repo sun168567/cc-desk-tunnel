@@ -1,0 +1,1121 @@
+{
+  "groups": {
+    "start": "Getting started",
+    "daily": "Everyday use",
+    "devices": "Several computers",
+    "agents": "Terminal and agents",
+    "account": "Quota and account",
+    "settings": "Settings",
+    "care": "Upkeep and safety",
+    "faq": "When something goes wrong"
+  },
+  "seeArticle": "See “{{title}}”",
+  "starters": {
+    "disks": "How much space is left on each disk of {device}",
+    "explain": "What is this project for? Read through its folders and tell me in three sentences",
+    "transfer": "Send dist/app.zip from this computer to the desktop of {device}",
+    "run": "Get this project running, and fix any errors along the way",
+    "report": "Every Friday at 5 pm, sum up this week’s commits as a draft weekly report",
+    "review": "Have Codex review these changes on its own with codex exec, and compare its opinion with yours for me"
+  },
+  "suggestions": {
+    "explain": "What is this project for? Read through its folders and tell me in three sentences",
+    "run": "Get this project running, and fix any errors along the way",
+    "otherTests": "On {{other}}, clone this repository and run the tests",
+    "commits": "Look at the past week’s git commits and sum up what changed",
+    "disks": "How much space is left on each disk of this computer, and which folders take the most",
+    "otherVersions": "Compare the versions of node, git and python on this computer and on {{other}}",
+    "tools": "List the development tools installed on this computer, with their versions",
+    "report": "Remind me to write my weekly report every Friday at 5 pm; set up the scheduled task for me"
+  },
+  "anotherComputer": "another computer",
+  "page": {
+    "search": "Search help",
+    "clearSearch": "Clear search",
+    "contents": "Help contents",
+    "home": "Home",
+    "news": "New in this version",
+    "newTag": "New",
+    "changed": "Updated in this version",
+    "changedTag": "Updated",
+    "kicker": "CC Desk Tunnel help",
+    "hero": {
+      "line1": "Claude Code lives on your server;",
+      "line2": "each of your computers is a pair of hands for it",
+      "text": "Sessions, memory and the account are kept on the server; projects, files and commands stay on their own computers."
+    },
+    "bannerTitle": "What’s new in {{version}}",
+    "bannerText_one": "{{count}} new feature: open it to see how it works",
+    "bannerText_other": "{{count}} new features: open them to see how they work",
+    "start": {
+      "title": "Start in three steps",
+      "addProject": {
+        "title": "Add a project",
+        "text": "Pick a folder on your computer; Claude works there."
+      },
+      "task": {
+        "title": "Say what to do",
+        "text": "Start a session and talk as you would to Claude Code in a terminal."
+      },
+      "watch": {
+        "title": "Watch it work",
+        "text": "Each step folds into one line; before it acts, it asks as the approval mode says."
+      }
+    },
+    "try": {
+      "title": "Try saying",
+      "hint": "Click “Try” to put it in a new session’s input box, edit it, then send",
+      "button": "Try",
+      "tip": "Start a session with this in the input box",
+      "more": "Learn more"
+    },
+    "browse": "Browse by subject",
+    "homepage": "Project homepage and full docs",
+    "crumbs": "Location",
+    "newsTitle": "New in {{version}}",
+    "newsLead": "What this version brings: open each to see how it works.",
+    "howTo": "See how",
+    "changes": {
+      "title": "Every change",
+      "text": "Every change and fix is in “What’s new” under [About and updates](settings:about). The passages marked “New” in the articles are this version’s."
+    },
+    "toc": "On this page",
+    "related": "Related",
+    "previous": "Previous",
+    "next": "Next",
+    "commandMenu": "Command menu (in the input box)",
+    "query": "“{{query}}”",
+    "found_one": "{{count}} article",
+    "found_other": "{{count}} articles",
+    "notFound": "Nothing found",
+    "searchHint": "Try other words, such as “quota”, “other computer” or “can’t connect”."
+  },
+  "figures": {
+    "anotherComputer": "Another computer",
+    "runsOn": "Runs on {{device}}",
+    "default": "Default",
+    "terminal": {
+      "title": "Terminal",
+      "session": "Project web-app · session “Fix the sign-in page”",
+      "you": "> Now add the tests for the sign-in page",
+      "claude": "Sure. First, a look at the tests there are…"
+    },
+    "agents": {
+      "inbound": "Other agents hand tasks to Claude",
+      "callers": "Other agents · scripts · editors",
+      "callersExamples": "Codex, Gemini CLI, Zed…",
+      "server": "Claude on the server",
+      "serverNote": "A plain session, seen here",
+      "outbound": "Claude calls other agents",
+      "inSession": "In your session",
+      "local": "A command-line agent on the computer",
+      "localNote": "A subtask done in one go"
+    },
+    "cache": {
+      "last": "Last message",
+      "compact": "Idle 50 minutes · auto compaction",
+      "expire": "About 1 hour · cache expires",
+      "note": "The first message after expiry reads the whole context again at full price."
+    },
+    "quota": {
+      "title": "The same use, counted against the 5-hour quota (community measurements)",
+      "desktop": "Desktop client",
+      "double": "About 2×",
+      "note": "The weekly quota is not affected."
+    },
+    "devices": {
+      "heading": "Other computers",
+      "folder": "Project folder",
+      "session": "Its session",
+      "more_one": "{{count}} more",
+      "more_other": "{{count}} more",
+      "tip": "Hover over a project and click +: the session runs on that computer"
+    },
+    "map": {
+      "server": "Your server",
+      "serverNote": "Claude Code · sessions · memory · account",
+      "channel": "Encrypted channel",
+      "hereNote": "This computer · projects and commands are here",
+      "more_one": "{{count}} more online",
+      "more_other": "{{count}} more online",
+      "otherNote": "Install the client and sign in to the same server",
+      "phone": "Phone · browser",
+      "thisBrowser": "This browser",
+      "phoneNote": "Check progress, approve, add instructions"
+    }
+  },
+  "articles": {
+    "how-it-works": {
+      "title": "How it works",
+      "lead": "Claude Code lives on your server; each of your computers is a pair of hands for it.",
+      "words": "architecture server execution channel ssh tunnel upload how",
+      "blocks": {
+        "list1": [
+          "**Sessions and memory are on the server**: close the client, switch computers or pick up your phone, and you carry on with the same session.",
+          "**Files and commands are on your computer**: over an encrypted channel, Claude reads and writes files and runs commands on your computer. Your project doesn’t move to the server and isn’t uploaded.",
+          "**Your computer connects out**: no public IP and no inbound port. Once it disconnects, that connection’s channel and temporary keys are void."
+        ],
+        "tip1": {
+          "title": "ssh device-… in the steps is normal",
+          "text": "That is Claude working on your computer: `device` is the one the session is on, `device-<name>` your other computers that are online."
+        },
+        "note1": {
+          "title": "Now and then it creates files on the server",
+          "text": "When a path in the steps starts with `/data/state/native/`, Claude is working on the server. Tell it “do it on my computer instead”."
+        }
+      }
+    },
+    "first-steps": {
+      "title": "First steps",
+      "lead": "Add a project, say what to do, and watch it work.",
+      "words": "getting started beginner tutorial begin add project new session",
+      "blocks": {
+        "steps1": [
+          {
+            "title": "Sign in to your Claude account",
+            "text": "Sign in once on the server; every computer, browser and `ccdt` shares it.",
+            "action": "Account and quota"
+          },
+          {
+            "title": "Add a project",
+            "text": "Pick a folder on your computer. Sessions are grouped by project, and Claude works in that folder.",
+            "action": "Add project"
+          },
+          {
+            "title": "Start a session and say what to do",
+            "text": "Talk as you would to Claude Code in a terminal. Hover over a project and click + to start one in it.",
+            "action": "New session"
+          },
+          {
+            "title": "Watch it work",
+            "text": "Each step folds into one line; open it to see the command and its output. Before it acts, it asks you as the [approval mode](#approval) says."
+          }
+        ],
+        "prompts1": {
+          "title": "A first message could be",
+          "items": [
+            {
+              "text": "What is this project for? Read through its folders and tell me in three sentences"
+            },
+            {
+              "text": "Get this project running, and fix any errors along the way"
+            },
+            {
+              "text": "Look at the past week’s git commits and sum up what changed"
+            }
+          ]
+        },
+        "tip1": {
+          "title": "A quick question needs no project",
+          "text": "Just click “New session”: you get a plain session, listed under “Recent”."
+        }
+      }
+    },
+    "sessions": {
+      "title": "Projects and sessions",
+      "lead": "A project is a folder on a computer; a session is a conversation, its context and memory kept on the server.",
+      "words": "project folder fork edit and resend pin rename export remove plain session recent",
+      "blocks": {
+        "list1": [
+          "**Projects**: click + next to “Projects” in the left column to add one; you can rename it. Starting a session in `ccdt` also adds its folder as a project.",
+          "**Plain sessions**: “New session” gives you one. It belongs to no project and is listed under “Recent”. Its working folder is under “Documents\\CC Desk Tunnel” unless you change it in [General](settings:general)."
+        ],
+        "list2": [
+          "**The same projects everywhere**: the server keeps the list of projects, so every computer, browser and `ccdt` sees the same one, offline computers’ projects included; a new name shows everywhere.",
+          "**Removing a project** only takes it off the list. The folder, its sessions and the project’s memory stay; its sessions become plain sessions. Add the same folder again and they’re all back."
+        ],
+        "list3": [
+          "**Moving elsewhere**: click the project tag above the input box to move the session to another project or to another computer that is online. A session that has been used keeps the memory of the project it came from.",
+          "**Edit and resend**: hover over a message of yours and click “Edit and resend” to fork a new session from just before it. The original session stays; changes already made to files are not undone."
+        ],
+        "tip1": {
+          "title": "Right-click a session",
+          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯)."
+        }
+      },
+      "news": {
+        "list2": "The server keeps the projects, and every client sees the same ones"
+      }
+    },
+    "conversation": {
+      "title": "Tips for talking to Claude",
+      "lead": "Talk as you would to Claude Code; a few handy extras come on top.",
+      "words": "add instruction stop continue slash command skills attachment screenshot image paste model effort shortcuts find",
+      "blocks": {
+        "list1": [
+          "**Talk while it works**: send a message while Claude is busy and it joins the turn under way, to steer or add something.",
+          "**Stop and continue**: stop the turn at the bottom right of the input box. After stopping or a dropped connection, click “Continue” to carry on without writing anything more.",
+          "**The command menu**: type `/` or `\\` for compacting the context, and for Claude Code’s commands and skills.",
+          "**Give it files and screenshots**: click +, or drag them in or paste them. The message holds the file’s path on your computer, and Claude reads it there; nothing is uploaded.",
+          "**A plan first for big changes**: switch to [Plan mode](#approval). It writes a plan, and once you have edited and approved it, it gets to work.",
+          "**Model and effort**: switch them below the input box; they apply to this session only."
+        ],
+        "note1": {
+          "title": "The status dot stops and says how long nothing has come",
+          "text": "It only means no new messages arrived in that time, not that something went wrong; long commands often do this."
+        },
+        "keys": "Keyboard shortcuts"
+      }
+    },
+    "approval": {
+      "title": "Approval modes",
+      "lead": "Whether Claude asks you before it acts. Switch at the bottom left of the input box.",
+      "words": "approval permission allow deny auto manual plan accept edits bypass safety check",
+      "blocks": {
+        "list1": [
+          "**Auto approval most of the time** (the default): Claude Code weighs the risk itself and asks you only when it needs to.",
+          "**Auto approval when nobody is watching**: the other modes stop at an approval and wait for someone. Auto approval asks now and then too; with [“Deny instead of asking”](#unattended#deny) it never stops.",
+          "**Switching**: click the bottom left of the input box, or press [[cycleMode]] to go through the modes.",
+          "**When it asks you**, an approval card appears in the conversation, saying what it wants to do and on which computer. You can approve from your phone or a browser too."
+        ],
+        "approval": "The approval card: allow it once, or deny it and say why.",
+        "note1": {
+          "title": "A “Claude Code safety check” asks in every mode",
+          "text": "Some actions always need your confirmation by Claude Code’s own safety checks, in Auto approval and Bypass permissions too. Such cards say “Claude Code safety check”."
+        },
+        "warn1": {
+          "title": "Bypass permissions",
+          "text": "Asks about nothing except the safety checks, including deleting files and running any command on your computer. It isn’t offered until you allow it in [General](settings:general); use it only on a test machine or a virtual machine."
+        }
+      }
+    },
+    "files": {
+      "title": "The file panel",
+      "lead": "Files on this computer, on the server and on every computer online: browse, preview and copy between them in one panel.",
+      "words": "files browse upload download copy paste preview SFTP",
+      "blocks": {
+        "steps1": [
+          {
+            "title": "Open it",
+            "text": "With the files button at the right of the title bar, or with [[toggleFiles]].",
+            "action": "Open the file panel"
+          },
+          {
+            "title": "Switch places",
+            "text": "At the top left, pick this computer, the server or another computer online."
+          },
+          {
+            "title": "Preview, upload and download, copy and paste",
+            "text": "Copying and pasting between places is moving files between computers."
+          }
+        ],
+        "list1": ["Giving Claude a file needs no panel: drag it into the input box."],
+        "list2": [
+          "The numbered folders on the server are the sessions’ working folders; each is marked with the project or session it belongs to."
+        ],
+        "prompts1": {
+          "title": "Or just have Claude move them",
+          "items": [
+            {
+              "text": "Copy report.pdf from this computer’s desktop to the desktop of {device}"
+            }
+          ]
+        }
+      },
+      "news": {
+        "list2": "The file panel marks which session a working folder on the server belongs to"
+      }
+    },
+    "schedules": {
+      "title": "Scheduled tasks",
+      "lead": "At the time you set, a message goes to a session and Claude gets to work.",
+      "words": "schedule scheduled task daily weekly cron report automatic timer",
+      "blocks": {
+        "prompts1": {
+          "title": "The easiest way: tell Claude",
+          "items": [
+            {
+              "text": "Every weekday at 9 am, check in this session whether the dependencies have security updates"
+            },
+            {
+              "text": "Every Friday at 5 pm, sum up this week’s commits as a draft weekly report"
+            }
+          ]
+        },
+        "steps1": [
+          {
+            "title": "Or make one yourself",
+            "text": "The calendar icon on the left opens the scheduled tasks; click “New task”.",
+            "action": "Open scheduled tasks"
+          },
+          {
+            "title": "Pick the session and the time",
+            "text": "Which session it goes to (or a new one each time), when, and how it repeats."
+          },
+          {
+            "title": "Write the prompt",
+            "text": "What is sent at that time, written as you would say it."
+          }
+        ],
+        "list1": [
+          "The client on this computer sends it when it is due, so the client must be open and connected. Closing the window only sends it to the tray, which is fine.",
+          "A run that still can’t be sent 10 minutes late is skipped, and you are told.",
+          "Use Auto approval, or it stops at an approval and waits for someone; to have it go all the way, see [Letting tasks finish on their own](#unattended)."
+        ]
+      }
+    },
+    "devices": {
+      "title": "Several computers",
+      "lead": "Every computer signed in to the same server is listed under “Other computers”.",
+      "words": "other computers several another computer move offline online fork new project",
+      "blocks": {
+        "list1": [
+          "**Joining**: install the desktop client on the other computer and sign in to the same server. A machine without a desktop uses [ccdt online](#always-online).",
+          "**When it is offline**: its sessions can only be read; you can carry one on here, or fork it to this computer."
+        ],
+        "list2": [
+          "**A session on that computer**: while it is online, hover over one of its projects and click +; the session runs on that computer.",
+          "**Moving a session there**: click the project tag above the input box; “Move to project…” lists them by computer. A running session can’t move to another computer."
+        ],
+        "no-project": "That computer has no projects yet",
+        "p1": "Here you can only start sessions in projects the other computer already has. Until it has one, there are two ways:",
+        "list3": [
+          "**Add one there**: add a project in its client, or run `ccdt` once in its project folder. After that you can start sessions in its project here.",
+          "**No project: just have Claude go there**: name that computer in any session on this one."
+        ],
+        "prompts1": {
+          "items": [
+            {
+              "text": "See which projects there are under D:\\work on {device}, and run the tests of the one changed most recently"
+            }
+          ]
+        }
+      },
+      "news": {
+        "list2": "Start a session in another computer’s project, or move a session there"
+      }
+    },
+    "remote-ops": {
+      "title": "Claude on other computers",
+      "lead": "Name a computer in any session, and Claude runs commands on it, or moves files between two computers.",
+      "words": "remote other computer ssh scp copy files devices several",
+      "blocks": {
+        "prompts1": {
+          "title": "Try saying",
+          "items": [
+            {
+              "text": "How much space is left on each disk of {device}",
+              "note": "Claude runs `devices` to find it first, then goes there with `ssh` to look."
+            },
+            {
+              "text": "Send dist/app.zip from this computer to the desktop of {device}",
+              "note": "It copies straight between the two computers with `scp`."
+            },
+            {
+              "text": "On {device}, clone this repository, install its dependencies and run the tests"
+            },
+            {
+              "text": "Compare the versions of node, git and python on this computer and on {device}"
+            }
+          ]
+        },
+        "remote-approval": "Before it changes anything on another computer, the card says which one.",
+        "list1": [
+          "It goes to another computer only when you mention one; otherwise every command runs on the session’s own computer.",
+          "There it does only what you asked, and asks you before changing anything.",
+          "That computer must be online: the desktop client open (in the tray counts), or `ccdt online` running.",
+          "Part of the name that tells it apart will do. When unsure, ask it “which computers are online now”."
+        ]
+      }
+    },
+    "always-online": {
+      "title": "Keeping a headless machine online",
+      "lead": "A NAS, a server, a Raspberry Pi or another machine without a desktop stays online with ccdt online, so Claude can get to it any time.",
+      "words": "ccdt online NAS server Raspberry Pi background systemd headless",
+      "blocks": {
+        "steps1": [
+          {
+            "title": "Install ccdt on that machine",
+            "text": "For the current user only; no administrator rights needed."
+          },
+          {
+            "title": "Sign in",
+            "text": "Run `ccdt login` and enter the service address, the certificate fingerprint and the service token."
+          },
+          {
+            "title": "Stay online",
+            "text": "Run `ccdt online`. It reconnects on its own; Ctrl+C ends it."
+          }
+        ],
+        "code1": {
+          "label": "Install on Linux and macOS",
+          "text": "curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh"
+        },
+        "code2": {
+          "label": "Run it in the background",
+          "text": "nohup ccdt online >> ~/ccdt-online.log 2>&1 &"
+        },
+        "p1": "For being online from startup (a systemd user service) and for Windows, see the [terminal client docs](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/cli.md#保持在线).",
+        "prompts1": {
+          "title": "Then, in any session",
+          "items": [
+            {
+              "text": "Check whether all the docker containers on nas are running, and tell me why any that died did"
+            }
+          ]
+        },
+        "note1": {
+          "title": "A computer with the desktop client doesn’t need it",
+          "text": "It is online while the client is open, in the tray included."
+        }
+      }
+    },
+    "browser": {
+      "title": "Browser and phone",
+      "lead": "Away from your computer, check progress, approve and add instructions from your phone.",
+      "words": "phone browser web page remote away two-step verification home screen mobile",
+      "blocks": {
+        "steps1": [
+          {
+            "title": "Turn on browser access",
+            "text": "In the desktop client’s settings; it is off by default.",
+            "action": "Browser access"
+          },
+          {
+            "title": "Sign in",
+            "text": "Open the address shown and sign in with the service token. Turning on two-step verification is advised."
+          },
+          {
+            "title": "Put it on your phone",
+            "text": "“Add to Home Screen” in the browser’s menu, and open it like an app."
+          }
+        ],
+        "list1": [
+          "The browser runs no commands itself: it works with sessions on computers that are online, or starts plain sessions that run on the server.",
+          "Keep it off while you don’t use it."
+        ]
+      }
+    },
+    "ccdt": {
+      "title": "The terminal client ccdt",
+      "lead": "The original Claude Code in your own terminal, sharing the same sessions with this window.",
+      "words": "ccdt terminal command line CLI original quota save",
+      "blocks": {
+        "workflow": "Suggested: work in ccdt, watch in the client",
+        "steps1": [
+          {
+            "title": "Set up projects and sessions in the client",
+            "text": "Projects and sessions are easy to see there, and you can carry on from either side later.",
+            "action": "Add project"
+          },
+          {
+            "title": "Right-click a session, “Open in ccdt”",
+            "text": "Carry on with the session in a terminal, with no signing in again."
+          },
+          {
+            "title": "Work in ccdt, watch in the client",
+            "text": "Requests from the terminal go easier on the 5-hour quota; the client shows what it does as it goes, folded and easier to read."
+          }
+        ],
+        "note1": {
+          "title": "One session takes input in one place at a time",
+          "text": "While the terminal is open, the client shows what it is doing and its input box is greyed out; close the terminal to carry on talking in the client."
+        },
+        "commands": "Common commands",
+        "table1": {
+          "head": ["Command", "What it does"],
+          "rows": [
+            ["`ccdt`", "Run in a project folder: continues the latest session, or starts one"],
+            ["`ccdt -r`", "Pick one of this project’s sessions"],
+            ["`ccdt new`", "Start a session"],
+            ["`ccdt usage`", "Quota and usage figures"],
+            ["`ccdt config`", "View and change settings"],
+            ["`ccdt upgrade`", "Upgrade the server and ccdt"]
+          ]
+        },
+        "list1": [
+          "**It’s already installed**: the desktop client comes with `ccdt` and upgrades it with itself; open a new terminal window to use it. On macOS, move the app to “Applications” and open it once first."
+        ]
+      },
+      "news": {
+        "list1": "The desktop client comes with ccdt"
+      }
+    },
+    "agents": {
+      "title": "Working with other agents",
+      "lead": "Claude can call Codex and other agents on your computer; other agents and scripts can hand tasks to Claude.",
+      "words": "agent Codex Gemini script ccdt -p dispatch automation exit code",
+      "blocks": {
+        "call-others": "Having Claude call other agents",
+        "prompts1": {
+          "items": [
+            {
+              "text": "Have Codex review these changes on its own with codex exec, and compare its opinion with yours for me",
+              "note": "Codex, Gemini CLI or another command-line agent installed on the computer is all it takes; nothing to set up."
+            }
+          ]
+        },
+        "called-by-others": "Having other agents call Claude",
+        "p1": "Another agent or a script runs `ccdt -p` on the computer, written as `claude -p` is. The task it hands over is a plain session: you see it here, and can step in and approve.",
+        "code1": {
+          "label": "Hand over",
+          "text": "ccdt -p \"Fix the error on the sign-in page\" --output-format json"
+        },
+        "table1": {
+          "head": ["Follow up", "What it does"],
+          "rows": [
+            ["`ccdt status <session>`", "What it’s doing, what it’s waiting for"],
+            ["`ccdt tell <session> \"…\"`", "Add an instruction on the way"],
+            ["`ccdt wait <session>`", "Wait until the turn ends"],
+            [
+              "`ccdt approve` · `deny`",
+              "When Claude needs an approval (exit code 2), the caller answers"
+            ]
+          ]
+        },
+        "tip1": {
+          "title": "Hand the how-to to your agent",
+          "text": "Tell it “run `ccdt help agents` and hand the task to Claude as it explains”. That is a full guide written for a model to read."
+        }
+      }
+    },
+    "acp": {
+      "title": "In an editor (ACP)",
+      "lead": "Zed, JetBrains, acpx and other tools that speak ACP use the server’s Claude in the editor once ccdt acp is set up as an agent.",
+      "words": "ACP Zed JetBrains acpx editor IDE",
+      "blocks": {
+        "code1": {
+          "label": "Zed: settings.json",
+          "text": "{ \"agent_servers\": { \"CC Desk Tunnel\": { \"type\": \"custom\", \"command\": \"ccdt\", \"args\": [\"acp\"] } } }"
+        },
+        "code2": {
+          "label": "acpx: .acpxrc.json in the project",
+          "text": "{ \"agents\": { \"ccdt\": { \"argv\": [\"ccdt\", \"acp\"] } } }"
+        },
+        "list1": [
+          "Sessions go to the project of the folder the editor has open, and show here too.",
+          "Approvals become the editor’s permission requests; the model, effort and approval mode are picked in the editor.",
+          "ACP has no questions: Claude’s question shows as its reply, and your next message is the answer.",
+          "Nothing can be added to a turn under way; to steer, cancel and send again."
+        ],
+        "note1": {
+          "title": "Sessions start on the computer it runs on",
+          "text": "To use another computer, connect from the editor on that computer, or load one of its sessions."
+        }
+      }
+    },
+    "quota": {
+      "title": "Quota and usage",
+      "lead": "See the 5-hour and weekly quota in “Account and quota”, or show it beside the input box.",
+      "words": "quota usage 5-hour weekly limit cost token call log save",
+      "blocks": {
+        "list1": [
+          "**Use `ccdt` when the 5-hour quota is tight**: the desktop client runs through the official Agent SDK. Community measurements put the share of the same use counted against the 5-hour quota at about twice that of the interactive CLI; the weekly quota is not affected. See [how ccdt is best used](#ccdt).",
+          "**Quota beside the input box**: turn it on in [Appearance](settings:appearance).",
+          "**Fast mode doesn’t use the plan’s quota**: on a subscription it is charged straight to extra usage; see [Fast mode](#model-settings#fast).",
+          "**The call log**: each request’s model, tokens and equivalent cost; the amounts are estimated at API prices, not a bill.",
+          "**The quota is empty**: it comes from a run of Claude Code; send a message, or refresh on the account page."
+        ],
+        "actions1": ["Account and quota"]
+      }
+    },
+    "account": {
+      "title": "Claude account",
+      "lead": "The account signs in on the server; every computer, browser and ccdt shares it.",
+      "words": "sign in sign out log in log out account setup token subscription authorize",
+      "blocks": {
+        "list1": [
+          "**Ordinary sign-in**: open the official authorization page and paste back the code it gives.",
+          "**Setup token**: made by the server, or paste one you have; this way the email, subscription type and full quota may not show.",
+          "**Signing out** removes the token kept on the server; the session history stays. Running the official `/logout` in `ccdt` does not remove it."
+        ],
+        "warn1": {
+          "title": "Where the server is, is where you use it from",
+          "text": "Every request leaves from the server. Use a server in a supported region with an ordinary origin; see the [account notes](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/account.md)."
+        },
+        "actions1": ["Account and quota"]
+      }
+    },
+    "settings": {
+      "title": "Settings guide",
+      "lead": "There are many settings, and most are best left as they are. Start from what you want to achieve, then change the few that do it; where several work only together, the articles below say how to combine them.",
+      "words": "settings options configuration this computer server Claude Code CLI config default ccdt",
+      "blocks": {
+        "table1": {
+          "head": ["I want", "Read"],
+          "rows": [
+            [
+              "To be away an hour or two and carry on cheaply when I’m back",
+              "[Cache and compaction](#context)"
+            ],
+            [
+              "Tasks that finish on their own at night or while I’m out",
+              "[Letting tasks finish on their own](#unattended)"
+            ],
+            [
+              "To see what Claude is thinking; more speed; no stop when the main model is busy",
+              "[Thinking, speed and fallback models](#model-settings)"
+            ],
+            [
+              "Claude to remember my habits and commit code by my rules",
+              "[Memory and instructions](#memory)"
+            ],
+            [
+              "Truncated command output, connections timing out, which shell scripts use",
+              "[Running on your computer](#execution)"
+            ],
+            ["To limit what Claude can change", "[Permission switches](#permissions)"]
+          ]
+        },
+        "tip1": {
+          "title": "Finding a setting",
+          "text": "The search box at the top left of the settings page finds settings by what they do, such as “tray”, “quota” or “compact”. A setting that is hard to follow has a ? beside it, which opens the passage about it."
+        },
+        "scopes": "Settings come in three groups",
+        "table2": {
+          "head": ["Group", "A change affects"],
+          "rows": [
+            ["**This computer**", "Only this client on this computer"],
+            [
+              "**Server**",
+              "Every computer connected to this server (the shell only this computer)"
+            ],
+            [
+              "**Claude Code**",
+              "Claude Code’s own settings on the server, shared by every session and `ccdt`"
+            ]
+          ]
+        },
+        "cli": "A few CLI settings work only in ccdt",
+        "p1": "The CLI settings are the same as Claude Code’s `/config`, and apply from its next run. A few of them are features of the official terminal interface that sessions in the desktop client can’t use:",
+        "table3": {
+          "head": ["Setting", "In the desktop client"],
+          "rows": [
+            [
+              "Carry on after the quota runs out",
+              "The turn ends when the quota runs out; you can [send “continue” when it is back](#unattended#limit)"
+            ],
+            ["When a question goes unanswered", "The question card waits for your answer"],
+            ["File checkpoints", "Nothing is recorded; the desktop client has no `/rewind`"],
+            [
+              "Switch models on a safety block (when off)",
+              "It doesn’t pause for you to choose; the turn ends with an error"
+            ]
+          ]
+        },
+        "actions1": ["Open CLI settings"]
+      }
+    },
+    "context": {
+      "title": "Cache and compaction",
+      "lead": "Each turn, Claude reads the whole session again. With a cache that is cheap; once the cache expires or is broken, the next turn reads it all at full price. Several settings revolve around this.",
+      "words": "cache expiry expire compaction compact context idle 1 hour 5 minutes ttl prompt cache auto compaction window cache read cache write save",
+      "blocks": {
+        "how": "How the cache works",
+        "p1": "With every message, Claude Code sends the system prompt, the instruction files, every earlier message and tool result again in full. The first part, the same as in the turn before, is read from the cache at about a tenth of the price of ordinary input; without the cache, all of it is processed and written again. The longer the session, the slower and dearer the first turn after you come back.",
+        "list1": [
+          "**The cache expires**: after 5 minutes or 1 hour with no new request since the last. Every request starts the clock again.",
+          "**These break the cache**: changing the model, turning fast mode on or off, adding or removing an MCP server, compaction. On older models, changing the effort does too. The model is best chosen at the start of a session.",
+          "**Editing instruction files doesn’t**, but a session under way doesn’t see the change either; it takes effect after compaction or in a new session."
+        ],
+        "ttl": "Cache lifetime: 5 minutes or 1 hour",
+        "p2": "A 1-hour cache lasts through a gap like lunch or a meeting, at the cost of dearer writes: at API prices, writing a 1-hour cache costs 2 times ordinary input, a 5-minute one 1.25 times. For a conversation that never pauses for more than 5 minutes, 1 hour only costs more.",
+        "table1": {
+          "head": ["Requests", "Default"],
+          "rows": [
+            ["The main conversation on a subscription", "1 hour"],
+            ["Subagents, workflows, compaction and the like on a subscription", "5 minutes"],
+            ["API keys and third-party endpoints", "5 minutes for all"]
+          ]
+        },
+        "note1": {
+          "title": "Once the plan’s quota is used up, the default becomes 5 minutes",
+          "text": "Past the plan’s quota, paying with extra usage (usage credits), Claude Code moves the main conversation to a 5-minute cache. To keep 1 hour then too, set [“Prompt cache lifetime”](settings:claude) to 1 hour explicitly."
+        },
+        "p3": "“Prompt cache lifetime for subtasks” covers the requests outside the main conversation, such as subagents, workflows and compaction; it is usually best left as it is.",
+        "idle": "Compacting before you’re away too long",
+        "p4": "Compaction replaces a long session with a summary, and from then on each turn reads only the summary. Compacting while the cache is still there reads the cache, which is cheap; compacting after it expires reads everything at full price. Auto compaction in [Context and cache](settings:context) does this for you before the cache expires: once a session has been idle for the time set, the server compacts it on its own, with neither your computer nor the client needing to be online.",
+        "list2": [
+          "**Off by default**; turn it on in [Context and cache](settings:context).",
+          "**Only for sessions with a 1-hour cache.** With “Prompt cache lifetime” at 5 minutes, or signed in with an API key, the cache expires before compaction could come, so it doesn’t happen.",
+          "**Compact after idle for**: 50 minutes by default. The nearer to 60 minutes, the less likely you come back meanwhile and the compaction is wasted, but the less margin it has.",
+          "**Context at least**: a small session isn’t dear even read at full price, and isn’t worth compacting.",
+          "**Compaction is a real request**: it counts against the quota, and the summary loses detail. If you’re only away a short while, you don’t need it.",
+          "**When it is off**, the session reminds you as the cache is about to expire, and you decide whether to compact. For a long session whose cache has already expired, switch to a cheaper model before compacting, or just start a new one.",
+          "Sessions in `ccdt` are compacted by Claude Code itself: with the switch and context size set here, at a fixed time of about 54 minutes."
+        ],
+        "window": "Compaction when the context is nearly full",
+        "p5": "This is something else: when a session grows close to the model’s context limit, Claude Code compacts it on its own and carries on. “Auto-compact context” in [CLI settings](settings:claude) controls it; it is on by default.",
+        "list3": [
+          "**Auto-compact window**: the context size at which it compacts, 100K at least. Smaller means less to read each turn, cheaper and a more focused Claude, at the cost of compacting more often and losing detail. For models with a 1M context, 300K to 500K keeps a session from growing dearer the longer it goes.",
+          "**Prepare compaction summaries ahead**: the summary is worked out in the background first, so compaction takes less waiting.",
+          "**With “Auto-compact context” off**, a full context can only be compacted by hand or left for a new session; idle compaction in `ccdt` goes off with it."
+        ],
+        "tip1": {
+          "title": "Pick the moment to compact by hand",
+          "text": "Typing `/compact` between two pieces of work is better than being compacted halfway through one. When it has gone the wrong way and you’d drop the whole stretch, a new session is cleaner than compaction."
+        },
+        "numbers": "Reading the cache from the figures",
+        "p6": "The reply summary and the session bar can show “Cache read” and “Cache write”; choose them in [Appearance](settings:appearance).",
+        "list4": [
+          "**Reads far above writes**: the cache is working.",
+          "**One turn with a very large write**: the cache was just broken, usually by being away too long, a model change or a compaction.",
+          "**Large writes every turn**: something keeps breaking the cache, such as switching models back and forth."
+        ],
+        "actions1": ["Open Context and cache", "Open CLI settings"]
+      }
+    },
+    "unattended": {
+      "title": "Letting tasks finish on their own",
+      "lead": "Long tasks, night tasks and scheduled tasks suffer most from stopping at one question and waiting. With a few settings working together, a task can go all the way.",
+      "words": "unattended night long task scheduled automatic deny instead of asking question timeout quota runs out continue sleep",
+      "blocks": {
+        "stops": "Where a task stops",
+        "table1": {
+          "head": ["Stops at", "What to do"],
+          "rows": [
+            [
+              "Waiting for your approval",
+              "Use **Auto approval**, and turn on [“Deny instead of asking”](#unattended#deny)"
+            ],
+            [
+              "A question from Claude",
+              "Say in the task not to ask questions; see [below](#unattended#question)"
+            ],
+            ["The quota runs out", "[Send “continue” when it is back](#unattended#limit)"],
+            [
+              "Your computer sleeps or drops off",
+              "The computer doesn’t go to sleep on its own while the client is open; a task stops only after 5 minutes offline"
+            ]
+          ]
+        },
+        "deny": "Deny instead of asking",
+        "list1": [
+          "Turned on in [CLI settings](settings:claude), a call that needs your approval no longer waits for you but is denied at once; Claude knows it was denied and tries another way, or tells you at the end.",
+          "**Use it with Auto approval**: allow rules and Auto approval decide first as usual, Auto approval lets through what it takes to be safe, and only the rest is denied. In Manual approval almost nothing gets done.",
+          "**It applies to every session**, `ccdt` included. Turn it off once the task is done, or it won’t ask you even while you’re there."
+        ],
+        "question": "A question from Claude",
+        "p1": "In the desktop client, a question card waits for your answer. For a task nobody watches, say in the prompt how far to go and not to ask questions:",
+        "prompts1": {
+          "items": [
+            {
+              "text": "Update every outdated passage in the docs folder, and stop only when done. Don’t ask me along the way; where unsure, take the most cautious choice, and list those places for me at the end."
+            }
+          ]
+        },
+        "p2": "In `ccdt` there is also the CLI setting “When a question goes unanswered”: after a while it carries on by itself with the options chosen.",
+        "limit": "The quota runs out",
+        "p3": "In the desktop client, the turn ends when the quota runs out. To have it carry on after the quota resets, tell Claude, and it sets up a [scheduled task](#schedules):",
+        "prompts2": {
+          "items": [
+            {
+              "text": "Once the quota resets, send “carry on with the task” in this session"
+            }
+          ]
+        },
+        "p4": "See when it resets in [Account and quota](settings:account). `ccdt` needs none of this: the CLI setting “Carry on after the quota runs out” is on by default, and the terminal waits for the reset and carries on.",
+        "recipe": "A combination that works",
+        "steps1": [
+          {
+            "title": "Choose Auto approval",
+            "text": "Switch at the bottom left of the input box."
+          },
+          {
+            "title": "Turn on “Deny instead of asking”",
+            "text": "Turn it off again when done.",
+            "action": "CLI settings"
+          },
+          {
+            "title": "Say in the prompt where to end",
+            "text": "How far to go, what to do when unsure, and what to report at the end."
+          },
+          {
+            "title": "Keep the client open",
+            "text": "Closing the window only sends it to the tray. Keep the notifications of done and failed tasks on, to see the result as soon as you’re back.",
+            "action": "Notification settings"
+          }
+        ]
+      }
+    },
+    "model-settings": {
+      "title": "Thinking, speed and fallback models",
+      "lead": "These decide how deeply Claude thinks, how fast it goes and what happens when the main model is busy. The two most misunderstood points: turning “Thinking” off does nothing on newer models, and fast mode costs extra on a subscription.",
+      "words": "thinking effort show thinking fast mode extra usage usage credits fallback model safety block switch models",
+      "blocks": {
+        "thinking": "Thinking",
+        "list1": [
+          "**Thinking** matters only on older models. Opus 5.5, Sonnet 5.5, Haiku 5.5 and the Fable models always think, and do even with it off.",
+          "**For less thinking and more speed**, lower the effort under “Model and effort” at the bottom left of the input box; each session can differ.",
+          "**Show thinking** only decides whether you see a summary of the thinking; how much Claude thinks and the quota it uses stay the same. Turn it on to see why it does something: the conversation gains thinking you can expand."
+        ],
+        "fast": "Fast mode",
+        "list2": [
+          "Output is clearly faster, and each token dearer. Only some models support it, such as Opus 5.5 and Fable 5.2.",
+          "**On a subscription it doesn’t use the plan’s quota**: fast mode is charged straight to extra usage (usage credits), even with plan quota left; without extra usage turned on it can’t be used.",
+          "Turning it on or off midway makes the next turn read everything at full price. If you use it, turn it on at the start of a session.",
+          "When the extra usage is used up, it falls back to normal speed and carries on."
+        ],
+        "fallback": "When the main model is busy or failing",
+        "list3": [
+          "**Fallback models**: when the main model is overloaded or unavailable, it moves to the next in order to finish the turn; the next message tries the main model first again. Without any, it only retries the main model, and reports an error if that still fails.",
+          "Up to 3, separated by commas, such as `sonnet, haiku`. A turn moved to another model has no cache and costs somewhat more.",
+          "**Switch models on a safety block**: Claude Code’s safety checks now and then stop a request, and by default it carries on with another model. With it off, the turn ends with an error in the desktop client; `ccdt` pauses and lets you choose between switching models and changing the prompt."
+        ],
+        "actions1": ["Open CLI settings"]
+      }
+    },
+    "memory": {
+      "title": "Memory and instructions",
+      "lead": "Each of Claude’s sessions starts blank, and learns your habits from instruction files and auto memory. Where they are decides what Claude remembers.",
+      "words": "memory auto memory CLAUDE.md AGENTS.md global instructions instruction file remember forget reply language attribution git commit PR",
+      "blocks": {
+        "table1": {
+          "head": ["", "Where it is, and who reads it"],
+          "rows": [
+            [
+              "**Global instructions**",
+              "The user-level `CLAUDE.md` on the server, read at the start of every session. Edit it in [Global instructions](settings:instructions)"
+            ],
+            [
+              "**`CLAUDE.md` and `AGENTS.md` in the project**",
+              "In the project folder on your computer. Claude Code is on the server and **doesn’t read them on its own**"
+            ],
+            ["**Auto memory**", "Notes Claude keeps itself, saved on the server by project"]
+          ]
+        },
+        "project": "Having Claude read your project’s instructions",
+        "p1": "The easy way is a line in the global instructions, which every session will follow from then on:",
+        "code1": {
+          "label": "Put in the global instructions",
+          "text": "On entering a project, first read CLAUDE.md or AGENTS.md at the project’s root (if there is one), and work by what it says."
+        },
+        "auto": "Auto memory",
+        "list1": [
+          "As it works, Claude notes the ways you corrected it, your preferences and how the project stands, and reads them at the start of the next session.",
+          "**Kept by project**: the sessions of one project folder on one computer share them; each plain session has its own. A session that has been used and is moved to another project keeps the memory of the project it came from.",
+          "To have it remember something, say “remember: …”; if it got something wrong, say “delete what you remember about …”.",
+          "“Tidy memory in the background” merges and tidies the memory there is while idle. With “Auto memory” off, Claude neither reads nor writes these notes."
+        ],
+        "note1": {
+          "title": "When a change to the instructions applies",
+          "text": "Instructions are read once, at the start of a session. A session under way doesn’t see a change; it applies after compaction or in a new session."
+        },
+        "habits": "Reply language and Git habits",
+        "list2": [
+          "**Reply language** goes to Claude as it is, as a request to “always reply in this language”; any name of the language will do, such as `japanese` or `Français`.",
+          "**Attribution in commits and PRs**: by default Claude’s attribution is added to commit messages and PR descriptions; choose “No attribution” to leave it out.",
+          "**Built-in commit and PR instructions**: the official ways of committing and opening PRs, and the state of the repository, that come with it. If you have conventions of your own, turn it off and write them into the global instructions."
+        ],
+        "actions1": ["Open Global instructions", "Open CLI settings"]
+      }
+    },
+    "execution": {
+      "title": "Running on your computer",
+      "lead": "Claude reads files, changes files and runs builds on your computer by running commands over the execution channel. The shell, the command output limit and the connection waits decide how smoothly that goes.",
+      "words": "shell powershell git bash command output truncated limit tool search mcp artifact connection wait timeout domain controller security software",
+      "blocks": {
+        "shell": "Shell: PowerShell or Git Bash",
+        "list1": [
+          "Unset, Claude picks one for the task. Chosen, it is only a preference: when a task clearly suits the other, it still switches.",
+          "**PowerShell**: smoother for working on Windows itself (services, the registry, processes).",
+          "**Git Bash**: if you know Linux commands, or the project is mostly shell scripts. Install Git for Windows first; it can be chosen after reconnecting.",
+          "PowerShell 7 comes with the client. This is set on each Windows computer separately, and applies from each session’s next message."
+        ],
+        "actions1": ["Open Shell"],
+        "output": "Command output limit",
+        "list2": [
+          "When a command’s output goes over the limit, the rest is saved to a file, and Claude sees only the start and where the file is, to read it next.",
+          "Raise it when build logs and test results are often truncated and Claude keeps going back to the files. The higher the limit, the more context each output takes and the faster a session grows.",
+          "4K to 128K characters; 30K by default."
+        ],
+        "tools": "Tool search and Artifacts",
+        "list3": [
+          "**Tool search**: the tools’ descriptions are no longer all sent each time but looked up when needed. With many MCP tools connected this saves a lot of context. On by default for official accounts; third-party endpoints must support it.",
+          "**Artifact pages**: Claude can publish documents, plans and charts as pages on claude.ai that only you can see, to share when you want. Turn it off if you don’t use it."
+        ],
+        "waits": "Connection waits",
+        "list4": [
+          "Connecting to the server, starting this computer’s SSH service, and the execution channel getting ready each have a time limit, and are retried when it passes.",
+          "**Most computers need no change.** With a company domain account that can’t reach its domain controller, or security software that scans slowly, the second step takes longer; raise it only if it keeps timing out.",
+          "“Execution channel ready” is at least 35 seconds more than “Local SSH service starts”. It affects only this computer."
+        ],
+        "actions2": ["Open Connection"]
+      }
+    },
+    "permissions": {
+      "title": "Permission switches",
+      "lead": "Whether you are asked is up to the approval mode. The switches below each cover a small part, and it is easy to think they do more.",
+      "words": "permission bypass working directory write files checkpoint rewind undo block",
+      "blocks": {
+        "bypass": "Allowing permissions to be bypassed",
+        "p1": "Only once it is turned on in [General](settings:general) does “Bypass permissions” appear among the approval modes, on this computer only. With it, nothing is asked except Claude Code’s safety checks, including deleting files and running any command on your computer. Use it only on a test machine or a virtual machine.",
+        "writes": "No writing outside working directories",
+        "list1": [
+          "It limits Claude Code’s tools for writing and editing files, and these tools work only on **files on the server**.",
+          "**It doesn’t stop changes to your computer**: Claude changes files on your computer by running commands, which this switch doesn’t limit. Against unwanted changes, rely on the approval mode.",
+          "With it on, these tools can’t change Claude Code’s own settings files either; Claude’s memory and plan files are not affected."
+        ],
+        "checkpoints": "File checkpoints",
+        "p2": "Snapshots taken before edits, for `/rewind` to undo. Of use only in `ccdt`, and covering only files on the server changed with the editing tools. For the projects on your computer, Git is more reliable.",
+        "note1": {
+          "title": "Two more",
+          "text": "For “Deny instead of asking”, see [Letting tasks finish on their own](#unattended#deny). Claude Code’s safety checks ask in every mode; see [Approval modes](#approval)."
+        },
+        "actions1": ["Open CLI settings"]
+      }
+    },
+    "background": {
+      "title": "Background and notifications",
+      "lead": "Closing the window doesn’t disconnect; you’re told when a task is done or needs you.",
+      "words": "tray background notification disconnect reconnect sleep several servers window",
+      "blocks": {
+        "list1": [
+          "**Closing the window only sends it to the tray**: the connection and tasks go on; right-click the tray icon and choose “Quit” to disconnect. While connected, the computer doesn’t go to sleep on its own.",
+          "**Notifications**: while the window is not in front, you’re told of tasks done or failed, approvals waiting and questions from Claude; each kind can be turned off on its own.",
+          "**A dropped network needs nothing from you**: the client reconnects by itself, and tasks go on on the server. A task stops only after the computer has been offline for 5 minutes; when back, click “Continue”.",
+          "**Several servers**: one window each, with their own credentials, drafts and scheduled tasks."
+        ],
+        "actions1": ["Notification settings"]
+      }
+    },
+    "upgrade": {
+      "title": "Upgrading",
+      "lead": "The client, ccdt and the server must be of the same version; one click in the client upgrades them, with no signing in to the server.",
+      "words": "upgrade update version mismatch new version",
+      "blocks": {
+        "steps1": [
+          {
+            "title": "Seeing a new version",
+            "text": "A download icon appears on the left; or check in “About and updates”.",
+            "action": "About and updates"
+          },
+          {
+            "title": "Upgrade the server first",
+            "text": "It reconnects on its own after about a minute. You’re told if sessions are running."
+          },
+          {
+            "title": "Then the client",
+            "text": "On Windows it downloads and installs in the client, or from GitHub while the server has no installer ready yet; on macOS and Linux, download and install it again."
+          }
+        ],
+        "list1": [
+          "The `ccdt` that comes with the desktop client upgrades with it; one installed on its own runs `ccdt upgrade`."
+        ]
+      }
+    },
+    "safety": {
+      "title": "Safety notes",
+      "lead": "The server can run commands as you on every computer connected to it. It must be a machine you control and trust.",
+      "words": "safety security credential token leak sandbox risk privacy",
+      "blocks": {
+        "list1": [
+          "**The service token is full control**: don’t take screenshots of it or paste it into chats and issues. If it leaks, run `sudo cc-desk-tunnel token` on the server to change it.",
+          "**It’s not a sandbox**: Claude can reach everything your user can on that computer, and can connect to your other computers that are online.",
+          "**Data leaves your computer**: the parts of files it reads and the output of commands go through the server to the model service.",
+          "**Browser access**: keep it off while you don’t use it, and use two-step verification while it is on."
+        ],
+        "p1": "For the full notes, see [Safety notes](https://github.com/sun168567/cc-desk-tunnel#安全须知)."
+      }
+    },
+    "troubleshoot": {
+      "title": "Can’t connect",
+      "lead": "Read the first red line in the sign-in window: that is the reason.",
+      "words": "can’t connect connection failed certificate fingerprint credential token antivirus sshd execution channel proxy log",
+      "blocks": {
+        "table1": {
+          "head": ["Message", "What to do"],
+          "rows": [
+            [
+              "Connection timed out, refused, or the name can’t be resolved",
+              "Check the service address and port, and that the server is up and the port is open"
+            ],
+            [
+              "Certificate not trusted, fingerprint doesn’t match",
+              "For a self-signed certificate, enter the SHA256 fingerprint given at install; enter it again if the server’s certificate changed"
+            ],
+            [
+              "Wrong service token",
+              "Check the token; after several failures in a row it is refused for a while"
+            ],
+            ["Versions don’t match", "Upgrade one side as the message says"],
+            [
+              "The SSH service couldn’t start, or was blocked",
+              "Most often antivirus software quarantined the bundled sshd.exe or PowerShell; look at its protection history first"
+            ],
+            [
+              "The execution channel isn’t ready",
+              "When connecting through a proxy, make sure it allows several connections to the same address"
+            ]
+          ]
+        },
+        "p1": "To find which part broke: “Open the log folder” in [About and updates](settings:about), and look at `client.log`. For more, see [Common problems and troubleshooting](https://github.com/sun168567/cc-desk-tunnel/blob/main/docs/troubleshooting.md)."
+      }
+    },
+    "faq": {
+      "title": "Questions",
+      "lead": "The questions that come up most in use.",
+      "words": "question problem why faq",
+      "blocks": {
+        "faq1": [
+          {
+            "q": "Why does Claude keep running ssh?",
+            "a": [
+              "That is how it works on your computer: Claude Code runs on the server and runs things on your computer through `ssh device-…`. See [How it works](#how-it-works)."
+            ]
+          },
+          {
+            "q": "Are my files uploaded?",
+            "a": [
+              "Not whole. Claude reads files on your computer; the parts it reads and the output of commands go through the server to the model, as with Claude Code used locally."
+            ]
+          },
+          {
+            "q": "The 5-hour quota drops fast?",
+            "a": [
+              "The desktop client runs through the Agent SDK, which counts about twice as much against the 5-hour quota as the interactive CLI. Do long tasks in `ccdt`. See [Quota and usage](#quota)."
+            ]
+          },
+          {
+            "q": "What does “cache expired” mean?",
+            "a": [
+              "After about an hour idle, the next message reads the context again at full price. Turning on auto compaction saves that. See [Cache and compaction](#context)."
+            ]
+          },
+          {
+            "q": "A task sits there and doesn’t move?",
+            "a": [
+              "First see whether it is waiting for your approval or an answer. When the status dot says how long nothing has come, it only means no new messages in that time; long commands often do this."
+            ]
+          },
+          {
+            "q": "What happens to a task when the computer sleeps or the network drops?",
+            "a": [
+              "The task goes on on the server, and commands wait for the computer to come back. A task stops only after 5 minutes offline; when back, click “Continue”."
+            ]
+          },
+          {
+            "q": "How do I get Claude to ask me less?",
+            "a": [
+              "Use Auto approval; to have it change files directly but still ask before commands, use Accept edits. See [Approval modes](#approval)."
+            ]
+          },
+          {
+            "q": "Can’t start a session on another computer?",
+            "a": [
+              "That computer must be online and have a project. Without one, have Claude go there from any session. See [Several computers](#devices#no-project)."
+            ]
+          },
+          {
+            "q": "Claude created files on the server?",
+            "a": [
+              "That happens when the paths in the steps start with `/data/state/native/`. Tell it “do it on my computer instead”."
+            ]
+          },
+          {
+            "q": "The quota or the model list is empty?",
+            "a": [
+              "They come from a run of Claude Code: send a message, or refresh on the account page."
+            ]
+          },
+          {
+            "q": "Two windows changing things in one folder at once?",
+            "a": [
+              "You’re told when sessions of two connections run in the same folder at once; their changes may overwrite each other."
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

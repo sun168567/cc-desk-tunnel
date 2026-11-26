@@ -1,0 +1,49 @@
+{
+  "language": {
+    "title": "Display language",
+    "detail": "For windows, menus and dialogs; the system setting uses your system’s display language",
+    "system": "Use system setting"
+  },
+  "cancel": "Cancel",
+  "retry": "Retry",
+  "device": {
+    "browser": "Browser",
+    "server": "Server",
+    "here": "This computer"
+  },
+  "collapse": "Collapse",
+  "expand": "Expand",
+  "locale": "en",
+  "ago": {
+    "now": "just now",
+    "minutes": "{{n}} min",
+    "hours": "{{n}} h",
+    "days": "{{n}} d"
+  },
+  "span": {
+    "seconds": "{{s}} s",
+    "minutes": "{{m}} min {{s}} s",
+    "hours": "{{h}} h {{m}} min"
+  },
+  "hours": {
+    "whole": "{{h}} h",
+    "minutes": "{{h}} h {{m}} min"
+  },
+  "minutes": "{{m}} min",
+  "copy": {
+    "done": "Copied",
+    "failed": "Couldn’t copy, try again",
+    "copy": "Copy",
+    "code": "Copy code",
+    "message": "Copy message",
+    "selectAll": "Select all"
+  },
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "save": "Save",
+  "gotIt": "Got it",
+  "failed": "That didn’t work.",
+  "help": "Help",
+  "helpFor": "Help: {{subject}}",
+  "close": "Close"
+}

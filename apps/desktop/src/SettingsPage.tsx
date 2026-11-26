@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { platformOf } from '@cc-desk-tunnel/protocol';
+import { languageChoices, languageNames } from '@cc-desk-tunnel/i18n';
 import {
   ArrowLeft,
   Bell,
@@ -19,6 +20,7 @@ import {
   SquareTerminal,
   UserRound,
 } from 'lucide-react';
+import { type T, useT } from './i18n.ts';
 import type { ConnectedDevice, ProxyClient } from './client.ts';
 import WebAccessSettings from './WebAccessSettings.tsx';
 import InstallAppSettings from './InstallAppSettings.tsx';
@@ -57,107 +59,26 @@ export type Section =
   | 'install'
   | 'about';
 // The groups say where their settings are kept and what they apply to: this computer, the service (for every device
-// connected to it), or Claude Code's own files on the cloud host. `words` is what the search box matches besides the
-// name: the settings found inside.
-export const sections: {
-  id: Section;
-  name: string;
-  group: string;
-  icon: typeof Bell;
-  words: string;
-}[] = [
-  {
-    id: 'general',
-    name: '常规',
-    group: '本机',
-    icon: Settings,
-    words: '窗口 托盘 后台 启动 普通会话 文件夹 对话记录 缓存 占用 清理 审批 绕过权限',
-  },
-  {
-    id: 'appearance',
-    name: '外观',
-    group: '本机',
-    icon: Palette,
-    words: '主题 深色 浅色 工作步骤 回复小结 会话栏 输入框 额度 用量 首字 速度 缓存',
-  },
-  {
-    id: 'connection',
-    name: '连接',
-    group: '本机',
-    icon: Cable,
-    words: '记住凭据 自动登录 多开 多个连接 登录过的服务 备注名 窗口 服务端 等待 超时 SSH 执行通道',
-  },
-  {
-    id: 'notifications',
-    name: '通知',
-    group: '本机',
-    icon: Bell,
-    words: '提醒 完成 失败 审批 提问 定时任务 连接 提示音',
-  },
-  {
-    id: 'shortcuts',
-    name: '快捷键',
-    group: '本机',
-    icon: Keyboard,
-    words: '键盘 组合键 热键 后退 前进 侧栏 缩放',
-  },
-  {
-    id: 'context',
-    name: '上下文与缓存',
-    group: '服务端',
-    icon: Hourglass,
-    words: '自动压缩 提示缓存 过期 空闲 上下文 compact',
-  },
-  {
-    id: 'shell',
-    name: 'Shell',
-    group: '服务端',
-    icon: SquareTerminal,
-    words: 'PowerShell Git Bash 命令 脚本 终端 偏好',
-  },
-  {
-    id: 'web',
-    name: '浏览器访问',
-    group: '服务端',
-    icon: Globe,
-    words: 'Web 网页 证书 域名 两步验证 反向代理 浏览器登录',
-  },
-  {
-    id: 'account',
-    name: '账号与额度',
-    group: 'Claude Code',
-    icon: UserRound,
-    words: '登录 退出 订阅 用量 调用日志 重置 读取额度',
-  },
-  {
-    id: 'claude',
-    name: 'CLI 设置',
-    group: 'Claude Code',
-    icon: SlidersHorizontal,
-    words: '自动压缩 思考 快速模式 记忆 检查点 缓存 语言 模型 备用模型 署名 工具搜索',
-  },
-  {
-    id: 'instructions',
-    name: '全局说明',
-    group: 'Claude Code',
-    icon: FileText,
-    words: 'CLAUDE.md AGENTS.md 提示词 说明',
-  },
-  {
-    id: 'install',
-    name: '手机应用',
-    group: '其他',
-    icon: Smartphone,
-    words: '添加至手机 安装 名称 图标 角标',
-  },
-  {
-    id: 'about',
-    name: '关于与更新',
-    group: '其他',
-    icon: Info,
-    words: '版本 升级 检查更新 项目主页 日志 排查 断开 开发者工具 控制台',
-  },
+// connected to it), or Claude Code's own files on the cloud host. A page's name and its `words`, what the search box
+// matches besides the name (the settings found inside), are in the catalogs (settings:section.<id>).
+type Group = 'local' | 'server' | 'claude' | 'other';
+export const sections: { id: Section; group: Group; icon: typeof Bell }[] = [
+  { id: 'general', group: 'local', icon: Settings },
+  { id: 'appearance', group: 'local', icon: Palette },
+  { id: 'connection', group: 'local', icon: Cable },
+  { id: 'notifications', group: 'local', icon: Bell },
+  { id: 'shortcuts', group: 'local', icon: Keyboard },
+  { id: 'context', group: 'server', icon: Hourglass },
+  { id: 'shell', group: 'server', icon: SquareTerminal },
+  { id: 'web', group: 'server', icon: Globe },
+  { id: 'account', group: 'claude', icon: UserRound },
+  { id: 'claude', group: 'claude', icon: SlidersHorizontal },
+  { id: 'instructions', group: 'claude', icon: FileText },
+  { id: 'install', group: 'other', icon: Smartphone },
+  { id: 'about', group: 'other', icon: Info },
 ];
+export const sectionName = (t: T, id: Section) => t(`settings:section.${id}.name`);
+const sectionWords = (t: T, id: Section) => t(`settings:section.${id}.words`);
 // The heading of the settings guide (help-content.ts) that tells about a page.
 // The help each settings page's "?" opens: the article on what its settings are for.
 const pageHelp: Partial<Record<Section, string>> = {
@@ -172,45 +93,72 @@ const pageHelp: Partial<Record<Section, string>> = {
   instructions: 'memory',
   about: 'upgrade',
 };
-// What a page's settings apply to, said under its title.
-const here = (browser: boolean) =>
-  browser
-    ? '只保存在这个浏览器里，只影响在这里打开的页面。'
-    : '只保存在这台电脑，只影响这个客户端。';
-const everyDevice = '保存在服务端，对所有连接到它的设备生效。';
-const thisDevice = '保存在服务端，只对这台电脑生效。';
-const kinds: { key: NotifyKind; title: string; detail: string }[] = [
-  { key: 'done', title: '任务完成', detail: 'Claude Code 做完了一轮任务' },
-  { key: 'failed', title: '任务失败', detail: '一轮任务因错误而结束' },
-  { key: 'approval', title: '等待审批', detail: '有操作需要你允许或拒绝' },
-  { key: 'question', title: 'Claude 提问', detail: 'Claude 需要你回答问题才能继续' },
-  { key: 'schedule', title: '定时任务未发出', detail: '到点的任务发送失败或被跳过' },
-  { key: 'connection', title: '连接中断', detail: '与服务的连接意外断开' },
-];
+// What a page's settings apply to, said under its title: kept in this browser or on this computer, or on the service
+// for every device or for this one (settings:scope.*).
+const localScope = (t: T, browser: boolean) =>
+  t(browser ? 'settings:scope.browser' : 'settings:scope.local');
+// The events that may raise a notification, each with what it is (settings:notify.<kind>).
+const kinds: NotifyKind[] = ['done', 'failed', 'approval', 'question', 'schedule', 'connection'];
 
-// How much of the work behind a reply is shown is a choice of this computer's window too.
-function ThemeSettings() {
-  const { theme } = usePrefs();
+// The language of this computer's windows, a choice of the computer like the colours. A language is named in
+// itself, as lists of languages do, so that it is found whatever language the window is in.
+function LanguageSettings() {
+  const { language } = usePrefs();
+  const t = useT();
   return (
     <>
-      <h2 className="page-heading">主题</h2>
+      <h2 className="page-heading">{t('language.title')}</h2>
       <div className="card">
         <div className="setting-row stat-picks">
           <span>
-            <strong>主题</strong>
-            <small>跟随系统时随系统的浅色或深色设置切换</small>
+            <strong>{t('language.title')}</strong>
+            <small>{t('language.detail')}</small>
           </span>
-          <div className="stat-chips" role="radiogroup" aria-label="主题">
+          <div className="stat-chips" role="radiogroup" aria-label={t('language.title')}>
+            {languageChoices.map((choice) => (
+              <button
+                type="button"
+                key={choice}
+                role="radio"
+                className="stat-chip"
+                lang={choice === 'system' ? undefined : choice}
+                aria-checked={choice === language}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, language: choice }))}
+              >
+                {choice === 'system' ? t('language.system') : languageNames[choice]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// How much of the work behind a reply is shown is a choice of this computer's window too.
+function ThemeSettings() {
+  const t = useT();
+  const { theme } = usePrefs();
+  return (
+    <>
+      <h2 className="page-heading">{t('settings:theme.heading')}</h2>
+      <div className="card">
+        <div className="setting-row stat-picks">
+          <span>
+            <strong>{t('settings:theme.heading')}</strong>
+            <small>{t('settings:theme.detail')}</small>
+          </span>
+          <div className="stat-chips" role="radiogroup" aria-label={t('settings:theme.heading')}>
             {themes.map((entry) => (
               <button
                 type="button"
-                key={entry.theme}
+                key={entry}
                 role="radio"
                 className="stat-chip"
-                aria-checked={entry.theme === theme}
-                onClick={() => setPrefs((prefs) => ({ ...prefs, theme: entry.theme }))}
+                aria-checked={entry === theme}
+                onClick={() => setPrefs((prefs) => ({ ...prefs, theme: entry }))}
               >
-                {entry.label}
+                {t(`settings:theme.${entry}`)}
               </button>
             ))}
           </div>
@@ -221,30 +169,31 @@ function ThemeSettings() {
 }
 
 function TranscriptViewSettings() {
+  const t = useT();
   const { view } = usePrefs();
   const set = (values: Partial<typeof view>) =>
     setPrefs((prefs) => ({ ...prefs, view: { ...prefs.view, ...values } }));
-  const current = viewModes.find((entry) => entry.mode === view.mode) ?? viewModes[0];
+  const current = viewModes.find((mode) => mode === view.mode) ?? viewModes[0];
   return (
     <>
-      <h2 className="page-heading">工作步骤展示</h2>
+      <h2 className="page-heading">{t('settings:view.heading')}</h2>
       <div className="card">
         <div className="setting-row stat-picks">
           <span>
-            <strong>展示多少</strong>
-            <small>{current.detail}</small>
+            <strong>{t('settings:view.amount')}</strong>
+            <small>{t(`settings:view.${current}.detail`)}</small>
           </span>
-          <div className="stat-chips" role="radiogroup" aria-label="工作步骤展示">
-            {viewModes.map((entry) => (
+          <div className="stat-chips" role="radiogroup" aria-label={t('settings:view.heading')}>
+            {viewModes.map((mode) => (
               <button
                 type="button"
-                key={entry.mode}
+                key={mode}
                 role="radio"
                 className="stat-chip"
-                aria-checked={entry.mode === view.mode}
-                onClick={() => set({ mode: entry.mode })}
+                aria-checked={mode === view.mode}
+                onClick={() => set({ mode })}
               >
-                {entry.label}
+                {t(`settings:view.${mode}.label`)}
               </button>
             ))}
           </div>
@@ -256,31 +205,32 @@ function TranscriptViewSettings() {
 
 // The strip under the input box: its two parts each show the figures switched on, and open a card with all of them.
 function SessionBarSettings() {
+  const t = useT();
   const { sessionBar } = usePrefs();
   const set = (values: Partial<typeof sessionBar>) =>
     setPrefs((prefs) => ({ ...prefs, sessionBar: { ...prefs.sessionBar, ...values } }));
   const preview = (['session', 'tokens'] as const)
-    .map((group) => barText(group, sampleSession, sessionBar.summary))
+    .map((group) => barText(t, group, sampleSession, sessionBar.summary))
     .filter(Boolean)
     .join('　　');
   return (
     <>
-      <h2 className="page-heading">会话栏</h2>
+      <h2 className="page-heading">{t('settings:bar.heading')}</h2>
       <div className="card">
-        <Row title="显示会话栏" detail="输入框下方一行：整个会话的轮数、步数、速度和 Token 用量">
+        <Row title={t('settings:bar.show')} detail={t('settings:bar.detail')}>
           <Switch
-            label="显示会话栏"
+            label={t('settings:bar.show')}
             checked={sessionBar.enabled}
             onChange={(enabled) => set({ enabled })}
           />
         </Row>
         <div className="setting-row stat-picks">
           <span>
-            <strong>会话栏里显示</strong>
-            <small>{preview || '都不选时每一块只显示它的名字'}</small>
+            <strong>{t('settings:bar.parts')}</strong>
+            <small>{preview || t('settings:bar.partsDetail')}</small>
           </span>
-          <div className="stat-chips" role="group" aria-label="会话栏里显示">
-            {sessionFields.map((field) => {
+          <div className="stat-chips" role="group" aria-label={t('settings:bar.parts')}>
+            {sessionFields(t).map((field) => {
               const on = inBar(field, sessionBar.summary);
               return (
                 <button
@@ -297,14 +247,14 @@ function SessionBarSettings() {
             })}
           </div>
         </div>
-        <Row title="恢复默认" detail="点开后的明细不受这里的选择影响">
+        <Row title={t('settings:reset')} detail={t('settings:bar.resetDetail')}>
           <button
             type="button"
             className="button"
             disabled={Object.keys(sessionBar.summary).length === 0}
             onClick={() => set({ summary: {} })}
           >
-            恢复默认
+            {t('settings:reset')}
           </button>
         </Row>
       </div>
@@ -314,31 +264,34 @@ function SessionBarSettings() {
 
 // The line under each reply is a choice of this computer's window, so it works outside the desktop app too.
 function ReplyStats() {
+  const t = useT();
   const { stats } = usePrefs();
   const set = (values: Partial<typeof stats>) =>
     setPrefs((prefs) => ({ ...prefs, stats: { ...prefs.stats, ...values } }));
   return (
     <>
-      <h2 className="page-heading">回复小结</h2>
+      <h2 className="page-heading">{t('settings:summary.heading')}</h2>
       <div className="card">
         <Row
-          title="显示回复小结"
-          detail="每轮回复末尾一个小按钮，点开看全部明细"
+          title={t('settings:summary.show')}
+          detail={t('settings:summary.detail')}
           help="context#numbers"
         >
           <Switch
-            label="显示回复小结"
+            label={t('settings:summary.show')}
             checked={stats.enabled}
             onChange={(enabled) => set({ enabled })}
           />
         </Row>
         <div className="setting-row stat-picks">
           <span>
-            <strong>小结里显示</strong>
-            <small>{summaryText(sampleStats, stats.summary) || '都不选时只显示“用量明细”'}</small>
+            <strong>{t('settings:summary.parts')}</strong>
+            <small>
+              {summaryText(t, sampleStats, stats.summary) || t('settings:summary.partsDetail')}
+            </small>
           </span>
-          <div className="stat-chips" role="group" aria-label="小结里显示">
-            {statFields.map((field) => {
+          <div className="stat-chips" role="group" aria-label={t('settings:summary.parts')}>
+            {statFields(t).map((field) => {
               const on = inSummary(field, stats.summary);
               return (
                 <button
@@ -355,14 +308,14 @@ function ReplyStats() {
             })}
           </div>
         </div>
-        <Row title="恢复默认" detail="明细里的数据不受这里的选择影响">
+        <Row title={t('settings:reset')} detail={t('settings:summary.resetDetail')}>
           <button
             type="button"
             className="button"
             disabled={Object.keys(stats.summary).length === 0}
             onClick={() => set({ summary: {} })}
           >
-            恢复默认
+            {t('settings:reset')}
           </button>
         </Row>
       </div>
@@ -380,6 +333,7 @@ function Seconds({
   value: number;
   change: (value: number) => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
   const commit = () => {
@@ -403,13 +357,14 @@ function Seconds({
           if (event.key === 'Enter') commit();
         }}
       />
-      秒
+      {t('settings:seconds')}
     </span>
   );
 }
 
 // The computer's connections, each a window of its own to a service of its own: see electron/connections.cjs.
 function Connections() {
+  const t = useT();
   const [list, setList] = useState<Account[]>([]);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState('');
@@ -429,18 +384,16 @@ function Connections() {
         return true;
       },
       (failure) => {
-        setError(
-          String(failure?.message ?? failure).replace(/^.*?'(accounts|login):\w+': (Error: )?/, ''),
-        );
+        setError(String(failure?.message ?? failure));
         return false;
       },
     );
   return (
     <>
-      <h2 className="page-heading">登录过的服务</h2>
+      <h2 className="page-heading">{t('settings:connections.heading')}</h2>
       <div className="card">
         {list
-          .map((item) => ({ ...item, label: item.label || '未保存地址的连接' }))
+          .map((item) => ({ ...item, label: item.label || t('settings:connections.unsaved') }))
           .map((entry) => (
             <Row key={entry.id} title={entry.label} detail={entry.name ? entry.url : undefined}>
               {editing?.id === entry.id ? (
@@ -455,18 +408,18 @@ function Connections() {
                 >
                   <input
                     className="setting-name"
-                    aria-label="备注名"
-                    placeholder="不填则显示服务地址"
+                    aria-label={t('settings:connections.nickname')}
+                    placeholder={t('settings:connections.nicknameHint')}
                     maxLength={24}
                     autoFocus
                     value={editing.name}
                     onChange={(event) => setEditing({ id: entry.id, name: event.target.value })}
                   />
                   <button type="submit" className="button">
-                    保存
+                    {t('common:save')}
                   </button>
                   <button type="button" className="button" onClick={() => setEditing(null)}>
-                    取消
+                    {t('common:cancel')}
                   </button>
                 </form>
               ) : (
@@ -475,48 +428,50 @@ function Connections() {
                     <button
                       type="button"
                       className="button"
-                      aria-label={`打开 ${entry.label}`}
+                      aria-label={t('settings:connections.openOf', { label: entry.label })}
                       onClick={() => void act(window.desktop!.openAccount(entry.id))}
                     >
-                      {entry.open ? '切换到' : '打开'}
+                      {entry.open
+                        ? t('settings:connections.switch')
+                        : t('settings:connections.open')}
                     </button>
                   )}
                   <button
                     type="button"
                     className="button"
-                    aria-label={`备注名 ${entry.label}`}
+                    aria-label={t('settings:connections.nicknameOf', { label: entry.label })}
                     onClick={() => setEditing({ id: entry.id, name: entry.name })}
                   >
-                    备注名
+                    {t('settings:connections.nickname')}
                   </button>
                   {!entry.current && (
                     <button
                       type="button"
                       className="button danger"
-                      aria-label={`删除 ${entry.label}`}
+                      aria-label={t('settings:connections.deleteOf', { label: entry.label })}
                       onClick={() => {
                         if (
                           window.confirm(
-                            `删除“${entry.label}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+                            t('settings:connections.deleteQuestion', { label: entry.label }),
                           )
                         )
                           void act(window.desktop!.forgetAccount(entry.id));
                       }}
                     >
-                      删除
+                      {t('settings:connections.delete')}
                     </button>
                   )}
                 </span>
               )}
             </Row>
           ))}
-        <Row title="新的登录窗口">
+        <Row title={t('settings:connections.newWindow')}>
           <button
             type="button"
             className="button"
             onClick={() => void act(window.desktop!.newLoginWindow())}
           >
-            打开
+            {t('settings:connections.open')}
           </button>
         </Row>
       </div>
@@ -532,6 +487,7 @@ function Connections() {
 // The history read before and kept here; clearing it has every session read from the service again. Each
 // connection keeps its own: a sign-in window, no connection's, has none to show.
 function HistoryCacheCard({ client }: { client: ProxyClient }) {
+  const t = useT();
   const [stats, setStats] = useState<Awaited<ReturnType<ProxyClient['disk']['stats']>>>(null);
   const read = () => void client.disk.stats().then(setStats);
   useEffect(read, [client]);
@@ -539,19 +495,19 @@ function HistoryCacheCard({ client }: { client: ProxyClient }) {
   const size = !stats.bytes
     ? ''
     : stats.bytes < 1024 * 1024
-      ? `约 ${Math.ceil(stats.bytes / 1024)} KB · `
+      ? t('settings:cache.kb', { n: Math.ceil(stats.bytes / 1024) })
       : stats.bytes < 1024 * 1024 * 1024
-        ? `约 ${(stats.bytes / 1024 / 1024).toFixed(1)} MB · `
-        : `约 ${(stats.bytes / 1024 / 1024 / 1024).toFixed(2)} GB · `;
+        ? t('settings:cache.mb', { n: (stats.bytes / 1024 / 1024).toFixed(1) })
+        : t('settings:cache.gb', { n: (stats.bytes / 1024 / 1024 / 1024).toFixed(2) });
   return (
     <>
-      <h2 className="page-heading">对话记录</h2>
+      <h2 className="page-heading">{t('settings:cache.heading')}</h2>
       <div className="card">
-        <Row title="本机缓存" detail="读过的对话留在本机，再次打开只补新内容">
+        <Row title={t('settings:cache.title')} detail={t('settings:cache.detail')}>
           <span className="setting-actions">
             <span className="setting-value">
-              {size}
-              {stats.sessions} 个会话
+              {size && `${size} · `}
+              {t('settings:cache.sessions', { count: stats.sessions })}
             </span>
             <button
               type="button"
@@ -561,7 +517,7 @@ function HistoryCacheCard({ client }: { client: ProxyClient }) {
                 read();
               }}
             >
-              清理
+              {t('settings:cache.clean')}
             </button>
           </span>
         </Row>
@@ -581,24 +537,25 @@ function General({
   workspaceRoot: string;
   chooseWorkspace: (reset: boolean) => void;
 }) {
+  const t = useT();
   const [closeToTray, setCloseToTray] = useState<boolean | null>(null);
   const { bypassPermissions } = usePrefs();
   useEffect(() => {
     void window.desktop?.windowSettings().then((values) => setCloseToTray(values.closeToTray));
   }, []);
   return (
-    <Page title="常规" intro={here(browser)}>
+    <Page title={sectionName(t, 'general')} intro={localScope(t, browser)}>
       {window.desktop && (
         <>
-          <h2 className="page-heading">窗口</h2>
+          <h2 className="page-heading">{t('settings:window.heading')}</h2>
           <div className="card">
             <Row
-              title="关闭窗口时留在后台"
-              detail="关窗口只是收到托盘，任务照常；托盘里选“退出”才结束"
+              title={t('settings:window.background')}
+              detail={t('settings:window.backgroundDetail')}
               help="background"
             >
               <Switch
-                label="关闭窗口时留在后台"
+                label={t('settings:window.background')}
                 checked={closeToTray ?? true}
                 disabled={closeToTray === null}
                 onChange={(value) => {
@@ -608,23 +565,23 @@ function General({
               />
             </Row>
           </div>
-          <h2 className="page-heading">会话</h2>
+          <h2 className="page-heading">{t('settings:sessions.heading')}</h2>
           <div className="card">
             <Row
-              title="普通会话的文件夹"
+              title={t('settings:sessions.folder')}
               detail={
                 <>
-                  不属于项目的新会话各在这里建一个文件夹；已有的不动
+                  {t('settings:sessions.folderDetail')}
                   <code className="setting-path">{workspaceRoot}</code>
                 </>
               }
             >
               <span className="setting-actions">
                 <button type="button" className="button" onClick={() => chooseWorkspace(false)}>
-                  更改
+                  {t('settings:sessions.change')}
                 </button>
                 <button type="button" className="button" onClick={() => chooseWorkspace(true)}>
-                  恢复默认
+                  {t('settings:reset')}
                 </button>
               </span>
             </Row>
@@ -632,15 +589,15 @@ function General({
         </>
       )}
       <HistoryCacheCard client={client} />
-      <h2 className="page-heading">审批</h2>
+      <h2 className="page-heading">{t('settings:approval.heading')}</h2>
       <div className="card">
         <Row
-          title="允许绕过权限"
-          detail="审批模式里多出“绕过权限”，什么都不再问。只建议在测试机上打开"
+          title={t('settings:approval.bypass')}
+          detail={t('settings:approval.bypassDetail')}
           help="permissions#bypass"
         >
           <Switch
-            label="允许绕过权限"
+            label={t('settings:approval.bypass')}
             checked={bypassPermissions}
             onChange={(value) => setPrefs((prefs) => ({ ...prefs, bypassPermissions: value }))}
           />
@@ -651,17 +608,19 @@ function General({
 }
 
 function Appearance({ browser }: { browser: boolean }) {
+  const t = useT();
   const { quota } = usePrefs();
   return (
-    <Page title="外观" intro={here(browser)}>
+    <Page title={sectionName(t, 'appearance')} intro={localScope(t, browser)}>
+      <LanguageSettings />
       <ThemeSettings />
       {window.desktop && (
         <>
-          <h2 className="page-heading">输入框</h2>
+          <h2 className="page-heading">{t('settings:input.heading')}</h2>
           <div className="card">
-            <Row title="在输入框旁显示额度" detail="5 小时和每周额度用了多少；点它打开账号与额度">
+            <Row title={t('settings:input.quota')} detail={t('settings:input.quotaDetail')}>
               <Switch
-                label="在输入框旁显示额度"
+                label={t('settings:input.quota')}
                 checked={quota}
                 onChange={(value) => setPrefs((prefs) => ({ ...prefs, quota: value }))}
               />
@@ -683,21 +642,22 @@ function ConnectionSettings({
   form: ConnectionForm;
   changeForm: (values: Partial<ConnectionForm>) => void;
 }) {
+  const t = useT();
   const { connection } = usePrefs();
   return (
-    <Page title="连接" intro={here(false)}>
-      <h2 className="page-heading">登录</h2>
+    <Page title={sectionName(t, 'connection')} intro={localScope(t, false)}>
+      <h2 className="page-heading">{t('settings:signIn.heading')}</h2>
       <div className="card">
-        <Row title="记住凭据" detail="服务凭据经当前系统账户加密后保存在本机">
+        <Row title={t('settings:signIn.remember')} detail={t('settings:signIn.rememberDetail')}>
           <Switch
-            label="记住凭据"
+            label={t('settings:signIn.remember')}
             checked={form.remember}
             onChange={(remember) => changeForm({ remember, autoLogin: remember && form.autoLogin })}
           />
         </Row>
-        <Row title="自动登录" detail="打开程序时直接登录这个服务">
+        <Row title={t('settings:signIn.auto')} detail={t('settings:signIn.autoDetail')}>
           <Switch
-            label="自动登录"
+            label={t('settings:signIn.auto')}
             checked={form.autoLogin}
             onChange={(autoLogin) =>
               changeForm({ autoLogin, remember: autoLogin || form.remember })
@@ -706,10 +666,14 @@ function ConnectionSettings({
         </Row>
       </div>
       <Connections />
-      <SettingsHeading help="execution#waits">连接等待时间</SettingsHeading>
+      <SettingsHeading help="execution#waits">{t('settings:wait.heading')}</SettingsHeading>
       <div className="card">
-        {waitFields.map(({ step, title, detail }) => (
-          <Row key={step} title={title} detail={`${detail}。默认 ${connectionWaits[step]} 秒`}>
+        {waitFields(t).map(({ step, title, detail }) => (
+          <Row
+            key={step}
+            title={title}
+            detail={t('settings:wait.withDefault', { detail, seconds: connectionWaits[step] })}
+          >
             <Seconds
               label={title}
               value={connection[step]}
@@ -722,14 +686,14 @@ function ConnectionSettings({
             />
           </Row>
         ))}
-        <Row title="恢复默认" detail="下次连接时生效；连接正常时不需要改">
+        <Row title={t('settings:reset')} detail={t('settings:wait.resetDetail')}>
           <button
             type="button"
             className="button"
-            disabled={waitFields.every(({ step }) => connection[step] === connectionWaits[step])}
+            disabled={waitFields(t).every(({ step }) => connection[step] === connectionWaits[step])}
             onClick={() => setPrefs((prefs) => ({ ...prefs, connection: connectionWaits }))}
           >
-            恢复默认
+            {t('settings:reset')}
           </button>
         </Row>
       </div>
@@ -737,37 +701,39 @@ function ConnectionSettings({
   );
 }
 function Notices() {
+  const t = useT();
   const { notify } = usePrefs();
   const set = (values: Partial<typeof notify>) =>
     setPrefs((prefs) => ({ ...prefs, notify: { ...prefs.notify, ...values } }));
   return (
-    <Page
-      title="通知"
-      intro="窗口收在托盘或不在前台时，用系统通知提醒需要你知道的事；点通知回到对应的会话。正在看的会话不会重复提醒。"
-    >
+    <Page title={t('settings:notify.heading')} intro={t('settings:notify.intro')}>
       <div className="card">
-        <Row title="开启通知" detail="关闭后既不弹出系统通知，也不记入通知列表">
+        <Row title={t('settings:notify.enabled')} detail={t('settings:notify.enabledDetail')}>
           <Switch
-            label="开启通知"
+            label={t('settings:notify.enabled')}
             checked={notify.enabled}
             onChange={(enabled) => set({ enabled })}
           />
         </Row>
-        <Row title="提示音" detail="弹出系统通知时播放系统的通知声音">
+        <Row title={t('settings:notify.sound')} detail={t('settings:notify.soundDetail')}>
           <Switch
-            label="提示音"
+            label={t('settings:notify.sound')}
             checked={notify.sound}
             disabled={!notify.enabled}
             onChange={(sound) => set({ sound })}
           />
         </Row>
       </div>
-      <h2 className="page-heading">提醒哪些事</h2>
+      <h2 className="page-heading">{t('settings:notify.which')}</h2>
       <div className="card">
-        {kinds.map(({ key, title, detail }) => (
-          <Row key={key} title={title} detail={detail}>
+        {kinds.map((key) => (
+          <Row
+            key={key}
+            title={t(`settings:notify.${key}.title`)}
+            detail={t(`settings:notify.${key}.detail`)}
+          >
             <Switch
-              label={title}
+              label={t(`settings:notify.${key}.title`)}
               checked={notify[key]}
               disabled={!notify.enabled}
               onChange={(value) => set({ [key]: value })}
@@ -781,15 +747,15 @@ function Notices() {
           className="button"
           onClick={() =>
             void window.desktop!.notify({
-              title: '测试通知',
-              body: '通知工作正常。',
+              title: t('settings:notify.testTitle'),
+              body: t('settings:notify.testBody'),
               sessionId: null,
               silent: !notify.sound,
               always: true,
             })
           }
         >
-          发送一条测试通知
+          {t('settings:notify.test')}
         </button>
       )}
     </Page>
@@ -809,34 +775,35 @@ function About({
   updates: MenuItem[];
   showNotes: (version: string) => void;
 }) {
+  const t = useT();
   return (
-    <Page title="关于与更新">
+    <Page title={t('settings:section.about.name')}>
       <div className="card">
-        <Row title="客户端版本">
+        <Row title={t('settings:about.client')}>
           <span className="setting-actions">
-            <span className="setting-value">{version || '浏览器开发入口'}</span>
+            <span className="setting-value">{version || t('settings:about.devEntry')}</span>
             {version && (
               <button type="button" className="button" onClick={() => showNotes(version)}>
-                这一版的更新内容
+                {t('settings:about.notes')}
               </button>
             )}
           </span>
         </Row>
-        <Row title="服务端版本">
-          <span className="setting-value">{service ?? '未知'}</span>
+        <Row title={t('settings:about.service')}>
+          <span className="setting-value">{service ?? t('settings:about.unknown')}</span>
         </Row>
-        <Row title="运行方式">
+        <Row title={t('settings:about.adapter')}>
           <span className="setting-value">{adapterName}</span>
         </Row>
       </div>
-      <h2 className="page-heading">更新</h2>
+      <h2 className="page-heading">{t('settings:about.updates')}</h2>
       <div className="card">
         <Row
-          title="客户端与服务端需要同一版本"
+          title={t('settings:about.sameVersion')}
           detail={
             selfUpdating
-              ? '服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级'
-              : '服务端跟随发布页；这个系统上的客户端要手动升级：下载与服务端同一版本的安装包，装好替换旧版'
+              ? t('settings:about.updatesFromService')
+              : t('settings:about.updatesManual')
           }
         >
           <span className="setting-actions">
@@ -864,40 +831,36 @@ function About({
                   )
                 }
               >
-                打开发布页
+                {t('settings:about.releases')}
               </button>
             ) : (
-              updates.length === 0 && <span className="setting-value">没有可用的更新操作</span>
+              updates.length === 0 && (
+                <span className="setting-value">{t('settings:about.noUpdates')}</span>
+              )
             )}
           </span>
         </Row>
       </div>
       {window.desktop && (
         <>
-          <h2 className="page-heading">排查</h2>
+          <h2 className="page-heading">{t('settings:about.troubleshoot')}</h2>
           <div className="card">
-            <Row
-              title="连接日志"
-              detail="每次连接何时建立、断开及原因，存在本机，不含凭据和对话。连接无故中断时用得上"
-            >
+            <Row title={t('settings:about.log')} detail={t('settings:about.logDetail')}>
               <button
                 type="button"
                 className="button"
                 onClick={() => void window.desktop!.openLogs()}
               >
-                打开日志文件夹
+                {t('settings:about.openLog')}
               </button>
             </Row>
-            <Row
-              title="开发者工具"
-              detail="反馈界面问题时查看报错。里面能看到对话，别按他人要求在其中粘贴代码"
-            >
+            <Row title={t('settings:about.devTools')} detail={t('settings:about.devToolsDetail')}>
               <button
                 type="button"
                 className="button"
                 onClick={() => void window.desktop!.openDevTools()}
               >
-                打开开发者工具
+                {t('settings:about.openDevTools')}
               </button>
             </Row>
           </div>
@@ -906,7 +869,7 @@ function About({
       {project.url && (
         <button type="button" className="button" onClick={openProject}>
           <GithubMark />
-          项目主页 · {project.name}
+          {t('settings:about.homepage', { name: project.name })}
         </button>
       )}
     </Page>
@@ -960,19 +923,24 @@ export default function SettingsPage({
   updates: MenuItem[];
   showNotes: (version: string) => void;
 }) {
+  const t = useT();
   const [search, setSearch] = useState('');
   const term = search.trim().toLowerCase();
   // Before a connection only this computer's; in a browser no computer's own nor Claude Code's files; the service's
   // where there is one to keep them. A page with nothing to set where it is shown is not listed.
+  // In a browser the account page shows only the plan's usage, under that name.
   const shown = sections
-    .map((item) =>
-      browser && item.id === 'account'
-        ? { ...item, name: '订阅用量', words: '订阅 用量 额度 周期统计 重置 自动读取额度' }
-        : item,
-    )
+    .map((item) => {
+      const usage = browser && item.id === 'account';
+      return {
+        ...item,
+        name: usage ? t('settings:section.usage.name') : sectionName(t, item.id),
+        words: usage ? t('settings:section.usage.words') : sectionWords(t, item.id),
+      };
+    })
     .filter(
       (item) =>
-        (!back || item.group === '本机') &&
+        (!back || item.group === 'local') &&
         (item.id !== 'connection' || window.desktop) &&
         (item.id !== 'install' ||
           (browser && /Android.*Mobile|iPhone|iPod/i.test(navigator.userAgent))) &&
@@ -988,27 +956,27 @@ export default function SettingsPage({
       <aside className="sidebar">
         <div className="sidebar-brand">
           {back && (
-            <IconButton title="返回登录" onClick={back}>
+            <IconButton title={t('settings:backToSignIn')} onClick={back}>
               <ArrowLeft />
             </IconButton>
           )}
-          <span className="brand">{back ? '本机设置' : '设置'}</span>
-          {!back && <HelpLink article="settings" title="设置怎么分组、各页管什么" />}
+          <span className="brand">{back ? t('settings:localTitle') : t('nav:bar.settings')}</span>
+          {!back && <HelpLink article="settings" title={t('settings:help')} />}
         </div>
         <label className="session-search">
           <Search />
           <input
-            aria-label="搜索设置"
+            aria-label={t('settings:search')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索"
+            placeholder={t('nav:search')}
           />
         </label>
-        <nav className="session-list" aria-label="设置分类">
+        <nav className="session-list" aria-label={t('settings:categories')}>
           {shown.map((item, index) => (
             <div key={item.id}>
               {item.group !== shown[index - 1]?.group && (
-                <div className="list-heading">{item.group}</div>
+                <div className="list-heading">{t(`settings:group.${item.group}`)}</div>
               )}
               <button
                 type="button"
@@ -1021,7 +989,7 @@ export default function SettingsPage({
               </button>
             </div>
           ))}
-          {shown.length === 0 && <p className="list-empty">没有匹配的设置</p>}
+          {shown.length === 0 && <p className="list-empty">{t('settings:noMatch')}</p>}
         </nav>
         {disconnect && (
           <button
@@ -1030,7 +998,7 @@ export default function SettingsPage({
             onClick={disconnect}
           >
             <LogOut />
-            {browser ? '退出登录' : '断开连接'}
+            {browser ? t('nav:bar.signOut') : t('nav:bar.disconnect')}
           </button>
         )}
       </aside>
@@ -1042,27 +1010,27 @@ export default function SettingsPage({
             native ? (
               <SettingsPanel client={client} />
             ) : (
-              <Page
-                title="CLI 设置"
-                intro="离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。"
-              />
+              <Page title={sectionName(t, 'claude')} intro={t('settings:simulation.cli')} />
             )
           ) : section === 'instructions' ? (
             native ? (
               <GlobalInstructions client={client} />
             ) : (
-              <Page title="全局说明" intro="离线模拟没有全局说明；连接远程代理后在这里修改。" />
+              <Page
+                title={sectionName(t, 'instructions')}
+                intro={t('settings:simulation.instructions')}
+              />
             )
           ) : section === 'context' ? (
-            <Page title="上下文与缓存" intro={everyDevice}>
+            <Page title={sectionName(t, 'context')} intro={t('settings:scope.everyDevice')}>
               <IdleCompactionSettings client={client} />
             </Page>
           ) : section === 'shell' && here ? (
-            <Page title="Shell" intro={thisDevice}>
+            <Page title={sectionName(t, 'shell')} intro={t('settings:scope.thisDevice')}>
               <ShellSettings client={client} here={here} />
             </Page>
           ) : section === 'web' ? (
-            <Page title="浏览器访问" intro={everyDevice}>
+            <Page title={sectionName(t, 'web')} intro={t('settings:scope.everyDevice')}>
               <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
             </Page>
           ) : section === 'install' && browser ? (

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { connect, createServer } from 'node:tls';
 import { test, type TestContext } from 'node:test';
 import { WebCertificates } from '../src/web-certificate.ts';
+import { textOf } from '../src/errors.ts';
 import {
   ca,
   clientOnly,
@@ -99,7 +100,7 @@ test('invalid saved material leaves original TLS usable and can be reset even wi
   certificates.set({ domain, ...custom });
   const restored = new WebCertificates({ ...options, domain: '' });
   assert.equal(restored.state().mode, 'default');
-  assert.match(restored.state().error!, /恢复默认证书/);
+  assert.equal(textOf(restored.state().error!), '已保存的域名证书无效，请重新导入或恢复默认证书。');
   restored.reset();
   assert.deepEqual(fs.readdirSync(join(dataDir, 'web')), []);
   assert.equal(restored.state().error, undefined);

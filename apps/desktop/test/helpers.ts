@@ -31,6 +31,8 @@ export function connection() {
 // Signs in on the sign-in page; in a browser the page signed in takes its place in the tab.
 export async function login(page: Page, wait = true) {
   const config = connection();
+  // The mode buttons come with the form: until it is drawn they are not visible either.
+  await page.getByLabel('服务地址').waitFor();
   const localMode = page.getByRole('button', { name: '本地模拟', exact: true });
   if (await localMode.isVisible()) await localMode.click();
   await page.getByLabel('服务地址').fill(config.serverUrl);
@@ -81,9 +83,16 @@ export async function signInWindow(application: ElectronApplication) {
 }
 // Finished turns, runs of tool calls and each call are folded; open them all to inspect the details.
 export async function expandActivity(page: Page) {
-  for (const selector of ['.turn-process', '.work', '.tool'])
-    while (await page.locator(`${selector}:not([open]) > summary`).count())
-      await page.locator(`${selector}:not([open]) > summary`).first().click();
+  for (const selector of ['.turn-process', '.work', '.tool']) {
+    const closed = page.locator(`${selector}:not([open]) > summary`);
+    // A row that arrives late draws its group again while it is being clicked, and the group may come back open:
+    // a click that finds nothing to click gives up soon, and the groups are counted again.
+    while (await closed.count())
+      await closed
+        .first()
+        .click({ timeout: 2000 })
+        .catch(() => {});
+  }
 }
 export async function sessionAction(page: Page, action: string) {
   const sidebar = page.getByRole('button', { name: '展开会话列表' });

@@ -1,0 +1,443 @@
+{
+  "terminal": {
+    "working": "终端运行中",
+    "waiting": "终端等你确认",
+    "open": "终端打开中",
+    "follow": "{{state}} · 进展随后显示在这里，关闭终端后可以在这里接着聊"
+  },
+  "run": {
+    "quiet": "仍在运行 · 已 {{n}} 分钟没有新输出",
+    "running": "运行中",
+    "toolCall": "第 {{n}} 次工具调用 · {{tool}}",
+    "waited": "已等待 {{span}}",
+    "offline": "所在设备不在线"
+  },
+  "idle": {
+    "before": "提示缓存约 {{minutes}} 分钟后过期。现在压缩读取的是缓存，比过期后再压缩便宜得多（上下文约 {{size}}）。",
+    "after": "距上一轮已过 {{span}}，提示缓存已过期：下一条消息会按全价重读约 {{size}} 的上下文。新任务建议新建会话（相当于 /clear）；要接着做又想省一些，可以先切到较便宜的模型压缩，再切回原模型。",
+    "compactNow": "现在压缩",
+    "close": "关闭提醒"
+  },
+  "tool": {
+    "command": {
+      "running": "运行",
+      "done": "已运行",
+      "doing": "运行命令",
+      "did_other": "运行了 {{count}} 条命令"
+    },
+    "edit": {
+      "running": "编辑",
+      "done": "已编辑",
+      "doing": "编辑文件",
+      "did_other": "编辑了 {{count}} 个文件"
+    },
+    "read": {
+      "running": "读取",
+      "done": "已读取",
+      "doing": "读取文件",
+      "did_other": "读取了 {{count}} 个文件"
+    },
+    "search": {
+      "running": "搜索",
+      "done": "已搜索",
+      "doing": "搜索",
+      "did_other": "搜索了 {{count}} 次"
+    },
+    "web": {
+      "running": "检索",
+      "done": "已检索",
+      "doing": "检索网页",
+      "did_other": "检索了 {{count}} 个网页"
+    },
+    "agent": {
+      "running": "子任务",
+      "done": "子任务完成",
+      "doing": "执行子任务",
+      "did_other": "执行了 {{count}} 个子任务"
+    },
+    "other": {
+      "running": "调用",
+      "done": "已调用",
+      "doing": "调用工具",
+      "did_other": "调用了 {{count}} 个工具"
+    },
+    "picture": "图片 {{n}}",
+    "exitCode": "退出码 {{code}}",
+    "backgroundHint": "命令接着运行，Claude 不再等它，先做别的；命令结束后 Claude 会收到结果",
+    "background": "转后台",
+    "endHint": "只结束这一条，这一轮不停止，Claude 会接着处理",
+    "end": "终止",
+    "hasPictures": "含图片",
+    "copyInput": "复制工具输入",
+    "copyOutput": "复制工具输出",
+    "thinking": "思考"
+  },
+  "toolState": {
+    "requested": "已请求",
+    "approval": "等待审批",
+    "running": "运行中",
+    "completed": "已完成",
+    "cancelled": "已取消",
+    "denied": "已拒绝",
+    "failed": "失败",
+    "unknown": "结果未知"
+  },
+  "work": {
+    "waitingAnswer": "等待回答",
+    "waitingApproval": "等待审批",
+    "doing": "正在{{what, series}}",
+    "thinking": "正在思考",
+    "thought": "思考",
+    "did": "{{what, commas}}",
+    "didFailed_other": "{{what, commas}}，{{count}} 项未成功"
+  },
+  "note": {
+    "planMode": "Claude 进入了计划模式：先调研并写出计划，经你批准后才动手",
+    "modeChanged": "审批模式改为{{mode, quoted}}",
+    "continued": "继续",
+    "stopped": "已停止"
+  },
+  "mode": {
+    "label": "审批模式",
+    "question": "Claude Code 操作前如何征求同意？",
+    "help": "各模式怎么选",
+    "auto": {
+      "name": "自动审批",
+      "detail": "由 Claude Code 判断风险，只在必要时询问"
+    },
+    "default": {
+      "name": "手动审批",
+      "detail": "编辑文件和执行命令前都先询问"
+    },
+    "acceptEdits": {
+      "name": "接受编辑",
+      "detail": "文件编辑直接通过，执行命令仍先询问"
+    },
+    "plan": {
+      "name": "计划模式",
+      "detail": "只调研并写出计划，经你批准后才动手"
+    },
+    "bypassPermissions": {
+      "name": "绕过权限",
+      "detail": "任何操作都不再询问，风险自负"
+    },
+    "bypass": {
+      "label": "确认绕过权限",
+      "question": "确认绕过权限？",
+      "warning": "这个会话里 Claude 做任何事都不再征求同意，包括删除文件和在你的电脑上执行任意命令，直到你换回别的审批模式。只在你能承担后果的环境里使用。"
+    }
+  },
+  "plan": {
+    "label": "Claude 的计划",
+    "title": "计划",
+    "copy": "复制计划",
+    "read": "全屏阅读",
+    "edit": "修改计划",
+    "whole": "展开全文",
+    "feedbackLabel": "哪里要改",
+    "feedbackHint": "说说哪里要改，Claude 会按你的意见接着规划（可以不填）",
+    "sendBack": "退回，继续规划",
+    "modeLabel": "执行时的审批模式",
+    "modes": "执行时",
+    "keepPlanning": "继续规划",
+    "start": "开始执行",
+    "discard": "取消修改",
+    "startEdited": "按修改后的计划执行",
+    "titleOf": "计划 · {{name}}",
+    "feedback": "你的意见：{{feedback}}",
+    "approved": "已批准",
+    "edited": "已修改",
+    "returned": "已退回，继续规划",
+    "open": "未处理",
+    "waiting": "等待批准"
+  },
+  "link": {
+    "webHint": "单击确认后打开 · {{key}} + 单击直接打开 · 右键可复制地址",
+    "elsewhereHint": "{{reason}}右键可复制路径。",
+    "pathHint": "点击打开 · 右键查看更多操作",
+    "leaveTitle": "打开外部链接",
+    "leaveMail": "将用邮件程序打开：",
+    "leaveWeb": "将在浏览器中打开：",
+    "open": "打开",
+    "showInFiles": "在文件面板显示",
+    "elsewhere": {
+      "share": "这是网络共享上的路径，不直接打开。",
+      "partial": "这个路径不完整，没法确定在哪里。",
+      "server": "这是服务端上的路径，本机没有这个文件。",
+      "windows": "这是 Windows 上的路径，不在这个会话的电脑上。",
+      "browser": "在浏览器里打不开电脑上的文件。",
+      "away": "这个会话的项目在另一台电脑上。"
+    },
+    "openFailed": "没能打开这个链接。",
+    "openLink": "打开链接",
+    "copyLink": "复制链接",
+    "copyPath": "复制路径",
+    "actionFailed": "操作失败，请重试。",
+    "reveal": "在文件夹中显示",
+    "missing": "本机找不到这个路径",
+    "runs": "它会运行程序，不直接打开",
+    "openFolder": "打开文件夹",
+    "openIn": "用 {{editor}} 打开",
+    "openInAt": "用 {{editor}} 打开（第 {{line}} 行）",
+    "openDefault": "用默认应用打开",
+    "openWith": "打开方式…",
+    "copyContent": "复制内容",
+    "saveAs": "另存为…"
+  },
+  "simulated": "模拟",
+  "delivery": {
+    "submitted": "已提交",
+    "queued": "等待原生处理",
+    "received": "原生已接收",
+    "not_sent": "未送达原生",
+    "unconfirmed": "接收未确认"
+  },
+  "compact": {
+    "before": "压缩前 {{tokens}} tokens",
+    "running": "正在压缩上下文",
+    "unfinished": "上下文压缩未完成",
+    "auto": "上下文已自动压缩",
+    "done": "上下文已压缩"
+  },
+  "turn": {
+    "cancelled": "已停止",
+    "failed": "处理失败",
+    "spent": "用时 {{span}}",
+    "steps_other": "{{count}} 步",
+    "notes_other": "{{count}} 条说明"
+  },
+  "background": {
+    "title": "后台任务 · Claude 已答完，任务结束后会接着处理",
+    "count_other": "后台任务 {{count}} 个 · Claude 已答完，任务结束后会接着处理",
+    "locked": "任务结束前不能更改模型、思考强度和审批模式，也不能改名、分叉或编辑重发。",
+    "lockedSend": "任务结束前不能更改模型、思考强度和审批模式，也不能改名、分叉或编辑重发；消息可以照常发送。",
+    "end": "结束",
+    "endAll": "全部结束"
+  },
+  "approval": {
+    "safetyHint": "Claude Code 自身的安全检查，任何审批模式都会询问",
+    "safety": "Claude Code 安全拦截",
+    "evenBypassing": "绕过时也提醒",
+    "deny": "拒绝",
+    "allow": "允许"
+  },
+  "message": {
+    "terminalHint": "在终端里问的，随终端的进展记入这个会话",
+    "terminal": "终端",
+    "edit": "编辑重发",
+    "editUnsent": "编辑重发：这条消息未送达原生，放回当前会话的输入框，不创建分叉",
+    "editFork": "编辑重发：从这条消息之前分叉出新会话，原会话保留",
+    "draftFirst": "输入框里还有草稿，请先发送或清空，再编辑这条未送达的消息。"
+  },
+  "history": {
+    "earlierFailed": "更早记录加载失败，请重试",
+    "loading": "加载中",
+    "loadEarlier": "加载更早记录",
+    "syncing": "同步会话"
+  },
+  "find": {
+    "open": "打开对话查找",
+    "find": "查找",
+    "label": "对话内查找",
+    "query": "查找对话内容",
+    "partial": "（仅已加载部分）",
+    "previous": "上一个匹配（Shift+Enter）",
+    "next": "下一个匹配（Enter）",
+    "close": "关闭查找（Esc）"
+  },
+  "empty": {
+    "title": "新会话",
+    "create": "新建会话",
+    "suggestions": "可以这样开始",
+    "more": "更多用法"
+  },
+  "toEnd": "回到底部",
+  "textMenu": "对话文字操作",
+  "composer": {
+    "message": "消息",
+    "remove": "移除",
+    "compact": "压缩上下文",
+    "refresh": "刷新原生状态",
+    "refreshDetail": "上下文与订阅额度",
+    "commands": "会话命令",
+    "project": "会话所在的项目",
+    "plain": "普通会话",
+    "branch": "项目当前所在的 git 分支",
+    "inTerminal": "会话在终端中打开，关闭终端后可以在这里接着聊",
+    "placeholder": "随心输入…",
+    "addFiles": "添加文件：把文件的路径放进消息",
+    "stop": "停止运行",
+    "continue": "接着上一轮继续",
+    "send": "发送消息",
+    "contextUsed": "已使用 {{percent}}%",
+    "tooLong": "消息超过 {{limit}} 字，删减后再发送"
+  },
+  "picture": {
+    "title": "图片",
+    "enlarge": "点击放大",
+    "note": "[图片 {{type}} · {{size}} KB]"
+  },
+  "rich": {
+    "svg": "SVG 图像",
+    "source": "查看源码",
+    "picture": "查看图像"
+  },
+  "project": {
+    "path": "本机项目目录",
+    "renameTitle": "项目显示名称",
+    "displayName": "显示名称",
+    "addTitle": "添加项目",
+    "add": "添加",
+    "renameHint": "只改名字，不改动文件夹 <code>{{path}}</code>；留空恢复文件夹名。",
+    "pathHere": "这台电脑上的项目目录",
+    "rename": "修改显示名称",
+    "changeFolder": "更改文件夹…",
+    "openFolder": "打开文件夹",
+    "remove": "移除项目",
+    "otherFolder": "其他文件夹…",
+    "moveHint": "下一条消息会告诉 Claude 换了项目或电脑；聊过的会话仍沿用原项目的记忆",
+    "changeFolderTitle": "更改项目文件夹",
+    "change": "更改"
+  },
+  "delete": {
+    "title": "删除会话",
+    "native": "原生 Claude Code 会话及代理展示记录将删除，本机项目文件保持不变。",
+    "plain": "会话记录将被删除，项目文件保持不变。",
+    "confirm": "删除",
+    "question": "删除“{{title}}”？"
+  },
+  "rename": {
+    "title": "重命名会话",
+    "name": "名称"
+  },
+  "ccdt": {
+    "update": "更新 ccdt",
+    "install": "安装 ccdt",
+    "needed": "用 ccdt 打开需要先安装终端客户端 ccdt：在自己的终端里使用原版 Claude Code，与这里共用会话。",
+    "copy": "复制命令",
+    "guide": "安装说明",
+    "outdated": "这台电脑上的 ccdt 是 {{installed}}，要与服务端同为 {{version}} 才能连接。",
+    "runPowerShell": "在 PowerShell 里运行下面这行，装好后再选一次“在 ccdt 中打开”：",
+    "runTerminal": "在终端里运行下面这行，装好后再选一次“在 ccdt 中打开”："
+  },
+  "stats": {
+    "session": "会话统计",
+    "tokens": "Token 用量",
+    "details": "用量明细",
+    "turn": "本轮用量",
+    "partial": "部分模型请求的记录还没有到达，以上数字可能偏小。",
+    "since": "调用记录最早从 {{date}} 起，更早的请求不在统计内。",
+    "lifetimes": "CLI 报告的缓存写入中，1 小时缓存 {{hour}}、5 分钟缓存 {{minutes}} tokens；1 小时缓存的写入单价是 5 分钟的 1.6 倍。",
+    "both": "{{lifetimes}}{{since}}"
+  },
+  "question": {
+    "label": "Claude 的提问",
+    "multiple": "可多选",
+    "other": "其他（自己写）",
+    "skip": "不回答",
+    "submit": "提交回答",
+    "otherFor": "其他回答：{{question}}"
+  },
+  "export": {
+    "header": "- 项目：`{{path}}`\n- 导出时间：{{time}}",
+    "tool": "工具 {{name}}",
+    "you": "你",
+    "untitled": "会话"
+  },
+  "simulation": {
+    "scenario": "场景",
+    "label": "模拟场景",
+    "chat": "对话",
+    "approval": "工具审批",
+    "question": "提问",
+    "plan": "计划",
+    "upstreamError": "上游错误"
+  },
+  "quota": {
+    "label": "额度已用",
+    "used": "{{label}}额度已用 {{used}}%",
+    "usedResets": "{{label}}额度已用 {{used}}%，{{time}} 重置",
+    "open": "点击查看账号与额度"
+  },
+  "model": {
+    "label": "模型与推理强度",
+    "choose": "选择模型",
+    "model": "模型",
+    "default": "默认模型",
+    "busy": "有会话正在运行，结束后可刷新",
+    "refreshing": "正在刷新模型列表…",
+    "refresh": "刷新模型列表"
+  },
+  "effort": {
+    "reset": "恢复默认推理强度",
+    "label": "推理强度",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "xhigh": "极高",
+    "max": "最高",
+    "default": "默认",
+    "native": "原生默认"
+  },
+  "command": {
+    "review": "审查代码改动",
+    "security-review": "检查当前分支改动里的安全问题",
+    "context": "查看上下文占用",
+    "usage": "查看用量与额度",
+    "init": "为项目写一份 CLAUDE.md"
+  },
+  "context": {
+    "title": "上下文窗口",
+    "waiting": "等待原生状态",
+    "category": {
+      "system_prompt": "系统提示词",
+      "system_tools": "系统工具",
+      "mcp_instructions": "MCP 说明",
+      "mcp_tools": "MCP 工具",
+      "custom_agents": "自定义智能体",
+      "memory_files": "记忆文件",
+      "skills": "技能",
+      "messages": "对话消息"
+    },
+    "used": "已用",
+    "window": "窗口",
+    "left": "剩余",
+    "model": "模型",
+    "measured": "{{time}} · 原生摘要",
+    "percent": "上下文 {{percent}}%",
+    "usedLeft": "{{used}}% 已用（剩余 {{left}}%）"
+  },
+  "elsewhere": {
+    "beside": "连接{{names, series}}里也有会话在这个文件夹运行，两边同时改动文件可能互相覆盖。",
+    "remote": "这个会话在设备“{{device}}”上，项目目录是 <code>{{path}}</code>。在这里的对话、审批和停止都作用于那台电脑，命令也在那里执行。",
+    "offline": "这个会话在设备“{{device}}”上，项目目录是 <code>{{path}}</code>。那台电脑不在线，这里只能查看，它上线后可以直接操作。",
+    "notConnected": "设备“{{device}}”未连接，当前只能查看会话。",
+    "takeOver": "在本机继续…",
+    "forkHere": "分叉到本机…"
+  },
+  "files": {
+    "offline": "这个路径所在的电脑现在不在线，文件面板打不开它。",
+    "title": "文件",
+    "resize": "调整文件面板宽度"
+  },
+  "statusFailed": "原生状态读取失败",
+  "newTitle": "新会话",
+  "schedule": {
+    "targetGone": "目标会话已不存在",
+    "createFailed": "新会话创建失败"
+  },
+  "fork": {
+    "title": "{{title}}（分叉）"
+  },
+  "action": {
+    "rename": "重命名",
+    "fork": "分叉",
+    "export": "导出 Markdown",
+    "resync": "重新同步",
+    "move": "移到项目…",
+    "ccdt": "用 ccdt 打开",
+    "refresh": "刷新状态",
+    "delete": "删除"
+  },
+  "closeError": "关闭错误提示"
+}

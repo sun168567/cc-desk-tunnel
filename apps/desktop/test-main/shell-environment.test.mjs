@@ -7,6 +7,10 @@ import { ProcessSupervisor } from '../electron/process-supervisor.mjs';
 import { captureShellEnvironment, resolvePosixShell } from '../electron/shell-environment.mjs';
 
 const posix = { skip: process.platform === 'win32', timeout: 10000 };
+// A failure says what went wrong as a phrase of the catalogs, which the window puts in its language.
+const says = (key, params) => ({
+  phrase: params ? { key: `desktop:shell.${key}`, params } : { key: `desktop:shell.${key}` },
+});
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'cc-desk-shell-env-'));
   const supervisor = new ProcessSupervisor({ graceMs: 100 });
@@ -63,7 +67,7 @@ test(
     await writeFile(join(f.directory, '.zshrc'), '/bin/sleep 120\n');
     await assert.rejects(
       captureShellEnvironment('/bin/zsh', f.supervisor, { env: f.env, timeoutMs: 50 }),
-      /超时/,
+      says('timeout'),
     );
     const controller = new AbortController();
     const capturing = captureShellEnvironment('/bin/zsh', f.supervisor, {
@@ -75,15 +79,15 @@ test(
     await writeFile(join(f.directory, '.zshrc'), 'printf "%01000d" 1\n');
     await assert.rejects(
       captureShellEnvironment('/bin/zsh', f.supervisor, { env: f.env, maxBytes: 128 }),
-      /超过大小限制/,
+      says('outputTooLarge'),
     );
   },
 );
 
 test('shell selection rejects relative paths and unsupported shell kinds', posix, async () => {
-  await assert.rejects(resolvePosixShell({ shellPath: 'zsh' }), /绝对路径/);
-  await assert.rejects(resolvePosixShell({ shellPath: '/bin/sh' }), /zsh 或 bash/);
-  await assert.rejects(resolvePosixShell({ shellPath: '/bin/zsh\n' }), /绝对路径/);
+  await assert.rejects(resolvePosixShell({ shellPath: 'zsh' }), says('unsupported'));
+  await assert.rejects(resolvePosixShell({ shellPath: '/bin/sh' }), says('unsupported'));
+  await assert.rejects(resolvePosixShell({ shellPath: '/bin/zsh\n' }), says('unsupported'));
 });
 
 test('a login shell of another kind gives way to the one of the system', posix, async (t) => {
@@ -113,11 +117,11 @@ test('shell selection rejects dangling and non-executable aliases', posix, async
   const f = await fixture(t);
   const alias = join(f.directory, 'bash');
   await symlink('missing-version', alias);
-  await assert.rejects(resolvePosixShell({ shellPath: alias }), /找不到本机登录 shell/);
+  await assert.rejects(resolvePosixShell({ shellPath: alias }), says('missing'));
   await rm(alias);
   await writeFile(join(f.directory, 'bash-versioned'), '#!/bin/bash\n', { mode: 0o600 });
   await symlink('bash-versioned', alias);
-  await assert.rejects(resolvePosixShell({ shellPath: alias }), /无法执行本机登录 shell/);
+  await assert.rejects(resolvePosixShell({ shellPath: alias }), says('notExecutable'));
 });
 
 test(
@@ -128,14 +132,17 @@ test(
     const shell = join(f.directory, 'broken-shell');
     await assert.rejects(
       captureShellEnvironment(shell, f.supervisor, { env: f.env }),
-      /无法启动本机登录 shell（ENOENT）/,
+      says('cannotStart', { code: 'ENOENT' }),
     );
     await writeFile(shell, '#!/bin/sh\nexit 7\n', { mode: 0o700 });
-    await assert.rejects(captureShellEnvironment(shell, f.supervisor, { env: f.env }), /退出码 7/);
+    await assert.rejects(
+      captureShellEnvironment(shell, f.supervisor, { env: f.env }),
+      says('exited', { code: 7 }),
+    );
     await writeFile(shell, '#!/bin/sh\nkill -TERM $$\n');
     await assert.rejects(
       captureShellEnvironment(shell, f.supervisor, { env: f.env }),
-      /信号 SIGTERM/,
+      says('signalled', { signal: 'SIGTERM' }),
     );
   },
 );

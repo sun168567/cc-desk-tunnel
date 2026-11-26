@@ -1,0 +1,548 @@
+{
+  "wait": {
+    "connect": {
+      "title": "连接服务器",
+      "detail": "与服务端建立网络连接"
+    },
+    "ssh": {
+      "title": "本机 SSH 服务启动",
+      "detail": "域账号连不上域控制器、或安全软件扫描较慢时，启动会久一些"
+    },
+    "ready": {
+      "title": "执行通道就绪",
+      "detail": "从连上服务端到隧道接通的总时间；至少比上一项多 35 秒"
+    },
+    "withDefault": "{{detail}}。默认 {{seconds}} 秒",
+    "heading": "连接等待时间",
+    "resetDetail": "下次连接时生效；连接正常时不需要改"
+  },
+  "idle": {
+    "enabled": {
+      "title": "自动压缩",
+      "detail": "只对 1 小时缓存的会话生效，订阅账号默认如此"
+    },
+    "after": {
+      "title": "空闲多久后压缩",
+      "detail": "从最后一轮结束算起；关闭自动压缩时，到点提醒"
+    },
+    "minTokens": {
+      "title": "上下文至少",
+      "detail": "更小的会话不压缩，也不提醒"
+    },
+    "minutes_other": "{{count}} 分钟",
+    "heading": "缓存过期前自动压缩",
+    "intro": "会话空闲到设定时间，服务端趁缓存还在替你压缩，回来时不用全价重读。电脑不用在线；压缩计入额度。"
+  },
+  "shell": {
+    "title": "偏好的 Shell",
+    "detail": "不指定时由 Claude 按任务选；选了也只是优先",
+    "unset": "不指定",
+    "missing": "没有检测到 Git Bash：安装 Git for Windows（https://git-scm.com/download/win）后重新连接，就可以选择它。",
+    "notFound": "{{name}}（未检测到）",
+    "heading": "脚本用哪种 Shell",
+    "intro": "PowerShell 7 随客户端自带；装了 Git for Windows 还能用 Git Bash。改动从每个会话的下一条消息起生效。"
+  },
+  "cli": {
+    "ttl": {
+      "5m": "5 分钟",
+      "1h": "1 小时"
+    },
+    "autoCompactEnabled": {
+      "title": "自动压缩上下文",
+      "detail": "上下文快满时自动摘要并接着做"
+    },
+    "autoCompactWindow": {
+      "title": "自动压缩窗口",
+      "detail": "上下文到这么大就压缩，不超过模型自身的窗口"
+    },
+    "precomputeCompactionEnabled": {
+      "title": "提前准备压缩摘要",
+      "detail": "后台先算好摘要，压缩时少等；需开启自动压缩"
+    },
+    "autoMemoryEnabled": {
+      "title": "自动记忆",
+      "detail": "Claude 自己记笔记，下次会话还记得"
+    },
+    "autoDreamEnabled": {
+      "title": "后台整理记忆",
+      "detail": "空闲时归并、整理已有的记忆"
+    },
+    "fileCheckpointingEnabled": {
+      "title": "文件检查点",
+      "detail": "编辑前留快照，供 /rewind 撤回；只在 ccdt 里有用"
+    },
+    "alwaysThinkingEnabled": {
+      "title": "思考",
+      "detail": "只对老一些的模型有用，新模型总会思考"
+    },
+    "showThinkingSummaries": {
+      "title": "显示思考过程",
+      "detail": "对话里显示思考的摘要，不改变思考多少"
+    },
+    "fastMode": {
+      "title": "快速模式",
+      "detail": "输出更快、更贵；订阅账号从额外用量扣费"
+    },
+    "fallbackModel": {
+      "title": "备用模型",
+      "detail": "主模型过载或不可用时依次换用；逗号分隔，最多 3 个",
+      "placeholder": "例如 sonnet, haiku"
+    },
+    "autoContinueAtUsageLimit": {
+      "title": "额度用尽后自动继续",
+      "detail": "等额度重置后接着做；只在 ccdt 里有用"
+    },
+    "switchModelsOnFlag": {
+      "title": "触发安全拦截时换模型",
+      "detail": "请求被拦下时换模型继续；关闭则这一轮出错结束"
+    },
+    "promptCacheTtl": {
+      "title": "提示缓存时长",
+      "detail": "主对话的缓存保留多久"
+    },
+    "subagentPromptCacheTtl": {
+      "title": "子任务的提示缓存时长",
+      "detail": "子代理、压缩等主对话之外的请求"
+    },
+    "language": {
+      "title": "回复语言",
+      "detail": "例如 chinese、japanese；留空由 CLI 决定"
+    },
+    "askUserQuestionTimeout": {
+      "title": "提问无人回答时",
+      "detail": "提问等多久后自己继续；只在 ccdt 里有用",
+      "60s": "60 秒后继续",
+      "5m": "5 分钟后继续",
+      "10m": "10 分钟后继续",
+      "never": "一直等"
+    },
+    "bashOutputMaxChars": {
+      "title": "命令输出上限",
+      "detail": "超出的部分存成文件，Claude 只看到开头",
+      "chars": "{{n}}K 字符"
+    },
+    "toolSearch": {
+      "title": "工具搜索",
+      "detail": "工具说明用到时再查，接了 MCP 时省上下文"
+    },
+    "enableArtifact": {
+      "title": "Artifact 网页",
+      "detail": "Claude 可以把文档、图表发布成 claude.ai 上的网页"
+    },
+    "denyInsteadOfPrompting": {
+      "title": "不等审批，直接拒绝",
+      "detail": "要你批准的调用直接拒绝，所有会话都不再弹审批"
+    },
+    "blockWritesOutsideWorkingDirectories": {
+      "title": "禁止在工作目录外写文件",
+      "detail": "只管服务器上的写文件工具，挡不住对你电脑的修改"
+    },
+    "attribution": {
+      "title": "提交与 PR 的署名",
+      "detail": "默认在提交信息和 PR 描述里加上 Claude 的署名",
+      "false": "不加署名"
+    },
+    "includeGitInstructions": {
+      "title": "内置的提交与 PR 流程说明",
+      "detail": "官方的提交、开 PR 做法；按自己的流程时关掉"
+    },
+    "group": {
+      "context": "上下文与记忆",
+      "model": "模型与额度",
+      "behavior": "行为",
+      "permissions": "权限"
+    },
+    "intro": "服务器上 Claude Code 自己的设置，所有会话和 ccdt 共用，从下一次运行起生效。“默认”即不写入，由 CLI 决定。"
+  },
+  "group": {
+    "local": "本机",
+    "server": "服务端",
+    "claude": "Claude Code",
+    "other": "其他"
+  },
+  "default": {
+    "on": "默认（开启）",
+    "auto": "默认（自动）",
+    "off": "默认（关闭）",
+    "wait": "默认（一直等）",
+    "chars": "默认（30K）",
+    "attribution": "默认（加署名）"
+  },
+  "cache": {
+    "kb": "约 {{n}} KB",
+    "mb": "约 {{n}} MB",
+    "gb": "约 {{n}} GB",
+    "sessions_other": "{{count}} 个会话",
+    "heading": "对话记录",
+    "title": "本机缓存",
+    "detail": "读过的对话留在本机，再次打开只补新内容",
+    "clean": "清理"
+  },
+  "about": {
+    "homepage": "项目主页 · {{name}}",
+    "client": "客户端版本",
+    "devEntry": "浏览器开发入口",
+    "notes": "这一版的更新内容",
+    "service": "服务端版本",
+    "unknown": "未知",
+    "adapter": "运行方式",
+    "updates": "更新",
+    "sameVersion": "客户端与服务端需要同一版本",
+    "updatesFromService": "服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级",
+    "updatesManual": "服务端跟随发布页；这个系统上的客户端要手动升级：下载与服务端同一版本的安装包，装好替换旧版",
+    "releases": "打开发布页",
+    "noUpdates": "没有可用的更新操作",
+    "troubleshoot": "排查",
+    "log": "连接日志",
+    "logDetail": "每次连接何时建立、断开及原因，存在本机，不含凭据和对话。连接无故中断时用得上",
+    "openLog": "打开日志文件夹",
+    "devTools": "开发者工具",
+    "devToolsDetail": "反馈界面问题时查看报错。里面能看到对话，别按他人要求在其中粘贴代码",
+    "openDevTools": "打开开发者工具"
+  },
+  "section": {
+    "general": {
+      "name": "常规",
+      "words": "窗口 托盘 后台 启动 普通会话 文件夹 对话记录 缓存 占用 清理 审批 绕过权限"
+    },
+    "appearance": {
+      "name": "外观",
+      "words": "主题 深色 浅色 工作步骤 回复小结 会话栏 输入框 额度 用量 首字 速度 缓存"
+    },
+    "connection": {
+      "name": "连接",
+      "words": "记住凭据 自动登录 多开 多个连接 登录过的服务 备注名 窗口 服务端 等待 超时 SSH 执行通道"
+    },
+    "notifications": {
+      "name": "通知",
+      "words": "提醒 完成 失败 审批 提问 定时任务 连接 提示音"
+    },
+    "shortcuts": {
+      "name": "快捷键",
+      "words": "键盘 组合键 热键 后退 前进 侧栏 缩放"
+    },
+    "context": {
+      "name": "上下文与缓存",
+      "words": "自动压缩 提示缓存 过期 空闲 上下文 compact"
+    },
+    "shell": {
+      "name": "Shell",
+      "words": "PowerShell Git Bash 命令 脚本 终端 偏好"
+    },
+    "web": {
+      "name": "浏览器访问",
+      "words": "Web 网页 证书 域名 两步验证 反向代理 浏览器登录"
+    },
+    "account": {
+      "name": "账号与额度",
+      "words": "登录 退出 订阅 用量 调用日志 重置 读取额度"
+    },
+    "claude": {
+      "name": "CLI 设置",
+      "words": "自动压缩 思考 快速模式 记忆 检查点 缓存 语言 模型 备用模型 署名 工具搜索"
+    },
+    "instructions": {
+      "name": "全局说明",
+      "words": "CLAUDE.md AGENTS.md 提示词 说明"
+    },
+    "install": {
+      "name": "手机应用",
+      "words": "添加至手机 安装 名称 图标 角标"
+    },
+    "about": {
+      "name": "关于与更新",
+      "words": "版本 升级 检查更新 项目主页 日志 排查 断开 开发者工具 控制台"
+    },
+    "usage": {
+      "name": "订阅用量",
+      "words": "订阅 用量 额度 周期统计 重置 自动读取额度"
+    }
+  },
+  "scope": {
+    "browser": "只保存在这个浏览器里，只影响在这里打开的页面。",
+    "local": "只保存在这台电脑，只影响这个客户端。",
+    "everyDevice": "保存在服务端，对所有连接到它的设备生效。",
+    "thisDevice": "保存在服务端，只对这台电脑生效。"
+  },
+  "notify": {
+    "done": {
+      "title": "任务完成",
+      "detail": "Claude Code 做完了一轮任务"
+    },
+    "failed": {
+      "title": "任务失败",
+      "detail": "一轮任务因错误而结束"
+    },
+    "approval": {
+      "title": "等待审批",
+      "detail": "有操作需要你允许或拒绝"
+    },
+    "question": {
+      "title": "Claude 提问",
+      "detail": "Claude 需要你回答问题才能继续"
+    },
+    "schedule": {
+      "title": "定时任务未发出",
+      "detail": "到点的任务发送失败或被跳过"
+    },
+    "connection": {
+      "title": "连接中断",
+      "detail": "与服务的连接意外断开"
+    },
+    "heading": "通知",
+    "intro": "窗口收在托盘或不在前台时，用系统通知提醒需要你知道的事；点通知回到对应的会话。正在看的会话不会重复提醒。",
+    "enabled": "开启通知",
+    "enabledDetail": "关闭后既不弹出系统通知，也不记入通知列表",
+    "sound": "提示音",
+    "soundDetail": "弹出系统通知时播放系统的通知声音",
+    "which": "提醒哪些事",
+    "testTitle": "测试通知",
+    "testBody": "通知工作正常。",
+    "test": "发送一条测试通知"
+  },
+  "simulation": {
+    "cli": "离线模拟没有 Claude Code 设置；连接远程代理后在这里修改。",
+    "instructions": "离线模拟没有全局说明；连接远程代理后在这里修改。"
+  },
+  "theme": {
+    "heading": "主题",
+    "detail": "跟随系统时随系统的浅色或深色设置切换",
+    "system": "跟随系统",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "view": {
+    "heading": "工作步骤展示",
+    "amount": "展示多少",
+    "standard": {
+      "label": "标准",
+      "detail": "运行中按连续的操作分组，结束后折成“用时 …”"
+    },
+    "expanded": {
+      "label": "全部展开",
+      "detail": "命令和思考一条条平铺，不分组，也不自动收起；思考显示第一行"
+    }
+  },
+  "bar": {
+    "heading": "会话栏",
+    "show": "显示会话栏",
+    "detail": "输入框下方一行：整个会话的轮数、步数、速度和 Token 用量",
+    "parts": "会话栏里显示",
+    "partsDetail": "都不选时每一块只显示它的名字",
+    "resetDetail": "点开后的明细不受这里的选择影响"
+  },
+  "reset": "恢复默认",
+  "summary": {
+    "heading": "回复小结",
+    "show": "显示回复小结",
+    "detail": "每轮回复末尾一个小按钮，点开看全部明细",
+    "parts": "小结里显示",
+    "partsDetail": "都不选时只显示“用量明细”",
+    "resetDetail": "明细里的数据不受这里的选择影响"
+  },
+  "seconds": "秒",
+  "connections": {
+    "heading": "登录过的服务",
+    "unsaved": "未保存地址的连接",
+    "nickname": "备注名",
+    "nicknameHint": "不填则显示服务地址",
+    "openOf": "打开 {{label}}",
+    "switch": "切换到",
+    "open": "打开",
+    "nicknameOf": "备注名 {{label}}",
+    "deleteOf": "删除 {{label}}",
+    "deleteQuestion": "删除“{{label}}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。",
+    "delete": "删除",
+    "newWindow": "新的登录窗口"
+  },
+  "window": {
+    "heading": "窗口",
+    "background": "关闭窗口时留在后台",
+    "backgroundDetail": "关窗口只是收到托盘，任务照常；托盘里选“退出”才结束"
+  },
+  "sessions": {
+    "heading": "会话",
+    "folder": "普通会话的文件夹",
+    "folderDetail": "不属于项目的新会话各在这里建一个文件夹；已有的不动",
+    "change": "更改"
+  },
+  "approval": {
+    "heading": "审批",
+    "bypass": "允许绕过权限",
+    "bypassDetail": "审批模式里多出“绕过权限”，什么都不再问。只建议在测试机上打开"
+  },
+  "input": {
+    "heading": "输入框",
+    "quota": "在输入框旁显示额度",
+    "quotaDetail": "5 小时和每周额度用了多少；点它打开账号与额度"
+  },
+  "signIn": {
+    "heading": "登录",
+    "remember": "记住凭据",
+    "rememberDetail": "服务凭据经当前系统账户加密后保存在本机",
+    "auto": "自动登录",
+    "autoDetail": "打开程序时直接登录这个服务"
+  },
+  "backToSignIn": "返回登录",
+  "localTitle": "本机设置",
+  "help": "设置怎么分组、各页管什么",
+  "search": "搜索设置",
+  "categories": "设置分类",
+  "noMatch": "没有匹配的设置",
+  "shortcut": {
+    "action": {
+      "back": "后退",
+      "forward": "前进",
+      "toggleSide": "收起或展开侧栏",
+      "newSession": "新建会话",
+      "settings": "打开设置",
+      "find": "查找对话内容",
+      "cycleMode": "切换审批模式",
+      "toggleFiles": "打开或关闭文件面板",
+      "zoomIn": "放大界面",
+      "zoomOut": "缩小界面",
+      "zoomReset": "恢复界面大小"
+    },
+    "space": "空格",
+    "change": "修改快捷键：{{name}}",
+    "typing": "{{combo}} 会妨碍正常输入；请加上 Ctrl、Alt 或 Command。",
+    "taken": "{{combo}} 已被“{{name}}”使用。",
+    "recording": "按下新的组合键…",
+    "unset": "未设置",
+    "intro": "快捷键只在本窗口处于前台时起作用，不向系统注册全局热键；对话框打开时，按键原样交给它。",
+    "enabled": "启用快捷键",
+    "enabledDetail": "关闭后下面的组合键全部不再响应，菜单里的功能照常可用",
+    "heading": "组合键",
+    "howTo": "点一项后按下新的组合键（需要包含 Ctrl、Alt 或 Command，或是功能键）；按 Esc 取消，按 Backspace 去掉这一项的快捷键。",
+    "reset": "恢复默认组合键"
+  },
+  "on": "开启",
+  "off": "关闭",
+  "saveFailed": "保存失败。",
+  "instructions": {
+    "readFailed": "读取失败。",
+    "saved": "已保存，从下一次运行起生效",
+    "intro": "云端 Claude Code 的用户级 CLAUDE.md，这个服务上的每个会话都会读取，下一次运行起生效。用户级不读 AGENTS.md；你电脑上项目里的 CLAUDE.md、AGENTS.md 也不会自动读取，需要时让 Claude 去读。",
+    "placeholder": "例如：回复用中文；提交信息用中文。",
+    "reload": "重新载入"
+  },
+  "web": {
+    "credential": "服务凭据",
+    "currentCode": "当前验证器动态码",
+    "saving": "正在保存…",
+    "confirm": "确认",
+    "copyFailed": "复制失败，请选中地址后复制。",
+    "openFailed": "打开浏览器失败，请复制地址访问。",
+    "connectFirst": "连接服务端后管理浏览器访问。",
+    "reading": "正在读取…",
+    "readFailed": "读取设置失败",
+    "enable": "启用 Web 访问",
+    "enableDetail": "控制当前服务端的浏览器入口。",
+    "address": "服务端访问地址",
+    "copyAddress": "复制服务端访问地址",
+    "openAddress": "打开服务端访问地址",
+    "addressNotReady": "地址未就绪",
+    "access": "访问设置",
+    "deployAddress": "使用部署地址",
+    "set": "设置",
+    "totp": "两步验证",
+    "totpOn": "登录时需要验证器动态码。",
+    "totpOff": "建议开启验证器两步验证。",
+    "turnOff": "关闭",
+    "browsers": "已登录浏览器",
+    "noBrowsers": "暂无已登录浏览器",
+    "cert": {
+      "title": "HTTPS 证书",
+      "external": "由反向代理管理",
+      "unavailable": "当前服务未配置 TLS",
+      "selfSigned": "使用默认自签名证书",
+      "deployed": "使用部署证书",
+      "domainFirst": "请先设置访问域名",
+      "import": "导入证书",
+      "reset": "恢复默认证书",
+      "expired": "证书已过期，请更换证书。",
+      "resetQuestion": "恢复部署时的默认证书？当前自定义证书将被移除；如果默认证书为自签名，浏览器会重新提示证书确认。",
+      "chainTooLarge": "证书链不得超过 64 KB。",
+      "keyTooLarge": "私钥不得超过 16 KB。",
+      "readFailed": "读取文件失败，请重新选择。",
+      "importTitle": "导入自定义证书",
+      "chain": "证书链 PEM",
+      "chooseChain": "选择证书文件",
+      "key": "私钥 PEM",
+      "chooseKey": "选择私钥文件",
+      "custom": "自定义证书 · {{domain}}",
+      "issuer": "签发者：{{issuer}}",
+      "validTo": "有效期至：{{date}}",
+      "expiring_other": "证书将在 {{count}} 天内到期，请及时更换。",
+      "forDomain": "证书用于 {{domain}}。请提供完整证书链与未加密私钥。"
+    },
+    "totpTurnOff": "关闭两步验证",
+    "totpTurnOffDetail": "关闭两步验证后，使用服务凭据即可登录。已登录浏览器将退出。",
+    "revoke": "退出浏览器登录",
+    "revokeOwn": "退出当前浏览器的登录？",
+    "revokeOther": "退出这个浏览器的登录？它需要重新输入服务凭据和动态码。",
+    "pathSaved": "路径已保存，请从桌面端复制新的访问地址。",
+    "domain": "访问域名",
+    "domainLocked": "请先恢复默认证书，再修改或清空域名。",
+    "domainHint": "留空使用部署地址；填写后仅允许指定域名访问，其他入口返回 404。",
+    "path": "服务端访问路径",
+    "pathHint": "留空使用根路径。修改域名或路径后，已登录浏览器需要重新登录。",
+    "idle": "登录空闲有效期（分钟）",
+    "trustProxy": "信任反向代理",
+    "proxyIps": "反向代理 IP",
+    "proxyIpsHint": "每行一个 IP 地址",
+    "proxyIpsDetail": "只信任这些地址转发的客户端 IP 信息。",
+    "qrFailed": "二维码生成失败，请手动输入密钥。",
+    "totpSetup": "设置两步验证",
+    "preparing": "正在准备…",
+    "next": "下一步",
+    "generating": "正在生成验证器密钥…",
+    "qr": "验证器二维码",
+    "manualKey": "手动设置密钥",
+    "copyKey": "复制密钥",
+    "verify": "验证新动态码",
+    "requestFailed": "请求失败，请重试。",
+    "current": "（当前浏览器）",
+    "lastActive": "最近活动 {{time}}",
+    "revokeOf": "退出 {{name}}",
+    "forwardedBy": "最近一次带客户端 IP 的请求来自 {{address}}，它不在上面的列表中。确认这是你的反向代理后再填写，不认识的地址不要加入。"
+  },
+  "proxy": {
+    "domainFirst": "请先填写访问域名，再生成反代配置。",
+    "pathFirst": "请先修正服务端访问路径。",
+    "upstreamForm": "上游地址应为 HTTPS 地址，不含路径、凭据或查询参数。",
+    "upstreamInvalid": "请填写有效的上游 HTTPS 地址。",
+    "nameForm": "证书校验名应为证书 SAN 中的 DNS 名称，不含协议或端口。",
+    "trustFileForm": "请填写反代机器上的 PEM 绝对路径，仅使用字母、数字、点、横线和下划线。",
+    "checkConfig": "请检查配置。",
+    "copied": "配置已复制",
+    "copyFailed": "复制失败，请选中下方配置手动复制。",
+    "heading": "反向代理配置示例",
+    "intro": "先保存访问域名、路径和反向代理 IP，再在反代机器部署配置。以下字段仅用于生成示例，不修改服务端。",
+    "upstream": "上游 HTTPS 地址",
+    "upstreamHint": "已按当前连接填写；请核对反代机器可达的后端地址，避免填写新域名造成循环转发。",
+    "name": "上游证书校验名",
+    "nameHint": "必须与上游证书 SAN 中的 DNS 名称一致；默认部署自签名为 cc-desk-tunnel.local。",
+    "trustFile": "受信任 PEM 文件",
+    "trustFileHint": "填反代机器上的文件路径。自签名使用证书本身；CA 签发的证书使用对应的根 CA 信任文件。",
+    "prepare": "如何准备信任文件",
+    "prepareIntro": "从部署机器安全复制公开证书，不复制私钥。默认 Docker 自签名部署可导出下列文件；若更改过数据目录或证书，请使用实际文件。",
+    "prepareCheck": "核对 SAN 和桌面连接的 SHA-256 指纹后，将 upstream.pem 安全复制到上方路径，并允许反代进程读取。指纹只用于核对，不能替代 PEM 文件。自签名证书更新后需同步信任文件。",
+    "software": "反向代理软件",
+    "copy": "复制反代配置",
+    "config": "反代配置",
+    "nginxHint": "替换域名证书与私钥路径，执行 nginx -t 后再重载。",
+    "caddyHint": "Caddy 管理公网域名证书；执行 caddy validate --config Caddyfile 后再重载。",
+    "safety": "示例保留访问路径并校验上游证书，不关闭 TLS 校验。只将反代机器实际来源 IP 加入信任列表。"
+  },
+  "install": {
+    "nameInvalid": "应用名称须为 1–40 个字符，不含控制字符。",
+    "badgeInvalid": "角标内容须为 1–3 个字符，不含控制字符。",
+    "saveFailed": "保存失败，请检查浏览器是否允许本地存储。",
+    "intro": "从浏览器菜单选择“添加至手机”或“添加到主屏幕”。",
+    "name": "应用名称",
+    "badge": "图标右上角显示角标",
+    "badgeText": "角标内容",
+    "badgeHint": "最多 3 个字符"
+  }
+}

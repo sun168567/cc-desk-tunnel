@@ -9,7 +9,9 @@ import type {
   PermissionMode,
   PlanMode,
 } from '@cc-desk-tunnel/protocol';
+import { phrase } from '@cc-desk-tunnel/i18n';
 import { deviceTerms } from './device-terms.ts';
+import { said } from './errors.ts';
 import type { Execution } from './device-terms.ts';
 import { ClaudeStream } from './claude-stream.ts';
 import type { SshConnection } from './tunnel.ts';
@@ -172,7 +174,7 @@ export function remotePrompt(projectPath: string, sessionId: string, execution: 
     'If the device is unreachable, say so; never fall back to this host. After an interruption report results as unknown; do not repeat side effects on your own.',
     'To look at a picture on the device, such as a pasted screenshot or an attached image, copy that one file with scp to a temporary file on this host, open it with the Read tool, and delete the copy afterwards. That is the only use of Read on this host for a file from the device.',
     'Commands may run concurrently. One that blocks holds the turn until its Bash timeout: size the timeout to the work, and run anything long-lived, such as a dev server or watcher, as a background Bash task. Do not count on a process outliving the ssh command that started it, nor on ending the command to stop it: keep the command running for as long as the process is needed, and stop the process itself on the device.',
-    `Scheduled and recurring prompts are sent by the desktop client, not by cron on this host: edit the UTF-8 JSON file whose path is in the device's CC_DESK_TUNNEL_SCHEDULES environment variable (its "说明" field documents the format; changes apply within seconds). Where that variable is empty the device is connected by ccdt, which sends none: say so instead of making a schedule elsewhere. This session's ID for a task that continues it: ${sessionId}.`,
+    `Scheduled and recurring prompts are sent by the desktop client, not by cron on this host: edit the UTF-8 JSON file whose path is in the device's CC_DESK_TUNNEL_SCHEDULES environment variable (the file explains its own format; changes apply within seconds). Where that variable is empty the device is connected by ccdt, which sends none: say so instead of making a schedule elsewhere. This session's ID for a task that continues it: ${sessionId}.`,
   ].join('\n');
 }
 
@@ -220,8 +222,7 @@ export async function runClaude(
     run.emit({
       type: 'run.error',
       code: 'native_context_missing',
-      message:
-        'Claude Code 原生上下文不存在；不会用界面记录伪造恢复或另开会话。请检查原生存储与备份。',
+      ...said(phrase('service:run.contextMissing')),
     });
     return 'failed';
   }
@@ -518,7 +519,7 @@ export async function runClaude(
               run.emit(ttl ? { ...payload, cacheTtl: ttl } : payload);
             } else run.emit(payload);
           } catch {
-            run.emit({ type: 'native.notice', text: '本轮原生状态未能读取；任务结果不受影响。' });
+            run.emit({ type: 'native.notice', text: phrase('service:notice.metricsFailed') });
           }
           const expiry = loginExpiry(message.credential_expires_at);
           if (expiry) run.emit({ type: 'native.notice', text: expiry });
@@ -559,12 +560,13 @@ export async function runClaude(
     run.emit({ type: 'native.title', title: context.summary.trim().slice(0, 120) });
   for (const tool of mapper.tools.values())
     if (!tool.finished) {
+      const { message: output, phrase: note } = said(phrase('service:tool.endedUnknown'));
       run.emit({
         type: 'tool.result',
         toolId: tool.id,
         status: 'unknown',
-        output:
-          '运行结束；该工具最终执行结果未确认。已发出的 SSH 命令可能继续执行，副作用未撤销，不能自动重放。',
+        output,
+        phrase: note,
         exitCode: null,
       });
     }

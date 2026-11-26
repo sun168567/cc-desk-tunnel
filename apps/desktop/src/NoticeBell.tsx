@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
+import { useT } from './i18n.ts';
 import type { Notifications } from './notifications.ts';
 import { ago } from './paths.ts';
 
+// Each kind of notice by the word that heads it.
 const names = {
-  done: '完成',
-  failed: '失败',
-  approval: '审批',
-  question: '提问',
-  schedule: '定时任务',
-  connection: '连接',
-};
+  done: 'nav:notice.kind.done',
+  failed: 'nav:notice.kind.failed',
+  approval: 'nav:notice.kind.approval',
+  question: 'nav:notice.kind.question',
+  schedule: 'nav:notice.kind.schedule',
+  connection: 'nav:notice.kind.connection',
+} as const;
 
 // The bell keeps what was reported while the user was elsewhere; opening it counts as having seen it.
 export default function NoticeBell({
@@ -20,6 +22,7 @@ export default function NoticeBell({
   notifications: Notifications;
   open: (sessionId: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const { notices, unread, markRead, clear } = notifications;
@@ -41,8 +44,8 @@ export default function NoticeBell({
       <button
         type="button"
         className="icon-button"
-        title="通知"
-        aria-label={unread ? `通知（${unread} 条未读）` : '通知'}
+        title={t('nav:notice.title')}
+        aria-label={unread ? t('nav:notice.unread', { count: unread }) : t('nav:notice.title')}
         aria-expanded={open}
         onClick={() => {
           setOpen((value) => !value);
@@ -53,16 +56,16 @@ export default function NoticeBell({
         {unread > 0 && <span className="notice-badge">{unread > 9 ? '9+' : unread}</span>}
       </button>
       {open && (
-        <div className="notice-list" role="dialog" aria-label="通知">
+        <div className="notice-list" role="dialog" aria-label={t('nav:notice.title')}>
           <header>
-            <strong>通知</strong>
+            <strong>{t('nav:notice.title')}</strong>
             {notices.length > 0 && (
               <button type="button" onClick={clear}>
-                清空
+                {t('nav:notice.clear')}
               </button>
             )}
           </header>
-          {notices.length === 0 && <p className="list-empty">暂无通知</p>}
+          {notices.length === 0 && <p className="list-empty">{t('nav:notice.none')}</p>}
           {notices.map((notice) => (
             <button
               type="button"
@@ -77,7 +80,7 @@ export default function NoticeBell({
               <span>
                 <strong>{notice.title}</strong>
                 <small>
-                  {names[notice.kind]} · {ago(notice.at)}
+                  {t(names[notice.kind])} · {ago(t, notice.at)}
                 </small>
               </span>
               <span className="notice-body">{notice.body}</span>

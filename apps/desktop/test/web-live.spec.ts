@@ -119,18 +119,16 @@ for (const path of ['', 'private-access'])
       await expect(page.getByText('还没有项目', { exact: true })).toHaveCount(0);
 
       await page.locator('.sidebar').getByRole('button', { name: '新建会话', exact: true }).click();
-      await expect
-        .poll(() =>
-          messages.some(
-            (message) =>
-              message.type === 'session.updated' && message.session.device?.name === '服务端',
-          ),
-        )
-        .toBe(true);
-      const created = messages.find(
-        (message): message is Extract<ServerMessage, { type: 'session.updated' }> =>
-          message.type === 'session.updated' && message.session.device?.name === '服务端',
-      )!.session;
+      // The service's own computer, as the service names it at sign-in.
+      const ready = messages.find(
+        (message): message is Extract<ServerMessage, { type: 'ready' }> => message.type === 'ready',
+      )!;
+      const onServer = (message: ServerMessage) =>
+        message.type === 'session.updated' && message.session.device?.id === ready.serverDeviceId;
+      await expect.poll(() => messages.some(onServer)).toBe(true);
+      const created = (
+        messages.find(onServer) as Extract<ServerMessage, { type: 'session.updated' }>
+      ).session;
       expect(created.device?.platform).toBe('linux');
       // The service is listed once it holds a session; the list follows that session.
       await expect

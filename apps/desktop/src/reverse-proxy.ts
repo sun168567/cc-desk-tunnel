@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { webDomainSchema, webPathSchema } from '@cc-desk-tunnel/protocol';
 import type { WebCertificateState } from '@cc-desk-tunnel/protocol';
 
@@ -37,17 +38,17 @@ export function proxyCertificateName(
 
 export function proxyConfiguration(kind: 'nginx' | 'caddy', values: ProxyConfiguration) {
   const domain = webDomainSchema.safeParse(values.domain);
-  if (!domain.success || !domain.data) throw new Error('请先填写访问域名，再生成反代配置。');
+  if (!domain.success || !domain.data) throw new Error(t('settings:proxy.domainFirst'));
   const path = webPathSchema.safeParse(values.path);
-  if (!path.success) throw new Error('请先修正服务端访问路径。');
+  if (!path.success) throw new Error(t('settings:proxy.pathFirst'));
   // Reject configuration metacharacters before URL normalization can remove them.
   if (!/^https:\/\/[a-zA-Z0-9.:[\]-]+\/?$/.test(values.upstream))
-    throw new Error('上游地址应为 HTTPS 地址，不含路径、凭据或查询参数。');
+    throw new Error(t('settings:proxy.upstreamForm'));
   let upstream: URL;
   try {
     upstream = new URL(values.upstream);
   } catch {
-    throw new Error('请填写有效的上游 HTTPS 地址。');
+    throw new Error(t('settings:proxy.upstreamInvalid'));
   }
   const serverName = values.serverName.trim().toLowerCase();
   if (
@@ -55,10 +56,10 @@ export function proxyConfiguration(kind: 'nginx' | 'caddy', values: ProxyConfigu
     !/[a-z]/.test(serverName) ||
     !serverName.split('.').every((part) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(part))
   )
-    throw new Error('证书校验名应为证书 SAN 中的 DNS 名称，不含协议或端口。');
+    throw new Error(t('settings:proxy.nameForm'));
   const trustFile = values.trustFile.trim();
   if (!/^\/(?:[a-zA-Z0-9._-]+\/)*[a-zA-Z0-9._-]+$/.test(trustFile))
-    throw new Error('请填写反代机器上的 PEM 绝对路径，仅使用字母、数字、点、横线和下划线。');
+    throw new Error(t('settings:proxy.trustFileForm'));
   const prefix = path.data ? `/${path.data}/` : '/';
   if (kind === 'caddy')
     return `${domain.data} {

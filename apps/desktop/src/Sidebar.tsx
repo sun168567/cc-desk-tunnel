@@ -15,7 +15,10 @@ import {
 } from 'lucide-react';
 import { projectOf } from '@cc-desk-tunnel/protocol';
 import type { Project, Session } from '@cc-desk-tunnel/protocol';
+import { localeOf, useT } from './i18n.ts';
+import type { T } from './i18n.ts';
 import type { ConnectedDevice } from './client.ts';
+import { deviceName } from './device.ts';
 import NoticeBell from './NoticeBell.tsx';
 import type { Notifications } from './notifications.ts';
 import { ago, pathKey, projectName } from './paths.ts';
@@ -25,12 +28,14 @@ import { terminalState } from './RunStatus.tsx';
 import type { MenuPosition } from './ui.tsx';
 import HelpLink from './HelpLink.tsx';
 
-function activity(session: Session) {
-  if (!session.activeRun) return ago(Date.parse(session.updatedAt));
-  if (session.activeRun.surface === 'terminal') return terminalState(session.activeRun.activity);
-  if (session.activeRun.waiting === 'background') return '后台任务';
-  if (session.activeRun.status !== 'awaiting_approval') return '运行中';
-  return session.activeRun.waiting === 'question' ? '等待回答' : '等待审批';
+function activity(t: T, session: Session) {
+  if (!session.activeRun) return ago(t, Date.parse(session.updatedAt));
+  if (session.activeRun.surface === 'terminal') return terminalState(t, session.activeRun.activity);
+  if (session.activeRun.waiting === 'background') return t('nav:activity.background');
+  if (session.activeRun.status !== 'awaiting_approval') return t('nav:activity.running');
+  return session.activeRun.waiting === 'question'
+    ? t('nav:activity.question')
+    : t('nav:activity.approval');
 }
 
 const breathing = (run: NonNullable<Session['activeRun']>) =>
@@ -53,6 +58,7 @@ export default function Sidebar({
   sessions,
   elsewhere,
   devices,
+  serverDeviceId,
   selectedId,
   projects,
   connected,
@@ -75,6 +81,7 @@ export default function Sidebar({
   // project here.
   elsewhere: Session[];
   devices: ConnectedDevice[];
+  serverDeviceId: string | null;
   selectedId: string | undefined;
   // The projects of all the user's computers, as the service keeps them. A session in none is a plain one.
   projects: Project[];
@@ -96,6 +103,7 @@ export default function Sidebar({
   projectMenu?: (project: Project, position: MenuPosition) => void;
   footer?: ReactNode;
 }) {
+  const t = useT();
   const prefs = usePrefs();
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
@@ -146,7 +154,7 @@ export default function Sidebar({
     const groups = new Map<string, Elsewhere>();
     const entryOf = (device: { id: string; name: string }) => {
       const entry: Elsewhere = groups.get(device.id) ?? {
-        name: device.name,
+        name: deviceName(t, device, serverDeviceId),
         online: devices.some((item) => item.id === device.id && item.ready),
         projects: new Map(),
         plain: [],
@@ -165,7 +173,7 @@ export default function Sidebar({
       const project = inProject(session);
       if (!found(session, project, term)) continue;
       // A session from before computers were told apart, whose folder is not on this one.
-      const entry = entryOf(session.device ?? { id: '', name: '未知设备' });
+      const entry = entryOf(session.device ?? { id: '', name: t('nav:unknownDevice') });
       if (!project) {
         entry.plain.push(session);
         continue;
@@ -176,7 +184,7 @@ export default function Sidebar({
       entry.projects.set(key, group);
     }
     return [...groups.entries()];
-  }, [elsewhere, devices, projects, search, hereId]);
+  }, [elsewhere, devices, serverDeviceId, projects, search, hereId, t]);
   const othersCount = others.reduce(
     (count, [, device]) =>
       count +
@@ -218,7 +226,7 @@ export default function Sidebar({
         type="button"
         className="project-toggle"
         aria-expanded={open}
-        aria-label={`${open ? '收起' : '展开'}${label}`}
+        aria-label={`${open ? t('common:collapse') : t('common:expand')}${label}`}
         onClick={toggle}
       >
         {icon}
@@ -247,7 +255,7 @@ export default function Sidebar({
           className="project-more"
           onClick={() => setListed((value) => toggled(value, key))}
         >
-          {full ? '收起' : `展开显示（还有 ${members.length - kept.length} 个）`}
+          {full ? t('common:collapse') : t('nav:showMore', { count: members.length - kept.length })}
         </button>
       </>
     );
@@ -284,10 +292,10 @@ export default function Sidebar({
           {session.activeRun && (
             <span className={`running-dot${breathing(session.activeRun) ? ' breathing' : ''}`} />
           )}
-          <small>{activity(session)}</small>
+          <small>{activity(t, session)}</small>
         </button>
         <IconButton
-          title={isPinned ? '取消置顶' : '置顶'}
+          title={isPinned ? t('nav:unpin') : t('nav:pin')}
           className="row-action"
           onClick={() =>
             setPrefs((value) => ({
@@ -299,7 +307,7 @@ export default function Sidebar({
           <Pin />
         </IconButton>
         <IconButton
-          title="会话操作"
+          title={t('nav:sessionActions')}
           className="row-action session-more"
           onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
@@ -318,7 +326,7 @@ export default function Sidebar({
         <span className="brand">CC Desk Tunnel</span>
         <NoticeBell notifications={notifications} open={select} />
         <IconButton
-          title={searching ? '关闭搜索' : '搜索'}
+          title={searching ? t('nav:closeSearch') : t('nav:search')}
           onClick={() => {
             setSearching((value) => !value);
             setSearch('');
@@ -332,7 +340,7 @@ export default function Sidebar({
           <Search />
           <input
             autoFocus
-            aria-label="搜索会话"
+            aria-label={t('nav:searchSessions')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
@@ -341,7 +349,7 @@ export default function Sidebar({
                 setSearch('');
               }
             }}
-            placeholder="搜索会话或项目"
+            placeholder={t('nav:searchPlaceholder')}
           />
         </label>
       )}
@@ -352,18 +360,22 @@ export default function Sidebar({
         onClick={newSession}
       >
         <SquarePen />
-        新建会话
+        {t('nav:newSession')}
       </button>
-      <nav className="session-list" aria-label="会话列表">
-        {pinned.length > 0 && <div className="list-heading">置顶</div>}
+      <nav className="session-list" aria-label={t('nav:sessionList')}>
+        {pinned.length > 0 && <div className="list-heading">{t('nav:pinned')}</div>}
         {pinned.map(renderSession)}
         {localProjects && (
           <div className="list-heading">
             <span className="list-heading-name">
-              项目
-              <HelpLink article="sessions" title="项目和会话是什么" />
+              {t('nav:projects')}
+              <HelpLink article="sessions" title={t('nav:projectsHelp')} />
             </span>
-            <IconButton title="添加项目" disabled={!connected || busy} onClick={addProject}>
+            <IconButton
+              title={t('nav:addProject')}
+              disabled={!connected || busy}
+              onClick={addProject}
+            >
               <Plus />
             </IconButton>
           </div>
@@ -384,7 +396,7 @@ export default function Sidebar({
               >
                 {foldToggle({
                   open: !collapsed,
-                  label: `项目 · ${name}`,
+                  label: t('nav:projectLabel', { name }),
                   icon: collapsed ? <Folder /> : <FolderOpen />,
                   name,
                   members,
@@ -397,7 +409,7 @@ export default function Sidebar({
                 {prefs.pinnedProjects.includes(key) && <Pin className="pin-mark" />}
                 {projectMenu && (
                   <IconButton
-                    title={`项目操作 · ${path}`}
+                    title={t('nav:projectActions', { path })}
                     className="row-action"
                     onClick={(event) => {
                       const box = event.currentTarget.getBoundingClientRect();
@@ -408,7 +420,7 @@ export default function Sidebar({
                   </IconButton>
                 )}
                 <IconButton
-                  title={`新建会话 · ${path}`}
+                  title={t('nav:newSessionIn', { path })}
                   className="row-action"
                   disabled={!connected || busy || refreshing}
                   onClick={() => createInProject(path)}
@@ -417,28 +429,32 @@ export default function Sidebar({
                 </IconButton>
               </h2>
               {!collapsed && renderSessions(key, members)}
-              {!collapsed && !members.length && <p className="project-empty">暂无会话</p>}
+              {!collapsed && !members.length && (
+                <p className="project-empty">{t('nav:noSessions')}</p>
+              )}
             </section>
           );
         })}
         {localProjects && groups.length === 0 && (
-          <p className="project-empty">{search ? '没有匹配的项目' : '还没有项目'}</p>
+          <p className="project-empty">
+            {search ? t('nav:noMatchingProjects') : t('nav:noProjects')}
+          </p>
         )}
-        {plain.length > 0 && <div className="list-heading">最近</div>}
+        {plain.length > 0 && <div className="list-heading">{t('nav:recent')}</div>}
         {plain.map(renderSession)}
         {others.length > 0 && (
           <section className="project-group">
-            <h2 title="你其他电脑上的项目和会话：那台电脑在线时可以直接在这里操作，离线时可以接到这台电脑上继续">
+            <h2 title={t('nav:elsewhereHint')}>
               {foldToggle({
                 open: othersOpen,
-                label: '其他设备的会话',
+                label: t('nav:elsewhereSessions'),
                 icon: <Laptop />,
-                name: '其他设备',
+                name: t('nav:elsewhere'),
                 members: elsewhere,
                 toggle: () =>
                   setPrefs((value) => ({ ...value, elsewhereOpen: !value.elsewhereOpen })),
               })}
-              <HelpLink article="devices" title="多台电脑怎么用" className="row-help" />
+              <HelpLink article="devices" title={t('nav:elsewhereHelp')} className="row-help" />
             </h2>
             {othersOpen &&
               others.map(([id, device]) => {
@@ -452,7 +468,7 @@ export default function Sidebar({
                     <div className="list-heading">
                       {foldToggle({
                         open: open(id),
-                        label: `设备 · ${device.name}`,
+                        label: t('nav:deviceLabel', { name: device.name }),
                         icon: open(id) ? <ChevronDown /> : <ChevronRight />,
                         name: device.name,
                         members: [
@@ -462,7 +478,7 @@ export default function Sidebar({
                         toggle: foldElsewhere(id),
                       })}
                       <span className={`device-state${device.online ? ' online' : ''}`}>
-                        {device.online ? '在线' : '离线'}
+                        {device.online ? t('nav:online') : t('nav:offline')}
                       </span>
                     </div>
                     {open(id) &&
@@ -482,7 +498,7 @@ export default function Sidebar({
                             >
                               {foldToggle({
                                 open: open(key),
-                                label: `项目 · ${device.name} · ${name}`,
+                                label: t('nav:deviceProjectLabel', { device: device.name, name }),
                                 icon: open(key) ? <FolderOpen /> : <Folder />,
                                 name,
                                 members,
@@ -490,7 +506,10 @@ export default function Sidebar({
                               })}
                               {projectMenu && (
                                 <IconButton
-                                  title={`项目操作 · ${device.name} · ${project.path}`}
+                                  title={t('nav:deviceProjectActions', {
+                                    device: device.name,
+                                    path: project.path,
+                                  })}
                                   className="row-action"
                                   onClick={(event) => {
                                     const box = event.currentTarget.getBoundingClientRect();
@@ -502,7 +521,10 @@ export default function Sidebar({
                               )}
                               {createElsewhere && device.online && (
                                 <IconButton
-                                  title={`新建会话 · ${device.name} · ${project.path}`}
+                                  title={t('nav:deviceNewSessionIn', {
+                                    device: device.name,
+                                    path: project.path,
+                                  })}
                                   className="row-action"
                                   disabled={!connected || busy || refreshing}
                                   onClick={() => createElsewhere(id, project.path)}
@@ -519,9 +541,9 @@ export default function Sidebar({
                       <div className="elsewhere-project">
                         {foldToggle({
                           open: open(plainKey),
-                          label: `普通会话 · ${device.name}`,
+                          label: t('nav:devicePlainLabel', { device: device.name }),
                           icon: open(plainKey) ? <FolderOpen /> : <Folder />,
-                          name: '普通会话',
+                          name: t('nav:plainSessions'),
                           members: device.plain,
                           toggle: foldElsewhere(plainKey),
                         })}
@@ -539,7 +561,7 @@ export default function Sidebar({
           groups.length === 0 &&
           plain.length === 0 &&
           pinned.length === 0 &&
-          othersCount === 0 && <p className="list-empty">没有匹配会话</p>}
+          othersCount === 0 && <p className="list-empty">{t('nav:noMatchingSessions')}</p>}
       </nav>
       {footer}
       {card && (
@@ -547,10 +569,11 @@ export default function Sidebar({
           <strong>{card.session.title}</strong>
           <span>
             <Folder />
-            {inProject(card.session) ? card.session.projectPath : '普通会话'}
+            {inProject(card.session) ? card.session.projectPath : t('nav:plainSessions')}
           </span>
           <small>
-            {activity(card.session)} · {new Date(card.session.updatedAt).toLocaleString('zh-CN')}
+            {activity(t, card.session)} ·{' '}
+            {new Date(card.session.updatedAt).toLocaleString(localeOf(t))}
           </small>
         </div>
       )}

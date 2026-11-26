@@ -1,0 +1,49 @@
+{
+  "language": {
+    "title": "界面语言",
+    "detail": "窗口、菜单和对话框的语言；跟随系统时使用系统的显示语言",
+    "system": "跟随系统"
+  },
+  "cancel": "取消",
+  "retry": "重试",
+  "device": {
+    "browser": "浏览器",
+    "server": "服务端",
+    "here": "这台电脑"
+  },
+  "collapse": "收起",
+  "expand": "展开",
+  "locale": "zh-CN",
+  "ago": {
+    "now": "刚刚",
+    "minutes": "{{n}} 分钟",
+    "hours": "{{n}} 小时",
+    "days": "{{n}} 天"
+  },
+  "span": {
+    "seconds": "{{s}} 秒",
+    "minutes": "{{m}} 分 {{s}} 秒",
+    "hours": "{{h}} 小时 {{m}} 分"
+  },
+  "hours": {
+    "whole": "{{h}} 小时",
+    "minutes": "{{h}} 小时 {{m}} 分钟"
+  },
+  "minutes": "{{m}} 分钟",
+  "copy": {
+    "done": "已复制",
+    "failed": "复制失败，请重试",
+    "copy": "复制",
+    "code": "复制代码",
+    "message": "复制消息",
+    "selectAll": "全选"
+  },
+  "today": "今天",
+  "yesterday": "昨天",
+  "save": "保存",
+  "gotIt": "知道了",
+  "failed": "操作失败。",
+  "help": "说明",
+  "helpFor": "{{subject}}：说明",
+  "close": "关闭"
+}

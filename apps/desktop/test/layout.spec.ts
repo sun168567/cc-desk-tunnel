@@ -383,6 +383,7 @@ test('a run that goes on only for background tasks looks finished, lists them an
         reply({
           type: 'ready',
           protocolVersion: PROTOCOL_VERSION,
+          serverDeviceId: '00000000-0000-4000-8000-000000000001',
           version: '0.0.1',
           connectionId,
           adapter: 'claude-code',
@@ -484,6 +485,7 @@ test('approval modes are described where they are chosen, and models sit behind 
         reply({
           type: 'ready',
           protocolVersion: PROTOCOL_VERSION,
+          serverDeviceId: '00000000-0000-4000-8000-000000000001',
           version: '0.0.1',
           connectionId: randomUUID(),
           adapter: 'claude-code',
@@ -634,7 +636,7 @@ test('Electron: frameless window, the project branch, files by path and window s
   const profile = resolve('.local/ui-test/profile-layout');
   rmSync(profile, { recursive: true, force: true });
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...connectionArgs(profile)],
     env,
   });
   try {

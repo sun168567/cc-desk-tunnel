@@ -1,0 +1,250 @@
+{
+  "dialog": {
+    "addProject": "添加项目",
+    "addFiles": "添加文件",
+    "export": "导出",
+    "saveWhere": "选择保存位置",
+    "saveAs": "另存为",
+    "openWith": "选择打开“{{name}}”的应用",
+    "applications": "应用程序",
+    "plainFolder": "普通会话的文件夹"
+  },
+  "error": {
+    "notSignedIn": "还没有登录服务。",
+    "imageTooLarge": "只能粘贴不超过 20 MB 的图片。",
+    "notFolder": "不是文件夹。",
+    "notConnected": "还没有连上服务。",
+    "noToken": "请输入服务凭据。",
+    "windowExited": "连接窗口意外退出，请再试一次。",
+    "connectionGone": "这个连接已不存在。",
+    "connectionInUse": "不能删除正在使用的连接。"
+  },
+  "open": {
+    "missing": "本机找不到这个路径，它可能在服务端或另一台电脑上。",
+    "failed": "没能打开：{{reason}}",
+    "program": "它会运行程序，没有直接打开，已在文件夹中显示。",
+    "tooLarge": "文件超过 1 MB，没有复制。",
+    "notText": "这不是文本文件，没有复制。",
+    "copied": "已复制文件内容",
+    "saved": "已另存"
+  },
+  "upgrade": {
+    "fromSource": "源码运行不支持自升级；请重新打包安装。",
+    "unsupported": "这个系统上的客户端不能在应用内升级，请到发布页下载新版本。",
+    "already": "客户端已经在升级了。",
+    "connectFirst": "请先连接服务。",
+    "othersOpen": "其他连接的窗口没有退出，请先退出它们再升级。",
+    "title": "正在升级 CC Desk Tunnel",
+    "body": "安装完成后会自动重新打开。"
+  },
+  "menu": {
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "selectAll": "全选",
+    "about": "关于 CC Desk Tunnel",
+    "hide": "隐藏 CC Desk Tunnel",
+    "hideOthers": "隐藏其他",
+    "unhide": "全部显示",
+    "quit": "退出 CC Desk Tunnel",
+    "edit": "编辑",
+    "window": "窗口",
+    "develop": "开发"
+  },
+  "tray": {
+    "show": "显示窗口",
+    "newLogin": "新的登录窗口",
+    "stayInBackground": "关闭窗口时留在后台",
+    "quit": "退出",
+    "backgroundTitle": "CC Desk Tunnel 仍在后台运行",
+    "backgroundBody": "点击托盘图标恢复窗口；右键图标选择“退出”才会结束连接。"
+  },
+  "bridge": {
+    "badPin": "请输入可信安装信息中的 SHA256 证书指纹，或留空使用 CA 验证。",
+    "pinMismatch": "服务证书指纹不匹配；未发送服务凭据。",
+    "pinMismatchCheck": "服务证书指纹不匹配；未发送服务凭据。\n请核对“服务证书指纹”是否与安装时给出的一致；服务端更换过证书后需要填新的指纹。若两者都没变，说明连到的不是你的服务器。",
+    "wssOnly": "原生模式需要不含凭据的 WSS 地址。",
+    "noAnswer": "服务端在 {{seconds}} 秒内没有完成应答。\n请检查网络是否稳定，或稍后重试；反复出现时查看服务端日志。",
+    "channelPinMismatch": "执行通道连到的服务证书指纹不匹配；未发送任何凭据。\n控制连接校验通过之后，同一地址应答了另一张证书：请确认服务地址没有被劫持或指向多台服务器。",
+    "silent": "已有 {{seconds}} 秒没有收到服务端的任何数据，连接已经断开。\n途中的网络、代理或反向代理中断了这条连接而没有通知本机。",
+    "badClientMessage": "客户端消息格式错误。",
+    "badServiceMessage": "服务端的消息无法识别。\n客户端与服务端的版本可能不一致，请把两者升级到同一版本。",
+    "tunnelMismatch": "隧道连接标识不匹配。",
+    "readyMismatch": "隧道就绪标识不匹配。",
+    "notReady": "还没有连上服务，或执行通道尚未就绪。",
+    "closed": "连接已经断开。",
+    "channelRefused": "执行通道的认证没有通过。\n请重新连接；反复出现时确认服务地址没有指向另一套部署。"
+  },
+  "connect": {
+    "lines": "{{what}}\n{{check}}",
+    "via": "\n本次连接经系统代理 {{proxy}} 发出，请一并确认代理可用。",
+    "tooLong": "会话历史超过 WebSocket 接收上限。",
+    "tooMany": "登录失败次数过多，服务端已暂时拒绝本机，请稍后再试。",
+    "proxyRefused": {
+      "what": "系统代理拒绝转发到 {{target}} 的连接。",
+      "whatNamed": "系统代理 {{proxy}}拒绝转发到 {{target}} 的连接。",
+      "check": "请检查 Windows 的代理设置，或把服务地址加入代理的排除列表。"
+    },
+    "unresolved": {
+      "what": "无法解析服务地址里的域名 {{host}}。",
+      "check": "请检查地址是否拼写正确，以及本机网络与 DNS 是否正常。{{via}}"
+    },
+    "refused": {
+      "what": "{{target}} 拒绝了连接。",
+      "check": "服务端可能没有启动，或地址里的端口不是服务端的控制端口；经 nginx 反代时请确认 nginx 正在运行。{{via}}"
+    },
+    "timeout": {
+      "what": "连接 {{target}} 超时。",
+      "check": "请检查服务器是否在线、服务器防火墙或云安全组是否放行了这个端口，以及本机网络是否能访问它。{{via}}"
+    },
+    "expired": {
+      "what": "服务证书已过期。",
+      "check": "请在服务器上续期证书（部署脚本的 certificate 命令）后重新连接。"
+    },
+    "notYetValid": {
+      "what": "服务证书尚未生效。",
+      "check": "请检查本机的系统时间是否正确。"
+    },
+    "hostMismatch": {
+      "what": "服务证书与地址里的主机名 {{host}} 不符。",
+      "check": "请使用证书对应的域名连接，或在“服务证书指纹”里填入安装时给出的指纹。"
+    },
+    "untrusted": {
+      "what": "服务证书不是受信任的机构签发的。",
+      "check": "使用自签证书时，需要在“服务证书指纹”里填入安装时给出的 SHA256 指纹。"
+    },
+    "notTls": {
+      "what": "{{target}} 没有按 TLS 应答。",
+      "check": "地址应以 wss:// 开头并指向服务端的控制端口，请核对端口是否填对。{{via}}"
+    },
+    "gateway": {
+      "what": "{{target}} 的反向代理应答了 {{status}}：它后面的服务端没有启动或无法访问。",
+      "check": "请在服务器上检查服务是否在运行。"
+    },
+    "http": {
+      "what": "{{target}} 应答了 HTTP {{status}}，不是本服务的连接入口。",
+      "check": "请核对服务地址；经 nginx 反代时检查是否转发了 WebSocket（Upgrade 请求头）。"
+    },
+    "reset": {
+      "what": "与 {{target}} 的连接被中断。",
+      "check": "常见于该端口上不是本服务，或中间的网络设备切断了连接；请核对地址后重试。{{via}}"
+    },
+    "other": {
+      "what": "无法连接 {{target}}。",
+      "check": "请检查服务地址和网络。{{via}}"
+    },
+    "otherCode": {
+      "what": "无法连接 {{target}}（{{code}}）。",
+      "check": "请检查服务地址和网络。{{via}}"
+    }
+  },
+  "channel": {
+    "failed": "执行通道在 {{seconds}} 秒内没有就绪。\n服务凭据已通过，但为执行通道再连接服务端时失败：{{cause}}\n执行通道与控制连接走同一个地址，每条 SSH 连接另占一条连接：请确认反向代理、系统代理或防火墙没有限制同一地址的并发连接数。",
+    "noAnswer": "执行通道在 {{seconds}} 秒内没有就绪。\n服务凭据已通过，本机的 SSH 服务也已启动，但服务端发来的探测命令没有得到应答。{{slow}}可在“设置 → 连接”里调大等待时间。",
+    "slow": "电脑或网络较慢时",
+    "slowShell": "登录 shell 的启动脚本或网络较慢时"
+  },
+  "component": {
+    "security": "请查看杀毒软件 / Windows 安全中心的“保护历史记录”：核对文件来源后，可以还原被隔离的文件并只为它设置例外，再重新连接。详见项目主页的“杀毒软件与 SmartScreen”。",
+    "pwsh": "PowerShell（pwsh.exe）",
+    "blocked": "{{name}} 被 Windows 或安全软件拦截，无法启动（系统错误 {{code}}）。\n{{hint}}",
+    "cannotStart": "{{name}} 无法启动（系统错误 {{code}}）。\n请重新安装本应用；仍然出现时检查安全软件的拦截记录。",
+    "exitCode": "（退出代码 {{code}}）",
+    "sshdSaid": "内置的 OpenSSH 服务（sshd.exe）已退出{{code}}。\n它的输出：{{said}}",
+    "sshdExited": "内置的 OpenSSH 服务（sshd.exe）已退出{{code}}。\n请重新连接；反复出现时重新安装本应用。",
+    "notStartedSaid": "本机的 SSH 服务没能启动。\n它的输出：{{said}}",
+    "exitedSaid": "本机的 SSH 服务已退出。\n它的输出：{{said}}",
+    "notStarted": "本机的 SSH 服务没能启动。\n常见原因是内置的 PowerShell 或 OpenSSH 被安全软件拦截。{{hint}}",
+    "exited": "本机的 SSH 服务已退出。\n请重新连接。",
+    "unsupportedShell": "本机 OpenSSH 的默认 shell 是 {{path}}，内置 SSH 服务无法在它下面执行命令。\n支持 cmd、PowerShell 和 Git Bash；可在注册表 HKLM\\SOFTWARE\\OpenSSH 里删除或改回 DefaultShell 与 DefaultShellCommandOption。",
+    "missing": "找不到随应用安装的 {{name}}。\n它多半被杀毒软件或 Windows 安全中心隔离或删除了。{{hint}}\n没有隔离记录时请重新安装本应用。",
+    "prepareSlow": "本机 SSH 服务的准备步骤在 {{seconds}} 秒内没有完成。\n电脑较忙或安全软件逐个扫描程序时会变慢，请重新连接。",
+    "prepareSaid": "本机 SSH 服务的准备步骤失败。\n{{said}}",
+    "prepareFailed": "本机 SSH 服务的准备步骤失败。\n请重新连接；仍然失败时重新安装本应用。",
+    "notListening": "本机的 SSH 服务在 {{seconds}} 秒内没有开始监听。\n电脑较忙或安全软件逐个扫描程序时会变慢，可在“设置 → 连接”里调大等待时间。"
+  },
+  "local": {
+    "workerTimeout": "本机执行服务初始化超时，请检查登录 shell 启动脚本。",
+    "workerMissing": "无法启动本机 SSH 执行服务。",
+    "workerSignalled": "本机 SSH 执行服务已停止（信号 {{signal}}），请重新连接。",
+    "workerExited": "本机 SSH 执行服务已停止（退出码 {{code}}），请重新连接。",
+    "workerNotStarted": "无法初始化本机 SSH 执行服务。",
+    "workerStopped": "本机 SSH 执行服务已停止。",
+    "noSftpServer": "找不到系统的 sftp-server。\nmacOS 自带它；Linux 上请安装 OpenSSH 的 SFTP 服务端（Debian / Ubuntu 的 openssh-sftp-server）。",
+    "keygenMissing": "无法启动系统 ssh-keygen。",
+    "keygenFailed": "无法生成本次连接的 SSH 密钥。"
+  },
+  "shell": {
+    "unsupported": "本机执行需要绝对路径的 zsh 或 bash，请检查登录 shell 设置。",
+    "missing": "找不到本机登录 shell，请检查 zsh 或 bash 的安装路径。",
+    "notExecutable": "无法执行本机登录 shell，请检查 zsh 或 bash 的文件权限。",
+    "timeout": "登录 shell 初始化超时，请检查 shell 启动脚本中的等待或交互命令。",
+    "environmentTooLarge": "登录 shell 的环境变量超过大小限制。",
+    "outputTooLarge": "登录 shell 启动脚本的输出超过大小限制。",
+    "cannotStart": "无法启动本机登录 shell（{{code}}），请检查路径和执行权限。",
+    "cannotStartUnknown": "无法启动本机登录 shell（未知错误），请检查路径和执行权限。",
+    "signalled": "登录 shell 异常结束（信号 {{signal}}），没有返回有效环境，请检查 shell 文件和启动脚本。",
+    "exited": "登录 shell 异常结束（退出码 {{code}}），没有返回有效环境，请检查 shell 文件和启动脚本。",
+    "noEnvironment": "登录 shell 没有返回有效环境，请检查 zsh 或 bash 启动脚本。"
+  },
+  "download": {
+    "noInstaller": "服务端没有提供客户端安装包。",
+    "serverFailed": "从服务端下载安装包失败（{{reason}}）。\n可以重试，或改从 GitHub 发布页下载。",
+    "noResponse": "{{seconds}} 秒没有响应",
+    "noData": "{{seconds}} 秒没有收到数据",
+    "notYet": "服务端还没有这个安装包",
+    "badHash": "安装包校验失败，已放弃升级。",
+    "cancelled": "已取消。",
+    "badVersion": "版本号不正确。",
+    "noManifest": "读取不到 {{version}} 的发布信息（{{reason}}）。\n请检查这台电脑能否访问 github.com，或改从服务端获取安装包。",
+    "notInManifest": "发布信息里没有这个版本的安装包。",
+    "otherFile": "发布页的安装包与服务端提供的不是同一个文件，已放弃升级。",
+    "interrupted": "从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。\n请检查网络后重试，或改从服务端获取安装包。",
+    "nothing": "连接没有数据",
+    "httpFailed": "安装包下载失败（{{status}}）。",
+    "tooLarge": "安装包比发布信息里的大，已放弃升级。"
+  },
+  "service": {
+    "refused": "服务端拒绝了连接。",
+    "tooOld": "服务端 {{service}} 太旧，请在服务器上重新运行安装命令升级（见项目 README 的“快速开始”）。",
+    "upgradeRefused": "服务端拒绝了升级。",
+    "declined": "没有升级服务端。",
+    "upgradeFailed": "服务端升级失败。",
+    "manual": "服务端 {{version}} 需要更新镜像，请在服务器上执行 sudo cc-desk-tunnel upgrade；没有这个命令的旧部署重新运行安装命令即可。",
+    "noNewer": "服务端没有找到更新的正式版本。",
+    "closed": "与服务端的连接断开了；稍后重新连接，查看它是否已经升级。",
+    "unreachable": "连不上服务端：{{reason}}"
+  },
+  "files": {
+    "cancelled": "已取消",
+    "missing": "文件或文件夹不存在。",
+    "protected": "没有权限。服务端的密钥、登录凭据和服务数据受保护，不能读取或修改。",
+    "denied": "没有权限访问这个位置。",
+    "exists": "目标位置已有同名文件或文件夹。",
+    "closed": "文件连接已关闭。",
+    "noServer": "服务端没有提供文件访问。",
+    "unreachable": "这台电脑现在连不上：它可能不在线，或执行通道尚未就绪。"
+  },
+  "ccdt": {
+    "said": "ccdt：{{said}}",
+    "failed": "ccdt 没有运行成功：{{reason}}",
+    "noTerminal": "没有找到可以打开的终端程序：请在终端里运行 ccdt open。",
+    "terminalFailed": "打开终端失败：{{reason}}",
+    "badAddress": "这个连接的地址不能交给 ccdt。"
+  },
+  "connections": {
+    "nameTooLong": "名称最多 {{max}} 个字。",
+    "nameTaken": "已有同名的连接。",
+    "tooMany": "最多保存 {{max}} 个连接。",
+    "stillOpen": "这个连接的窗口还开着，请先退出它。"
+  },
+  "macos": {
+    "desktop": "访问你选择的桌面项目，让 Claude 经执行通道读取和修改其中的文件。",
+    "documents": "访问你选择的文稿项目，让 Claude 经执行通道读取和修改其中的文件。",
+    "downloads": "访问你选择的下载项目，让 Claude 经执行通道读取和修改其中的文件。",
+    "removable": "访问你选择的外接磁盘项目，让 Claude 经执行通道读取和修改其中的文件。",
+    "network": "访问你选择的网络磁盘项目，让 Claude 经执行通道读取和修改其中的文件。"
+  }
+}

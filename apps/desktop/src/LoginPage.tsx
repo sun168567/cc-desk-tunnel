@@ -4,6 +4,7 @@ import { FORCED_UPGRADE_SINCE } from '@cc-desk-tunnel/protocol';
 import type { ClientUpgrade } from './client-upgrade.ts';
 import UpgradeProgress from './UpgradeProgress.tsx';
 import { thisDevice } from './device.ts';
+import { say, useT } from './i18n.ts';
 import { GithubMark, openProject, project } from './project.tsx';
 import { serviceKey } from './shared.ts';
 import type { Account } from './shared.ts';
@@ -67,6 +68,7 @@ export default function LoginPage({
   // This computer's own settings, which need no connection.
   openSettings?: () => void;
 }) {
+  const t = useT();
   // The services this computer has signed in to, each a window of its own (see electron/connections.cjs): one
   // fills the form, and its record can be forgotten. A remembered token is not read here: the sign-in takes it.
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -85,10 +87,7 @@ export default function LoginPage({
     document.addEventListener('pointerdown', away);
     return () => document.removeEventListener('pointerdown', away);
   }, [listOpen]);
-  const failed = (failure: unknown) =>
-    setListError(
-      String((failure as Error)?.message ?? failure).replace(/^.*?'accounts:\w+': (Error: )?/, ''),
-    );
+  const failed = (failure: unknown) => setListError(String((failure as Error)?.message ?? failure));
   // A service whose token its connection keeps shows the field filled. Typing there replaces it; emptied, the
   // field asks for one again.
   const [replaced, setReplaced] = useState<string | null>(null);
@@ -115,7 +114,9 @@ export default function LoginPage({
   function forget(account: Account) {
     if (
       !window.confirm(
-        `删除“${account.label || '未保存地址的连接'}”的登录记录？这台电脑上为它保存的凭据、草稿和定时任务会一并删除；服务端上的会话不受影响。`,
+        t('connection:login.forgetConfirm', {
+          name: account.label || t('connection:login.unnamed'),
+        }),
       )
     )
       return;
@@ -139,16 +140,19 @@ export default function LoginPage({
     if (
       !window.confirm(
         force
-          ? `服务端 ${service} 上有会话正在运行。强行升级会重启服务端：正在进行的回答、命令和等你确认的审批会被中断，可能需要重新开始。继续？`
-          : `服务端 ${service} 将升级到最新的正式版并重启，需要几分钟。继续？`,
+          ? t('connection:upgrade.serviceForceConfirm', { service })
+          : t('connection:upgrade.serviceConfirm', { service }),
       )
     )
       return;
-    setServiceUpgrade({ phase: 'running', text: '正在升级服务端' });
+    setServiceUpgrade({ phase: 'running', text: t('connection:upgrade.serviceRunning') });
     const stop = window.desktop!.onServiceUpgrade(
       (update) =>
         update.detail &&
-        setServiceUpgrade({ phase: 'running', text: `正在升级服务端：${update.detail}` }),
+        setServiceUpgrade({
+          phase: 'running',
+          text: t('connection:upgrade.serviceStep', { step: say(update.detail) }),
+        }),
     );
     void thisDevice()
       .then((device) =>
@@ -161,14 +165,16 @@ export default function LoginPage({
           ...(force ? { force } : {}),
         }),
       )
-      .then(({ version, error, code }) => {
+      .then(({ version, error, phrase, code }) => {
         if (version) serviceUpgraded(service);
         setServiceUpgrade(
           version
-            ? { phase: 'done', text: `服务端已升级到 ${version}，正在重启，好了就自动连接…` }
+            ? { phase: 'done', text: t('connection:upgrade.serviceDone', { version }) }
             : {
                 phase: 'failed',
-                text: error ?? '服务端升级失败。',
+                text: phrase
+                  ? say(phrase, error)
+                  : (error ?? t('connection:upgrade.serviceFailed')),
                 forcible:
                   code === 'busy' &&
                   service.localeCompare(FORCED_UPGRADE_SINCE, undefined, { numeric: true }) >= 0,
@@ -189,8 +195,10 @@ export default function LoginPage({
           <span>CC Desk Tunnel</span>
         </div>
         <div className="login-title">
-          <h1>连接代理服务</h1>
-          {form.mode === 'local' && <span className="badge simulation">离线模拟</span>}
+          <h1>{t('connection:login.title')}</h1>
+          {form.mode === 'local' && (
+            <span className="badge simulation">{t('connection:login.simulation')}</span>
+          )}
         </div>
         <form
           onSubmit={(event) => {
@@ -201,20 +209,20 @@ export default function LoginPage({
           className="connection-form"
         >
           {window.desktop?.dev && (
-            <div className="connection-modes" role="group" aria-label="连接方式">
+            <div className="connection-modes" role="group" aria-label={t('connection:login.mode')}>
               <button
                 type="button"
                 aria-pressed={form.mode === 'local'}
                 onClick={() => change({ mode: 'local' })}
               >
-                本地模拟
+                {t('connection:login.local')}
               </button>
               <button
                 type="button"
                 aria-pressed={form.mode === 'remote'}
                 onClick={() => change({ mode: 'remote' })}
               >
-                远程代理
+                {t('connection:login.remote')}
               </button>
             </div>
           )}
@@ -229,7 +237,7 @@ export default function LoginPage({
             }}
           >
             <label>
-              服务地址
+              {t('connection:login.url')}
               <input
                 autoFocus
                 type="url"
@@ -243,7 +251,7 @@ export default function LoginPage({
               <button
                 type="button"
                 className="icon-button login-account-toggle"
-                aria-label="登录过的服务"
+                aria-label={t('connection:login.accounts')}
                 aria-expanded={listOpen}
                 onClick={() => {
                   if (!listOpen) readAccounts();
@@ -254,7 +262,7 @@ export default function LoginPage({
               </button>
             )}
             {listOpen && accounts.length > 0 && (
-              <ul className="login-accounts" aria-label="登录过的服务">
+              <ul className="login-accounts" aria-label={t('connection:login.accounts')}>
                 {accounts.map((account) => (
                   <li key={account.id}>
                     <button
@@ -263,7 +271,7 @@ export default function LoginPage({
                       onClick={() => choose(account)}
                     >
                       <span className="login-account-name">
-                        {account.label || '未保存地址的连接'}
+                        {account.label || t('connection:login.unnamed')}
                       </span>
                       {account.name && account.url && (
                         <span className="login-account-detail">{account.url}</span>
@@ -272,8 +280,10 @@ export default function LoginPage({
                     <button
                       type="button"
                       className="icon-button"
-                      aria-label={`删除 ${account.label || '未保存地址的连接'} 的登录记录`}
-                      title="删除登录记录"
+                      aria-label={t('connection:login.forgetLabel', {
+                        name: account.label || t('connection:login.unnamed'),
+                      })}
+                      title={t('connection:login.forget')}
                       onClick={() => forget(account)}
                     >
                       <X />
@@ -285,18 +295,18 @@ export default function LoginPage({
           </div>
           {form.mode === 'remote' && (
             <label>
-              服务证书指纹（可选）
+              {t('connection:login.fingerprintOptional')}
               <input
-                aria-label="服务证书指纹"
+                aria-label={t('connection:login.fingerprint')}
                 value={form.fingerprint}
                 onChange={(event) => change({ fingerprint: event.target.value })}
-                placeholder="留空使用 CA 验证"
+                placeholder={t('connection:login.fingerprintPlaceholder')}
                 spellCheck={false}
               />
             </label>
           )}
           <label>
-            服务凭据
+            {t('connection:login.token')}
             <input
               type="password"
               value={remembered ? keptToken : form.token}
@@ -322,7 +332,7 @@ export default function LoginPage({
                     })
                   }
                 />
-                记住凭据
+                {t('connection:login.remember')}
               </label>
               <label>
                 <input
@@ -335,7 +345,7 @@ export default function LoginPage({
                     })
                   }
                 />
-                自动登录
+                {t('connection:login.autoLogin')}
               </label>
             </div>
           )}
@@ -353,7 +363,7 @@ export default function LoginPage({
               onClick={() => upgrading.start()}
             >
               <Download />
-              升级客户端到 {upgrade}
+              {t('connection:upgrade.client', { version: upgrade })}
             </button>
           )}
           {older && serviceUpgrade?.phase !== 'done' && (
@@ -364,7 +374,9 @@ export default function LoginPage({
               onClick={() => upgradeService(older)}
             >
               <Download />
-              {serviceUpgrade?.phase === 'running' ? serviceUpgrade.text : '升级服务端'}
+              {serviceUpgrade?.phase === 'running'
+                ? serviceUpgrade.text
+                : t('connection:upgrade.service')}
             </button>
           )}
           {older && serviceUpgrade?.forcible && (
@@ -375,12 +387,12 @@ export default function LoginPage({
               onClick={() => upgradeService(older, true)}
             >
               <Download />
-              强行升级服务端
+              {t('connection:upgrade.serviceForce')}
             </button>
           )}
           {newer && (
             <button className="button login-submit" type="button" onClick={() => showNotes(newer)}>
-              查看 {newer} 的更新内容
+              {t('connection:upgrade.notes', { version: newer })}
             </button>
           )}
           {direct && !upgrading.step && (
@@ -392,17 +404,17 @@ export default function LoginPage({
             >
               <Download />
               {upgrade
-                ? `改从 GitHub 发布页下载 ${direct}`
-                : `从 GitHub 发布页下载并升级到 ${direct}`}
+                ? t('connection:upgrade.fromGithubInstead', { version: direct })
+                : t('connection:upgrade.fromGithub', { version: direct })}
             </button>
           )}
           <button className="button primary login-submit" disabled={connecting || !!upgrading.step}>
             <Unplug />
-            {connecting ? '连接中…' : '连接'}
+            {connecting ? t('connection:login.connecting') : t('connection:login.connect')}
           </button>
           {connecting && cancel && (
             <button className="button login-submit" type="button" onClick={cancel}>
-              取消
+              {t('common:cancel')}
             </button>
           )}
         </form>
@@ -410,7 +422,7 @@ export default function LoginPage({
           {openSettings && (
             <button className="project-link" type="button" onClick={openSettings}>
               <Settings />
-              本机设置
+              {t('connection:login.localSettings')}
             </button>
           )}
           {project.url && (

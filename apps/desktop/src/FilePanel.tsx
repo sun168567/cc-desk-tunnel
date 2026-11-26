@@ -33,6 +33,7 @@ import {
   X,
   ServerOff,
 } from 'lucide-react';
+import { useT } from './i18n.ts';
 import RichText from './RichText.tsx';
 import './file-panel.css';
 import { copyText } from './copy.tsx';
@@ -139,6 +140,7 @@ export default function FilePanel({
   // What a directory of the service's is for, where its name does not tell (see `nativeLabels`).
   aliasOf: (name: string) => string | undefined;
 }) {
+  const t = useT();
   const [placeId, setPlaceId] = useState(() => places.find((place) => start(place))?.id ?? 'local');
   const place = places.find((entry) => entry.id === placeId) ?? places[0]!;
   const style = place.style;
@@ -223,9 +225,7 @@ export default function FilePanel({
     try {
       directory = (await api().stat(place.id, path)).kind === 'directory';
     } catch (error) {
-      setMessage(
-        (error as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
-      );
+      setMessage((error as Error).message);
       return;
     }
     await go(directory ? path : parentOf(style, path));
@@ -357,7 +357,11 @@ export default function FilePanel({
     }
     const fromLabel = places.find((entry) => entry.id === from.place)?.label ?? '';
     run({
-      label: `${names.length === 1 ? names[0] : `${names.length} 项`}：${fromLabel} → ${to.place.label}`,
+      label: t('files:transfer.label', {
+        what: names.length === 1 ? names[0] : t('files:items', { count: names.length }),
+        from: fromLabel,
+        to: to.place.label,
+      }),
       request: {
         from: { target: from.place, paths: from.paths },
         to: { target: to.place.id, dir: to.dir },
@@ -376,28 +380,18 @@ export default function FilePanel({
       .transfer(id, request)
       .then(
         (result) => {
+          if (result.cancelled) return finish({ state: 'cancelled' });
           finish({ state: 'done', done: result.bytes, total: result.bytes });
           if (request.to.target === place.id) void load(request.to.dir);
         },
-        (error: Error) =>
-          finish(
-            /已取消/.test(error.message)
-              ? { state: 'cancelled' }
-              : {
-                  state: 'failed',
-                  error: error.message.replace(
-                    /^Error invoking remote method '[^']+': (Error: )?/,
-                    '',
-                  ),
-                },
-          ),
+        (error: Error) => finish({ state: 'failed', error: error.message }),
       );
   }
 
   async function makeFolder(directory: string) {
     const name = await askFor<string | null>((resolve) => ({
       kind: 'name',
-      title: '新建文件夹',
+      title: t('files:newFolder'),
       value: '',
       resolve,
     }));
@@ -410,7 +404,7 @@ export default function FilePanel({
   async function renameEntry(path: string) {
     const name = await askFor<string | null>((resolve) => ({
       kind: 'name',
-      title: '重命名',
+      title: t('files:rename'),
       value: baseName(style, path),
       resolve,
     }));
@@ -422,11 +416,13 @@ export default function FilePanel({
   async function removeEntries(paths: string[]) {
     const yes = await askFor<boolean>((resolve) => ({
       kind: 'confirm',
-      title: '删除',
+      title: t('files:delete.title'),
       text:
         paths.length === 1
-          ? `删除“${baseName(style, paths[0]!)}”？${place.kind === 'local' ? '' : '服务端和远程电脑上的文件删除后不能恢复。'}`
-          : `删除这 ${paths.length} 项？`,
+          ? t(place.kind === 'local' ? 'files:delete.one' : 'files:delete.oneRemote', {
+              name: baseName(style, paths[0]!),
+            })
+          : t('files:delete.many', { count: paths.length }),
       resolve,
     }));
     if (!yes) return;
@@ -438,9 +434,7 @@ export default function FilePanel({
       await change();
       setMessage(null);
     } catch (error) {
-      setMessage(
-        (error as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
-      );
+      setMessage((error as Error).message);
     }
     reloadAround(around);
   }
@@ -470,23 +464,25 @@ export default function FilePanel({
       x: event.clientX,
       y: event.clientY,
       items: [
-        ...(directory ? [] : [{ label: '预览', icon: <Expand />, run: () => void show(path) }]),
+        ...(directory
+          ? []
+          : [{ label: t('files:preview'), icon: <Expand />, run: () => void show(path) }]),
         ...(local
           ? [
               {
-                label: '用编辑器打开',
+                label: t('files:openEditor'),
                 icon: <SquareArrowOutUpRight />,
                 run: () => void window.desktop!.actOnPath(directory ? 'open' : 'editor', path),
               },
               {
-                label: '在文件夹中显示',
+                label: t('files:reveal'),
                 icon: <FolderSearch />,
                 run: () => void window.desktop!.actOnPath('reveal', path),
               },
             ]
-          : [{ label: '下载…', icon: <Download />, run: () => void download([path]) }]),
+          : [{ label: t('files:download'), icon: <Download />, run: () => void download([path]) }]),
         {
-          label: '复制',
+          label: t('files:copy'),
           icon: <Copy />,
           separated: true,
           run: () => setClipboard({ place: place.id, paths: [path] }),
@@ -494,22 +490,32 @@ export default function FilePanel({
         ...(clipboard && directory
           ? [
               {
-                label: '粘贴',
+                label: t('files:paste'),
                 icon: <ClipboardPaste />,
                 run: () => void copy(clipboard, { place, dir: into }),
               },
             ]
           : []),
-        { label: '复制路径', icon: <Copy />, run: () => void copyText(path) },
+        { label: t('files:copyPath'), icon: <Copy />, run: () => void copyText(path) },
         {
-          label: '上传…',
+          label: t('files:upload'),
           icon: <Upload />,
           separated: true,
           run: () => void upload(into),
         },
-        { label: '新建文件夹', icon: <FolderPlus />, run: () => void makeFolder(into) },
-        { label: '重命名', icon: <Pencil />, separated: true, run: () => void renameEntry(path) },
-        { label: '删除', icon: <Trash2 />, danger: true, run: () => void removeEntries([path]) },
+        { label: t('files:newFolder'), icon: <FolderPlus />, run: () => void makeFolder(into) },
+        {
+          label: t('files:rename'),
+          icon: <Pencil />,
+          separated: true,
+          run: () => void renameEntry(path),
+        },
+        {
+          label: t('files:delete.title'),
+          icon: <Trash2 />,
+          danger: true,
+          run: () => void removeEntries([path]),
+        },
       ],
     });
   }
@@ -522,15 +528,19 @@ export default function FilePanel({
         ...(clipboard
           ? [
               {
-                label: '粘贴',
+                label: t('files:paste'),
                 icon: <ClipboardPaste />,
                 run: () => void copy(clipboard, { place, dir: directory }),
               },
             ]
           : []),
-        { label: '上传…', icon: <Upload />, run: () => void upload(directory) },
-        { label: '新建文件夹', icon: <FolderPlus />, run: () => void makeFolder(directory) },
-        { label: '刷新', icon: <RefreshCw />, run: refresh },
+        { label: t('files:upload'), icon: <Upload />, run: () => void upload(directory) },
+        {
+          label: t('files:newFolder'),
+          icon: <FolderPlus />,
+          run: () => void makeFolder(directory),
+        },
+        { label: t('files:refresh'), icon: <RefreshCw />, run: refresh },
       ],
     });
   }
@@ -639,8 +649,8 @@ export default function FilePanel({
     <div className="file-tree-pane">
       <label className="file-filter">
         <input
-          placeholder="筛选已展开的文件…"
-          aria-label="筛选文件"
+          placeholder={t('files:filterHint')}
+          aria-label={t('files:filter')}
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
@@ -648,7 +658,7 @@ export default function FilePanel({
       {changes && changes.length > 0 && project && root && within(style, root, project) && (
         <details className="file-changes" open>
           <summary>
-            已更改的文件 <span>{changes.length}</span>
+            {t('files:changes')} <span>{changes.length}</span>
           </summary>
           <div>
             {changes.slice(0, 200).map((change) => {
@@ -690,9 +700,9 @@ export default function FilePanel({
         {rootFolder?.error ? (
           <p className="file-empty-note">{rootFolder.error}</p>
         ) : !rootFolder ? (
-          <p className="file-empty-note">正在读取…</p>
+          <p className="file-empty-note">{t('files:reading')}</p>
         ) : !data.length ? (
-          <p className="file-empty-note">这个文件夹是空的</p>
+          <p className="file-empty-note">{t('files:empty')}</p>
         ) : (
           <Tree<Node>
             data={data}
@@ -738,9 +748,9 @@ export default function FilePanel({
       <table>
         <thead>
           <tr>
-            <th>名称</th>
-            <th>大小</th>
-            <th>修改时间</th>
+            <th>{t('files:col.name')}</th>
+            <th>{t('files:col.size')}</th>
+            <th>{t('files:col.modified')}</th>
           </tr>
         </thead>
         <tbody>
@@ -774,10 +784,10 @@ export default function FilePanel({
   );
 
   const previewPane = preview ? (
-    <section className="file-preview" aria-label="文件预览">
+    <section className="file-preview" aria-label={t('files:previewLabel')}>
       <header className="file-preview-head">
         {narrow && (
-          <IconButton title="返回目录" onClick={() => setPreview(null)}>
+          <IconButton title={t('files:backToFolder')} onClick={() => setPreview(null)}>
             <ArrowLeft />
           </IconButton>
         )}
@@ -785,7 +795,7 @@ export default function FilePanel({
         <b title={preview.path}>{baseName(style, preview.path)}</b>
         <span className="file-meta">
           {preview.size ? formatSize(preview.size) : ''}
-          {changed.get(preview.path) ? ' · 已更改' : ''}
+          {changed.get(preview.path) ? ` · ${t('files:changed')}` : ''}
         </span>
         <span className="grow" />
         {preview.shown?.kind === 'markdown' && (
@@ -794,46 +804,46 @@ export default function FilePanel({
             className="file-source-toggle"
             onClick={() => setPreview({ ...preview, source: !preview.source })}
           >
-            {preview.source ? '排版' : '原文'}
+            {preview.source ? t('files:rendered') : t('files:source')}
           </button>
         )}
         {place.kind === 'local' ? (
           <IconButton
-            title="用编辑器打开"
+            title={t('files:openEditor')}
             onClick={() => void window.desktop!.actOnPath('editor', preview.path)}
           >
             <SquareArrowOutUpRight />
           </IconButton>
         ) : (
-          <IconButton title="下载到本机…" onClick={() => void download([preview.path])}>
+          <IconButton title={t('files:downloadHere')} onClick={() => void download([preview.path])}>
             <Download />
           </IconButton>
         )}
         {preview.shown && preview.shown.kind !== 'binary' && (
-          <IconButton title="全屏阅读" onClick={() => setReading(true)}>
+          <IconButton title={t('files:readFull')} onClick={() => setReading(true)}>
             <Maximize2 />
           </IconButton>
         )}
       </header>
       {preview.truncated && preview.shown?.kind !== 'image' && (
-        <p className="file-truncated">文件较大，只显示开头的部分。</p>
+        <p className="file-truncated">{t('files:truncated')}</p>
       )}
       <div className="file-preview-body">{previewBody(preview)}</div>
     </section>
   ) : layout !== 'narrow' ? (
-    <section className="file-preview empty" aria-label="文件预览">
+    <section className="file-preview empty" aria-label={t('files:previewLabel')}>
       <FolderOpen />
-      <span>选择文件预览</span>
+      <span>{t('files:choosePreview')}</span>
     </section>
   ) : null;
 
   function previewBody(shown: NonNullable<typeof preview>): ReactNode {
     if (shown.error) return <p className="file-empty-note">{shown.error}</p>;
-    if (!shown.shown) return <p className="file-empty-note">正在读取…</p>;
+    if (!shown.shown) return <p className="file-empty-note">{t('files:reading')}</p>;
     const content = shown.shown;
     if (content.kind === 'image')
       return <img className="file-image" src={content.url} alt={baseName(style, shown.path)} />;
-    if (content.kind === 'binary') return <p className="file-empty-note">无法预览</p>;
+    if (content.kind === 'binary') return <p className="file-empty-note">{t('files:noPreview')}</p>;
     if (content.kind === 'markdown' && !shown.source)
       return (
         <div className="file-markdown message-content">
@@ -850,7 +860,9 @@ export default function FilePanel({
           </div>
         ))}
         {lines.length > SHOWN_LINES && (
-          <div className="file-more">还有 {lines.length - SHOWN_LINES} 行未显示</div>
+          <div className="file-more">
+            {t('files:moreLines', { count: lines.length - SHOWN_LINES })}
+          </div>
         )}
       </pre>
     );
@@ -863,7 +875,7 @@ export default function FilePanel({
         {place.label}
       </span>
     ) : !narrow ? (
-      <div className="file-places" role="tablist" aria-label="位置">
+      <div className="file-places" role="tablist" aria-label={t('files:place.label')}>
         {places.map((entry) => (
           <button
             type="button"
@@ -882,7 +894,7 @@ export default function FilePanel({
       <label className="file-place-select">
         {placeIcon(place)}
         <select
-          aria-label="位置"
+          aria-label={t('files:place.label')}
           value={place.id}
           onChange={(event) => setPlaceId(event.target.value)}
         >
@@ -900,38 +912,38 @@ export default function FilePanel({
       <header className="file-panel-head">
         {placesBar}
         <span className="grow" />
-        <HelpLink article="files" title="文件面板怎么用" />
+        <HelpLink article="files" title={t('files:help')} />
         <IconButton
-          title="上传文件…"
+          title={t('files:uploadFiles')}
           disabled={!root}
           onClick={() => root && void upload(current ?? root)}
         >
           <Upload />
         </IconButton>
         <IconButton
-          title="新建文件夹"
+          title={t('files:newFolder')}
           disabled={!root}
           onClick={() => root && void makeFolder(current ?? root)}
         >
           <FolderPlus />
         </IconButton>
-        <IconButton title="刷新" onClick={refresh}>
+        <IconButton title={t('files:refresh')} onClick={refresh}>
           <RefreshCw />
         </IconButton>
         <IconButton
-          title={layout === 'page' ? '收回侧栏' : '展开为整页'}
+          title={layout === 'page' ? t('files:toSide') : t('files:toPage')}
           onClick={() => setPage(layout !== 'page')}
         >
           {layout === 'page' ? <Minimize2 /> : <Maximize2 />}
         </IconButton>
-        <IconButton title="关闭文件面板" onClick={close}>
+        <IconButton title={t('files:close')} onClick={close}>
           <X />
         </IconButton>
       </header>
       {root && (
-        <nav className="file-crumbs" aria-label="当前位置">
+        <nav className="file-crumbs" aria-label={t('files:current')}>
           <IconButton
-            title="上一级"
+            title={t('files:up')}
             disabled={parentOf(style, root) === root}
             onClick={() => void go(parentOf(style, root))}
           >
@@ -955,11 +967,9 @@ export default function FilePanel({
       {unprotected && (
         <div className="file-notice" role="note">
           <ShieldAlert />
-          <span title="内核不支持 Landlock：登录凭据、setup token 等可被读取和修改">
-            敏感文件未受保护
-          </span>
+          <span title={t('files:landlock.detail')}>{t('files:landlock.title')}</span>
           <IconButton
-            title="不再提示"
+            title={t('files:landlock.dismiss')}
             onClick={() => {
               localStorage.setItem(`files-notice:${noticeKey}`, 'closed');
               setNoticeClosed(true);
@@ -972,7 +982,7 @@ export default function FilePanel({
       {message && (
         <div className="file-message" role="alert">
           <span>{message}</span>
-          <IconButton title="关闭" onClick={() => setMessage(null)}>
+          <IconButton title={t('files:closeNotice')} onClick={() => setMessage(null)}>
             <X />
           </IconButton>
         </div>
@@ -981,10 +991,8 @@ export default function FilePanel({
         {outdated ? (
           <div className="file-preview empty file-outdated" role="note">
             <ServerOff />
-            <b>服务端镜像较旧</b>
-            <span title="缺少 sftp-server；在服务器上用 deploy/manage.sh 升级">
-              升级镜像后可浏览
-            </span>
+            <b>{t('files:oldImage.title')}</b>
+            <span title={t('files:oldImage.detail')}>{t('files:oldImage.action')}</span>
           </div>
         ) : previewing ? (
           previewPane
@@ -997,13 +1005,16 @@ export default function FilePanel({
         )}
       </div>
       {transfers.length > 0 && (
-        <ul className="file-transfers" aria-label="传输">
+        <ul className="file-transfers" aria-label={t('files:transfer.list')}>
           {transfers.map((transfer) => (
             <li key={transfer.id} className={`transfer-${transfer.state}`}>
               {transfer.request.to.target === 'local' ? <Download /> : <Upload />}
               <span className="transfer-label" title={transfer.error ?? transfer.label}>
                 {transfer.state === 'failed'
-                  ? `${transfer.label}：${transfer.error}`
+                  ? t('files:transfer.failedWith', {
+                      label: transfer.label,
+                      error: transfer.error ?? '',
+                    })
                   : transfer.label}
               </span>
               {transfer.state === 'running' && (
@@ -1019,12 +1030,12 @@ export default function FilePanel({
                 {transfer.state === 'running'
                   ? transfer.total
                     ? `${formatSize(transfer.done)} / ${formatSize(transfer.total)}`
-                    : '准备中'
+                    : t('files:transfer.preparing')
                   : transfer.state === 'done'
-                    ? '完成'
+                    ? t('files:transfer.done')
                     : transfer.state === 'cancelled'
-                      ? '已取消'
-                      : '失败'}
+                      ? t('files:transfer.cancelled')
+                      : t('files:transfer.failed')}
               </span>
               {transfer.state === 'running' ? (
                 <button
@@ -1032,7 +1043,7 @@ export default function FilePanel({
                   className="link-button"
                   onClick={() => void api().cancel(transfer.id)}
                 >
-                  取消
+                  {t('common:cancel')}
                 </button>
               ) : transfer.state === 'failed' ? (
                 <>
@@ -1047,10 +1058,10 @@ export default function FilePanel({
                       });
                     }}
                   >
-                    续传
+                    {t('files:transfer.resume')}
                   </button>
                   <IconButton
-                    title="移除"
+                    title={t('files:transfer.remove')}
                     onClick={() =>
                       setTransfers((all) => all.filter((entry) => entry.id !== transfer.id))
                     }
@@ -1063,7 +1074,7 @@ export default function FilePanel({
           ))}
         </ul>
       )}
-      {menu && <Menu label="文件" {...menu} onClose={() => setMenu(null)} />}
+      {menu && <Menu label={t('files:title')} {...menu} onClose={() => setMenu(null)} />}
       {reading && preview?.shown && preview.shown.kind !== 'binary' && (
         <Modal title={baseName(style, preview.path)} onClose={() => setReading(false)}>
           <div className="file-reader">{previewBody(preview)}</div>
@@ -1075,38 +1086,40 @@ export default function FilePanel({
           <p className="delete-question">{ask.text}</p>
           <div className="dialog-actions">
             <button type="button" className="button secondary" onClick={() => ask.resolve(false)}>
-              取消
+              {t('common:cancel')}
             </button>
             <button type="button" className="button danger" onClick={() => ask.resolve(true)}>
-              删除
+              {t('files:delete.confirm')}
             </button>
           </div>
         </Modal>
       )}
       {ask?.kind === 'conflict' && (
-        <Modal title="目标位置已有同名项" onClose={() => ask.resolve(null)}>
+        <Modal title={t('files:conflict.title')} onClose={() => ask.resolve(null)}>
           <p className="delete-question">
             {ask.names.length === 1
-              ? `“${ask.names[0]}”`
-              : `${ask.names.slice(0, 3).join('、')} 等 ${ask.names.length} 项`}
-            已存在
+              ? t('files:conflict.one', { name: ask.names[0] })
+              : t('files:conflict.many', {
+                  names: ask.names.slice(0, 3),
+                  count: ask.names.length,
+                })}
           </p>
           <div className="dialog-actions">
             <button type="button" className="button secondary" onClick={() => ask.resolve(null)}>
-              取消
+              {t('common:cancel')}
             </button>
             <button type="button" className="button secondary" onClick={() => ask.resolve('skip')}>
-              跳过
+              {t('files:conflict.skip')}
             </button>
             <button
               type="button"
               className="button secondary"
               onClick={() => ask.resolve('resume')}
             >
-              续传
+              {t('files:transfer.resume')}
             </button>
             <button type="button" className="button primary" onClick={() => ask.resolve('replace')}>
-              替换
+              {t('files:conflict.replace')}
             </button>
           </div>
         </Modal>
@@ -1116,6 +1129,7 @@ export default function FilePanel({
 }
 
 function NameDialog({ ask }: { ask: Extract<Ask, { kind: 'name' }> }) {
+  const t = useT();
   const [value, setValue] = useState(ask.value);
   const valid = value.trim() && !/[\\/]/.test(value);
   return (
@@ -1128,7 +1142,7 @@ function NameDialog({ ask }: { ask: Extract<Ask, { kind: 'name' }> }) {
         }}
       >
         <label>
-          名称
+          {t('files:col.name')}
           <input
             autoFocus
             value={value}
@@ -1141,10 +1155,10 @@ function NameDialog({ ask }: { ask: Extract<Ask, { kind: 'name' }> }) {
         </label>
         <div className="dialog-actions">
           <button type="button" className="button secondary" onClick={() => ask.resolve(null)}>
-            取消
+            {t('common:cancel')}
           </button>
           <button type="submit" className="button primary" disabled={!valid}>
-            确定
+            {t('files:ok')}
           </button>
         </div>
       </form>

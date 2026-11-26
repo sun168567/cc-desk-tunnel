@@ -12,6 +12,9 @@ import {
   unsupportedShell,
 } from './connect-errors.mjs';
 import { findGitBash } from './git-bash.mjs';
+import { failure, failureOf, phrase } from './failure.cjs';
+
+const pwsh = phrase('desktop:component.pwsh');
 
 function execute(file, args, timeout) {
   return new Promise((resolve, reject) => {
@@ -24,13 +27,13 @@ function execute(file, args, timeout) {
         // What the script reported, such as ssh-keygen failing or a folder that may not be written, says why.
         const said = lastLine(stderr);
         reject(
-          new Error(
-            error.code === 'ENOENT'
-              ? missingComponent('PowerShell（pwsh.exe）')
-              : error.killed
-                ? `本机 SSH 服务的准备步骤在 ${timeout / 1000} 秒内没有完成。\n电脑较忙或安全软件逐个扫描程序时会变慢，请重新连接。`
-                : `本机 SSH 服务的准备步骤失败。${said ? `\n${said}` : '\n请重新连接；仍然失败时重新安装本应用。'}`,
-          ),
+          error.code === 'ENOENT'
+            ? failureOf(missingComponent(pwsh))
+            : error.killed
+              ? failure('desktop:component.prepareSlow', { seconds: timeout / 1000 })
+              : said
+                ? failure('desktop:component.prepareSaid', { said })
+                : failure('desktop:component.prepareFailed'),
         );
       },
     );
@@ -128,7 +131,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
       });
     children.push(child);
     child.once('error', () => {
-      if (!closed) onFailure(missingComponent('PowerShell（pwsh.exe）'));
+      if (!closed) onFailure(missingComponent(pwsh));
     });
     child.once('close', () => {
       if (!closed) onFailure(componentFailure(output, Date.now() - started < 30000));
@@ -138,7 +141,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
   try {
     check();
     await access(join(binaries.openssh, 'sshd.exe')).catch(() => {
-      throw new Error(missingComponent('sshd.exe'));
+      throw failureOf(missingComponent('sshd.exe'));
     });
     const port = await availablePort();
     const metadata = JSON.parse(
@@ -160,7 +163,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
         Math.max(30000, readyMs),
       ),
     );
-    if (metadata.unsupportedShell) throw new Error(unsupportedShell(metadata.unsupportedShell));
+    if (metadata.unsupportedShell) throw failureOf(unsupportedShell(metadata.unsupportedShell));
     check();
     launch(powershell, [
       '-NoLogo',
@@ -184,10 +187,7 @@ export async function startWindowsSsh(connectionId, binaries, signal, onFailure,
       }
       await delay(100);
     }
-    if (!ready)
-      throw new Error(
-        `本机的 SSH 服务在 ${readyMs / 1000} 秒内没有开始监听。\n电脑较忙或安全软件逐个扫描程序时会变慢，可在“设置 → 连接”里调大等待时间。`,
-      );
+    if (!ready) throw failure('desktop:component.notListening', { seconds: readyMs / 1000 });
     return {
       port,
       credentials: {

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { ClipboardEvent, KeyboardEvent } from 'react';
 import { fileName, pieces, quote } from './attachments.ts';
+import { t as say, useT } from './i18n.ts';
 import { isPicture, localPicture } from './links.ts';
 import { PictureDialog } from './Picture.tsx';
 
@@ -36,6 +37,7 @@ const PlainInput = forwardRef<MessageInputHandle, Props>(function PlainInput(
   { value, onChange, disabled, placeholder, onKeyDown, onPaste },
   ref,
 ) {
+  const t = useT();
   const box = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(
     ref,
@@ -61,7 +63,7 @@ const PlainInput = forwardRef<MessageInputHandle, Props>(function PlainInput(
     <textarea
       ref={box}
       className="message-input"
-      aria-label="消息"
+      aria-label={t('session:composer.message')}
       placeholder={placeholder}
       value={value}
       disabled={disabled}
@@ -92,7 +94,7 @@ function chip(path: string) {
   name.textContent = fileName(path);
   const remove = document.createElement('span');
   remove.className = 'path-chip-remove';
-  remove.title = '移除';
+  remove.title = say('session:composer.remove');
   element.append(name, remove);
   return element;
 }
@@ -154,6 +156,7 @@ const RichInput = forwardRef<MessageInputHandle, Props>(function RichInput(
   { value, onChange, windows, disabled, placeholder, onKeyDown, onPaste },
   ref,
 ) {
+  const t = useT();
   const box = useRef<HTMLDivElement>(null);
   // The text the box shows. A value from elsewhere (another session's draft, a command filled in, a message sent)
   // is drawn anew; one the box made itself is there already, and drawing it again would lose the caret.
@@ -257,7 +260,7 @@ const RichInput = forwardRef<MessageInputHandle, Props>(function RichInput(
         className="message-input"
         role="textbox"
         aria-multiline="true"
-        aria-label="消息"
+        aria-label={t('session:composer.message')}
         aria-disabled={disabled || undefined}
         aria-placeholder={placeholder}
         data-placeholder={placeholder}

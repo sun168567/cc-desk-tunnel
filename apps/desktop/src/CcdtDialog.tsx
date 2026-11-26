@@ -1,4 +1,5 @@
 import { ExternalLink } from 'lucide-react';
+import { useT } from './i18n.ts';
 import { CopyButton } from './copy.tsx';
 import { project } from './project.tsx';
 import { Modal } from './ui.tsx';
@@ -22,26 +23,26 @@ export function CcdtDialog({
   version: string;
   close: () => void;
 }) {
+  const t = useT();
   const platform = window.desktop?.platform ?? '';
   const command = installCommand(platform, version);
   return (
-    <Modal title={installed ? '更新 ccdt' : '安装 ccdt'} onClose={close}>
+    <Modal title={installed ? t('session:ccdt.update') : t('session:ccdt.install')} onClose={close}>
       <div className="dialog-form ccdt-dialog">
         <p>
           {installed
-            ? `这台电脑上的 ccdt 是 ${installed}，要与服务端同为 ${version} 才能连接。`
-            : '用 ccdt 打开需要先安装终端客户端 ccdt：在自己的终端里使用原版 Claude Code，与这里共用会话。'}
+            ? t('session:ccdt.outdated', { installed, version })
+            : t('session:ccdt.needed')}
         </p>
         <p className="muted">
-          在{platform === 'win32' ? ' PowerShell ' : '终端'}里运行下面这行，装好后再选一次“在 ccdt
-          中打开”：
+          {t(platform === 'win32' ? 'session:ccdt.runPowerShell' : 'session:ccdt.runTerminal')}
         </p>
         <div className="code-block">
           <pre>
             <code>{command}</code>
           </pre>
           <span className="code-actions">
-            <CopyButton text={command} label="复制命令" />
+            <CopyButton text={command} label={t('session:ccdt.copy')} />
           </span>
         </div>
         <div className="dialog-actions">
@@ -51,10 +52,10 @@ export function CcdtDialog({
             onClick={() => void window.desktop?.openExternal(`${project.url}#终端客户端-ccdt`)}
           >
             <ExternalLink />
-            安装说明
+            {t('session:ccdt.guide')}
           </button>
           <button type="button" className="button primary" onClick={close}>
-            知道了
+            {t('common:gotIt')}
           </button>
         </div>
       </div>

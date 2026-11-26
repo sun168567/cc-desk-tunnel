@@ -12,6 +12,7 @@
     "apps/cli",
     "apps/desktop",
     "apps/server",
+    "packages/i18n",
     "packages/protocol"
   ],
   "scripts": {
@@ -20,7 +21,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test apps/server/test/*.test.ts packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs apps/cli/test/*.test.mjs",
+    "test": "node --test apps/server/test/*.test.ts packages/i18n/test/*.test.mjs packages/protocol/test/*.test.ts apps/desktop/test-main/*.test.mjs apps/cli/test/*.test.mjs",
     "pretest:ui": "npm run build",
     "test:ui": "playwright test",
     "dev": "node scripts/dev.mjs",

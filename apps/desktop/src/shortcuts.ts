@@ -1,3 +1,4 @@
+import type { T } from './i18n.ts';
 import { isMac } from './platform.ts';
 import type { Prefs } from './prefs.ts';
 
@@ -15,20 +16,22 @@ export type Action =
   | 'zoomIn'
   | 'zoomOut'
   | 'zoomReset';
-// `desktop` marks what only the desktop window does; a browser has its own zoom.
-export const actions: { id: Action; name: string; desktop?: boolean }[] = [
-  { id: 'back', name: '后退' },
-  { id: 'forward', name: '前进' },
-  { id: 'toggleSide', name: '收起或展开侧栏' },
-  { id: 'newSession', name: '新建会话' },
-  { id: 'settings', name: '打开设置' },
-  { id: 'find', name: '查找对话内容' },
-  { id: 'cycleMode', name: '切换审批模式' },
-  { id: 'toggleFiles', name: '打开或关闭文件面板', desktop: true },
-  { id: 'zoomIn', name: '放大界面', desktop: true },
-  { id: 'zoomOut', name: '缩小界面', desktop: true },
-  { id: 'zoomReset', name: '恢复界面大小', desktop: true },
+// `desktop` marks what only the desktop window does; a browser has its own zoom. Each is named by
+// settings:shortcut.action.<id> (actionName).
+export const actions: { id: Action; desktop?: boolean }[] = [
+  { id: 'back' },
+  { id: 'forward' },
+  { id: 'toggleSide' },
+  { id: 'newSession' },
+  { id: 'settings' },
+  { id: 'find' },
+  { id: 'cycleMode' },
+  { id: 'toggleFiles', desktop: true },
+  { id: 'zoomIn', desktop: true },
+  { id: 'zoomOut', desktop: true },
+  { id: 'zoomReset', desktop: true },
 ];
+export const actionName = (t: T, action: Action) => t(`settings:shortcut.action.${action}`);
 // On macOS the key of commands is Command, which a key press names `Win` here as on any keyboard. Option with an
 // arrow moves through text there, so going back and forward take the brackets, as in its browsers. Each default is
 // written in the order comboOf records a key press in, or a press of it would not match.
@@ -89,10 +92,14 @@ const names: Record<string, string> = {
   ArrowRight: '→',
   ArrowUp: '↑',
   ArrowDown: '↓',
-  Space: '空格',
 };
-export const show = (combo: string) =>
+// A combination as it is written for the user; the space bar is named in the window's language.
+export const show = (t: T, combo: string) =>
   combo
     .split('+')
-    .map((part) => names[part] ?? part.replace(/^(Key|Digit)/, ''))
+    .map((part) =>
+      part === 'Space'
+        ? t('settings:shortcut.space')
+        : (names[part] ?? part.replace(/^(Key|Digit)/, '')),
+    )
     .join('+');

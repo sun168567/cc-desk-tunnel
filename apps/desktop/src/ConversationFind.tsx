@@ -1,6 +1,7 @@
 import { createContext, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { ArrowDown, ArrowUp, X } from 'lucide-react';
+import { useT } from './i18n.ts';
 import { matchingRanges } from './conversationSearch.ts';
 import { IconButton } from './ui.tsx';
 
@@ -24,6 +25,7 @@ export default function ConversationFind({
   // Earlier pages of the session are not loaded, and so not searched.
   partial: boolean;
 }) {
+  const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const ranges = useRef<Range[]>([]);
   const active = useRef(0);
@@ -90,7 +92,7 @@ export default function ConversationFind({
     <div
       className="conversation-find"
       role="search"
-      aria-label="对话内查找"
+      aria-label={t('session:find.label')}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
         if (event.key === 'Escape') {
@@ -105,26 +107,26 @@ export default function ConversationFind({
     >
       <input
         ref={input}
-        aria-label="查找对话内容"
+        aria-label={t('session:find.query')}
         value={query}
-        placeholder="查找对话内容"
+        placeholder={t('session:find.query')}
         onChange={(event) => change(event.target.value)}
       />
       <span className="find-count" role="status">
         {result.index} / {result.count}
-        {partial ? '（仅已加载部分）' : ''}
+        {partial ? t('session:find.partial') : ''}
       </span>
       <IconButton
-        title="上一个匹配（Shift+Enter）"
+        title={t('session:find.previous')}
         disabled={!result.count}
         onClick={() => move(-1)}
       >
         <ArrowUp />
       </IconButton>
-      <IconButton title="下一个匹配（Enter）" disabled={!result.count} onClick={() => move(1)}>
+      <IconButton title={t('session:find.next')} disabled={!result.count} onClick={() => move(1)}>
         <ArrowDown />
       </IconButton>
-      <IconButton title="关闭查找（Esc）" onClick={close}>
+      <IconButton title={t('session:find.close')} onClick={close}>
         <X />
       </IconButton>
     </div>

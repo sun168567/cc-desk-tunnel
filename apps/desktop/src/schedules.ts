@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { effortSchema } from '@cc-desk-tunnel/protocol';
 import type { Effort } from '@cc-desk-tunnel/protocol';
+import { useT } from './i18n.ts';
+import type { T } from './i18n.ts';
 
 // Scheduled tasks belong to this computer: a task is a message the client sends by itself when its time
 // comes. They live in one JSON file the user, this window and Claude (over SSH) may all edit; the file
@@ -22,32 +24,41 @@ export type Task = {
   effort: Effort | null;
 };
 // What the last due time came to; kept apart from the file so that running a task never rewrites it.
-export type Outcome = { at: number; status: 'sent' | 'missed' | 'failed'; text: string };
+// `due` is the time a missed run was for, and `error` why one failed; one run at once that could not be
+// sent then is `blocked`.
+export type Outcome = {
+  at: number;
+  status: 'sent' | 'missed' | 'failed' | 'blocked';
+  due?: number;
+  error?: string;
+};
 type Progress = Record<string, { key: string; base: number; last?: Outcome }>;
 
-export const guide = [
-  'CC Desk Tunnel 客户端的定时任务。到点时客户端向会话发送一条带“定时任务”标签的消息，内容为 prompt。',
-  '修改本文件后几秒内生效，无需重启；格式不对的任务不会运行，并在客户端“定时任务”面板里提示原因。',
-  '任务字段：id（任意不重复字符串）、name、enabled（true/false）、prompt（不超过 15000 字）、schedule、target、model、effort。',
-  'schedule 四选一，时间均为本机时间：{"type":"once","at":"2026-01-31T09:00"}、{"type":"daily","time":"09:00"}、',
-  '{"type":"weekly","days":[1,3,5],"time":"09:00"}（1=周一 … 7=周日）、{"type":"interval","minutes":60}（不少于 5）。',
-  'target 二选一：{"type":"session","sessionId":"…"} 接续已有会话；{"type":"new","projectPath":"D:\\\\项目"} 每次新开会话。',
-  'model 与 effort 可为 null（不改动会话当前设置）；effort 取 low / medium / high / xhigh / max。',
-  '只在客户端运行并已连接时触发；晚于计划 10 分钟仍无法发送的那一次会跳过。无人值守时会话应使用自动审批，否则会停在审批处。',
-];
+// The file's own account of its format, for whoever edits it: written in the window's language, under a key
+// of that language too. Reading the file ignores it.
+const guide = [
+  'intro',
+  'reload',
+  'fields',
+  'schedule',
+  'weekly',
+  'target',
+  'model',
+  'when',
+] as const;
 export const grace = 10 * 60_000;
 const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-function parseTask(value: unknown): Task {
+function parseTask(t: T, value: unknown): Task {
   const fail = (reason: string): never => {
     throw new Error(reason);
   };
-  if (!value || typeof value !== 'object') return fail('不是对象');
+  if (!value || typeof value !== 'object') return fail(t('schedules:problem.notObject'));
   const task = value as Record<string, unknown>;
   const text = (key: string, max: number) => {
     const field = task[key];
     if (typeof field !== 'string' || !field.trim() || field.length > max)
-      return fail(`${key} 应为不超过 ${max} 字的非空文本`);
+      return fail(t('schedules:problem.text', { field: key, max }));
     return field as string;
   };
   const schedule = task.schedule as Record<string, unknown> | undefined;
@@ -55,13 +66,13 @@ function parseTask(value: unknown): Task {
   const time = () =>
     typeof schedule?.time === 'string' && clock.test(schedule.time)
       ? schedule.time
-      : fail('schedule.time 应为 HH:MM');
+      : fail(t('schedules:problem.time'));
   let rule: Schedule;
   if (schedule?.type === 'once')
     rule =
       typeof schedule.at === 'string' && !Number.isNaN(new Date(schedule.at).getTime())
         ? { type: 'once', at: schedule.at }
-        : fail('schedule.at 应为 2026-01-31T09:00 形式的时间');
+        : fail(t('schedules:problem.at'));
   else if (schedule?.type === 'daily') rule = { type: 'daily', time: time() };
   else if (schedule?.type === 'weekly') {
     const days = schedule.days;
@@ -70,24 +81,24 @@ function parseTask(value: unknown): Task {
       !days.length ||
       days.some((day) => !Number.isInteger(day) || day < 1 || day > 7)
     )
-      return fail('schedule.days 应为 1 到 7 的数组');
+      return fail(t('schedules:problem.days'));
     rule = { type: 'weekly', days: [...new Set(days as number[])].sort(), time: time() };
   } else if (schedule?.type === 'interval')
     rule =
       Number.isInteger(schedule.minutes) && (schedule.minutes as number) >= 5
         ? { type: 'interval', minutes: schedule.minutes as number }
-        : fail('schedule.minutes 应为不小于 5 的整数');
-  else return fail('schedule.type 应为 once / daily / weekly / interval');
+        : fail(t('schedules:problem.minutes'));
+  else return fail(t('schedules:problem.type'));
   let where: Target;
   if (target?.type === 'session' && typeof target.sessionId === 'string' && target.sessionId)
     where = { type: 'session', sessionId: target.sessionId };
   else if (target?.type === 'new' && typeof target.projectPath === 'string' && target.projectPath)
     where = { type: 'new', projectPath: target.projectPath };
-  else return fail('target 应为 {"type":"session","sessionId"} 或 {"type":"new","projectPath"}');
+  else return fail(t('schedules:problem.target'));
   const effort = task.effort == null ? null : effortSchema.safeParse(task.effort).data;
-  if (effort === undefined) return fail('effort 应为 low / medium / high / xhigh / max 或 null');
+  if (effort === undefined) return fail(t('schedules:problem.effort'));
   if (task.model != null && (typeof task.model !== 'string' || !task.model.trim()))
-    return fail('model 应为模型名或 null');
+    return fail(t('schedules:problem.model'));
   return {
     id: text('id', 120),
     name: text('name', 80),
@@ -101,31 +112,41 @@ function parseTask(value: unknown): Task {
 }
 // Reads the file's text. A task that cannot be understood is left out and named in `problems`; text that is
 // not the expected JSON at all yields `broken`, and the caller keeps what it had.
-export function parseTasks(text: string): { tasks: Task[]; problems: string[]; broken?: string } {
+export function parseTasks(
+  t: T,
+  text: string,
+): { tasks: Task[]; problems: string[]; broken?: string } {
   let list: unknown;
   try {
     list = text.trim() ? (JSON.parse(text) as { tasks?: unknown }).tasks : [];
   } catch (error) {
-    return { tasks: [], problems: [], broken: `不是有效的 JSON：${(error as Error).message}` };
+    const reason = (error as Error).message;
+    return { tasks: [], problems: [], broken: t('schedules:problem.notJson', { reason }) };
   }
-  if (!Array.isArray(list)) return { tasks: [], problems: [], broken: '缺少 tasks 数组' };
+  if (!Array.isArray(list))
+    return { tasks: [], problems: [], broken: t('schedules:problem.noTasks') };
   const tasks: Task[] = [];
   const problems: string[] = [];
   list.forEach((value, index) => {
     const name = (value as { name?: unknown } | null)?.name;
-    const label = typeof name === 'string' && name ? `“${name}”` : `第 ${index + 1} 个任务`;
+    const label =
+      typeof name === 'string' && name
+        ? t('schedules:problem.named', { name })
+        : t('schedules:problem.numbered', { n: index + 1 });
     try {
-      const task = parseTask(value);
-      if (tasks.some((other) => other.id === task.id)) throw new Error('id 与其他任务重复');
+      const task = parseTask(t, value);
+      if (tasks.some((other) => other.id === task.id))
+        throw new Error(t('schedules:problem.duplicateId'));
       tasks.push(task);
     } catch (error) {
-      problems.push(`${label}：${(error as Error).message}`);
+      problems.push(t('schedules:problem.task', { label, reason: (error as Error).message }));
     }
   });
   return { tasks, problems };
 }
-export function formatTasks(tasks: Task[]) {
-  return JSON.stringify({ 说明: guide, tasks }, null, 2) + '\n';
+export function formatTasks(t: T, tasks: Task[]) {
+  const about = guide.map((line) => t(`schedules:file.guide.${line}`));
+  return JSON.stringify({ [t('schedules:file.key')]: about, tasks }, null, 2) + '\n';
 }
 
 function at(day: Date, time: string) {
@@ -148,13 +169,22 @@ export function nextRun(schedule: Schedule, after: number): number | null {
   }
   return null;
 }
-const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
-export function describeSchedule(schedule: Schedule) {
-  if (schedule.type === 'once') return `一次 · ${stamp(new Date(schedule.at).getTime())}`;
-  if (schedule.type === 'daily') return `每天 ${schedule.time}`;
+// Monday is 1 and Sunday 7, as in the file.
+export const weekdays = [1, 2, 3, 4, 5, 6, 7] as const;
+export const weekdayName = (t: T, day: number) =>
+  t(`schedules:weekday.${String(day) as `${(typeof weekdays)[number]}`}`);
+export function describeSchedule(t: T, schedule: Schedule) {
+  if (schedule.type === 'once')
+    return t('schedules:rule.once', { time: stamp(new Date(schedule.at).getTime()) });
+  if (schedule.type === 'daily') return t('schedules:rule.daily', { time: schedule.time });
   if (schedule.type === 'weekly')
-    return `每周${schedule.days.map((day) => weekdays[day - 1]).join('、')} ${schedule.time}`;
-  return schedule.minutes % 60 ? `每 ${schedule.minutes} 分钟` : `每 ${schedule.minutes / 60} 小时`;
+    return t('schedules:rule.weekly', {
+      days: schedule.days.map((day) => weekdayName(t, day)),
+      time: schedule.time,
+    });
+  return schedule.minutes % 60
+    ? t('schedules:rule.minutes', { count: schedule.minutes })
+    : t('schedules:rule.hours', { count: schedule.minutes / 60 });
 }
 export function stamp(time: number) {
   const date = new Date(time);
@@ -162,8 +192,15 @@ export function stamp(time: number) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 // The message a due task sends: the user's prompt under a line saying where it came from.
-export function taskMessage(task: Task, due: number) {
-  return `[定时任务「${task.name}」· 计划时间 ${stamp(due)}]\n\n${task.prompt}`;
+export function taskMessage(t: T, task: Task, due: number) {
+  return `${t('schedules:message', { name: task.name, time: stamp(due) })}\n\n${task.prompt}`;
+}
+export function outcomeText(t: T, outcome: Outcome) {
+  if (outcome.status === 'sent') return t('schedules:outcome.sent');
+  if (outcome.status === 'missed')
+    return t('schedules:outcome.missed', { time: stamp(outcome.due ?? outcome.at) });
+  if (outcome.status === 'blocked') return t('schedules:outcome.blocked');
+  return outcome.error ?? t('schedules:outcome.failed');
 }
 
 const storageKey = 'proxy-schedules';
@@ -176,8 +213,8 @@ function readProgress(): Progress {
     return {};
   }
 }
-async function loadFile(): Promise<{ path: string; text: string }> {
-  if (window.desktop) return window.desktop.loadSchedules(formatTasks([]));
+async function loadFile(t: T): Promise<{ path: string; text: string }> {
+  if (window.desktop) return window.desktop.loadSchedules(formatTasks(t, []));
   return { path: '', text: localStorage.getItem(storageKey) ?? '' };
 }
 
@@ -200,12 +237,14 @@ export function useSchedules(
   report?: (task: Task, outcome: Outcome) => void,
   enabled = true,
 ) {
+  const t = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [problems, setProblems] = useState<string[]>([]);
+  // The file's text as last read, kept so that what is wrong with it is said again in a new language.
+  const [file, setFile] = useState('');
   const [path, setPath] = useState('');
   const [progress, setProgress] = useState<Progress>(readProgress);
-  const current = useRef({ tasks, progress, send, report });
-  current.current = { tasks, progress, send, report };
+  const current = useRef({ tasks, progress, send, report, t });
+  current.current = { tasks, progress, send, report, t };
   const busy = useRef(false);
 
   const record = useCallback((update: (progress: Progress) => Progress) => {
@@ -216,8 +255,8 @@ export function useSchedules(
   }, []);
   const accept = useCallback(
     (text: string) => {
-      const parsed = parseTasks(text);
-      setProblems(parsed.broken ? [`配置文件未采用：${parsed.broken}`] : parsed.problems);
+      const parsed = parseTasks(current.current.t, text);
+      setFile(text);
       // A file that cannot be read at all changes nothing: the tasks already loaded keep running.
       if (parsed.broken) return;
       setTasks(parsed.tasks);
@@ -234,9 +273,15 @@ export function useSchedules(
     },
     [record],
   );
+  const problems = useMemo(() => {
+    const parsed = parseTasks(t, file);
+    return parsed.broken
+      ? [t('schedules:problem.refused', { reason: parsed.broken })]
+      : parsed.problems;
+  }, [t, file]);
   useEffect(() => {
     if (!enabled) return;
-    void loadFile().then((file) => {
+    void loadFile(current.current.t).then((file) => {
       setPath(file.path);
       accept(file.text);
     });
@@ -244,15 +289,12 @@ export function useSchedules(
   }, [accept, enabled]);
 
   const settle = useCallback(
-    (task: Task, status: Outcome['status'], text: string) => {
-      if (status !== 'sent') current.current.report?.(task, { at: Date.now(), status, text });
+    (task: Task, result: Omit<Outcome, 'at'>) => {
+      const last = { at: Date.now(), ...result };
+      if (last.status !== 'sent') current.current.report?.(task, last);
       record((progress) => ({
         ...progress,
-        [task.id]: {
-          ...progress[task.id]!,
-          base: Date.now(),
-          last: { at: Date.now(), status, text },
-        },
+        [task.id]: { ...progress[task.id]!, base: Date.now(), last },
       }));
     },
     [record],
@@ -261,9 +303,12 @@ export function useSchedules(
     async (task: Task, due: number) => {
       try {
         if (!(await current.current.send(task, due))) return false;
-        settle(task, 'sent', '已发送');
+        settle(task, { status: 'sent' });
       } catch (error) {
-        settle(task, 'failed', error instanceof Error ? error.message : '发送失败');
+        settle(task, {
+          status: 'failed',
+          error: error instanceof Error ? error.message : undefined,
+        });
       }
       return true;
     },
@@ -281,7 +326,7 @@ export function useSchedules(
           const due = nextRun(task.schedule, state.base);
           if (due === null || due > Date.now()) continue;
           // While it cannot be sent it is tried again on every tick, until it is too late to be worth it.
-          if (Date.now() - due > grace) settle(task, 'missed', `错过了 ${stamp(due)} 的一次`);
+          if (Date.now() - due > grace) settle(task, { status: 'missed', due });
           else await attempt(task, due);
         }
       } finally {
@@ -295,7 +340,7 @@ export function useSchedules(
 
   const save = useCallback(
     async (tasks: Task[]) => {
-      const text = formatTasks(tasks);
+      const text = formatTasks(current.current.t, tasks);
       if (window.desktop) await window.desktop.saveSchedules(text);
       else localStorage.setItem(storageKey, text);
       accept(text);
@@ -313,8 +358,7 @@ export function useSchedules(
     last: (task) => progress[task.id]?.last,
     save,
     runNow: async (task) => {
-      if (!(await attempt(task, Date.now())))
-        settle(task, 'failed', '现在无法发送：未连接，或目标会话正在运行');
+      if (!(await attempt(task, Date.now()))) settle(task, { status: 'blocked' });
     },
   };
   return result;

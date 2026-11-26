@@ -7,12 +7,15 @@ import type {
   WebSettingsState,
   WebTotpSetup,
 } from '@cc-desk-tunnel/protocol';
+import { wordsText } from '@cc-desk-tunnel/i18n';
+import { localeOf, t as say, useT } from './i18n.ts';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Modal, Row, Switch } from './ui.tsx';
 import { CopyButton } from './copy.tsx';
 import ReverseProxyHelp from './ReverseProxyHelp.tsx';
 
-const message = (error: unknown) => (error instanceof Error ? error.message : '请求失败，请重试。');
+const message = (error: unknown) =>
+  error instanceof Error ? error.message : say('settings:web.requestFailed');
 
 // The service token, and the current authenticator code once two-step verification is on.
 function ProofFields({
@@ -24,10 +27,11 @@ function ProofFields({
   change: (value: WebProof) => void;
   totp: boolean;
 }) {
+  const t = useT();
   return (
     <>
       <label>
-        服务凭据
+        {t('settings:web.credential')}
         <input
           type="password"
           autoComplete="current-password"
@@ -38,7 +42,7 @@ function ProofFields({
       </label>
       {totp && (
         <label>
-          当前验证器动态码
+          {t('settings:web.currentCode')}
           <input
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -86,6 +90,7 @@ function DialogForm({
   close: () => void;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <Modal
       title={title}
@@ -108,10 +113,10 @@ function DialogForm({
         )}
         <div className="dialog-actions">
           <button type="button" className="button" disabled={busy} onClick={close}>
-            取消
+            {t('common:cancel')}
           </button>
           <button className="button primary" disabled={busy}>
-            {submitLabel ?? (busy ? '正在保存…' : '确认')}
+            {submitLabel ?? (busy ? t('settings:web.saving') : t('settings:web.confirm'))}
           </button>
         </div>
       </form>
@@ -141,6 +146,7 @@ export default function WebAccessSettings({
   browser: boolean;
   connectionUrl?: string;
 }) {
+  const t = useT();
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const [values, setValues] = useState<WebSettingsState | null>(null);
   const [certificate, setCertificate] = useState<WebCertificateState | null>(null);
@@ -194,7 +200,7 @@ export default function WebAccessSettings({
       if (window.desktop) await window.desktop.copyText(text);
       else await navigator.clipboard.writeText(text);
     } catch {
-      setError('复制失败，请选中地址后复制。');
+      setError(t('settings:web.copyFailed'));
     }
   }
   async function open(url: string) {
@@ -202,10 +208,10 @@ export default function WebAccessSettings({
       if (window.desktop) await window.desktop.openWeb(url);
       else window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
-      setError('打开浏览器失败，请复制地址访问。');
+      setError(t('settings:web.openFailed'));
     }
   }
-  if (!connected) return <p className="muted">连接服务端后管理浏览器访问。</p>;
+  if (!connected) return <p className="muted">{t('settings:web.connectFirst')}</p>;
   const close = () => setDialog(null);
   const own = connection.browser?.sessionId;
   const expires =
@@ -215,17 +221,17 @@ export default function WebAccessSettings({
     <>
       <div className="card web-access-settings" aria-busy={busy}>
         {!values ? (
-          <Row title={busy ? '正在读取…' : '读取设置失败'}>
+          <Row title={busy ? t('settings:web.reading') : t('settings:web.readFailed')}>
             <button className="button" disabled={busy} onClick={() => void load()}>
-              重试
+              {t('common:retry')}
             </button>
           </Row>
         ) : (
           <>
             {!browser && (
-              <Row title="启用 Web 访问" detail="控制当前服务端的浏览器入口。">
+              <Row title={t('settings:web.enable')} detail={t('settings:web.enableDetail')}>
                 <Switch
-                  label="启用 Web 访问"
+                  label={t('settings:web.enable')}
                   checked={values.enabled}
                   disabled={busy}
                   onChange={(enabled) => void toggle(enabled)}
@@ -234,7 +240,7 @@ export default function WebAccessSettings({
             )}
             {values.enabled && (
               <>
-                <Row title="服务端访问地址">
+                <Row title={t('settings:web.address')}>
                   <div className="web-row-actions">
                     {values.url ? (
                       <>
@@ -242,14 +248,14 @@ export default function WebAccessSettings({
                           {displayWebAddress(values.url)}
                         </span>
                         <IconButton
-                          title="复制服务端访问地址"
+                          title={t('settings:web.copyAddress')}
                           onClick={() => void copy(values.url!)}
                           disabled={busy}
                         >
                           <Copy />
                         </IconButton>
                         <IconButton
-                          title="打开服务端访问地址"
+                          title={t('settings:web.openAddress')}
                           onClick={() => void open(values.url!)}
                           disabled={busy}
                         >
@@ -257,54 +263,60 @@ export default function WebAccessSettings({
                         </IconButton>
                       </>
                     ) : (
-                      <span className="muted">地址未就绪</span>
+                      <span className="muted">{t('settings:web.addressNotReady')}</span>
                     )}
                   </div>
                 </Row>
-                <Row title="访问设置" detail={values.domain || '使用部署地址'}>
+                <Row
+                  title={t('settings:web.access')}
+                  detail={values.domain || t('settings:web.deployAddress')}
+                >
                   <button className="button" disabled={busy} onClick={() => setDialog('access')}>
-                    设置
+                    {t('settings:web.set')}
                   </button>
                 </Row>
                 <Row
-                  title="两步验证"
-                  detail={
-                    values.totpEnabled ? '登录时需要验证器动态码。' : '建议开启验证器两步验证。'
-                  }
+                  title={t('settings:web.totp')}
+                  detail={values.totpEnabled ? t('settings:web.totpOn') : t('settings:web.totpOff')}
                 >
                   <button
                     className="button"
                     disabled={busy}
                     onClick={() => setDialog(values.totpEnabled ? 'disable' : 'totp')}
                   >
-                    {values.totpEnabled ? '关闭' : '设置'}
+                    {values.totpEnabled ? t('settings:web.turnOff') : t('settings:web.set')}
                   </button>
                 </Row>
                 <details className="web-sessions">
                   <summary>
-                    已登录浏览器{' '}
+                    {t('settings:web.browsers')}{' '}
                     <span>
                       {values.sessions.length}
                       <ChevronRight aria-hidden="true" />
                     </span>
                   </summary>
                   {values.sessions.length === 0 ? (
-                    <p className="muted">暂无已登录浏览器</p>
+                    <p className="muted">{t('settings:web.noBrowsers')}</p>
                   ) : (
                     <ul>
-                      {values.sessions.map((session) => (
+                      {values.sessions.map(({ name, ...session }) => (
+                        // A browser that did not say what it is is called one.
                         <li key={session.id}>
                           <span>
                             <strong>
-                              {session.name}
-                              {session.id === own ? '（当前浏览器）' : ''}
+                              {name || t('common:device.browser')}
+                              {session.id === own ? t('settings:web.current') : ''}
                             </strong>
                             <small>
-                              最近活动 {new Date(session.lastActiveAt).toLocaleString()}
+                              {t('settings:web.lastActive', {
+                                time: new Date(session.lastActiveAt).toLocaleString(localeOf(t)),
+                              })}
                             </small>
                           </span>
                           <IconButton
-                            title={`退出 ${session.name}`}
+                            title={t('settings:web.revokeOf', {
+                              name: name || t('common:device.browser'),
+                            })}
                             disabled={busy}
                             onClick={() => setDialog({ revoke: session.id })}
                           >
@@ -321,18 +333,18 @@ export default function WebAccessSettings({
               certificate &&
               (values.enabled || certificate.mode === 'custom' || certificate.error) && (
                 <Row
-                  title="HTTPS 证书"
+                  title={t('settings:web.cert.title')}
                   detail={
-                    certificate.error ??
+                    (certificate.error && wordsText(t, certificate.error)) ??
                     (certificate.mode === 'custom'
-                      ? `自定义证书 · ${certificate.details?.domain ?? ''}`
+                      ? t('settings:web.cert.custom', { domain: certificate.details?.domain ?? '' })
                       : certificate.mode === 'external'
-                        ? '由反向代理管理'
+                        ? t('settings:web.cert.external')
                         : certificate.mode === 'unavailable'
-                          ? '当前服务未配置 TLS'
+                          ? t('settings:web.cert.unavailable')
                           : certificate.selfSigned
-                            ? '使用默认自签名证书'
-                            : '使用部署证书')
+                            ? t('settings:web.cert.selfSigned')
+                            : t('settings:web.cert.deployed'))
                   }
                 >
                   <div className="web-row-actions">
@@ -340,15 +352,15 @@ export default function WebAccessSettings({
                       <button
                         className="button"
                         disabled={busy || !values.domain}
-                        title={values.domain ? undefined : '请先设置访问域名'}
+                        title={values.domain ? undefined : t('settings:web.cert.domainFirst')}
                         onClick={() => setDialog('certificate')}
                       >
-                        导入证书
+                        {t('settings:web.cert.import')}
                       </button>
                     )}
                     {(certificate.mode === 'custom' || certificate.error) && (
                       <IconButton
-                        title="恢复默认证书"
+                        title={t('settings:web.cert.reset')}
                         disabled={busy}
                         onClick={() => setDialog('reset')}
                       >
@@ -362,15 +374,21 @@ export default function WebAccessSettings({
               certificate?.details &&
               (values.enabled || certificate.mode === 'custom') && (
                 <div className="web-certificate-details">
-                  <span>签发者：{certificate.details.issuer}</span>
-                  <span>有效期至：{new Date(certificate.details.validTo).toLocaleString()}</span>
+                  <span>
+                    {t('settings:web.cert.issuer', { issuer: certificate.details.issuer })}
+                  </span>
+                  <span>
+                    {t('settings:web.cert.validTo', {
+                      date: new Date(certificate.details.validTo).toLocaleString(localeOf(t)),
+                    })}
+                  </span>
                 </div>
               )}
             {expires !== undefined && expires <= 30 && (
               <p className="web-expiry" role="status">
                 {expires < 0
-                  ? '证书已过期，请更换证书。'
-                  : `证书将在 ${expires} 天内到期，请及时更换。`}
+                  ? t('settings:web.cert.expired')
+                  : t('settings:web.cert.expiring', { count: expires })}
               </p>
             )}
           </>
@@ -397,8 +415,8 @@ export default function WebAccessSettings({
       )}
       {values && dialog === 'disable' && (
         <ConfirmDialog
-          title="关闭两步验证"
-          text="关闭两步验证后，使用服务凭据即可登录。已登录浏览器将退出。"
+          title={t('settings:web.totpTurnOff')}
+          text={t('settings:web.totpTurnOffDetail')}
           proof={browser ? values.totpEnabled : undefined}
           act={async (proof) => {
             const result = await client.fetch({ type: 'web.totp.disable', ...proof });
@@ -409,12 +427,8 @@ export default function WebAccessSettings({
       )}
       {values && typeof dialog === 'object' && dialog && (
         <ConfirmDialog
-          title="退出浏览器登录"
-          text={
-            dialog.revoke === own
-              ? '退出当前浏览器的登录？'
-              : '退出这个浏览器的登录？它需要重新输入服务凭据和动态码。'
-          }
+          title={t('settings:web.revoke')}
+          text={dialog.revoke === own ? t('settings:web.revokeOwn') : t('settings:web.revokeOther')}
           // Ending another login from a browser asks for proof; a desktop or this browser itself need none.
           proof={browser && dialog.revoke !== own ? values.totpEnabled : undefined}
           act={async (proof) => {
@@ -438,8 +452,8 @@ export default function WebAccessSettings({
       )}
       {dialog === 'reset' && (
         <ConfirmDialog
-          title="恢复默认证书"
-          text="恢复部署时的默认证书？当前自定义证书将被移除；如果默认证书为自签名，浏览器会重新提示证书确认。"
+          title={t('settings:web.cert.reset')}
+          text={t('settings:web.cert.resetQuestion')}
           act={async () => setCertificate(await client.fetch({ type: 'web.certificate.reset' }))}
           close={close}
         />
@@ -462,6 +476,7 @@ function ConfirmDialog({
   act: (proof: { proof?: WebProof }) => Promise<void>;
   close: () => void;
 }) {
+  const t = useT();
   const [proof, setProof] = useState<WebProof>({ password: '' });
   const { busy, error, run } = useSubmit();
   return (
@@ -500,6 +515,7 @@ function AccessDialog({
   close: () => void;
   changed: (values: WebSettingsState) => void;
 }) {
+  const t = useT();
   const [proof, setProof] = useState<WebProof>({ password: '' });
   const [draft, setDraft] = useState({
     domain: values.domain,
@@ -533,17 +549,23 @@ function AccessDialog({
         const url = new URL(result.values.url ?? '', location.href);
         const expected = result.values.path ? `/${result.values.path}/` : '/';
         if (url.origin !== location.origin || url.pathname !== expected || url.search || url.hash)
-          throw new Error('路径已保存，请从桌面端复制新的访问地址。');
+          throw new Error(t('settings:web.pathSaved'));
         location.assign(url.href);
       }
       changed(result.values);
       close();
     });
   return (
-    <DialogForm title="访问设置" busy={busy} error={error} close={close} submit={() => void save()}>
+    <DialogForm
+      title={t('settings:web.access')}
+      busy={busy}
+      error={error}
+      close={close}
+      submit={() => void save()}
+    >
       {!browser && (
         <label>
-          访问域名
+          {t('settings:web.domain')}
           <input
             value={draft.domain}
             disabled={certificate?.mode === 'custom'}
@@ -553,13 +575,13 @@ function AccessDialog({
           />
           <small className="muted">
             {certificate?.mode === 'custom'
-              ? '请先恢复默认证书，再修改或清空域名。'
-              : '留空使用部署地址；填写后仅允许指定域名访问，其他入口返回 404。'}
+              ? t('settings:web.domainLocked')
+              : t('settings:web.domainHint')}
           </small>
         </label>
       )}
       <label>
-        服务端访问路径
+        {t('settings:web.path')}
         <div className="web-path-input">
           <span>/</span>
           <input
@@ -569,14 +591,12 @@ function AccessDialog({
             onChange={(event) => setDraft({ ...draft, path: event.target.value })}
           />
         </div>
-        <small className="muted">
-          留空使用根路径。修改域名或路径后，已登录浏览器需要重新登录。
-        </small>
+        <small className="muted">{t('settings:web.pathHint')}</small>
       </label>
       {!browser && (
         <>
           <label>
-            登录空闲有效期（分钟）
+            {t('settings:web.idle')}
             <input
               type="number"
               min={15}
@@ -586,9 +606,9 @@ function AccessDialog({
               onChange={(event) => setDraft({ ...draft, idleMinutes: Number(event.target.value) })}
             />
           </label>
-          <Row title="信任反向代理">
+          <Row title={t('settings:web.trustProxy')}>
             <Switch
-              label="信任反向代理"
+              label={t('settings:web.trustProxy')}
               checked={draft.proxyEnabled}
               disabled={busy}
               onChange={(proxyEnabled) => setDraft({ ...draft, proxyEnabled })}
@@ -597,23 +617,22 @@ function AccessDialog({
           {draft.proxyEnabled && (
             <>
               <label>
-                反向代理 IP
+                {t('settings:web.proxyIps')}
                 <textarea
                   rows={3}
                   required
                   value={draft.trustedProxies}
                   onChange={(event) => setDraft({ ...draft, trustedProxies: event.target.value })}
-                  placeholder="每行一个 IP 地址"
+                  placeholder={t('settings:web.proxyIpsHint')}
                 />
-                <small className="muted">只信任这些地址转发的客户端 IP 信息。</small>
+                <small className="muted">{t('settings:web.proxyIpsDetail')}</small>
                 {values.forwardedBy &&
                   !draft.trustedProxies
                     .split(/[\n,]/)
                     .map((value) => value.trim())
                     .includes(values.forwardedBy) && (
                     <small className="muted">
-                      最近一次带客户端 IP 的请求来自 {values.forwardedBy}
-                      ，它不在上面的列表中。确认这是你的反向代理后再填写，不认识的地址不要加入。
+                      {t('settings:web.forwardedBy', { address: values.forwardedBy })}
                     </small>
                   )}
               </label>
@@ -644,6 +663,7 @@ function TotpDialog({
   close: () => void;
   changed: (values: WebSettingsState) => void;
 }) {
+  const t = useT();
   const [proof, setProof] = useState<WebProof>({ password: '' });
   const [setup, setSetup] = useState<WebTotpSetup | null>(null);
   const [qr, setQr] = useState('');
@@ -673,7 +693,7 @@ function TotpDialog({
           if (current) setQr(url);
         },
         () => {
-          if (current) setError('二维码生成失败，请手动输入密钥。');
+          if (current) setError(t('settings:web.qrFailed'));
         },
       );
     return () => {
@@ -688,29 +708,41 @@ function TotpDialog({
     });
   return (
     <DialogForm
-      title="设置两步验证"
+      title={t('settings:web.totpSetup')}
       busy={busy}
       error={error}
       close={close}
       submit={() => void (setup ? enable() : prepare())}
-      submitLabel={setup ? undefined : busy ? '正在准备…' : browser ? '下一步' : '重试'}
+      submitLabel={
+        setup
+          ? undefined
+          : busy
+            ? t('settings:web.preparing')
+            : browser
+              ? t('settings:web.next')
+              : t('common:retry')
+      }
     >
       {!setup && browser && <ProofFields proof={proof} change={setProof} totp={false} />}
-      {!setup && !browser && busy && <p role="status">正在生成验证器密钥…</p>}
+      {!setup && !browser && busy && <p role="status">{t('settings:web.generating')}</p>}
       {setup && (
         <div className="web-totp-setup">
           <div className="web-totp-qr">
-            {qr && <img src={qr} width="200" height="200" alt="验证器二维码" />}
+            {qr && <img src={qr} width="200" height="200" alt={t('settings:web.qr')} />}
           </div>
           <div className="web-totp-manual">
-            <span>手动设置密钥</span>
+            <span>{t('settings:web.manualKey')}</span>
             <div className="web-totp-secret-row">
               <code className="web-totp-secret">{setup.secret}</code>
-              <CopyButton key={setup.secret} text={setup.secret} label="复制密钥" />
+              <CopyButton
+                key={setup.secret}
+                text={setup.secret}
+                label={t('settings:web.copyKey')}
+              />
             </div>
           </div>
           <label>
-            验证新动态码
+            {t('settings:web.verify')}
             <input
               value={code}
               required
@@ -738,24 +770,27 @@ function CertificateDialog({
   close: () => void;
   changed: (certificate: WebCertificateState) => void;
 }) {
+  const t = useT();
   const [cert, setCert] = useState('');
   const [key, setKey] = useState('');
   const { busy, error, setError, run } = useSubmit();
   async function read(file: File | undefined, kind: 'cert' | 'key') {
     if (!file) return;
     if (file.size > (kind === 'cert' ? 65536 : 16384)) {
-      setError(kind === 'cert' ? '证书链不得超过 64 KB。' : '私钥不得超过 16 KB。');
+      setError(
+        kind === 'cert' ? t('settings:web.cert.chainTooLarge') : t('settings:web.cert.keyTooLarge'),
+      );
       return;
     }
     try {
       (kind === 'cert' ? setCert : setKey)(await file.text());
     } catch {
-      setError('读取文件失败，请重新选择。');
+      setError(t('settings:web.cert.readFailed'));
     }
   }
   return (
     <DialogForm
-      title="导入自定义证书"
+      title={t('settings:web.cert.importTitle')}
       busy={busy}
       error={error}
       close={close}
@@ -766,9 +801,9 @@ function CertificateDialog({
         })
       }
     >
-      <p className="muted">证书用于 {domain}。请提供完整证书链与未加密私钥。</p>
+      <p className="muted">{t('settings:web.cert.forDomain', { domain })}</p>
       <label>
-        证书链 PEM
+        {t('settings:web.cert.chain')}
         <textarea
           rows={5}
           value={cert}
@@ -778,13 +813,13 @@ function CertificateDialog({
         />
         <input
           type="file"
-          aria-label="选择证书文件"
+          aria-label={t('settings:web.cert.chooseChain')}
           accept=".pem,.crt,.cer"
           onChange={(event) => void read(event.target.files?.[0], 'cert')}
         />
       </label>
       <label>
-        私钥 PEM
+        {t('settings:web.cert.key')}
         <textarea
           rows={5}
           value={key}
@@ -796,7 +831,7 @@ function CertificateDialog({
         />
         <input
           type="file"
-          aria-label="选择私钥文件"
+          aria-label={t('settings:web.cert.chooseKey')}
           accept=".pem,.key"
           onChange={(event) => void read(event.target.files?.[0], 'key')}
         />

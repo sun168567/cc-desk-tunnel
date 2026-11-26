@@ -2,9 +2,10 @@ import { lazy, Suspense, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronUp, ListChecks, Maximize2, Pencil, Undo2 } from 'lucide-react';
 import { PLAN_LIMIT } from '@cc-desk-tunnel/protocol';
 import type { PlanMode } from '@cc-desk-tunnel/protocol';
+import { type T, useT } from './i18n.ts';
 import { CopyButton } from './copy.tsx';
 import { IconButton, Modal } from './ui.tsx';
-import { modeNames } from './modes.ts';
+import { modeDetail, modeName } from './modes.ts';
 
 const RichText = lazy(() => import('./RichText.tsx'));
 const Rich = ({ text }: { text: string }) => (
@@ -21,11 +22,7 @@ export function feedbackOf(output?: string) {
 }
 
 // The modes a plan approved may be carried out in, as Claude Code's own plan approval offers them.
-const choices: { mode: PlanMode; detail: string }[] = [
-  { mode: 'auto', detail: '由 Claude Code 判断风险，只在必要时询问' },
-  { mode: 'acceptEdits', detail: '文件编辑直接通过，执行命令仍先询问' },
-  { mode: 'default', detail: '编辑文件和执行命令前都先询问' },
-];
+const choices: PlanMode[] = ['auto', 'acceptEdits', 'default'];
 
 export type PlanOutcome =
   // Not decided yet, and not here: in another window, or by whoever runs the session.
@@ -42,18 +39,14 @@ export type PlanDecide = {
   keepPlanning: (feedback: string) => void;
 };
 
-const outcomeText = (outcome: PlanOutcome) =>
+const outcomeText = (t: T, outcome: PlanOutcome) =>
   outcome.kind === 'approved'
     ? [
-        '已批准',
-        ...(outcome.mode ? [modeNames[outcome.mode]] : []),
-        ...(outcome.edited ? ['已修改'] : []),
+        t('session:plan.approved'),
+        ...(outcome.mode ? [modeName(t, outcome.mode)] : []),
+        ...(outcome.edited ? [t('session:plan.edited')] : []),
       ].join(' · ')
-    : outcome.kind === 'returned'
-      ? '已退回，继续规划'
-      : outcome.kind === 'open'
-        ? '未处理'
-        : '等待批准';
+    : t(`session:plan.${outcome.kind}`);
 
 // Claude's plan, read as a document: shown in part with the rest a click away, read whole in a window of its own,
 // copied as written. Until it is decided here it is carried out in a mode chosen, as written or as changed here, or
@@ -72,6 +65,7 @@ export default function PlanCard({
   // Shown by its heading alone, as in a turn that is over.
   folded?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(!folded);
   const [whole, setWhole] = useState(false);
   const [long, setLong] = useState(false);
@@ -98,13 +92,13 @@ export default function PlanCard({
   return (
     <section
       className={`plan-card${outcome?.kind === 'returned' ? ' returned' : ''}`}
-      aria-label="Claude 的计划"
+      aria-label={t('session:plan.label')}
     >
       <header className="plan-heading">
         {decide ? (
           <span className="plan-title">
             <ListChecks />
-            <span>计划</span>
+            <span>{t('session:plan.title')}</span>
             {name && <small title={file}>{name}</small>}
           </span>
         ) : (
@@ -115,14 +109,16 @@ export default function PlanCard({
             onClick={() => setOpen((value) => !value)}
           >
             <ListChecks />
-            <span>计划</span>
+            <span>{t('session:plan.title')}</span>
             {name && <small title={file}>{name}</small>}
           </button>
         )}
-        {outcome && <span className={`plan-outcome ${outcome.kind}`}>{outcomeText(outcome)}</span>}
+        {outcome && (
+          <span className={`plan-outcome ${outcome.kind}`}>{outcomeText(t, outcome)}</span>
+        )}
         <span className="plan-tools">
-          <CopyButton text={editing ?? plan} label="复制计划" />
-          <IconButton title="全屏阅读" onClick={() => setReading(true)}>
+          <CopyButton text={editing ?? plan} label={t('session:plan.copy')} />
+          <IconButton title={t('session:plan.read')} onClick={() => setReading(true)}>
             <Maximize2 />
           </IconButton>
         </span>
@@ -131,7 +127,7 @@ export default function PlanCard({
         (editing !== null ? (
           <textarea
             className="plan-editor"
-            aria-label="修改计划"
+            aria-label={t('session:plan.edit')}
             value={editing}
             maxLength={PLAN_LIMIT}
             disabled={busy}
@@ -153,13 +149,15 @@ export default function PlanCard({
                 onClick={() => setWhole((value) => !value)}
               >
                 {whole ? <ChevronUp /> : <ChevronDown />}
-                {whole ? '收起' : '展开全文'}
+                {whole ? t('common:collapse') : t('session:plan.whole')}
               </button>
             )}
           </>
         ))}
       {open && outcome?.kind === 'returned' && outcome.feedback && (
-        <p className="plan-feedback">你的意见：{outcome.feedback}</p>
+        <p className="plan-feedback">
+          {t('session:plan.feedback', { feedback: outcome.feedback })}
+        </p>
       )}
       {decide && returning !== null && (
         <form
@@ -170,8 +168,8 @@ export default function PlanCard({
           }}
         >
           <textarea
-            aria-label="哪里要改"
-            placeholder="说说哪里要改，Claude 会按你的意见接着规划（可以不填）"
+            aria-label={t('session:plan.feedbackLabel')}
+            placeholder={t('session:plan.feedbackHint')}
             value={returning}
             maxLength={PLAN_LIMIT}
             disabled={busy}
@@ -185,31 +183,31 @@ export default function PlanCard({
               disabled={busy}
               onClick={() => setReturning(null)}
             >
-              取消
+              {t('common:cancel')}
             </button>
             <button type="submit" className="button primary" disabled={busy}>
               <Undo2 />
-              退回，继续规划
+              {t('session:plan.sendBack')}
             </button>
           </div>
         </form>
       )}
       {decide && returning === null && (
         <div className="plan-decide">
-          <div className="plan-modes" role="radiogroup" aria-label="执行时的审批模式">
-            <span className="plan-modes-label">执行时</span>
+          <div className="plan-modes" role="radiogroup" aria-label={t('session:plan.modeLabel')}>
+            <span className="plan-modes-label">{t('session:plan.modes')}</span>
             {choices.map((choice) => (
               <button
                 type="button"
                 role="radio"
-                key={choice.mode}
-                aria-checked={mode === choice.mode}
-                title={choice.detail}
+                key={choice}
+                aria-checked={mode === choice}
+                title={modeDetail(t, choice)}
                 className="stat-chip"
                 disabled={busy}
-                onClick={() => setMode(choice.mode)}
+                onClick={() => setMode(choice)}
               >
-                {modeNames[choice.mode]}
+                {modeName(t, choice)}
               </button>
             ))}
           </div>
@@ -223,7 +221,7 @@ export default function PlanCard({
                   onClick={() => setReturning('')}
                 >
                   <Undo2 />
-                  继续规划
+                  {t('session:plan.keepPlanning')}
                 </button>
                 <button
                   type="button"
@@ -235,7 +233,7 @@ export default function PlanCard({
                   }}
                 >
                   <Pencil />
-                  修改计划
+                  {t('session:plan.edit')}
                 </button>
                 <button
                   type="button"
@@ -244,7 +242,7 @@ export default function PlanCard({
                   onClick={() => decide.approve(mode)}
                 >
                   <Check />
-                  开始执行
+                  {t('session:plan.start')}
                 </button>
               </>
             ) : (
@@ -255,7 +253,7 @@ export default function PlanCard({
                   disabled={busy}
                   onClick={() => setEditing(null)}
                 >
-                  取消修改
+                  {t('session:plan.discard')}
                 </button>
                 <button
                   type="button"
@@ -266,7 +264,7 @@ export default function PlanCard({
                   }
                 >
                   <Check />
-                  按修改后的计划执行
+                  {t('session:plan.startEdited')}
                 </button>
               </>
             )}
@@ -274,7 +272,10 @@ export default function PlanCard({
         </div>
       )}
       {reading && (
-        <Modal title={name ? `计划 · ${name}` : '计划'} onClose={() => setReading(false)}>
+        <Modal
+          title={name ? t('session:plan.titleOf', { name }) : t('session:plan.title')}
+          onClose={() => setReading(false)}
+        >
           <div className="plan-reader message-content">
             <Rich text={editing ?? plan} />
           </div>

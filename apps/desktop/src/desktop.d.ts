@@ -8,7 +8,13 @@ declare global {
       platform: 'win32' | 'darwin' | 'linux';
       // Which of this computer's connections the window is ('' the first), and what they all share.
       // `launcher`: a sign-in window, which is no connection's (see Launcher.tsx).
-      boot: { connection: string; launcher?: boolean; shared: import('./shared.ts').Shared };
+      boot: {
+        connection: string;
+        launcher?: boolean;
+        shared: import('./shared.ts').Shared;
+        // The system's languages, most preferred first.
+        languages: string[];
+      };
       saveShared: (key: 'prefs', value: unknown) => Promise<void>;
       // The computer's project list from before the service kept them, while this connection has yet to hand it
       // to its service, and the call that says it has (see App.tsx).
@@ -73,7 +79,7 @@ declare global {
             to: { target: string; dir: string };
             conflict?: 'replace' | 'skip' | 'resume';
           },
-        ) => Promise<{ files: number; bytes: number }>;
+        ) => Promise<{ files: number; bytes: number; cancelled?: true }>;
         cancel: (id: string) => Promise<void>;
         // What git sees changed in a project of this computer; null outside a repository or without git.
         changes: (directory: string) => Promise<{ path: string; status: string }[] | null>;
@@ -193,7 +199,13 @@ declare global {
         service: string;
         // Upgrades even while sessions are at work (see FORCED_UPGRADE_SINCE).
         force?: boolean;
-      }) => Promise<{ version?: string; error?: string; code?: string }>;
+      }) => Promise<{
+        version?: string;
+        error?: string;
+        // What the service said, when it said it as a phrase; `error` is the text it sent with it, if any.
+        phrase?: import('@cc-desk-tunnel/protocol').Phrase;
+        code?: string;
+      }>;
       // Opens the session in ccdt, the terminal client, signed in to this window's service with its token; says
       // instead when ccdt is not installed, or not of this client's release.
       openInCcdt: (request: {

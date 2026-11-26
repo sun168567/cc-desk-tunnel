@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { packageName } from './runtime.mjs';
+import { t } from './i18n.mjs';
 
 const RELEASES = 'https://github.com/sun168567/cc-desk-tunnel/releases/download';
 // The first release whose install script replaces a ccdt while it runs; an earlier one's would leave it half removed.
@@ -14,7 +15,7 @@ export async function download(release, { system, get = fetch } = {}) {
   const name = packageName(release, system);
   if (!name)
     throw new Error(
-      `没有这个系统（${system ?? `${process.platform}-${process.arch}`}）的 ccdt 包。`,
+      t('cli:upgrade.noPackage', { system: system ?? `${process.platform}-${process.arch}` }),
     );
   const fetched = async (file) => {
     let response;
@@ -24,10 +25,11 @@ export async function download(release, { system, get = fetch } = {}) {
       });
     } catch (error) {
       throw new Error(
-        `下载 ${file} 失败：${error.cause?.message ?? error.message}。需要代理时，设置 HTTPS_PROXY 和 NODE_USE_ENV_PROXY=1 再试。`,
+        t('cli:upgrade.downloadFailed', { file, reason: error.cause?.message ?? error.message }),
       );
     }
-    if (!response.ok) throw new Error(`下载 ${file} 失败（HTTP ${response.status}）。`);
+    if (!response.ok)
+      throw new Error(t('cli:upgrade.httpFailed', { file, status: response.status }));
     return Buffer.from(await response.arrayBuffer());
   };
   const sums = (await fetched('SHA256SUMS')).toString('utf8');
@@ -35,10 +37,10 @@ export async function download(release, { system, get = fetch } = {}) {
     .split('\n')
     .map((line) => line.trim().split(/\s+/))
     .find(([, file]) => file === name)?.[0];
-  if (!expected) throw new Error(`${release} 的校验清单里没有 ${name}。`);
+  if (!expected) throw new Error(t('cli:upgrade.notListed', { release, name }));
   const body = await fetched(name);
   if (createHash('sha256').update(body).digest('hex') !== expected)
-    throw new Error(`下载的 ${name} 校验不符，没有安装。`);
+    throw new Error(t('cli:upgrade.badHash', { name }));
   return { name, body };
 }
 
@@ -71,7 +73,9 @@ export function install({ name, body }, { windows = process.platform === 'win32'
         );
       else execFileSync('sh', [join(folder, 'ccdt', 'install.sh')], { stdio: 'pipe' });
     } catch (error) {
-      throw new Error(`新版本没有装上：${String(error.stderr ?? error.message).trim()}`);
+      throw new Error(
+        t('cli:upgrade.installFailed', { reason: String(error.stderr ?? error.message).trim() }),
+      );
     }
   } finally {
     rmSync(folder, { recursive: true, force: true });

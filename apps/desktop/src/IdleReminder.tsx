@@ -2,13 +2,17 @@ import { useEffect, useState } from 'react';
 import { Hourglass, X } from 'lucide-react';
 import type { IdleCompaction, SessionEvent } from '@cc-desk-tunnel/protocol';
 import { idleReminder } from './idle.ts';
+import { useT } from './i18n.ts';
+import type { T } from './i18n.ts';
 import { IconButton } from './ui.tsx';
 
 const size = (tokens: number) => `${Math.round(tokens / 1000)}K tokens`;
-const span = (minutes: number) =>
+const span = (t: T, minutes: number) =>
   minutes >= 60
-    ? `${Math.floor(minutes / 60)} 小时${minutes % 60 ? ` ${minutes % 60} 分钟` : ''}`
-    : `${minutes} 分钟`;
+    ? minutes % 60
+      ? t('common:hours.minutes', { h: Math.floor(minutes / 60), m: minutes % 60 })
+      : t('common:hours.whole', { h: Math.floor(minutes / 60) })
+    : t('common:minutes', { m: minutes });
 
 // Shown above the message box of the session being read; closing it hides it until the next turn.
 export default function IdleReminder({
@@ -24,6 +28,7 @@ export default function IdleReminder({
   compact: () => void;
   startFresh: () => void;
 }) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   const [closed, setClosed] = useState<string[]>([]);
   useEffect(() => {
@@ -37,27 +42,29 @@ export default function IdleReminder({
       <Hourglass />
       {reminder.phase === 'before' ? (
         <p>
-          提示缓存约 {reminder.minutes}{' '}
-          分钟后过期。现在压缩读取的是缓存，比过期后再压缩便宜得多（上下文约 {size(reminder.tokens)}
-          ）。
+          {t('session:idle.before', { minutes: reminder.minutes, size: size(reminder.tokens) })}
         </p>
       ) : (
         <p>
-          距上一轮已过 {span(reminder.minutes)}，提示缓存已过期：下一条消息会按全价重读约{' '}
-          {size(reminder.tokens)} 的上下文。新任务建议新建会话（相当于
-          /clear）；要接着做又想省一些，可以先切到较便宜的模型压缩，再切回原模型。
+          {t('session:idle.after', {
+            span: span(t, reminder.minutes),
+            size: size(reminder.tokens),
+          })}
         </p>
       )}
       {reminder.phase === 'before' ? (
         <button type="button" className="button primary" disabled={!canCompact} onClick={compact}>
-          现在压缩
+          {t('session:idle.compactNow')}
         </button>
       ) : (
         <button type="button" className="button secondary" onClick={startFresh}>
-          新建会话
+          {t('nav:newSession')}
         </button>
       )}
-      <IconButton title="关闭提醒" onClick={() => setClosed((keys) => [...keys, reminder.key])}>
+      <IconButton
+        title={t('session:idle.close')}
+        onClick={() => setClosed((keys) => [...keys, reminder.key])}
+      >
         <X />
       </IconButton>
     </div>

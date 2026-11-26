@@ -3125,6 +3125,8 @@ div.message-input:not([aria-disabled]) .path-chip:hover .path-chip-remove {
   color: var(--muted);
   font-size: 12px;
   margin: 0;
+}
+.account-plan {
   text-transform: capitalize;
 }
 .account-identity > .button {

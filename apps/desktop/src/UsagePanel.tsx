@@ -2,25 +2,44 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import type { UsagePage, UsageSummary } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import { Trans } from 'react-i18next';
+import { localeOf, type T, useT } from './i18n.ts';
 import { IconButton } from './ui.tsx';
 import { ModelBreakdown, TokenTrend, cacheHitRate, percent } from './UsageCharts.tsx';
 
 const pageSize = 50;
-const quotaNames: Record<string, string | undefined> = {
-  five_hour: '5 小时额度',
-  seven_day: '每周额度',
-  seven_day_opus: 'Opus 每周额度',
-  seven_day_sonnet: 'Sonnet 每周额度',
-  seven_day_oauth_apps: '应用每周额度',
-  // Read from a long-lived token's replies, which do not name the models it counts.
-  seven_day_overage_included: '按模型计的每周额度',
-};
+// The quota windows the account's plan reports, by name (account:quota.window.<name>). The last is read from a
+// long-lived token's replies, which do not name the models it counts.
+const quotaWindows = [
+  'five_hour',
+  'seven_day',
+  'seven_day_opus',
+  'seven_day_sonnet',
+  'seven_day_oauth_apps',
+  'seven_day_overage_included',
+] as const;
+const isQuotaWindow = (name: string): name is (typeof quotaWindows)[number] =>
+  (quotaWindows as readonly string[]).includes(name);
 // The service names a per-model weekly window `seven_day:<model>`, as the account's plan reports it.
-export const quotaName = (name: string) =>
-  quotaNames[name] ?? (name.startsWith('seven_day:') ? `${name.slice(10)} 每周额度` : undefined);
-const compact = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 });
-export const tokens = (value: number) =>
-  value < 10000 ? value.toLocaleString('zh-CN') : compact.format(value);
+export const quotaName = (t: T, name: string) =>
+  isQuotaWindow(name)
+    ? t(`account:quota.window.${name}`)
+    : name.startsWith('seven_day:')
+      ? t('account:quota.window.model', { model: name.slice(10) })
+      : undefined;
+// Large counts in the language's short form (12K, 1.2万); a formatter for each language shown.
+const compacts = new Map<string, Intl.NumberFormat>();
+const compactOf = (locale: string) => {
+  let format = compacts.get(locale);
+  if (!format)
+    compacts.set(
+      locale,
+      (format = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 })),
+    );
+  return format;
+};
+export const tokens = (t: T, value: number) =>
+  value < 10000 ? value.toLocaleString(localeOf(t)) : compactOf(localeOf(t)).format(value);
 export const dollars = (value: number) =>
   `$${value >= 100 ? value.toFixed(0) : value >= 1 ? value.toFixed(2) : value.toFixed(value >= 0.01 || value === 0 ? 2 : 4)}`;
 export const seconds = (ms: number | null) =>
@@ -32,15 +51,11 @@ const total = (item: {
   cacheCreationTokens: number;
 }) => item.inputTokens + item.outputTokens + item.cacheReadTokens + item.cacheCreationTokens;
 const hour = 3600_000;
-const presets = [
-  ['today', '今日'],
-  ['24h', '24 小时'],
-  ['7d', '7 天'],
-  ['30d', '30 天'],
-  ['custom', '自定义'],
-] as const;
-const measures = { costUsd: '等价费用', tokens: 'Token', requests: '请求数' } as const;
-type Measure = keyof typeof measures;
+// The ranges offered, besides the plan's own windows (account:usage.range.<id>), and what the chart may show
+// (account:usage.measure.<id>).
+const presets = ['today', '24h', '7d', '30d', 'custom'] as const;
+const measures = ['costUsd', 'tokens', 'requests'] as const;
+type Measure = (typeof measures)[number];
 const localInput = (date: Date) =>
   new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 
@@ -55,6 +70,8 @@ export default function UsagePanel({
   initial: string;
   back: () => void;
 }) {
+  const t = useT();
+  const locale = localeOf(t);
   const [preset, setPreset] = useState(initial);
   const [customFrom, setCustomFrom] = useState(() => localInput(new Date(Date.now() - 24 * hour)));
   const [customTo, setCustomTo] = useState(() => localInput(new Date()));
@@ -112,7 +129,7 @@ export default function UsagePanel({
         setPage(result);
         setIndex(index);
       } catch (error) {
-        setError(error instanceof Error ? error.message : '读取失败。');
+        setError(error instanceof Error ? error.message : t('account:readFailed'));
       } finally {
         setLoading(false);
       }
@@ -149,11 +166,11 @@ export default function UsagePanel({
     measure === 'costUsd'
       ? dollars(value)
       : measure === 'tokens'
-        ? tokens(value)
-        : value.toLocaleString('zh-CN');
+        ? tokens(t, value)
+        : value.toLocaleString(locale);
   const bucketLabel = (at: string) =>
     new Date(at).toLocaleString(
-      'zh-CN',
+      locale,
       range.bucketMinutes >= 1440
         ? { month: 'numeric', day: 'numeric' }
         : { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' },
@@ -161,24 +178,34 @@ export default function UsagePanel({
   const totals = page?.totals;
   const pages = Math.max(Math.ceil((totals?.requests ?? 0) / pageSize), 1);
   return (
-    <section className="account-page" aria-label="调用日志">
+    <section className="account-page" aria-label={t('account:usage.title')}>
       <header className="account-heading">
-        <IconButton title="返回账号" onClick={back}>
+        <IconButton title={t('account:usage.back')} onClick={back}>
           <ArrowLeft />
         </IconButton>
-        <h1>调用日志</h1>
-        <IconButton title="刷新调用日志" disabled={loading} onClick={() => setLoadedAt(Date.now())}>
+        <h1>{t('account:usage.title')}</h1>
+        <IconButton
+          title={t('account:usage.refresh')}
+          disabled={loading}
+          onClick={() => setLoadedAt(Date.now())}
+        >
           <RefreshCw className={loading ? 'spinning' : ''} />
         </IconButton>
       </header>
       <div className="account-body usage-body">
         <div className="usage-filters">
-          <div className="segmented" role="group" aria-label="时间范围">
+          <div className="segmented" role="group" aria-label={t('account:usage.rangeLabel')}>
             {[
               ...(summary?.windows
-                .filter((window) => quotaName(window.name))
-                .map((window) => [window.name, `本期${quotaName(window.name)}`] as const) ?? []),
-              ...presets,
+                .filter((window) => quotaName(t, window.name))
+                .map(
+                  (window) =>
+                    [
+                      window.name,
+                      t('account:usage.range.window', { name: quotaName(t, window.name) ?? '' }),
+                    ] as const,
+                ) ?? []),
+              ...presets.map((id) => [id, t(`account:usage.range.${id}`)] as const),
             ].map(([value, label]) => (
               <button
                 type="button"
@@ -194,11 +221,11 @@ export default function UsagePanel({
             ))}
           </div>
           <select
-            aria-label="模型"
+            aria-label={t('account:usage.model')}
             value={model}
             onChange={(event) => setModel(event.target.value)}
           >
-            <option value="">全部模型</option>
+            <option value="">{t('account:usage.allModels')}</option>
             {[...new Set([...(page?.models ?? []), ...(model ? [model] : [])])].map((name) => (
               <option key={name} value={name}>
                 {name}
@@ -209,15 +236,15 @@ export default function UsagePanel({
             <div className="usage-custom">
               <input
                 type="datetime-local"
-                aria-label="开始时间"
+                aria-label={t('account:usage.from')}
                 value={customFrom}
                 max={customTo}
                 onChange={(event) => setCustomFrom(event.target.value)}
               />
-              <span>至</span>
+              <span>{t('account:usage.to')}</span>
               <input
                 type="datetime-local"
-                aria-label="结束时间"
+                aria-label={t('account:usage.toLabel')}
                 value={customTo}
                 min={customFrom}
                 onChange={(event) => setCustomTo(event.target.value)}
@@ -232,40 +259,53 @@ export default function UsagePanel({
         )}
         <div className="usage-tiles">
           <div>
-            <span>请求数</span>
-            <strong>{totals ? totals.requests.toLocaleString('zh-CN') : '—'}</strong>
+            <span>{t('account:usage.measure.requests')}</span>
+            <strong>{totals ? totals.requests.toLocaleString(locale) : '—'}</strong>
           </div>
           <div
             title={
               totals
-                ? `输入 ${totals.inputTokens.toLocaleString()} · 输出 ${totals.outputTokens.toLocaleString()} · 缓存读取 ${totals.cacheReadTokens.toLocaleString()} · 缓存写入 ${totals.cacheCreationTokens.toLocaleString()}`
+                ? t('account:usage.tokensWhole', {
+                    input: totals.inputTokens.toLocaleString(locale),
+                    output: totals.outputTokens.toLocaleString(locale),
+                    read: totals.cacheReadTokens.toLocaleString(locale),
+                    write: totals.cacheCreationTokens.toLocaleString(locale),
+                  })
                 : undefined
             }
           >
-            <span>总 Token</span>
-            <strong>{totals ? tokens(total(totals)) : '—'}</strong>
+            <span>{t('account:usage.totalTokens')}</span>
+            <strong>{totals ? tokens(t, total(totals)) : '—'}</strong>
             <small>
               {totals
-                ? `输入 ${tokens(totals.inputTokens)} · 输出 ${tokens(totals.outputTokens)} · 缓存 ${tokens(totals.cacheReadTokens + totals.cacheCreationTokens)}`
+                ? t('account:usage.tokensShort', {
+                    input: tokens(t, totals.inputTokens),
+                    output: tokens(t, totals.outputTokens),
+                    cache: tokens(t, totals.cacheReadTokens + totals.cacheCreationTokens),
+                  })
                 : ''}
             </small>
           </div>
-          <div title="缓存读取 ÷（输入 + 缓存读取 + 缓存写入）">
-            <span>缓存命中率</span>
+          <div title={t('account:usage.hitFormula')}>
+            <span>{t('account:usage.hitRate')}</span>
             <strong>{percent(totals ? cacheHitRate(totals) : null)}</strong>
-            <small>{totals ? `读取 ${tokens(totals.cacheReadTokens)}` : ''}</small>
+            <small>
+              {totals
+                ? t('account:usage.cacheRead', { tokens: tokens(t, totals.cacheReadTokens) })
+                : ''}
+            </small>
           </div>
           <div>
-            <span>等价 API 费用</span>
+            <span>{t('account:usage.apiCost')}</span>
             <strong>{totals ? dollars(totals.costUsd) : '—'}</strong>
-            <small>官方 CLI 按 API 价格估算，非订阅账单</small>
+            <small>{t('account:usage.apiCostDetail')}</small>
           </div>
           <div>
-            <span>平均首字延迟</span>
+            <span>{t('account:usage.ttft')}</span>
             <strong>{seconds(totals?.ttftMs ?? null)}</strong>
           </div>
           <div>
-            <span>平均输出速度</span>
+            <span>{t('account:usage.speed')}</span>
             <strong>
               {totals?.outputPerSecond != null ? `${totals.outputPerSecond.toFixed(1)} tok/s` : '—'}
             </strong>
@@ -274,22 +314,24 @@ export default function UsagePanel({
         <figure className="usage-chart">
           <figcaption>
             <span>
-              {range.bucketMinutes >= 1440
-                ? '每日'
-                : range.bucketMinutes === 60
-                  ? '每小时'
-                  : '每 30 分钟'}
-              {measures[measure]}
+              {t(
+                range.bucketMinutes >= 1440
+                  ? 'account:usage.chart.daily'
+                  : range.bucketMinutes === 60
+                    ? 'account:usage.chart.hourly'
+                    : 'account:usage.chart.halfHourly',
+                { measure: t(`account:usage.measure.${measure}`) },
+              )}
             </span>
-            <div className="segmented" role="group" aria-label="图表指标">
-              {(Object.keys(measures) as Measure[]).map((key) => (
+            <div className="segmented" role="group" aria-label={t('account:usage.measureLabel')}>
+              {measures.map((key) => (
                 <button
                   type="button"
                   key={key}
                   aria-pressed={measure === key}
                   onClick={() => setMeasure(key)}
                 >
-                  {measures[key]}
+                  {t(`account:usage.measure.${key}`)}
                 </button>
               ))}
             </div>
@@ -323,8 +365,13 @@ export default function UsagePanel({
                 }
               >
                 <strong>{bucketLabel(bars[hover].at)}</strong>
-                <span>{bars[hover].requests.toLocaleString('zh-CN')} 次请求</span>
-                <span>{tokens(bars[hover].tokens)} tokens</span>
+                <span>
+                  {t('account:usage.requests', {
+                    count: bars[hover].requests,
+                    n: bars[hover].requests.toLocaleString(locale),
+                  })}
+                </span>
+                <span>{tokens(t, bars[hover].tokens)} tokens</span>
                 <span>{dollars(bars[hover].costUsd)}</span>
               </div>
             )}
@@ -334,26 +381,30 @@ export default function UsagePanel({
             <span>{bars.length > 1 && bucketLabel(bars.at(-1)!.at)}</span>
           </div>
         </figure>
-        <TokenTrend buckets={bars} label={bucketLabel} format={tokens} />
+        <TokenTrend buckets={bars} label={bucketLabel} format={(value) => tokens(t, value)} />
         {page && page.byModel.length > 0 && (
-          <ModelBreakdown models={page.byModel} tokens={tokens} dollars={dollars} />
+          <ModelBreakdown
+            models={page.byModel}
+            tokens={(value) => tokens(t, value)}
+            dollars={dollars}
+          />
         )}
         <div className="usage-table usage-log">
-          <h2 className="usage-section">调用记录</h2>
+          <h2 className="usage-section">{t('account:usage.records')}</h2>
           <table>
             <thead>
               <tr>
-                <th>时间</th>
-                <th>会话</th>
-                <th>模型</th>
-                <th>输入</th>
-                <th>输出</th>
-                <th>缓存读取</th>
-                <th>缓存写入</th>
-                <th>等价费用</th>
-                <th>首字</th>
-                <th>总用时</th>
-                <th>速度</th>
+                <th>{t('account:usage.col.time')}</th>
+                <th>{t('account:usage.col.session')}</th>
+                <th>{t('account:usage.model')}</th>
+                <th>{t('account:usage.col.input')}</th>
+                <th>{t('account:usage.col.output')}</th>
+                <th>{t('account:usage.col.cacheRead')}</th>
+                <th>{t('account:usage.col.cacheWrite')}</th>
+                <th>{t('account:usage.measure.costUsd')}</th>
+                <th>{t('account:usage.col.ttft')}</th>
+                <th>{t('account:usage.col.duration')}</th>
+                <th>{t('account:usage.col.speed')}</th>
               </tr>
             </thead>
             <tbody>
@@ -365,7 +416,7 @@ export default function UsagePanel({
                 return (
                   <tr key={row.id}>
                     <td>
-                      {new Date(row.at).toLocaleString('zh-CN', {
+                      {new Date(row.at).toLocaleString(locale, {
                         month: 'numeric',
                         day: 'numeric',
                         hour: '2-digit',
@@ -377,10 +428,10 @@ export default function UsagePanel({
                       {row.sessionTitle ?? (row.source && row.source !== 'sdk' ? row.source : '—')}
                     </td>
                     <td>{row.model}</td>
-                    <td>{row.inputTokens.toLocaleString()}</td>
-                    <td>{row.outputTokens.toLocaleString()}</td>
-                    <td>{row.cacheReadTokens.toLocaleString()}</td>
-                    <td>{row.cacheCreationTokens.toLocaleString()}</td>
+                    <td>{row.inputTokens.toLocaleString(locale)}</td>
+                    <td>{row.outputTokens.toLocaleString(locale)}</td>
+                    <td>{row.cacheReadTokens.toLocaleString(locale)}</td>
+                    <td>{row.cacheCreationTokens.toLocaleString(locale)}</td>
                     <td>{dollars(row.costUsd)}</td>
                     <td>{seconds(row.ttftMs)}</td>
                     <td>{seconds(row.durationMs)}</td>
@@ -394,11 +445,11 @@ export default function UsagePanel({
               })}
             </tbody>
           </table>
-          {page && !page.rows.length && <p className="muted">这个范围内没有调用记录。</p>}
+          {page && !page.rows.length && <p className="muted">{t('account:usage.empty')}</p>}
           {page && pages > 1 && (
-            <nav className="usage-pager" aria-label="调用记录翻页">
+            <nav className="usage-pager" aria-label={t('account:usage.pager')}>
               <IconButton
-                title="上一页"
+                title={t('account:usage.previous')}
                 disabled={loading || index === 0}
                 onClick={() => {
                   void load(index - 1);
@@ -407,27 +458,34 @@ export default function UsagePanel({
                 <ChevronLeft />
               </IconButton>
               <label>
-                第
-                <input
-                  key={index}
-                  aria-label="页码"
-                  inputMode="numeric"
-                  defaultValue={index + 1}
-                  disabled={loading}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter') return;
-                    const wanted = Math.round(Number(event.currentTarget.value));
-                    if (wanted >= 1 && wanted <= pages) void load(wanted - 1);
-                    else event.currentTarget.value = String(index + 1);
-                  }}
-                  onBlur={(event) => {
-                    event.currentTarget.value = String(index + 1);
+                <Trans
+                  t={t}
+                  i18nKey="account:usage.page"
+                  values={{ pages }}
+                  components={{
+                    page: (
+                      <input
+                        key={index}
+                        aria-label={t('account:usage.pageNumber')}
+                        inputMode="numeric"
+                        defaultValue={index + 1}
+                        disabled={loading}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter') return;
+                          const wanted = Math.round(Number(event.currentTarget.value));
+                          if (wanted >= 1 && wanted <= pages) void load(wanted - 1);
+                          else event.currentTarget.value = String(index + 1);
+                        }}
+                        onBlur={(event) => {
+                          event.currentTarget.value = String(index + 1);
+                        }}
+                      />
+                    ),
                   }}
                 />
-                / {pages} 页
               </label>
               <IconButton
-                title="下一页"
+                title={t('account:usage.next')}
                 disabled={loading || !page.hasMore}
                 onClick={() => {
                   void load(index + 1);
@@ -436,18 +494,22 @@ export default function UsagePanel({
                 <ChevronRight />
               </IconButton>
               <span>
-                共 {totals!.requests.toLocaleString('zh-CN')} 条，每页 {pageSize} 条
+                {t('account:usage.pageSize', {
+                  total: totals!.requests.toLocaleString(locale),
+                  size: pageSize,
+                })}
               </span>
             </nav>
           )}
         </div>
         {summary && (
           <p className="account-updated">
-            调用记录保留 {summary.retentionDays} 天
             {summary.firstRecordAt
-              ? `，最早一条：${new Date(summary.firstRecordAt).toLocaleString('zh-CN')}`
-              : ''}
-            。
+              ? t('account:usage.retentionSince', {
+                  count: summary.retentionDays,
+                  first: new Date(summary.firstRecordAt).toLocaleString(locale),
+                })
+              : t('account:usage.retention', { count: summary.retentionDays })}
           </p>
         )}
       </div>

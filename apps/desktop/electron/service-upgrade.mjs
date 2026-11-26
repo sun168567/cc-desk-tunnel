@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { PROTOCOL_HISTORY, PROTOCOL_VERSION } from '@cc-desk-tunnel/protocol';
 import { certificateMatches, connectService } from './proxy-bridge.mjs';
+import { failure, phrase } from './failure.cjs';
+import { say } from './words.mjs';
 
 // Has a service older than this client, which refuses it at sign-in, upgrade itself the way its own clients
 // do: sign in with the protocol version of its release, ask it to check for the newest release and install
@@ -39,7 +41,7 @@ export function probeService({ url, fingerprint, token, deviceName }, options = 
         fingerprint &&
         !certificateMatches(remote._socket.getPeerCertificate().fingerprint256, fingerprint)
       )
-        end({ status: 'failed', error: '服务证书指纹不匹配；未发送服务凭据。' });
+        end({ status: 'failed', error: say(phrase('desktop:bridge.pinMismatch')) });
       else
         remote.send(
           JSON.stringify({ type: 'auth', protocolVersion: PROTOCOL_VERSION, token, deviceName }),
@@ -65,7 +67,10 @@ export function probeService({ url, fingerprint, token, deviceName }, options = 
             : null,
         });
       else if (message.type === 'connection.error')
-        end({ status: 'failed', error: message.message ?? '服务端拒绝了连接。' });
+        end({
+          status: 'failed',
+          error: say(message.phrase ?? message.message ?? phrase('desktop:service.refused')),
+        });
     });
     remote.on('close', () => end({ status: 'unreachable' }));
     remote.on('error', () => end({ status: 'unreachable' }));
@@ -79,37 +84,45 @@ export function upgradeService(
   const protocolVersion = Object.entries(PROTOCOL_HISTORY).findLast(
     ([release]) => release.localeCompare(service, undefined, { numeric: true }) <= 0,
   )?.[1];
-  if (!protocolVersion)
-    return Promise.reject(
-      new Error(
-        `服务端 ${service} 太旧，请在服务器上重新运行安装命令升级（见项目 README 的“快速开始”）。`,
-      ),
-    );
+  if (!protocolVersion) return Promise.reject(failure('desktop:service.tooOld', { service }));
   const address = new URL(url);
   const remote = options.open?.() ?? open(address, fingerprint, options.resolveProxy);
   const send = (message) => remote.send(JSON.stringify({ requestId: randomUUID(), ...message }));
   return new Promise((resolve, reject) => {
-    const end = (error, version, code) => {
+    // A failure is said in the service's words: a text, or a phrase the window says in its language, with the
+    // text the service sent beside it, if any.
+    const fail = (words, code, sent) => {
       remote.close();
-      if (error) reject(Object.assign(new Error(error), code ? { code } : {}));
-      else resolve(version);
+      const text = typeof words === 'string' ? words : (sent ?? words.key);
+      reject(
+        Object.assign(
+          new Error(text),
+          typeof words === 'string' ? {} : { phrase: words },
+          code ? { code } : {},
+        ),
+      );
+    };
+    const end = (error, version, code) => {
+      if (error) return fail(error, code);
+      remote.close();
+      resolve(version);
     };
     remote.on('open', () => {
       if (
         fingerprint &&
         !certificateMatches(remote._socket.getPeerCertificate().fingerprint256, fingerprint)
       )
-        end('服务证书指纹不匹配；未发送服务凭据。');
+        end(phrase('desktop:bridge.pinMismatch'));
       else remote.send(JSON.stringify({ type: 'auth', protocolVersion, token, deviceName }));
     });
     // Read as plain JSON: the frames are those of an older release.
     remote.on('message', (raw) => {
       const message = JSON.parse(raw.toString('utf8'));
       if (message.type === 'connection.error' || (message.type === 'response' && !message.ok))
-        end(
-          message.message ?? '服务端拒绝了升级。',
-          undefined,
+        fail(
+          message.phrase ?? message.message ?? phrase('desktop:service.upgradeRefused'),
           message.code === 'native_busy' ? 'busy' : undefined,
+          message.message,
         );
       // An upgrade already under way is only followed.
       else if (message.type === 'ready' && message.update?.state !== 'installing')
@@ -125,22 +138,21 @@ export function upgradeService(
                     version: message.latest,
                     ...(force ? { force: true } : {}),
                   })
-                : end('没有升级服务端。', undefined, 'declined'),
-            (error) => end(error.message, undefined, 'declined'),
+                : end(phrase('desktop:service.declined'), undefined, 'declined'),
+            (error) => end(error.phrase ?? error.message, undefined, 'declined'),
           );
         else if (message.state === 'restarting') end(null, message.latest);
-        else if (message.state === 'failed') end(message.detail ?? '服务端升级失败。');
+        else if (message.state === 'failed')
+          fail(message.detail ?? phrase('desktop:service.upgradeFailed'));
         else if (message.state === 'manual')
-          end(
-            `服务端 ${message.latest} 需要更新镜像，请在服务器上执行 sudo cc-desk-tunnel upgrade；没有这个命令的旧部署重新运行安装命令即可。`,
-            undefined,
-            'manual',
-          );
+          end(phrase('desktop:service.manual', { version: message.latest }), undefined, 'manual');
         else if (message.state === 'idle')
-          end('服务端没有找到更新的正式版本。', undefined, 'current');
+          end(phrase('desktop:service.noNewer'), undefined, 'current');
       }
     });
-    remote.on('close', () => end('与服务端的连接断开了；稍后重新连接，查看它是否已经升级。'));
-    remote.on('error', (error) => end(`连不上服务端：${error.message}`));
+    remote.on('close', () => end(phrase('desktop:service.closed')));
+    remote.on('error', (error) =>
+      end(phrase('desktop:service.unreachable', { reason: error.phrase ?? error.message })),
+    );
   });
 }

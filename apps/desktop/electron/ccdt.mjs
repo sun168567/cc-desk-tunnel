@@ -4,6 +4,7 @@ import * as files from 'node:fs';
 import { existsSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
 import { delimiter, join, posix } from 'node:path';
+import { failure } from './failure.cjs';
 
 // A session opened in ccdt, the terminal client, from the desktop client: ccdt is a program of its own, spoken to
 // through its command line alone. It is signed in to the service this window is connected to, with the token the
@@ -137,7 +138,11 @@ function run(ccdt, args, system, input) {
       (error, stdout, stderr) => {
         if (!error) return resolve(stdout);
         const said = stderr.trim().split('\n').at(-1);
-        reject(new Error(said ? `ccdt：${said}` : `ccdt 没有运行成功：${error.message}`));
+        reject(
+          said
+            ? failure('desktop:ccdt.said', { said })
+            : failure('desktop:ccdt.failed', { reason: error.message }),
+        );
       },
     );
     // ccdt may end before it reads, as `--version` does, which closes the pipe: how it ended tells the outcome.
@@ -179,7 +184,7 @@ export function terminalCommand({ platform, env }, ccdt, args, cwd, exists = exi
       .find((path) => exists(path));
     if (file) return { file, args: [flag, 'sh', '-c', script], options: {} };
   }
-  throw new Error('没有找到可以打开的终端程序：请在终端里运行 ccdt open。');
+  throw failure('desktop:ccdt.noTerminal');
 }
 
 function launch({ file, args, options, script }, system, cwd) {
@@ -193,7 +198,9 @@ function launch({ file, args, options, script }, system, cwd) {
       stdio: 'ignore',
       windowsHide: false,
     });
-    child.once('error', (error) => reject(new Error(`打开终端失败：${error.message}`)));
+    child.once('error', (error) =>
+      reject(failure('desktop:ccdt.terminalFailed', { reason: error.message })),
+    );
     child.once('spawn', () => {
       child.unref();
       resolve();
@@ -214,7 +221,7 @@ export async function openSession(
     !/^wss?:\/\/[^\s"'%^&|<>`$\\]+$/.test(url) ||
     !/^[0-9A-Fa-f:]*$/.test(fingerprint ?? '')
   )
-    throw new Error('这个连接的地址不能交给 ccdt。');
+    throw failure('desktop:ccdt.badAddress');
   const system = { platform, env, home, own };
   const ccdt = locate(system);
   if (!ccdt) return { status: 'missing' };

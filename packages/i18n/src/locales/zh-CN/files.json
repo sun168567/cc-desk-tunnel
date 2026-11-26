@@ -1,0 +1,84 @@
+{
+  "newFolder": "新建文件夹",
+  "rename": "重命名",
+  "delete": {
+    "title": "删除",
+    "confirm": "删除",
+    "one": "删除“{{name}}”？",
+    "oneRemote": "删除“{{name}}”？服务端和远程电脑上的文件删除后不能恢复。",
+    "many_other": "删除这 {{count}} 项？"
+  },
+  "preview": "预览",
+  "openEditor": "用编辑器打开",
+  "reveal": "在文件夹中显示",
+  "download": "下载…",
+  "copy": "复制",
+  "paste": "粘贴",
+  "copyPath": "复制路径",
+  "upload": "上传…",
+  "refresh": "刷新",
+  "filterHint": "筛选已展开的文件…",
+  "filter": "筛选文件",
+  "reading": "正在读取…",
+  "empty": "这个文件夹是空的",
+  "col": {
+    "name": "名称",
+    "size": "大小",
+    "modified": "修改时间"
+  },
+  "previewLabel": "文件预览",
+  "backToFolder": "返回目录",
+  "rendered": "排版",
+  "source": "原文",
+  "downloadHere": "下载到本机…",
+  "readFull": "全屏阅读",
+  "truncated": "文件较大，只显示开头的部分。",
+  "choosePreview": "选择文件预览",
+  "noPreview": "无法预览",
+  "place": {
+    "label": "位置",
+    "local": "本机"
+  },
+  "help": "文件面板怎么用",
+  "uploadFiles": "上传文件…",
+  "toSide": "收回侧栏",
+  "toPage": "展开为整页",
+  "close": "关闭文件面板",
+  "current": "当前位置",
+  "up": "上一级",
+  "landlock": {
+    "detail": "内核不支持 Landlock：登录凭据、setup token 等可被读取和修改",
+    "title": "敏感文件未受保护",
+    "dismiss": "不再提示"
+  },
+  "closeNotice": "关闭",
+  "oldImage": {
+    "title": "服务端镜像较旧",
+    "detail": "缺少 sftp-server；在服务器上用 deploy/manage.sh 升级",
+    "action": "升级镜像后可浏览"
+  },
+  "transfer": {
+    "list": "传输",
+    "preparing": "准备中",
+    "done": "完成",
+    "cancelled": "已取消",
+    "failed": "失败",
+    "resume": "续传",
+    "remove": "移除",
+    "label": "{{what}}：{{from}} → {{to}}",
+    "failedWith": "{{label}}：{{error}}"
+  },
+  "title": "文件",
+  "conflict": {
+    "title": "目标位置已有同名项",
+    "skip": "跳过",
+    "replace": "替换",
+    "one": "“{{name}}”已存在",
+    "many_other": "{{names, series}} 等 {{count}} 项已存在"
+  },
+  "ok": "确定",
+  "items_other": "{{count}} 项",
+  "changes": "已更改的文件",
+  "changed": "已更改",
+  "moreLines_other": "还有 {{count}} 行未显示"
+}

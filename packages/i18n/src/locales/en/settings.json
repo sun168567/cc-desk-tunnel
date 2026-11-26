@@ -1,0 +1,551 @@
+{
+  "wait": {
+    "connect": {
+      "title": "Connect to the server",
+      "detail": "Open the network connection to the server"
+    },
+    "ssh": {
+      "title": "Local SSH service starts",
+      "detail": "Takes longer when a domain account can’t reach its domain controller, or security software scans slowly"
+    },
+    "ready": {
+      "title": "Execution channel ready",
+      "detail": "Total time from reaching the server to the tunnel being up; at least 35 seconds more than the step above"
+    },
+    "withDefault": "{{detail}}. Default {{seconds}} s",
+    "heading": "Connection waits",
+    "resetDetail": "Takes effect on the next connection; no need to change while connecting works"
+  },
+  "idle": {
+    "enabled": {
+      "title": "Auto compaction",
+      "detail": "Only for sessions with the 1-hour cache, the default for subscription accounts"
+    },
+    "after": {
+      "title": "Compact after idle for",
+      "detail": "Counted from the end of the last turn; with auto compaction off, a reminder comes instead"
+    },
+    "minTokens": {
+      "title": "Context at least",
+      "detail": "Smaller sessions are neither compacted nor reminded about"
+    },
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "heading": "Compact before the cache expires",
+    "intro": "When a session has been idle for the set time, the server compacts it while the cache still holds, so coming back doesn’t reread at full price. Your computer needn’t be online; compaction counts toward the quota."
+  },
+  "shell": {
+    "title": "Preferred shell",
+    "detail": "Unset, Claude picks one for the task; set, it is only a preference",
+    "unset": "Not set",
+    "missing": "Git Bash wasn’t found: install Git for Windows (https://git-scm.com/download/win), reconnect, and it can be chosen.",
+    "notFound": "{{name}} (not found)",
+    "heading": "Shell for scripts",
+    "intro": "PowerShell 7 comes with the client; with Git for Windows installed, Git Bash can be used too. Changes take effect from each session’s next message."
+  },
+  "cli": {
+    "ttl": {
+      "5m": "5 minutes",
+      "1h": "1 hour"
+    },
+    "autoCompactEnabled": {
+      "title": "Auto-compact context",
+      "detail": "Summarizes and carries on when the context is nearly full"
+    },
+    "autoCompactWindow": {
+      "title": "Auto-compact window",
+      "detail": "Compacts once the context reaches this size, never beyond the model’s own window"
+    },
+    "precomputeCompactionEnabled": {
+      "title": "Prepare compaction summaries ahead",
+      "detail": "Works out the summary in the background so compaction waits less; needs auto compaction"
+    },
+    "autoMemoryEnabled": {
+      "title": "Auto memory",
+      "detail": "Claude keeps notes and remembers them next session"
+    },
+    "autoDreamEnabled": {
+      "title": "Tidy memory in the background",
+      "detail": "Merges and tidies existing memories while idle"
+    },
+    "fileCheckpointingEnabled": {
+      "title": "File checkpoints",
+      "detail": "Snapshots before edits for /rewind; useful only in ccdt"
+    },
+    "alwaysThinkingEnabled": {
+      "title": "Thinking",
+      "detail": "Matters only for older models; newer ones always think"
+    },
+    "showThinkingSummaries": {
+      "title": "Show thinking",
+      "detail": "Shows summaries of the thinking in the conversation, without changing how much it thinks"
+    },
+    "fastMode": {
+      "title": "Fast mode",
+      "detail": "Faster output at a higher price; subscription accounts pay from extra usage"
+    },
+    "fallbackModel": {
+      "title": "Fallback models",
+      "detail": "Used in turn when the main model is overloaded or unavailable; comma-separated, up to 3",
+      "placeholder": "e.g. sonnet, haiku"
+    },
+    "autoContinueAtUsageLimit": {
+      "title": "Carry on after the quota runs out",
+      "detail": "Waits for the quota to reset, then goes on; useful only in ccdt"
+    },
+    "switchModelsOnFlag": {
+      "title": "Switch models on a safety block",
+      "detail": "Goes on with another model when a request is blocked; off, the turn ends with an error"
+    },
+    "promptCacheTtl": {
+      "title": "Prompt cache lifetime",
+      "detail": "How long the main conversation’s cache is kept"
+    },
+    "subagentPromptCacheTtl": {
+      "title": "Prompt cache lifetime for subtasks",
+      "detail": "Subagents, compaction and other requests outside the main conversation"
+    },
+    "language": {
+      "title": "Reply language",
+      "detail": "e.g. chinese, japanese; empty lets the CLI decide"
+    },
+    "askUserQuestionTimeout": {
+      "title": "When a question goes unanswered",
+      "detail": "How long a question waits before going on alone; useful only in ccdt",
+      "60s": "Go on after 60 seconds",
+      "5m": "Go on after 5 minutes",
+      "10m": "Go on after 10 minutes",
+      "never": "Wait forever"
+    },
+    "bashOutputMaxChars": {
+      "title": "Command output limit",
+      "detail": "What goes beyond is saved to a file; Claude sees only the start",
+      "chars": "{{n}}K characters"
+    },
+    "toolSearch": {
+      "title": "Tool search",
+      "detail": "Looks up tool descriptions when needed; saves context with MCP servers"
+    },
+    "enableArtifact": {
+      "title": "Artifact pages",
+      "detail": "Claude can publish documents and charts as pages on claude.ai"
+    },
+    "denyInsteadOfPrompting": {
+      "title": "Deny instead of asking",
+      "detail": "Calls that need your approval are denied; no session asks for approval any more"
+    },
+    "blockWritesOutsideWorkingDirectories": {
+      "title": "No writing outside working directories",
+      "detail": "Covers only the file-writing tools on the server; it can’t stop changes on your computer"
+    },
+    "attribution": {
+      "title": "Attribution in commits and PRs",
+      "detail": "By default Claude is credited in commit messages and PR descriptions",
+      "false": "No attribution"
+    },
+    "includeGitInstructions": {
+      "title": "Built-in commit and PR instructions",
+      "detail": "The official way to commit and open PRs; turn off to follow your own"
+    },
+    "group": {
+      "context": "Context and memory",
+      "model": "Model and quota",
+      "behavior": "Behavior",
+      "permissions": "Permissions"
+    },
+    "intro": "Claude Code’s own settings on the server, shared by every session and ccdt, taking effect from the next run. “Default” writes nothing and leaves it to the CLI."
+  },
+  "group": {
+    "local": "This computer",
+    "server": "Server",
+    "claude": "Claude Code",
+    "other": "Other"
+  },
+  "default": {
+    "on": "Default (on)",
+    "auto": "Default (auto)",
+    "off": "Default (off)",
+    "wait": "Default (wait forever)",
+    "chars": "Default (30K)",
+    "attribution": "Default (credit Claude)"
+  },
+  "cache": {
+    "kb": "about {{n}} KB",
+    "mb": "about {{n}} MB",
+    "gb": "about {{n}} GB",
+    "sessions_one": "{{count}} session",
+    "sessions_other": "{{count}} sessions",
+    "heading": "Conversation history",
+    "title": "Local cache",
+    "detail": "Conversations read stay on this computer; reopening fetches only what’s new",
+    "clean": "Clean"
+  },
+  "about": {
+    "homepage": "Project homepage · {{name}}",
+    "client": "Client version",
+    "devEntry": "Browser development entry",
+    "notes": "What’s new in this version",
+    "service": "Server version",
+    "unknown": "Unknown",
+    "adapter": "Runs as",
+    "updates": "Updates",
+    "sameVersion": "Client and server need the same version",
+    "updatesFromService": "The server follows the release page; the client’s installer comes from the server it connects to, or from the GitHub release page if chosen on the sign-in page, checked before upgrading in place",
+    "updatesManual": "The server follows the release page; on this system the client is upgraded by hand: download the installer of the server’s version and install it over the old one",
+    "releases": "Open the release page",
+    "noUpdates": "No update actions available",
+    "troubleshoot": "Troubleshooting",
+    "log": "Connection log",
+    "logDetail": "When each connection opened and closed, and why, kept on this computer without credentials or conversations. Useful when connections drop for no reason",
+    "openLog": "Open the log folder",
+    "devTools": "Developer tools",
+    "devToolsDetail": "For errors when reporting a window problem. Conversations can be seen there; don’t paste code into it because someone asks you to",
+    "openDevTools": "Open developer tools"
+  },
+  "section": {
+    "general": {
+      "name": "General",
+      "words": "window tray background startup plain session folder history cache usage clean approval bypass permissions"
+    },
+    "appearance": {
+      "name": "Appearance",
+      "words": "theme dark light work steps reply summary session bar input quota usage first token speed cache"
+    },
+    "connection": {
+      "name": "Connection",
+      "words": "remember credentials auto sign-in multiple connections signed-in servers nickname window server wait timeout SSH execution channel"
+    },
+    "notifications": {
+      "name": "Notifications",
+      "words": "alert done failed approval question scheduled task connection sound"
+    },
+    "shortcuts": {
+      "name": "Shortcuts",
+      "words": "keyboard key combination hotkey back forward sidebar zoom"
+    },
+    "context": {
+      "name": "Context and cache",
+      "words": "auto compaction prompt cache expire idle context compact"
+    },
+    "shell": {
+      "name": "Shell",
+      "words": "PowerShell Git Bash command script terminal preferred"
+    },
+    "web": {
+      "name": "Browser access",
+      "words": "web page certificate domain two-step verification reverse proxy browser sign-in"
+    },
+    "account": {
+      "name": "Account and quota",
+      "words": "sign in sign out subscription usage call log reset read quota"
+    },
+    "claude": {
+      "name": "CLI settings",
+      "words": "auto compaction thinking fast mode memory checkpoints cache language model fallback attribution tool search"
+    },
+    "instructions": {
+      "name": "Global instructions",
+      "words": "CLAUDE.md AGENTS.md prompt instructions"
+    },
+    "install": {
+      "name": "Phone app",
+      "words": "add to home screen install name icon badge"
+    },
+    "about": {
+      "name": "About and updates",
+      "words": "version upgrade check for updates homepage log troubleshoot disconnect developer tools console"
+    },
+    "usage": {
+      "name": "Plan usage",
+      "words": "subscription usage quota period stats reset auto read quota"
+    }
+  },
+  "scope": {
+    "browser": "Kept only in this browser; affects only pages opened here.",
+    "local": "Kept only on this computer; affects only this client.",
+    "everyDevice": "Kept on the server; applies to every device connected to it.",
+    "thisDevice": "Kept on the server; applies only to this computer."
+  },
+  "notify": {
+    "done": {
+      "title": "Task done",
+      "detail": "Claude Code finished a turn"
+    },
+    "failed": {
+      "title": "Task failed",
+      "detail": "A turn ended with an error"
+    },
+    "approval": {
+      "title": "Awaiting approval",
+      "detail": "Something needs you to allow or deny it"
+    },
+    "question": {
+      "title": "Claude asks",
+      "detail": "Claude needs your answer to go on"
+    },
+    "schedule": {
+      "title": "Scheduled task not sent",
+      "detail": "A due task failed to send or was skipped"
+    },
+    "connection": {
+      "title": "Connection lost",
+      "detail": "The connection to the service dropped unexpectedly"
+    },
+    "heading": "Notifications",
+    "intro": "While the window is in the tray or in the background, system notifications tell you what you need to know; clicking one goes back to its session. The session you’re looking at isn’t notified again.",
+    "enabled": "Turn on notifications",
+    "enabledDetail": "Off, neither system notifications nor the notification list get anything",
+    "sound": "Sound",
+    "soundDetail": "Plays the system’s notification sound with each system notification",
+    "which": "What to notify about",
+    "testTitle": "Test notification",
+    "testBody": "Notifications work.",
+    "test": "Send a test notification"
+  },
+  "simulation": {
+    "cli": "The offline simulation has no Claude Code settings; connect to a remote proxy to change them here.",
+    "instructions": "The offline simulation has no global instructions; connect to a remote proxy to change them here."
+  },
+  "theme": {
+    "heading": "Theme",
+    "detail": "Following the system switches with its light or dark setting",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "view": {
+    "heading": "Work steps",
+    "amount": "How much to show",
+    "standard": {
+      "label": "Standard",
+      "detail": "While running, steps are grouped by run; once done they fold into “Took …”"
+    },
+    "expanded": {
+      "label": "All expanded",
+      "detail": "Commands and thinking are laid out one by one, ungrouped and never folded; thinking shows its first line"
+    }
+  },
+  "bar": {
+    "heading": "Session bar",
+    "show": "Show the session bar",
+    "detail": "A line under the input box: the whole session’s turns, steps, speed and token usage",
+    "parts": "In the session bar",
+    "partsDetail": "With none chosen, each part shows only its name",
+    "resetDetail": "The details shown on click aren’t affected by these choices"
+  },
+  "reset": "Reset",
+  "summary": {
+    "heading": "Reply summary",
+    "show": "Show the reply summary",
+    "detail": "A small button at the end of each reply; click it for all the details",
+    "parts": "In the summary",
+    "partsDetail": "With none chosen, only “Usage details” shows",
+    "resetDetail": "The figures in the details aren’t affected by these choices"
+  },
+  "seconds": "s",
+  "connections": {
+    "heading": "Signed-in services",
+    "unsaved": "Connection without a saved address",
+    "nickname": "Nickname",
+    "nicknameHint": "Empty shows the service address",
+    "openOf": "Open {{label}}",
+    "switch": "Switch to",
+    "open": "Open",
+    "nicknameOf": "Nickname {{label}}",
+    "deleteOf": "Delete {{label}}",
+    "deleteQuestion": "Delete the sign-in record of “{{label}}”? The credentials, drafts and scheduled tasks saved for it on this computer go too; sessions on the server aren’t affected.",
+    "delete": "Delete",
+    "newWindow": "New sign-in window"
+  },
+  "window": {
+    "heading": "Window",
+    "background": "Keep running when the window closes",
+    "backgroundDetail": "Closing the window only sends it to the tray and tasks go on; choose “Quit” in the tray to end it"
+  },
+  "sessions": {
+    "heading": "Sessions",
+    "folder": "Folder for plain sessions",
+    "folderDetail": "Each new session outside a project gets a folder here; existing ones stay put",
+    "change": "Change"
+  },
+  "approval": {
+    "heading": "Approval",
+    "bypass": "Allow bypassing permissions",
+    "bypassDetail": "Adds “Bypass permissions” to the approval modes, which asks about nothing. Only advisable on a test machine"
+  },
+  "input": {
+    "heading": "Input box",
+    "quota": "Show quota beside the input box",
+    "quotaDetail": "How much of the 5-hour and weekly quota is used; click it for account and quota"
+  },
+  "signIn": {
+    "heading": "Sign-in",
+    "remember": "Remember credentials",
+    "rememberDetail": "The service token is encrypted by the current system account and kept on this computer",
+    "auto": "Sign in automatically",
+    "autoDetail": "Signs in to this service as soon as the program opens"
+  },
+  "backToSignIn": "Back to sign-in",
+  "localTitle": "Local settings",
+  "help": "How settings are grouped and what each page covers",
+  "search": "Search settings",
+  "categories": "Settings categories",
+  "noMatch": "No matching settings",
+  "shortcut": {
+    "action": {
+      "back": "Back",
+      "forward": "Forward",
+      "toggleSide": "Collapse or show the sidebar",
+      "newSession": "New session",
+      "settings": "Open settings",
+      "find": "Find in conversation",
+      "cycleMode": "Switch approval mode",
+      "toggleFiles": "Open or close the file panel",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomReset": "Reset zoom"
+    },
+    "space": "Space",
+    "change": "Change shortcut: {{name}}",
+    "typing": "{{combo}} would get in the way of typing; add Ctrl, Alt or Command.",
+    "taken": "{{combo}} is already used by “{{name}}”.",
+    "recording": "Press the new combination…",
+    "unset": "Not set",
+    "intro": "Shortcuts work only while this window is in front; no global hotkeys are registered with the system. While a dialog is open, keys go to it unchanged.",
+    "enabled": "Enable shortcuts",
+    "enabledDetail": "Off, none of the combinations below respond; the menus work as usual",
+    "heading": "Combinations",
+    "howTo": "Click an item, then press the new combination (with Ctrl, Alt or Command, or a function key); Esc cancels, Backspace removes the item’s shortcut.",
+    "reset": "Reset combinations"
+  },
+  "on": "On",
+  "off": "Off",
+  "saveFailed": "Couldn’t save.",
+  "instructions": {
+    "readFailed": "Couldn’t read.",
+    "saved": "Saved; takes effect from the next run",
+    "intro": "The user-level CLAUDE.md of Claude Code in the cloud, read by every session on this service from the next run. The user level doesn’t read AGENTS.md, and the CLAUDE.md and AGENTS.md in projects on your computer aren’t read automatically either; ask Claude to read them when needed.",
+    "placeholder": "For example: reply in English; write commit messages in English.",
+    "reload": "Reload"
+  },
+  "web": {
+    "credential": "Service token",
+    "currentCode": "Current authenticator code",
+    "saving": "Saving…",
+    "confirm": "Confirm",
+    "copyFailed": "Couldn’t copy; select the address and copy it.",
+    "openFailed": "Couldn’t open the browser; copy the address and visit it.",
+    "connectFirst": "Connect to the server to manage browser access.",
+    "reading": "Reading…",
+    "readFailed": "Couldn’t read the settings",
+    "enable": "Enable web access",
+    "enableDetail": "Controls the browser entry of this server.",
+    "address": "Server access address",
+    "copyAddress": "Copy the server access address",
+    "openAddress": "Open the server access address",
+    "addressNotReady": "Address not ready",
+    "access": "Access settings",
+    "deployAddress": "Uses the deployment address",
+    "set": "Set",
+    "totp": "Two-step verification",
+    "totpOn": "Signing in needs an authenticator code.",
+    "totpOff": "Authenticator two-step verification is advised.",
+    "turnOff": "Turn off",
+    "browsers": "Signed-in browsers",
+    "noBrowsers": "No signed-in browsers",
+    "cert": {
+      "title": "HTTPS certificate",
+      "external": "Managed by the reverse proxy",
+      "unavailable": "This service has no TLS configured",
+      "selfSigned": "Uses the default self-signed certificate",
+      "deployed": "Uses the deployment certificate",
+      "domainFirst": "Set the access domain first",
+      "import": "Import certificate",
+      "reset": "Restore default certificate",
+      "expired": "The certificate has expired; replace it.",
+      "resetQuestion": "Restore the deployment’s default certificate? The custom certificate is removed; if the default is self-signed, browsers ask to confirm the certificate again.",
+      "chainTooLarge": "The certificate chain must not exceed 64 KB.",
+      "keyTooLarge": "The private key must not exceed 16 KB.",
+      "readFailed": "Couldn’t read the file; choose it again.",
+      "importTitle": "Import a custom certificate",
+      "chain": "Certificate chain PEM",
+      "chooseChain": "Choose the certificate file",
+      "key": "Private key PEM",
+      "chooseKey": "Choose the private key file",
+      "custom": "Custom certificate · {{domain}}",
+      "issuer": "Issuer: {{issuer}}",
+      "validTo": "Valid until: {{date}}",
+      "expiring_one": "The certificate expires within {{count}} day; replace it soon.",
+      "expiring_other": "The certificate expires within {{count}} days; replace it soon.",
+      "forDomain": "The certificate is for {{domain}}. Provide the full certificate chain and an unencrypted private key."
+    },
+    "totpTurnOff": "Turn off two-step verification",
+    "totpTurnOffDetail": "With two-step verification off, the service token alone signs in. Signed-in browsers are signed out.",
+    "revoke": "Sign the browser out",
+    "revokeOwn": "Sign this browser out?",
+    "revokeOther": "Sign that browser out? It will need the service token and a code again.",
+    "pathSaved": "Path saved; copy the new access address from the desktop client.",
+    "domain": "Access domain",
+    "domainLocked": "Restore the default certificate before changing or clearing the domain.",
+    "domainHint": "Empty uses the deployment address; once set, only that domain is allowed and other entries return 404.",
+    "path": "Server access path",
+    "pathHint": "Empty uses the root path. After changing the domain or path, signed-in browsers sign in again.",
+    "idle": "Sign-in idle lifetime (minutes)",
+    "trustProxy": "Trust reverse proxy",
+    "proxyIps": "Reverse proxy IPs",
+    "proxyIpsHint": "One IP address per line",
+    "proxyIpsDetail": "Client IP information is trusted only when forwarded by these addresses.",
+    "qrFailed": "Couldn’t make the QR code; enter the key by hand.",
+    "totpSetup": "Set up two-step verification",
+    "preparing": "Preparing…",
+    "next": "Next",
+    "generating": "Generating the authenticator key…",
+    "qr": "Authenticator QR code",
+    "manualKey": "Set up the key by hand",
+    "copyKey": "Copy key",
+    "verify": "Verify the new code",
+    "requestFailed": "The request failed; try again.",
+    "current": " (this browser)",
+    "lastActive": "Last active {{time}}",
+    "revokeOf": "Sign out {{name}}",
+    "forwardedBy": "The latest request with a client IP came from {{address}}, which isn’t in the list above. Add it only once you’re sure it is your reverse proxy; don’t add addresses you don’t recognize."
+  },
+  "proxy": {
+    "domainFirst": "Fill in the access domain before making the proxy configuration.",
+    "pathFirst": "Fix the server access path first.",
+    "upstreamForm": "The upstream address must be an HTTPS address without a path, credentials or query.",
+    "upstreamInvalid": "Fill in a valid upstream HTTPS address.",
+    "nameForm": "The verification name must be a DNS name from the certificate’s SAN, without scheme or port.",
+    "trustFileForm": "Fill in the absolute path of the PEM file on the proxy machine, using only letters, digits, dots, hyphens and underscores.",
+    "checkConfig": "Check the configuration.",
+    "copied": "Configuration copied",
+    "copyFailed": "Couldn’t copy; select the configuration below and copy it by hand.",
+    "heading": "Reverse proxy configuration example",
+    "intro": "Save the access domain, path and reverse proxy IPs first, then deploy the configuration on the proxy machine. The fields below only make the example; they don’t change the server.",
+    "upstream": "Upstream HTTPS address",
+    "upstreamHint": "Filled in from the current connection; check that it is a backend address the proxy machine can reach, and don’t use the new domain, which would loop.",
+    "name": "Upstream certificate name",
+    "nameHint": "Must match a DNS name in the upstream certificate’s SAN; the default deployment’s self-signed one is cc-desk-tunnel.local.",
+    "trustFile": "Trusted PEM file",
+    "trustFileHint": "The file’s path on the proxy machine. Self-signed: the certificate itself; CA-issued: the matching root CA trust file.",
+    "prepare": "How to prepare the trust file",
+    "prepareIntro": "Copy the public certificate safely from the deployment machine, never the private key. The default Docker self-signed deployment can export the files below; if the data directory or certificate was changed, use the actual files.",
+    "prepareCheck": "After checking the SAN and the desktop connection’s SHA-256 fingerprint, copy upstream.pem safely to the path above and let the proxy process read it. The fingerprint is only for checking and can’t replace the PEM file. Update the trust file when the self-signed certificate is renewed.",
+    "software": "Reverse proxy software",
+    "copy": "Copy proxy configuration",
+    "config": "Proxy configuration",
+    "nginxHint": "Replace the domain certificate and private key paths, run nginx -t, then reload.",
+    "caddyHint": "Caddy manages the public domain’s certificate; run caddy validate --config Caddyfile, then reload.",
+    "safety": "The example keeps the access path and verifies the upstream certificate without turning TLS verification off. Trust only the proxy machine’s actual source IP."
+  },
+  "install": {
+    "nameInvalid": "The app name must be 1–40 characters without control characters.",
+    "badgeInvalid": "The badge must be 1–3 characters without control characters.",
+    "saveFailed": "Couldn’t save; check that the browser allows local storage.",
+    "intro": "Choose “Add to phone” or “Add to Home Screen” from the browser menu.",
+    "name": "App name",
+    "badge": "Show a badge at the icon’s top right",
+    "badgeText": "Badge text",
+    "badgeHint": "Up to 3 characters"
+  }
+}

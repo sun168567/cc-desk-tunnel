@@ -211,7 +211,7 @@ test('Electron copies text and supplies the native editing context menu', async 
     ),
   );
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...connectionArgs(profile)],
     env,
   });
   const previous = await application.evaluate(({ clipboard }) => clipboard.readText());

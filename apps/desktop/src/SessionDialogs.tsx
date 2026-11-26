@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import type { Session } from '@cc-desk-tunnel/protocol';
+import { Trans } from 'react-i18next';
+import { useT } from './i18n.ts';
 import { folderName } from './paths.ts';
 import { isMac } from './platform.ts';
 import { Modal } from './ui.tsx';
@@ -14,9 +16,12 @@ export function AddProjectDialog({
   error,
   close,
   add,
-  title = '添加项目',
-  action = '添加',
+  title,
+  action,
 }: DialogProps & { add: (path: string) => void; title?: string; action?: string }) {
+  const t = useT();
+  title ??= t('session:project.addTitle');
+  action ??= t('session:project.add');
   const [path, setPath] = useState('');
   return (
     <Modal
@@ -33,7 +38,7 @@ export function AddProjectDialog({
         }}
       >
         <label>
-          本机项目目录
+          {t('session:project.path')}
           <input
             value={path}
             onChange={(event) => setPath(event.target.value)}
@@ -50,7 +55,7 @@ export function AddProjectDialog({
         )}
         <div className="dialog-actions">
           <button type="button" className="button secondary" disabled={busy} onClick={close}>
-            取消
+            {t('common:cancel')}
           </button>
           <button className="button primary" disabled={busy || !connected}>
             <Plus />
@@ -75,19 +80,16 @@ export function DeleteSessionDialog({
   native: boolean;
   confirm: () => void;
 }) {
+  const t = useT();
   return (
     <Modal
-      title="删除会话"
+      title={t('session:delete.title')}
       onClose={() => {
         if (!busy) close();
       }}
     >
-      <p className="delete-question">删除“{session.title}”？</p>
-      <p className="muted">
-        {native
-          ? '原生 Claude Code 会话及代理展示记录将删除，本机项目文件保持不变。'
-          : '会话记录将被删除，项目文件保持不变。'}
-      </p>
+      <p className="delete-question">{t('session:delete.question', { title: session.title })}</p>
+      <p className="muted">{native ? t('session:delete.native') : t('session:delete.plain')}</p>
       {error && (
         <p className="error-text" role="alert">
           {error}
@@ -95,7 +97,7 @@ export function DeleteSessionDialog({
       )}
       <div className="dialog-actions">
         <button type="button" className="button secondary" disabled={busy} onClick={close}>
-          取消
+          {t('common:cancel')}
         </button>
         <button
           type="button"
@@ -104,7 +106,7 @@ export function DeleteSessionDialog({
           onClick={confirm}
         >
           <Trash2 />
-          删除
+          {t('session:delete.confirm')}
         </button>
       </div>
     </Modal>
@@ -122,10 +124,11 @@ export function RenameSessionDialog({
   session: Session;
   rename: (title: string) => void;
 }) {
+  const t = useT();
   const [title, setTitle] = useState(session.title);
   return (
     <Modal
-      title="重命名会话"
+      title={t('session:rename.title')}
       onClose={() => {
         if (!busy) close();
       }}
@@ -138,7 +141,7 @@ export function RenameSessionDialog({
         }}
       >
         <label>
-          名称
+          {t('session:rename.name')}
           <input
             autoFocus
             maxLength={120}
@@ -154,11 +157,11 @@ export function RenameSessionDialog({
         )}
         <div className="dialog-actions">
           <button type="button" className="button secondary" disabled={busy} onClick={close}>
-            取消
+            {t('common:cancel')}
           </button>
           <button className="button primary" disabled={busy || !connected}>
             <Check />
-            保存
+            {t('common:save')}
           </button>
         </div>
       </form>
@@ -179,10 +182,11 @@ export function RenameProjectDialog({
   name: string;
   rename: (name: string) => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(current);
   return (
     <Modal
-      title="项目显示名称"
+      title={t('session:project.renameTitle')}
       onClose={() => {
         if (!busy) close();
       }}
@@ -195,7 +199,7 @@ export function RenameProjectDialog({
         }}
       >
         <label>
-          显示名称
+          {t('session:project.displayName')}
           <input
             autoFocus
             maxLength={60}
@@ -205,7 +209,12 @@ export function RenameProjectDialog({
           />
         </label>
         <p className="muted">
-          只改名字，不改动文件夹 <code>{path}</code>；留空恢复文件夹名。
+          <Trans
+            t={t}
+            i18nKey="session:project.renameHint"
+            values={{ path }}
+            components={{ code: <code /> }}
+          />
         </p>
         {error && (
           <p className="error-text" role="alert">
@@ -214,11 +223,11 @@ export function RenameProjectDialog({
         )}
         <div className="dialog-actions">
           <button type="button" className="button secondary" disabled={busy} onClick={close}>
-            取消
+            {t('common:cancel')}
           </button>
           <button className="button primary" disabled={busy || !connected}>
             <Check />
-            保存
+            {t('common:save')}
           </button>
         </div>
       </form>

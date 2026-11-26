@@ -13,7 +13,9 @@ import type {
   ServerMessage,
   TunnelCredentials,
 } from '@cc-desk-tunnel/protocol';
+import { phrase, type Words } from '@cc-desk-tunnel/i18n';
 import { systemShell } from './device-terms.ts';
+import { textOf } from './errors.ts';
 
 export type TunnelOptions = {
   // How long an SSH connection waits for the device to open its channel before it is dropped.
@@ -212,7 +214,14 @@ export function probeOutput(output: Buffer) {
     .slice(0, 300);
 }
 // A probe that got no ready answer; the message is what the device or `ssh` said instead.
-export class ProbeFailure extends Error {}
+// What the device answered, or what it did not: outside text as it is, else words of the service.
+export class ProbeFailure extends Error {
+  words: Words;
+  constructor(words: Words) {
+    super(textOf(words));
+    this.words = words;
+  }
+}
 // Runs a script the way the system prompt tells Claude to, in the shell of `host`. A failure says what went wrong.
 export function sshProbe(configPath: string, host: string) {
   return new Promise<void>((resolve, reject) => {
@@ -227,8 +236,11 @@ export function sshProbe(configPath: string, host: string) {
         reject(
           new ProbeFailure(
             error?.killed
-              ? '20 秒内没有应答。'
-              : said || `没有输出${error ? `（退出代码 ${error.code}）` : ''}。`,
+              ? phrase('service:probe.noAnswer')
+              : said ||
+                  (error
+                    ? phrase('service:probe.noOutputCode', { code: String(error.code) })
+                    : phrase('service:probe.noOutput')),
           ),
         );
       },

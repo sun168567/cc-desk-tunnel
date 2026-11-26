@@ -1,0 +1,311 @@
+{
+  "help": {
+    "main": "ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的原版 Claude Code，与图形客户端共用会话。\n\n用法：\n  ccdt                   接着当前目录这个项目最近的会话；没有就新建\n  ccdt -r                从当前项目的会话里选一个打开（加 --all 从全部会话里选）\n  ccdt new [标题]        在当前目录新建会话\n  ccdt sessions [--all]  列出当前项目的会话；--all 列出全部；--json 输出 JSON\n  ccdt online            不开终端，让这台电脑保持在线，Claude 可以在这里执行命令；\n                         断线自动重连，Ctrl+C 结束。无图形界面的服务器上可放到后台运行\n  ccdt usage             订阅额度与调用统计\n  ccdt config            查看和修改设置：在终端里用方向键逐项选择\n  ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认\n  ccdt server            已登录的服务端：选一个作为默认连接的，或登录新的\n  ccdt login [wss 地址]  登录服务端；不写地址时从图形客户端保存的里选。--fingerprint 证书指纹，\n                         --token-stdin 从标准输入读凭据，--no-save 不保存\n  ccdt logout            退出一个服务端（登录了几个时先选），其他的不受影响\n  ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用\n  ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本；\n                         有会话正在运行时会说明，可以选择强行升级（--force 不问）\n  ccdt upgrade --check   只检查有没有新版本\n  ccdt --version         版本，须与服务端相同\n\n供程序和其他 agent 使用（写法同 claude -p；详见 ccdt help agents）：\n  ccdt -p \"任务\"         在当前目录的项目里新建会话、发出任务，这一轮结束后输出 Claude 的回复\n                         -c 接最近的会话，-r <会话> 接指定的会话，--bg 发出后立即返回\n  ccdt status <会话>     在做什么、在等什么\n  ccdt tell <会话> \"…\"   追加指示：运行中就加进正在进行的这一轮\n  ccdt wait <会话>       等到这一轮结束，或 Claude 等人批准、回答\n  ccdt approve|deny <会话>  批准或拒绝 Claude 等待的请求，再等到它下次停下；ccdt answer <会话> \"答案\" 回答提问\n  ccdt logs <会话>       最近的对话和工具调用\n  ccdt stop <会话>       停止正在进行的这一轮\n  ccdt acp               作为 ACP（Agent Client Protocol）agent 运行，供 Zed、JetBrains、acpx 等接入\n\n选项：\n  -s                     先选服务端，再做后面的事，如 ccdt -s -r\n  --server <名称>        直接指定服务端：图形客户端里的连接名、主机名或地址，写出能区分的一段即可\n不指定时连接上一次连接的服务端。\n\n用法和本地的 claude 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。",
+    "agents": "ccdt 供程序和其他 agent 使用：把任务交给服务端上的 Claude Code，跟进到它完成。\n会话和图形客户端里的是同一个：窗口里能看到它在做什么，也能插话、批准。\n\n派发（写法同 claude -p）：\n  ccdt -p \"任务\" [选项]\n    默认在当前目录的项目里新建会话；-c 接这个项目最近的会话；-r <会话> 接指定会话\n    --bg                    发出后立即返回会话 ID，不等结果\n    --output-format text|json|stream-json   默认 text：只输出 Claude 最后的回复；\n                            stream-json 逐行输出文字、思考、工具调用与结果、状态\n    --permission-mode auto|default|plan|acceptEdits|bypassPermissions\n    --model <模型>  --effort low|medium|high|xhigh|max  --title <标题>\n    --timeout <秒>          最多等这么久；到时仍在运行就返回（退出码 6）\n  任务也可以从标准输入传入：echo \"任务\" | ccdt -p\n\n跟进（<会话> 写会话 ID，可只写开头几位）：\n  ccdt status <会话> [--json]     在做什么、在等什么\n  ccdt wait <会话> [--timeout 秒] [--output-format …]   等到这一轮结束或需要人处理\n  ccdt tell <会话> \"补充\"          追加指示；Claude 正在做时加进这一轮，用来中途纠偏\n  ccdt approve <会话> [--mode auto|acceptEdits|default]   批准请求；--mode 只用于计划\n  ccdt deny <会话> [\"意见\"]        拒绝；对计划，意见是让它怎么改\n  ccdt answer <会话> \"答案1\" [\"答案2\" …]   按顺序回答 Claude 的提问；多选用逗号隔开\n  ccdt logs <会话> [--last N] [--json]   最近 N 条（默认 20）对话和工具调用\n  ccdt stop <会话>                停止这一轮\n  ccdt sessions [--all] --json    列出会话\n\nACP：会说 Agent Client Protocol 的编辑器和 agent（Zed、JetBrains、acpx 等）把 ccdt acp 配成 agent 命令即可，\n会话就在启动它的目录对应的项目里。\n\n退出码：0 完成（或 --bg 已发出）；2 在等批准或回答；3 失败；4 已停止；5 连不上或未登录；\n6 到 --timeout 时仍在运行；1 其他错误。结果在标准输出，说明和下一步该怎么做在标准错误。\n\njson 结果：{\"session_id\",\"state\",\"result\",\"is_error\",\"approval\"?}。state 为 completed、background（这一轮\n结束，后台任务还在运行，完成后 Claude 会自动接着做）、awaiting_approval、awaiting_answer、failed、cancelled\n或 running。approval 说明在等什么：{\"kind\":\"tool\",\"tool\",\"input\",\"reason\"?}、{\"kind\":\"plan\",\"plan\"}\n或 {\"kind\":\"question\",\"questions\":[{\"question\",\"options\",\"multiSelect\"}]}。\n\n审批：Claude 请求批准或提问时，ccdt -p 和 ccdt wait 停下来，交给调用方用 approve、deny、answer 处理。\n这三个命令回复后像 ccdt -p 一样接着等、输出结果、退出码相同，等待期间提供这台电脑的执行通道；\n加 --bg 只回复不等（之后命令要在这台电脑上运行时，需图形客户端或 ccdt online 开着）。\n图形客户端里同时也能处理，谁先回答算谁的。要少被问，派发时带 --permission-mode。\n\n用法提示：\n- 任务长时，把 ccdt -p 放进你自己的后台任务里跑，它结束时你就会得知；或用 --bg 发出，之后 ccdt wait。\n- Claude 在哪台电脑上执行命令：会话所在的那台，新建的会话就是运行 ccdt 的这台。\n  ccdt -p 等待期间自己提供这台电脑的执行通道；用 --bg 发出后，要有图形客户端或 ccdt online 开着。"
+  },
+  "cancelled": "已取消。",
+  "unknownCommand": "没有这个命令：{{command}}",
+  "connection": {
+    "closed": "连接已关闭。",
+    "channelNotReady": "本机的执行通道没有就绪。"
+  },
+  "session": {
+    "idNeeded": "要写会话 ID（可只写开头几位）：ccdt sessions --json 列出这个目录的会话。",
+    "ambiguous_other": "有 {{count}} 个会话以 {{ref}} 开头，请多写几位。",
+    "none": "没有会话 {{ref}}：ccdt sessions --all --json 列出全部会话。",
+    "readFailed": "读取会话失败。"
+  },
+  "online": {
+    "online": "已在线：Claude 可以在这台电脑（{{host}}）上执行命令。",
+    "reconnecting": "连接断开，正在重连……"
+  },
+  "picker": {
+    "hint": "↑↓ 选择 · Enter 打开 · Esc 取消",
+    "notTty": "选择会话需要在终端里运行；也可以用 ccdt open <会话 ID>。"
+  },
+  "upgrade": {
+    "noPackage": "没有这个系统（{{system}}）的 ccdt 包。",
+    "downloadFailed": "下载 {{file}} 失败：{{reason}}。需要代理时，设置 HTTPS_PROXY 和 NODE_USE_ENV_PROXY=1 再试。",
+    "httpFailed": "下载 {{file}} 失败（HTTP {{status}}）。",
+    "notListed": "{{release}} 的校验清单里没有 {{name}}。",
+    "badHash": "下载的 {{name}} 校验不符，没有安装。",
+    "installFailed": "新版本没有装上：{{reason}}",
+    "withWindow": "这个 ccdt 随图形客户端安装，跟着它更新：打开图形客户端，按提示升级到 {{version}} 即可。",
+    "withWindowPage": "这个 ccdt 随图形客户端安装，跟着它更新：到 {{page}} 下载图形客户端 {{version}} 重新安装即可。",
+    "checking": "服务端是 {{version}}，正在检查新版本……",
+    "confirmFirst": "升级服务端要先确认：在终端里运行 ccdt upgrade，或加 --yes。",
+    "question": "服务端有新版本 {{latest}}（现在是 {{current}}）。升级时服务端会重启，正在运行的会话要先结束。",
+    "yes": "升级服务端",
+    "no": "不升级",
+    "installing": "服务端正在下载并安装……",
+    "forceHint": "{{busy}}强行升级：加 --force。",
+    "force": "强行升级（正在运行的会被中断）",
+    "declined": "没有升级服务端。",
+    "restarting": "服务端已升级到 {{version}}，正在重启，约一分钟后可以连接。",
+    "current": "服务端已是最新的正式版本 {{version}}。",
+    "same": "ccdt 是 {{version}}，与服务端相同。",
+    "tooOld": "ccdt 不能自己换成 {{first}} 以前的版本：到 {{page}} 下载 ccdt {{version}}，运行其中的安装脚本。",
+    "fromSource": "从源码运行的 ccdt 不自行更新：服务端是 {{version}}，请换到这个版本的源码。",
+    "downloading": "正在下载 ccdt {{version}}……",
+    "done": "ccdt 已换成 {{version}}。",
+    "othersOld": "其他已打开的 ccdt 窗口仍是原来的版本，关掉重开即可。"
+  },
+  "check": {
+    "failed": "检查新版本失败：{{reason}}",
+    "unknown": "原因不明",
+    "now": "服务端和 ccdt 现在是 {{version}}。",
+    "latest": "服务端和 ccdt 都是 {{version}}，已是最新的正式版本。"
+  },
+  "update": {
+    "available": "服务端有新版本 {{version}}：运行 ccdt upgrade 升级服务端和 ccdt。",
+    "manual": "服务端有新版本 {{version}}，要在服务器上重新运行安装命令升级。"
+  },
+  "when": {
+    "today": "今天 {{clock}}"
+  },
+  "using": {
+    "window": "图形客户端运行中",
+    "working": "终端运行中",
+    "waiting": "终端等你确认",
+    "idle": "终端打开中"
+  },
+  "server": {
+    "current": "（当前）",
+    "noneLogin": "还没有登录服务端：先运行 ccdt login。",
+    "noneFirst": "还没有登录服务端，先登录一个。",
+    "ambiguous": "有几个服务端都符合 {{name}}：{{found, series}}，请写得更具体。",
+    "unknown": "没有登录过 {{name}}：运行 ccdt server 查看已登录的服务端，或运行 ccdt login 登录。",
+    "pickNotTty": "选服务端需要在终端里运行；也可以用 --server 指定。",
+    "pick": "连接哪个服务端：",
+    "pickHint": "↑↓ 选择 · Enter 连接 · Esc 取消",
+    "noToken": "没有保存这个服务端的凭据：运行 ccdt login 重新登录，或设置 CCDT_TOKEN。",
+    "connecting": "正在连接 {{name}} ……",
+    "none": "还没有登录服务端。",
+    "list": "已登录的服务端：",
+    "loginNew": "登录新的服务端…",
+    "listHint": "↑↓ 选择 · Enter 设为默认 · Esc 退出",
+    "chosen": "之后默认连接 {{name}}。",
+    "noneAtAll": "没有登录任何服务端。",
+    "loggedOut": "已退出 {{name}}。"
+  },
+  "login": {
+    "pick": "登录哪个服务端：",
+    "signedIn": "（已登录）",
+    "other": "输入其他地址…",
+    "pickHint": "↑↓ 选择 · Enter 登录 · Esc 取消",
+    "usage": "用法：ccdt login <wss 地址> [--fingerprint 证书指纹]",
+    "fromWindow": "服务端：{{name}}（{{url}}，取自图形客户端）",
+    "address": "服务端地址（wss://…）：",
+    "token": "服务凭据（与图形客户端填的相同，输入时不显示）：",
+    "done": "已登录 {{url}}。",
+    "verifying": "正在验证……",
+    "doneVersion": "已登录 {{url}}（服务端版本 {{version}}）。",
+    "onlineTip": "不开终端、让这台电脑一直在线：ccdt online",
+    "notSaved": "凭据没有保存；之后用 CCDT_TOKEN 环境变量提供。",
+    "savedInFile": "系统没有可用的密钥服务，凭据存在只有本账号可读的 {{path}}。"
+  },
+  "config": {
+    "notSignedIn": "还没有登录服务端",
+    "localOnly": "连不上服务端，只能改本机的设置：{{reason}}",
+    "unknown": "没有这个设置：{{name}}。运行 ccdt config 查看全部。",
+    "value": "{{title}}：{{value}}",
+    "title": "ccdt 设置",
+    "hint": "↑↓ 选择 · Enter 修改 · Esc 退出",
+    "choiceHint": "↑↓ 选择 · Enter 确定 · Esc 返回",
+    "type": "{{title}}（写 default 恢复默认，Esc 返回）：",
+    "notSaved": "没有保存：{{reason}}",
+    "options": "可选：{{options}}",
+    "option": "{{value}}（{{words}}）",
+    "howTo": "改一项：ccdt config <名称> <值>；值写 default 恢复默认。"
+  },
+  "settings": {
+    "on": "开启",
+    "off": "关闭",
+    "default": "默认",
+    "separator": "、",
+    "here": "本机",
+    "server": "服务端",
+    "waitDetail": "{{detail}}。默认 {{seconds}} 秒",
+    "notFound": "{{words}}（未检测到）",
+    "minutes_other": "{{count}} 分钟",
+    "web": {
+      "title": "浏览器访问",
+      "address": "访问地址 {{url}}",
+      "detail": "在浏览器里使用这个服务端",
+      "access": "浏览器访问的地址、两步验证与证书",
+      "where": "在图形客户端的“设置 → 浏览器访问”里设置。"
+    },
+    "instructions": {
+      "title": "全局说明（CLAUDE.md）",
+      "where": "在 Claude Code 里用 /memory 编辑，或在图形客户端的“设置 → 全局说明”里编辑。"
+    },
+    "account": {
+      "title": "Claude 账号",
+      "where": "在 Claude Code 里用 /login、/logout，或在图形客户端的“设置 → 账号与额度”里。"
+    },
+    "pending": "暂不支持",
+    "secondsDefault": "{{seconds}} 秒（默认）",
+    "seconds": "{{seconds}} 秒",
+    "notHere": "{{title}}暂不支持在 ccdt 里设置：{{where}}",
+    "onOff": "{{title}}只能是 on 或 off。",
+    "onOffDefault": "{{title}}只能是 on 或 off，或 default。",
+    "secondsRange": "{{title}}要填 {{min}}–{{max}} 之间的整数秒，或 default。",
+    "options": "{{title}}可选：{{options}}。",
+    "connectFirst": "改服务端的设置要先连上服务端。",
+    "language": {
+      "title": "ccdt 的语言",
+      "detail": "ccdt 输出的语言；跟随系统时按 LANG 等环境变量"
+    }
+  },
+  "sessions": {
+    "device": "（{{name}}）",
+    "none": "还没有会话。",
+    "noneHere": "这个目录还没有会话：运行 ccdt 新建一个，或用 ccdt sessions --all 看全部。",
+    "ambiguous": "有几个会话以此开头，请多写几位。",
+    "unknown": "没有这个会话。",
+    "noneToPick": "这个目录还没有会话：运行 ccdt 新建一个，或用 ccdt -r --all 从全部会话里选。",
+    "pick": "选择会话：",
+    "pickHere": "选择 {{here}} 的会话："
+  },
+  "usage": {
+    "window": {
+      "five_hour": "5 小时",
+      "seven_day": "7 天",
+      "seven_day_opus": "7 天 Opus"
+    },
+    "line_other": "{{name}} 已用 {{used}} · {{count}} 次请求 · 约 ${{cost}}",
+    "lineReset_other": "{{name}} 已用 {{used}}，{{reset}} 重置 · {{count}} 次请求 · 约 ${{cost}}",
+    "none": "没有订阅额度数据：使用 API Key 或第三方接口时没有额度，用量见图形客户端的统计页。",
+    "note": "金额是按 API 价格估算的等价消耗，不是订阅账单。完整的图表在图形客户端的统计页。"
+  },
+  "open": {
+    "folder": "文件夹",
+    "project": "项目",
+    "session": "会话",
+    "new": "（新建）",
+    "busy": "这个会话正在图形客户端里运行，这一轮结束后再打开。",
+    "ended": "已退出。对话记录在这个会话里，在这个目录运行 ccdt 可以接着聊。",
+    "elsewhere": "这个会话在另一个窗口里打开了，这里不再显示。",
+    "reconnectingTitle": "ccdt：连接断开，正在重连",
+    "reconnecting": "连接断开，正在重连……Claude Code 在服务端继续运行。"
+  },
+  "mismatch": {
+    "question": "这个 ccdt 是 {{version}}，服务端是 {{service}}，两边要同一版本才能连接。",
+    "switch": "把 ccdt 换成 {{version}}",
+    "upgrade": "升级服务端，再把 ccdt 换成同一版本",
+    "later": "暂不升级",
+    "again": "重新运行 ccdt 即可接着用。",
+    "howTo": "这个 ccdt 是 {{version}}，服务端是 {{service}}：运行 ccdt upgrade 升级，或安装与服务端相同版本的 ccdt：{{page}}"
+  },
+  "next": {
+    "plan": "Claude 写好了计划，等待批准：\n{{plan}}",
+    "approval": "Claude 请求批准：{{tool}} {{input}}",
+    "approvalSafety": "Claude 请求批准（Claude Code 安全检查）：{{tool}} {{input}}",
+    "reason": "原因：{{reason}}",
+    "approvePlan": "批准：ccdt approve {{id}} [--mode auto|acceptEdits|default]；要它改计划：ccdt deny {{id}} \"意见\"",
+    "approveTool": "批准：ccdt approve {{id}}；拒绝：ccdt deny {{id}}",
+    "afterReplyOrWindow": "回复后 ccdt 接着等到它再停下。也可以在图形客户端里处理。",
+    "asking": "Claude 在提问：",
+    "options": "（可选：{{options}}）",
+    "optionsMulti": "（可选：{{options}}，可多选，用逗号隔开）",
+    "answer": "回答：ccdt answer {{id}} \"第 1 题的答案\" [\"第 2 题的答案\" …]；不答：ccdt deny {{id}}",
+    "afterReply": "回复后 ccdt 接着等到它再停下。",
+    "background": "这一轮已结束，Claude 启动的后台任务还在运行，结束后它会自动接着做：ccdt wait {{id}} 等到那时。",
+    "running": "还在运行：ccdt wait {{id}} 接着等，ccdt status {{id}} 看进度，ccdt tell {{id}} \"补充\" 追加指示。",
+    "failedWith": "运行失败：{{errors}}",
+    "errorSeparator": "；",
+    "failed": "运行失败。",
+    "cancelled": "运行已停止。"
+  },
+  "task": {
+    "uncarried": "Claude 在这台电脑上执行命令要靠它的连接：保持图形客户端或 ccdt online 开着。",
+    "reconnecting": "连接断开，正在重连……Claude 在服务端继续运行。",
+    "badFormat": "--output-format 只能是 text、json 或 stream-json。",
+    "badTimeout": "--timeout 写秒数，如 --timeout 600。",
+    "noText": "要写任务内容：ccdt -p \"任务\"，或从标准输入传入。",
+    "noSession": "这个目录还没有会话：去掉 -c 新建一个。",
+    "sent": "已发出。ccdt wait {{id}} 等结果，ccdt status {{id}} 看进度。",
+    "noTell": "要写追加的内容：ccdt tell <会话> \"内容\"。",
+    "added": "已追加到正在进行的这一轮。ccdt wait {{id}} 等结果。",
+    "told": "已发出。ccdt wait {{id}} 等结果。",
+    "inTerminal": "这个会话在 ccdt 终端里打开着，在那里继续。",
+    "notRunning": "这个会话没有在运行。",
+    "stopped": "已停止。",
+    "nothingWaiting": "这个会话现在没有等待批准或回答的请求：ccdt status 看它在做什么。",
+    "replied": "已回复。ccdt wait {{id}} 等它接着做。",
+    "askingNotApproval": "Claude 在提问，不是请求批准：用 ccdt answer {{id}} \"答案\"。",
+    "badMode": "--mode 只能是 auto、acceptEdits 或 default。",
+    "approvalNotAsking": "Claude 在请求批准，不是提问：用 ccdt approve {{id}} 或 ccdt deny。",
+    "answerCount_other": "Claude 问了 {{count}} 个问题，要按顺序给 {{count}} 个答案："
+  },
+  "status": {
+    "line": "{{title}}（{{id}}）：{{state}}",
+    "state": {
+      "idle": "空闲",
+      "running": "运行中",
+      "background": "这一轮已结束，后台任务还在运行",
+      "awaiting_approval": "等待批准",
+      "awaiting_answer": "等待回答",
+      "terminal": "在 ccdt 终端里打开着"
+    },
+    "latest": "最近：{{tool}} {{input}}",
+    "reply": "Claude 最后说：{{reply}}"
+  },
+  "logs": {
+    "status": "（{{status}}）"
+  },
+  "acp": {
+    "mode": {
+      "title": "审批模式",
+      "auto": {
+        "name": "自动",
+        "detail": "由 Claude Code 判断哪些操作需要询问"
+      },
+      "default": {
+        "name": "每次询问",
+        "detail": "编辑和命令都先询问"
+      },
+      "acceptEdits": {
+        "name": "自动接受编辑",
+        "detail": "编辑不再询问，命令仍询问"
+      },
+      "plan": {
+        "name": "计划",
+        "detail": "先写计划，批准后再动手"
+      },
+      "bypassPermissions": {
+        "name": "绕过权限",
+        "detail": "什么都不问（须先在客户端允许）"
+      }
+    },
+    "default": "默认",
+    "model": "模型",
+    "effort": "推理强度",
+    "level": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "极高",
+      "max": "最高"
+    },
+    "options": "（{{options}}）",
+    "replyToAnswer": "（直接回复即可回答。）",
+    "plan": {
+      "auto": "批准，自动执行",
+      "acceptEdits": "批准，自动接受编辑",
+      "default": "批准，每步询问",
+      "reject": "继续规划"
+    },
+    "allow": "允许",
+    "reject": "拒绝",
+    "replyFailed": "回复审批失败：{{reason}}",
+    "noSession": "没有这个会话：{{id}}",
+    "mcpIgnored": "ccdt acp 暂不连接客户端传来的 MCP 服务（{{names, series}}）。",
+    "noOption": "没有这个选项：{{id}}",
+    "noValue": "{{option}}没有这个值：{{value}}",
+    "noText": "提示里没有文字。",
+    "unsupported": "不支持 {{method}}",
+    "notJson": "不是 JSON。",
+    "inputEnded": "输入已结束。"
+  }
+}

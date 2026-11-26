@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
+import { say, t } from './i18n.ts';
 import { getPrefs } from './prefs.ts';
 import type { NotifyKind } from './prefs.ts';
 
@@ -96,7 +97,12 @@ export function useNotifications(client: ProxyClient, viewing: () => string | nu
             waiting(session);
           // Claude's turn is over once only background tasks go on; their ending without another turn is no news.
           if (now?.waiting === 'background' && before && before.waiting !== 'background')
-            push({ kind: 'done', title: '任务完成', body: session.title, sessionId: session.id });
+            push({
+              kind: 'done',
+              title: t('nav:notice.taskDone'),
+              body: session.title,
+              sessionId: session.id,
+            });
           if (before && !now && before.waiting !== 'background') ended(session, before.id);
         }
       previous = runs;
@@ -108,7 +114,7 @@ export function useNotifications(client: ProxyClient, viewing: () => string | nu
       const question = session.activeRun?.waiting === 'question';
       push({
         kind: question ? 'question' : 'approval',
-        title: question ? 'Claude 有问题要问你' : '等待审批',
+        title: question ? t('nav:notice.question') : t('nav:notice.approval'),
         body: session.title,
         sessionId: session.id,
       });
@@ -126,11 +132,23 @@ export function useNotifications(client: ProxyClient, viewing: () => string | nu
         if (outcome === 'failed' || error)
           push({
             kind: 'failed',
-            title: '任务失败',
-            body: `${session.title}${error?.type === 'run.error' ? `：${error.message}` : ''}`,
+            title: t('nav:notice.taskFailed'),
+            body:
+              error?.type === 'run.error'
+                ? t('nav:notice.failedBody', {
+                    title: session.title,
+                    error: error.phrase ? say(error.phrase, error.message) : error.message,
+                  })
+                : session.title,
             sessionId: session.id,
           });
-        else push({ kind: 'done', title: '任务完成', body: session.title, sessionId: session.id });
+        else
+          push({
+            kind: 'done',
+            title: t('nav:notice.taskDone'),
+            body: session.title,
+            sessionId: session.id,
+          });
       });
     inspect();
     return client.subscribe(inspect);

@@ -6,6 +6,7 @@ import type {
   SDKResultMessage,
   SlashCommand,
 } from '@anthropic-ai/claude-agent-sdk';
+import { phrase, type Phrase } from '@cc-desk-tunnel/i18n';
 import { eventPayloadSchema } from '@cc-desk-tunnel/protocol';
 import type {
   AccountQuota,
@@ -160,7 +161,7 @@ function planQuota(
 // answer if that CLI was the one asked, whose session totals are then this session's.
 export type QuotaAnswer = {
   rateLimits: AccountQuota['rateLimits'];
-  error?: string;
+  error?: Phrase;
   usage?: UsageReading;
 };
 
@@ -168,7 +169,7 @@ export type QuotaAnswer = {
 type Read = {
   at: number;
   rateLimits: AccountQuota['rateLimits'];
-  error?: string;
+  error?: Phrase;
   pending?: Promise<unknown>;
 };
 
@@ -423,7 +424,7 @@ function lifetimes(values: NonNullable<SDKResultMessage['modelUsage']>[string][]
 async function optionalStatus<T>(
   read: () => Promise<T>,
   timeoutMs: number,
-): Promise<{ value: T | null; error?: string }> {
+): Promise<{ value: T | null; error?: Phrase }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -431,10 +432,13 @@ async function optionalStatus<T>(
         .then(read)
         .then(
           (value) => ({ value }),
-          () => ({ value: null, error: '原生接口读取失败' }),
+          () => ({ value: null, error: phrase('service:status.readFailed') }),
         ),
-      new Promise<{ value: null; error: string }>((resolve) => {
-        timer = setTimeout(() => resolve({ value: null, error: '原生接口读取超时' }), timeoutMs);
+      new Promise<{ value: null; error: Phrase }>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ value: null, error: phrase('service:status.readTimeout') }),
+          timeoutMs,
+        );
       }),
     ]);
   } finally {

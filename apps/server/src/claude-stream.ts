@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { phrase } from '@cc-desk-tunnel/i18n';
 import { permissionModeSchema } from '@cc-desk-tunnel/protocol';
 import type { Effort, EventPayload, PermissionMode } from '@cc-desk-tunnel/protocol';
 
@@ -114,7 +115,13 @@ export class ClaudeStream {
         ) {
           this.emit({
             type: 'native.notice',
-            text: `请求审批模式 ${this.requestedPermissionMode}；原生进程实际报告 ${String(message.permissionMode ?? '未知')}。`,
+            text: phrase('service:notice.modeMismatch', {
+              requested: this.requestedPermissionMode,
+              reported:
+                message.permissionMode == null
+                  ? phrase('service:notice.modeUnknown')
+                  : String(message.permissionMode),
+            }),
           });
         }
       } else if (message.subtype === 'compact_boundary') {
@@ -145,16 +152,19 @@ export class ClaudeStream {
       } else if (message.subtype === 'session_writes_lost') {
         // The CLI could not save all it wrote as it exited: the server's disk was full, or its quota used up.
         const lost = Array.isArray(message.lost) ? message.lost : [];
-        const disk =
-          message.error_code === 'EDQUOT' ? '服务器的磁盘配额已用完' : '服务器的磁盘已满';
         this.emit({
           type: 'native.notice',
-          text: `${disk}，Claude Code 有内容没能保存：${[
-            ...(lost.includes('transcript')
-              ? ['会话记录缺了一部分，之后继续这个会话时 Claude 可能看不到这段对话']
-              : []),
-            ...(lost.includes('global_config') ? ['它自己的配置（~/.claude.json）的改动'] : []),
-          ].join('；')}。请清理服务器磁盘。`,
+          text: phrase('service:notice.writesLost', {
+            disk: phrase(
+              message.error_code === 'EDQUOT'
+                ? 'service:notice.diskQuota'
+                : 'service:notice.diskFull',
+            ),
+            lost: [
+              ...(lost.includes('transcript') ? [phrase('service:notice.lostTranscript')] : []),
+              ...(lost.includes('global_config') ? [phrase('service:notice.lostConfig')] : []),
+            ],
+          }),
         });
       } else if (message.subtype === 'status' && message.status === null) {
         // The status the CLI was in is over; what it was over for (a compaction) says so itself.

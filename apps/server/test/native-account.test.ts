@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { configureSetupToken, NativeLogin } from '../src/native-account.ts';
+import { textOf } from '../src/errors.ts';
 import type { TerminalSpawner } from '../src/native-terminal.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readNativeSettings, updateNativeSettings } from '../src/native-settings.ts';
@@ -156,9 +157,10 @@ test('setup-token uses the official command, extracts its successful output and 
   data('Paste code here if prompted > code#state\r\nCreating token…\r\n');
   await delay(400);
   assert.deepEqual(waited, { succeeded: false });
-  assert.match(waiting.error!, /0 秒未拿到令牌/);
-  assert.match(waiting.error!, /Creating token…/);
-  assert.equal(waiting.error!.includes('code#state'), false);
+  const told = textOf(waiting.error!);
+  assert.match(told, /^0 秒未拿到令牌，请重新生成链接。（官方命令：/);
+  assert.match(told, /Creating token…/);
+  assert.equal(told.includes('code#state'), false);
 
   const startup = new NativeLogin(
     'claude',

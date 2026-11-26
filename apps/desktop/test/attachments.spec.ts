@@ -14,7 +14,7 @@ test('Electron: files in a message show as files, and are sent as their paths', 
   const profile = resolve('.local/ui-test/profile-attachments');
   rmSync(profile, { recursive: true, force: true });
   const application = await _electron.launch({
-    args: [resolve('apps/desktop'), '--smoke-test', ...connectionArgs(profile)],
+    args: [resolve('apps/desktop'), '--smoke-test', '--lang=zh-CN', ...connectionArgs(profile)],
     env,
   });
   try {

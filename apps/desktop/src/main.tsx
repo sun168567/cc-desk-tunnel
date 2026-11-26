@@ -1,5 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import './i18n.ts';
+// Before any other part of the window: its text is in the chosen language from the first.
+import './language.ts';
 import WebGate from './WebGate.tsx';
 import { App } from './App.tsx';
 import Launcher, { desktopSignIns } from './Launcher.tsx';

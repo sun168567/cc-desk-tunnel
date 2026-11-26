@@ -39,6 +39,7 @@ export default function QuestionCard({
   answer: (answers: Record<string, string>) => void;
   skip: () => void;
 }) {
+  const t = useT();
   const [chosen, setChosen] = useState<Record<string, string[]>>({});
   const [other, setOther] = useState<Record<string, string>>({});
   const answers = Object.fromEntries(
@@ -54,7 +55,7 @@ export default function QuestionCard({
   return (
     <form
       className="question-card"
-      aria-label="Claude 的提问"
+      aria-label={t('session:question.label')}
       onSubmit={(event) => {
         event.preventDefault();
         if (complete) answer(answers);
@@ -65,7 +66,7 @@ export default function QuestionCard({
           <legend>
             {header && <span className="question-header">{header}</span>}
             {question}
-            {multiSelect && <small>可多选</small>}
+            {multiSelect && <small>{t('session:question.multiple')}</small>}
           </legend>
           {options.map(({ label, description }) => {
             const picked = chosen[question]?.includes(label) ?? false;
@@ -104,8 +105,8 @@ export default function QuestionCard({
             );
           })}
           <input
-            aria-label={`其他回答：${question}`}
-            placeholder="其他（自己写）"
+            aria-label={t('session:question.otherFor', { question })}
+            placeholder={t('session:question.other')}
             maxLength={2000}
             value={other[question] ?? ''}
             onChange={(event) => {
@@ -119,13 +120,14 @@ export default function QuestionCard({
       <div className="approval-actions">
         <button type="button" className="button secondary" disabled={busy} onClick={skip}>
           <X />
-          不回答
+          {t('session:question.skip')}
         </button>
         <button type="submit" className="button primary" disabled={busy || !complete}>
           <Check />
-          提交回答
+          {t('session:question.submit')}
         </button>
       </div>
     </form>
   );
 }
+import { useT } from './i18n.ts';

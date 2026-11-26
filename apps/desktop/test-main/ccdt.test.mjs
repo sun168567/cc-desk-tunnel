@@ -14,6 +14,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { linkCcdt, locate, openSession, terminalCommand } from '../electron/ccdt.mjs';
+import { failureText } from '../electron/words.mjs';
+// What a failure says, in the catalogs' source language: the tests read its words.
+const told = (pattern) => (error) => pattern.test(failureText(error));
 
 test('ccdt is the client’s own, else looked for on the PATH, then where its install script puts it', () => {
   const windows = {
@@ -99,7 +102,7 @@ test('the terminal window runs ccdt quoted for the shell that reads it, and wait
         '/',
         () => false,
       ),
-    /没有找到可以打开的终端程序/,
+    told(/没有找到可以打开的终端程序/),
   );
 });
 
@@ -118,7 +121,7 @@ test('an address, session or fingerprint that would mean more to a shell is neve
     { sessionId: '1 && calc' },
     { fingerprint: 'AB;rm' },
   ])
-    await assert.rejects(openSession({ ...request, ...bad }, system), /不能交给 ccdt/);
+    await assert.rejects(openSession({ ...request, ...bad }, system), told(/不能交给 ccdt/));
   assert.deepEqual(await openSession(request, system), { status: 'missing' });
 });
 

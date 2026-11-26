@@ -1,40 +1,48 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NativeMetrics } from '@cc-desk-tunnel/protocol';
+import { wordsText } from '@cc-desk-tunnel/i18n';
+import { localeOf, useT } from './i18n.ts';
 import { usePopover } from './usePopover.ts';
 
 // The native summary names its categories in English, and a newer CLI gives each a stable id as well; the common ones
-// are translated, any other is shown as it came.
-const categoryIds: Record<string, string> = {
-  system_prompt: '系统提示词',
-  system_tools: '系统工具',
-  mcp_instructions: 'MCP 说明',
-  mcp_tools: 'MCP 工具',
-  custom_agents: '自定义智能体',
-  memory_files: '记忆文件',
-  skills: '技能',
-  messages: '对话消息',
+// are said in the window's words (session:context.category.<id>), any other is shown as it came.
+const categories = [
+  'system_prompt',
+  'system_tools',
+  'mcp_instructions',
+  'mcp_tools',
+  'custom_agents',
+  'memory_files',
+  'skills',
+  'messages',
+] as const;
+type Category = (typeof categories)[number];
+const categoryIds: Record<string, Category> = {
+  'System prompt': 'system_prompt',
+  'System tools': 'system_tools',
+  'MCP server instructions': 'mcp_instructions',
+  'MCP tools': 'mcp_tools',
+  'Custom agents': 'custom_agents',
+  'Memory files': 'memory_files',
+  Skills: 'skills',
+  Messages: 'messages',
 };
-const categoryNames: Record<string, string> = {
-  'System prompt': '系统提示词',
-  'System tools': '系统工具',
-  'MCP server instructions': 'MCP 说明',
-  'MCP tools': 'MCP 工具',
-  'Custom agents': '自定义智能体',
-  'Memory files': '记忆文件',
-  Skills: '技能',
-  Messages: '对话消息',
-};
+const isCategory = (id: string | undefined): id is Category =>
+  !!id && (categories as readonly string[]).includes(id);
 
 // What the used part of the window is made of: a bar filled by the categories in proportion to each other, and a line
 // per category. Free space is left out (the card already gives the remainder), and so are the compaction buffer and
 // tools loaded on demand.
 function ContextBreakdown({ context }: { context: NonNullable<NativeMetrics['context']> }) {
+  const t = useT();
   const used = context.categories.filter((item) => item.kind === 'used' && item.tokens > 0);
   const total = used.reduce((sum, item) => sum + item.tokens, 0);
   if (!total) return null;
-  const label = ({ id, name }: (typeof used)[number]) =>
-    (id && categoryIds[id]) ?? categoryNames[name] ?? name;
-  const size = (tokens: number) => `${tokens.toLocaleString('zh-CN')} tok`;
+  const label = ({ id, name }: (typeof used)[number]) => {
+    const category = isCategory(id) ? id : categoryIds[name];
+    return category ? t(`session:context.category.${category}`) : name;
+  };
+  const size = (tokens: number) => `${tokens.toLocaleString(localeOf(t))} tok`;
   return (
     <div className="context-breakdown">
       <div className="context-breakdown-bar" aria-hidden="true">
@@ -69,6 +77,7 @@ export default function ContextMeter({
   metrics: NativeMetrics | null;
   withPercent?: boolean;
 }) {
+  const t = useT();
   const [hovered, setHovered] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const popover = usePopover();
@@ -104,17 +113,17 @@ export default function ContextMeter({
   if (withPercent) {
     const rows = context
       ? [
-          ['已用', `${context.usedTokens.toLocaleString('zh-CN')} tok`],
-          ['窗口', `${context.windowTokens.toLocaleString('zh-CN')} tok`],
-          ['剩余', `${Math.max(0, 100 - context.percentage)}%`],
-          ['模型', context.model],
+          [t('session:context.used'), `${context.usedTokens.toLocaleString(localeOf(t))} tok`],
+          [t('session:context.window'), `${context.windowTokens.toLocaleString(localeOf(t))} tok`],
+          [t('session:context.left'), `${Math.max(0, 100 - context.percentage)}%`],
+          [t('session:context.model'), context.model],
         ]
       : [];
     return (
       <div className="session-bar-part context" ref={popover.container}>
         <button
           type="button"
-          aria-label="上下文窗口"
+          aria-label={t('session:context.title')}
           aria-expanded={popover.open}
           onClick={() => popover.setOpen((value) => !value)}
         >
@@ -122,10 +131,15 @@ export default function ContextMeter({
           {context && <span>{context.percentage}%</span>}
         </button>
         {popover.open && (
-          <div className="turn-stats-card" role="dialog" aria-label="上下文窗口" ref={popover.card}>
+          <div
+            className="turn-stats-card"
+            role="dialog"
+            aria-label={t('session:context.title')}
+            ref={popover.card}
+          >
             <header>
               {ring}
-              <strong>上下文窗口</strong>
+              <strong>{t('session:context.title')}</strong>
               {context && <b>{context.percentage}%</b>}
             </header>
             {context ? (
@@ -139,10 +153,18 @@ export default function ContextMeter({
                   ))}
                 </dl>
                 <ContextBreakdown context={context} />
-                <p>{new Date(context.measuredAt).toLocaleTimeString('zh-CN')} · 原生摘要</p>
+                <p>
+                  {t('session:context.measured', {
+                    time: new Date(context.measuredAt).toLocaleTimeString(localeOf(t)),
+                  })}
+                </p>
               </>
             ) : (
-              <p>{metrics?.errors?.context ?? '等待原生状态'}</p>
+              <p>
+                {metrics?.errors?.context
+                  ? wordsText(t, metrics.errors.context)
+                  : t('session:context.waiting')}
+              </p>
             )}
           </div>
         )}
@@ -159,9 +181,13 @@ export default function ContextMeter({
       <button
         type="button"
         className="icon-button context-button"
-        aria-label="上下文窗口"
+        aria-label={t('session:context.title')}
         aria-expanded={hovered}
-        title={context ? `上下文 ${context.percentage}%` : '上下文窗口'}
+        title={
+          context
+            ? t('session:context.percent', { percent: context.percentage })
+            : t('session:context.title')
+        }
         onFocus={() => setHovered(true)}
         onBlur={() => setHovered(false)}
         onClick={() => setHovered(true)}
@@ -170,20 +196,31 @@ export default function ContextMeter({
       </button>
       {hovered && (
         <div className="context-tooltip" role="tooltip">
-          <strong>上下文窗口</strong>
+          <strong>{t('session:context.title')}</strong>
           {context ? (
             <>
               <span>
-                {context.percentage}% 已用（剩余 {Math.max(0, 100 - context.percentage)}%）
+                {t('session:context.usedLeft', {
+                  used: context.percentage,
+                  left: Math.max(0, 100 - context.percentage),
+                })}
               </span>
               <span>
-                {context.usedTokens.toLocaleString()} / {context.windowTokens.toLocaleString()}{' '}
-                tokens
+                {context.usedTokens.toLocaleString(localeOf(t))} /{' '}
+                {context.windowTokens.toLocaleString(localeOf(t))} tokens
               </span>
-              <small>{new Date(context.measuredAt).toLocaleTimeString('zh-CN')} · 原生摘要</small>
+              <small>
+                {t('session:context.measured', {
+                  time: new Date(context.measuredAt).toLocaleTimeString(localeOf(t)),
+                })}
+              </small>
             </>
           ) : (
-            <span>{metrics?.errors?.context ?? '等待原生状态'}</span>
+            <span>
+              {metrics?.errors?.context
+                ? wordsText(t, metrics.errors.context)
+                : t('session:context.waiting')}
+            </span>
           )}
         </div>
       )}

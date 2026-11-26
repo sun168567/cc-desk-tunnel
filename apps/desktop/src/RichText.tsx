@@ -7,6 +7,7 @@ import 'katex/dist/katex.min.css';
 import { isValidElement, memo, useContext, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Code, Image } from 'lucide-react';
+import { useT } from './i18n.ts';
 import { CopyButton } from './copy.tsx';
 import { isPicture, LinkPlace, linkTarget, localPicture } from './links.ts';
 import { Picture } from './Picture.tsx';
@@ -21,6 +22,7 @@ function drawing(children: ReactNode) {
 }
 
 function CodeBlock({ children }: { children?: ReactNode }) {
+  const t = useT();
   const block = useRef<HTMLPreElement>(null);
   const svg = drawing(children);
   const [shown, setShown] = useState<'picture' | 'source' | 'broken'>('picture');
@@ -30,7 +32,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
       {picture ? (
         <img
           className="code-picture"
-          alt="SVG 图像"
+          alt={t('session:rich.svg')}
           src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
           onError={() => setShown('broken')}
         />
@@ -45,10 +47,13 @@ function CodeBlock({ children }: { children?: ReactNode }) {
             onClick={() => setShown(picture ? 'source' : 'picture')}
           >
             {picture ? <Code /> : <Image />}
-            <span>{picture ? '查看源码' : '查看图像'}</span>
+            <span>{picture ? t('session:rich.source') : t('session:rich.picture')}</span>
           </button>
         )}
-        <CopyButton text={() => svg ?? block.current?.textContent ?? ''} label="复制代码" />
+        <CopyButton
+          text={() => svg ?? block.current?.textContent ?? ''}
+          label={t('common:copy.code')}
+        />
       </span>
     </div>
   );
@@ -57,6 +62,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 // A picture from the user's computer is shown in the conversation of a session there. Any other is a link:
 // one from the web would be fetched just by being shown, and so tell its server what the reply put in its address.
 function Figure({ src, alt }: { src: string; alt: string }) {
+  const t = useT();
   const target = linkTarget(src, useContext(LinkPlace));
   const [broken, setBroken] = useState(false);
   if (target?.kind === 'path' && isPicture(target.path) && !broken)
@@ -71,7 +77,7 @@ function Figure({ src, alt }: { src: string; alt: string }) {
   return (
     <a className="picture-link" href={src} data-link={src || undefined}>
       <Image />
-      {alt || '图片'}
+      {alt || t('session:picture.title')}
     </a>
   );
 }

@@ -1,0 +1,37 @@
+{
+  "pending": {},
+  "kept": {
+    "apps/server/src/simulation.ts": {
+      "count": 36,
+      "reason": "The offline simulation stands in for Claude: its replies and tool output are sample content the UI tests read, not the program’s text."
+    },
+    "apps/server/src/store.ts": {
+      "count": 3,
+      "reason": "The note beside the pre-upgrade history backup, a file for whoever runs the server; it is written in Chinese and English both."
+    },
+    "apps/desktop/src/SettingsPage.tsx": {
+      "count": 1,
+      "reason": "Two ideographic spaces part the figures of the session bar preview: spacing, not text."
+    },
+    "apps/desktop/src/setting-fields.ts": {
+      "count": 1,
+      "reason": "A list typed into a field may be parted by a full-width comma: input parsing, not text."
+    },
+    "apps/desktop/electron/connections.cjs": {
+      "count": 1,
+      "reason": "主连接 is the name earlier versions gave the first connection: compared when an old profile is moved, not shown."
+    },
+    "apps/cli/src/settings.mjs": {
+      "count": 5,
+      "reason": "What may be typed for on, off and default: the words of both languages are taken, whatever the language shown."
+    },
+    "apps/cli/src/config.mjs": {
+      "count": 1,
+      "reason": "主连接 is the name earlier desktop versions gave the first connection: compared when reading its profile, not shown."
+    },
+    "apps/desktop/src/CcdtDialog.tsx": {
+      "count": 1,
+      "reason": "The anchor of a heading of the README, which is written in Chinese: an address, not text."
+    }
+  }
+}

@@ -12,6 +12,7 @@
     "start": "electron ."
   },
   "dependencies": {
+    "@cc-desk-tunnel/i18n": "0.0.0",
     "@cc-desk-tunnel/protocol": "0.0.0",
     "katex": "0.19.0",
     "lucide-react": "1.49.0",
@@ -21,6 +22,7 @@
     "react-dnd": "16.0.1",
     "react-dnd-html5-backend": "16.0.1",
     "react-dom": "19.3.0",
+    "react-i18next": "18.0.3",
     "react-markdown": "10.1.0",
     "rehype-katex": "7.0.1",
     "remark-gfm": "4.0.1",

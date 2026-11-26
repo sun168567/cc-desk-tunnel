@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { open, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { failure, phrase } from './failure.cjs';
 
 // Where this client's releases are published. The service normally hands out the installer; this is the other
 // way to get it, for when the service has not fetched it or cannot.
@@ -13,7 +14,8 @@ export const releasePage = 'https://github.com/sun168567/cc-desk-tunnel/releases
 const defaultPace = { stretch: 20_000, stall: 15_000, attempts: 5 };
 
 // What a download stopped by its caller rejects with.
-export const cancelled = () => Object.assign(new Error('已取消。'), { cancelled: true });
+export const cancelled = () =>
+  failure('desktop:download.cancelled', undefined, { cancelled: true });
 const megabytes = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
 
 // Downloads the installer of `version` from the release page into `directory` and resolves to its path. It is
@@ -34,7 +36,7 @@ export async function downloadRelease(
     page = releasePage,
   } = {},
 ) {
-  if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw new Error('版本号不正确。');
+  if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw failure('desktop:download.badVersion');
   const name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`;
   let manifest;
   try {
@@ -45,9 +47,13 @@ export async function downloadRelease(
     manifest = await response.json();
   } catch (error) {
     if (signal?.aborted) throw cancelled();
-    throw new Error(
-      `读取不到 ${version} 的发布信息（${error.name === 'TimeoutError' ? '30 秒没有响应' : error.message}）。\n请检查这台电脑能否访问 github.com，或改从服务端获取安装包。`,
-    );
+    throw failure('desktop:download.noManifest', {
+      version,
+      reason:
+        error.name === 'TimeoutError'
+          ? phrase('desktop:download.noResponse', { seconds: 30 })
+          : error.message,
+    });
   }
   const file = manifest?.files?.find?.((item) => item?.name === name);
   if (
@@ -56,9 +62,9 @@ export async function downloadRelease(
     !/^[0-9a-f]{64}$/.test(file.sha256) ||
     !(file.size > 0)
   )
-    throw new Error('发布信息里没有这个版本的安装包。');
+    throw failure('desktop:download.notInManifest');
   if (announced?.version === version && announced.sha256 !== file.sha256)
-    throw new Error('发布页的安装包与服务端提供的不是同一个文件，已放弃升级。');
+    throw failure('desktop:download.otherFile');
   const target = join(directory, name);
   const output = await open(target, 'w');
   try {
@@ -66,9 +72,11 @@ export async function downloadRelease(
     let last;
     for (let idle = 0; received < file.size;) {
       if (idle >= pace.attempts)
-        throw new Error(
-          `从 GitHub 下载安装包中断（${last ?? '连接没有数据'}），已下载 ${megabytes(received)} / ${megabytes(file.size)}。\n请检查网络后重试，或改从服务端获取安装包。`,
-        );
+        throw failure('desktop:download.interrupted', {
+          reason: last ?? phrase('desktop:download.nothing'),
+          received: megabytes(received),
+          size: megabytes(file.size),
+        });
       if (signal?.aborted) throw cancelled();
       const before = received;
       const controller = new AbortController();
@@ -93,7 +101,11 @@ export async function downloadRelease(
           signal: controller.signal,
         });
         if (!response.ok)
-          throw Object.assign(new Error(`安装包下载失败（${response.status}）。`), { fatal: true });
+          throw failure(
+            'desktop:download.httpFailed',
+            { status: response.status },
+            { fatal: true },
+          );
         // A host that does not continue a file sends all of it again.
         if (received && response.status !== 206) {
           received = 0;
@@ -105,14 +117,16 @@ export async function downloadRelease(
           await output.write(chunk, 0, chunk.length, received);
           received += chunk.length;
           if (received > file.size)
-            throw Object.assign(new Error('安装包比发布信息里的大，已放弃升级。'), { fatal: true });
+            throw failure('desktop:download.tooLarge', undefined, { fatal: true });
           progress(received, file.size);
         }
       } catch (error) {
         if (signal?.aborted) throw cancelled();
         if (error?.fatal) throw error;
         failed = !ended || silent;
-        last = silent ? `${Math.round(pace.stall / 1000)} 秒没有收到数据` : error.message;
+        last = silent
+          ? phrase('desktop:download.noData', { seconds: Math.round(pace.stall / 1000) })
+          : error.message;
       } finally {
         clearTimeout(end);
         clearTimeout(quiet);
@@ -126,7 +140,7 @@ export async function downloadRelease(
     report({ phase: 'verifying' });
     const hash = createHash('sha256');
     for await (const chunk of createReadStream(target)) hash.update(chunk);
-    if (hash.digest('hex') !== file.sha256) throw new Error('安装包校验失败，已放弃升级。');
+    if (hash.digest('hex') !== file.sha256) throw failure('desktop:download.badHash');
     return target;
   } catch (error) {
     await output.close().catch(() => {});

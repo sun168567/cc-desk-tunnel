@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { login } from './helpers.ts';
+import { resolve } from 'node:path';
+import { login, screenshots } from './helpers.ts';
 
 // The help is a page of its own: reached from the rail, the menus and the "?" beside controls; its articles link to
 // each other, are found by searching, and offer prompts that start a session.
@@ -8,6 +9,12 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await login(page);
+  // The prompts to try start a session in a project of this computer: one of its own, not one an earlier test
+  // left in the service.
+  await page.getByRole('button', { name: '添加项目', exact: true }).click();
+  await page.getByLabel('本机项目目录').fill('D:\\工作\\中文项目');
+  await page.getByRole('button', { name: '添加', exact: true }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
   // The "?" beside a heading is styled before the help has ever been opened.
   await expect(page.getByRole('button', { name: '项目和会话是什么', exact: true })).toHaveCSS(
     'width',
@@ -70,5 +77,41 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   await page.getByRole('textbox', { name: '消息' }).fill('');
   await page.locator('.empty-suggestion').first().click();
   await expect(page.getByRole('textbox', { name: '消息' })).not.toHaveValue('');
+  expect(errors).toEqual([]);
+});
+
+// In English the help is written in English throughout: its articles, its pictures, its search and its links to
+// headings, which are named the same in every language.
+test('the help in English', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await login(page);
+  await page.getByRole('button', { name: '设置与账号', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '设置分类' })
+    .getByRole('button', { name: '外观', exact: true })
+    .click();
+  await page
+    .getByRole('radiogroup', { name: '界面语言' })
+    .getByRole('radio', { name: 'English' })
+    .click();
+  const rail = page.getByRole('navigation', { name: 'Pages' });
+  await rail.getByRole('button', { name: 'Help', exact: true }).click();
+  await expect(page.locator('.help-hero h1')).toContainText('a pair of hands for it');
+  await expect(page.locator('.fig-map-server')).toContainText('Your server');
+  await page.screenshot({ path: resolve(screenshots, 'help-en-home.png') });
+  const contents = page.getByRole('navigation', { name: 'Help contents' });
+  await expect(contents).toContainText('Getting started');
+  await contents.getByRole('button', { name: 'Questions' }).click();
+  await page.getByText('Can’t start a session on another computer?').click();
+  await page.locator('.help-inline-link', { hasText: 'Several computers' }).click();
+  await expect(page.locator('.help-article-head h1')).toHaveText('Several computers');
+  await expect(page.locator('#help-no-project')).toHaveText('That computer has no projects yet');
+  await expect(page.locator('#help-no-project')).toBeInViewport();
+  await page.screenshot({ path: resolve(screenshots, 'help-en-article.png') });
+  await page.getByLabel('Search help').fill('quota');
+  await expect(page.locator('.help-result').first()).toContainText('Quota and usage');
   expect(errors).toEqual([]);
 });

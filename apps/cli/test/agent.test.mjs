@@ -1,3 +1,4 @@
+import './zh.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';

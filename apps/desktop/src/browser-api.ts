@@ -1,5 +1,6 @@
-import { webLoginStateSchema } from '@cc-desk-tunnel/protocol';
+import { phraseSchema, webLoginStateSchema } from '@cc-desk-tunnel/protocol';
 import type { WebProof } from '@cc-desk-tunnel/protocol';
+import { say, t } from './i18n.ts';
 
 // The server redirects an entry without its trailing slash before serving the application.
 export function browserEndpoint(name: string) {
@@ -27,15 +28,19 @@ async function request(name: string, body?: unknown) {
     // A refusal from a proxy or the entry itself may have no JSON body at all.
     const value: unknown = await response.json().catch(() => undefined);
     if (!response.ok || value === undefined) {
-      const message =
-        value && typeof value === 'object' && 'error' in value
-          ? String(value.error)
-          : '请求失败，请重试。';
+      // The service says why in a phrase, with its text beside it.
+      const said = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+      const phrase = phraseSchema.safeParse(said.phrase);
+      const message = phrase.success
+        ? say(phrase.data, typeof said.error === 'string' ? said.error : undefined)
+        : typeof said.error === 'string'
+          ? said.error
+          : t('connection:browserRequestFailed');
       throw new Error(message);
     }
     return value;
   } catch (error) {
-    if (controller.signal.aborted) throw new Error('连接超时，请重试。');
+    if (controller.signal.aborted) throw new Error(t('connection:browserTimeout'));
     throw error;
   } finally {
     clearTimeout(timer);

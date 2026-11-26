@@ -10,39 +10,20 @@ import {
 } from 'lucide-react';
 import type { PermissionMode } from '@cc-desk-tunnel/protocol';
 import { usePrefs } from './prefs.ts';
-import { modeNames } from './modes.ts';
+import { useT } from './i18n.ts';
+import { modeDetail, modeName } from './modes.ts';
 import HelpLink from './HelpLink.tsx';
 
-// The modes are Claude Code's own; the lines under them say what each asks the user for.
-type Mode = { value: PermissionMode; name: string; detail: string; icon: typeof Hand };
+// The modes are Claude Code's own; the lines under them say what each asks the user for (modeDetail).
+type Mode = { value: PermissionMode; icon: typeof Hand };
 export const modes: Mode[] = [
-  {
-    value: 'auto',
-    name: modeNames.auto,
-    detail: '由 Claude Code 判断风险，只在必要时询问',
-    icon: ShieldCheck,
-  },
-  { value: 'default', name: modeNames.default, detail: '编辑文件和执行命令前都先询问', icon: Hand },
-  {
-    value: 'acceptEdits',
-    name: modeNames.acceptEdits,
-    detail: '文件编辑直接通过，执行命令仍先询问',
-    icon: FilePen,
-  },
-  {
-    value: 'plan',
-    name: modeNames.plan,
-    detail: '只调研并写出计划，经你批准后才动手',
-    icon: ListChecks,
-  },
+  { value: 'auto', icon: ShieldCheck },
+  { value: 'default', icon: Hand },
+  { value: 'acceptEdits', icon: FilePen },
+  { value: 'plan', icon: ListChecks },
 ];
 // Offered once the user allowed it in the settings, and chosen only after being told what it means.
-const bypass: Mode = {
-  value: 'bypassPermissions',
-  name: modeNames.bypassPermissions,
-  detail: '任何操作都不再询问，风险自负',
-  icon: ShieldOff,
-};
+const bypass: Mode = { value: 'bypassPermissions', icon: ShieldOff };
 
 export default function PermissionMenu({
   mode,
@@ -53,6 +34,7 @@ export default function PermissionMenu({
   disabled: boolean;
   change: (mode: PermissionMode) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const allowed = usePrefs().bypassPermissions;
@@ -81,27 +63,28 @@ export default function PermissionMenu({
         className={
           mode === bypass.value ? 'chip danger' : mode === 'plan' ? 'chip planning' : 'chip'
         }
-        aria-label="审批模式"
-        title={current.name}
+        aria-label={t('session:mode.label')}
+        title={modeName(t, current.value)}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
         <current.icon />
-        <span>{current.name}</span>
+        <span>{modeName(t, current.value)}</span>
         <ChevronDown />
       </button>
       {open && confirming && (
-        <div className="permission-menu" role="alertdialog" aria-label="确认绕过权限">
-          <p className="menu-heading">确认绕过权限？</p>
-          <p className="permission-confirm">
-            这个会话里 Claude
-            做任何事都不再征求同意，包括删除文件和在你的电脑上执行任意命令，直到你换回别的审批模式。只在你能承担后果的环境里使用。
-          </p>
+        <div
+          className="permission-menu"
+          role="alertdialog"
+          aria-label={t('session:mode.bypass.label')}
+        >
+          <p className="menu-heading">{t('session:mode.bypass.question')}</p>
+          <p className="permission-confirm">{t('session:mode.bypass.warning')}</p>
           <div className="permission-confirm-actions">
             <button type="button" onClick={() => setConfirming(false)}>
-              取消
+              {t('common:cancel')}
             </button>
             <button
               type="button"
@@ -111,23 +94,23 @@ export default function PermissionMenu({
                 change(bypass.value);
               }}
             >
-              绕过权限
+              {modeName(t, bypass.value)}
             </button>
           </div>
         </div>
       )}
       {open && !confirming && (
-        <div className="permission-menu" role="menu" aria-label="审批模式">
+        <div className="permission-menu" role="menu" aria-label={t('session:mode.label')}>
           <p className="menu-heading">
-            Claude Code 操作前如何征求同意？
-            <HelpLink article="approval" title="各模式怎么选" />
+            {t('session:mode.question')}
+            <HelpLink article="approval" title={t('session:mode.help')} />
           </p>
-          {offered.map(({ value, name, detail, icon: Icon }) => (
+          {offered.map(({ value, icon: Icon }) => (
             <button
               type="button"
               role="menuitemradio"
               aria-checked={value === mode}
-              aria-label={name}
+              aria-label={modeName(t, value)}
               className={value === bypass.value ? 'danger' : undefined}
               key={value}
               onClick={() => {
@@ -138,8 +121,8 @@ export default function PermissionMenu({
             >
               <Icon />
               <span className="menu-label">
-                {name}
-                <small>{detail}</small>
+                {modeName(t, value)}
+                <small>{modeDetail(t, value)}</small>
               </span>
               {value === mode && <Check className="menu-check" />}
             </button>

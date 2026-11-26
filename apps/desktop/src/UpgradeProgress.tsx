@@ -1,8 +1,10 @@
+import { useT } from './i18n.ts';
 import type { ClientUpgrade } from './client-upgrade.ts';
 import { megabytes } from './client-upgrade.ts';
 
 // The upgrade under way, where the buttons that start one were: the step, how much has come, and a way to stop.
 export default function UpgradeProgress({ upgrade }: { upgrade: ClientUpgrade }) {
+  const t = useT();
   const { step } = upgrade;
   if (!step) return null;
   const counted =
@@ -20,7 +22,7 @@ export default function UpgradeProgress({ upgrade }: { upgrade: ClientUpgrade })
       {counted ? <progress max={counted} value={step.received ?? 0} /> : <progress />}
       {upgrade.cancellable && (
         <button className="button" type="button" onClick={upgrade.cancel}>
-          取消
+          {t('common:cancel')}
         </button>
       )}
     </div>

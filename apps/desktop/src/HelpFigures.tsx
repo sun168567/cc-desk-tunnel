@@ -15,8 +15,10 @@ import {
   SquareTerminal,
   X,
 } from 'lucide-react';
+import { useT } from './i18n.ts';
 import type { Figure as Name } from './help-content.ts';
 import { modes } from './PermissionMenu.tsx';
+import { modeDetail, modeName } from './modes.ts';
 
 // Pictures for the help, drawn with the window's own colours and shapes so that they look like what the user will
 // meet: the computers around the service, an approval card, the mode menu, a terminal. Names are the user's own
@@ -32,7 +34,8 @@ export default function Figure({
   others: string[];
   browser?: boolean;
 }) {
-  const other = others[0] ?? '另一台电脑';
+  const t = useT();
+  const other = others[0] ?? t('help:figures.anotherComputer');
   switch (name) {
     case 'map':
       return <DeviceMap here={browser ? null : here} others={others} />;
@@ -42,7 +45,7 @@ export default function Figure({
           tool="Bash"
           command="npm install --save-dev vitest"
           device={here}
-          note={`在 ${here} 上执行`}
+          note={t('help:figures.runsOn', { device: here })}
         />
       );
     case 'remote-approval':
@@ -51,22 +54,22 @@ export default function Figure({
           tool="Bash"
           command={`ssh device-${slug(other)}-pwsh  # Remove-Item .\\build -Recurse`}
           device={other}
-          note={`在 ${other} 上执行`}
+          note={t('help:figures.runsOn', { device: other })}
         />
       );
     case 'modes':
       return (
         <div className="fig fig-modes" aria-hidden="true">
-          <p className="fig-menu-heading">Claude Code 操作前如何征求同意？</p>
-          {modes.map(({ value, name: label, detail, icon: Icon }, index) => (
+          <p className="fig-menu-heading">{t('session:mode.question')}</p>
+          {modes.map(({ value, icon: Icon }, index) => (
             <div className={`fig-mode${index === 0 ? ' current' : ''}`} key={value}>
               <Icon />
               <span>
                 <strong>
-                  {label}
-                  {index === 0 && <em>默认</em>}
+                  {modeName(t, value)}
+                  {index === 0 && <em>{t('help:figures.default')}</em>}
                 </strong>
-                <small>{detail}</small>
+                <small>{modeDetail(t, value)}</small>
               </span>
               {index === 0 && <Check className="fig-mode-check" />}
             </div>
@@ -80,33 +83,33 @@ export default function Figure({
             <i />
             <i />
             <i />
-            <span>终端</span>
+            <span>{t('help:figures.terminal.title')}</span>
           </div>
           <pre>
             <span className="t-dim">PS D:\work\web-app&gt; </span>
             <span className="t-cmd">ccdt</span>
             {'\n'}
-            <span className="t-dim">项目 web-app · 会话「修复登录页」</span>
+            <span className="t-dim">{t('help:figures.terminal.session')}</span>
             {'\n\n'}
             <span className="t-accent">✻</span> Claude Code
             {'\n'}
             <span className="t-dim">────────────────────────────────</span>
             {'\n'}
-            <span className="t-you">&gt; 接着把登录页的测试补上</span>
+            <span className="t-you">{t('help:figures.terminal.you')}</span>
             {'\n'}
-            <span className="t-accent">●</span> 好的，先看看现有的测试……
+            <span className="t-accent">●</span> {t('help:figures.terminal.claude')}
           </pre>
         </div>
       );
     case 'agents':
       return (
         <div className="fig fig-agents" aria-hidden="true">
-          <p className="fig-flow-label">其他 agent 把任务交给 Claude</p>
+          <p className="fig-flow-label">{t('help:figures.agents.inbound')}</p>
           <div className="fig-flow">
             <div className="fig-box">
               <Code2 />
-              <strong>其他 agent · 脚本 · 编辑器</strong>
-              <small>Codex、Gemini CLI、Zed……</small>
+              <strong>{t('help:figures.agents.callers')}</strong>
+              <small>{t('help:figures.agents.callersExamples')}</small>
             </div>
             <div className="fig-arrow">
               <code>ccdt -p</code>
@@ -115,16 +118,16 @@ export default function Figure({
             </div>
             <div className="fig-box accent">
               <Server />
-              <strong>服务端上的 Claude</strong>
-              <small>普通会话，这里看得到</small>
+              <strong>{t('help:figures.agents.server')}</strong>
+              <small>{t('help:figures.agents.serverNote')}</small>
             </div>
           </div>
-          <p className="fig-flow-label">Claude 调用其他 agent</p>
+          <p className="fig-flow-label">{t('help:figures.agents.outbound')}</p>
           <div className="fig-flow">
             <div className="fig-box accent">
               <Server />
               <strong>Claude</strong>
-              <small>在你的会话里</small>
+              <small>{t('help:figures.agents.inSession')}</small>
             </div>
             <div className="fig-arrow">
               <code>codex exec</code>
@@ -132,8 +135,8 @@ export default function Figure({
             </div>
             <div className="fig-box">
               <Bot />
-              <strong>电脑上的命令行 agent</strong>
-              <small>一次性完成的子任务</small>
+              <strong>{t('help:figures.agents.local')}</strong>
+              <small>{t('help:figures.agents.localNote')}</small>
             </div>
           </div>
         </div>
@@ -149,29 +152,29 @@ export default function Figure({
             <i className="fig-cache-mark expire" style={{ left: '72%' }} />
           </div>
           <div className="fig-cache-labels">
-            <span style={{ left: '0%' }}>最后一条消息</span>
+            <span style={{ left: '0%' }}>{t('help:figures.cache.last')}</span>
             <span className="compact" style={{ left: '60%' }}>
-              空闲 50 分钟 · 自动压缩
+              {t('help:figures.cache.compact')}
             </span>
             <span className="expire" style={{ left: '72%' }}>
-              约 1 小时 · 缓存过期
+              {t('help:figures.cache.expire')}
             </span>
           </div>
-          <p className="fig-cache-note">过期后的第一条消息，要按全价重读整段上下文。</p>
+          <p className="fig-cache-note">{t('help:figures.cache.note')}</p>
         </div>
       );
     case 'quota':
       return (
         <div className="fig fig-quota" aria-hidden="true">
-          <p className="fig-quota-title">同样的用量，计入 5 小时额度（社区实测）</p>
+          <p className="fig-quota-title">{t('help:figures.quota.title')}</p>
           <div className="fig-quota-row">
             <span>
-              <Monitor /> 图形客户端
+              <Monitor /> {t('help:figures.quota.desktop')}
             </span>
             <div className="fig-quota-bar">
               <i style={{ width: '84%' }} />
             </div>
-            <b>约 2×</b>
+            <b>{t('help:figures.quota.double')}</b>
           </div>
           <div className="fig-quota-row">
             <span>
@@ -182,7 +185,7 @@ export default function Figure({
             </div>
             <b>1×</b>
           </div>
-          <p className="fig-quota-note">每周额度不受影响。</p>
+          <p className="fig-quota-note">{t('help:figures.quota.note')}</p>
         </div>
       );
     case 'devices':
@@ -190,33 +193,35 @@ export default function Figure({
         <div className="fig fig-sidebar" aria-hidden="true">
           <div className="fig-side-row heading">
             <Laptop />
-            <strong>其他设备</strong>
+            <strong>{t('help:figures.devices.heading')}</strong>
             <ChevronDown className="end" />
           </div>
           <div className="fig-side-row device">
             <ChevronDown />
             <span>{other}</span>
-            <em className="online">在线</em>
+            <em className="online">{t('nav:online')}</em>
           </div>
           <div className="fig-side-row project hover">
             <FolderOpen />
-            <span>项目文件夹</span>
+            <span>{t('help:figures.devices.folder')}</span>
             <Plus className="end fig-pulse" />
           </div>
-          <div className="fig-side-row session">它的会话</div>
+          <div className="fig-side-row session">{t('help:figures.devices.session')}</div>
           {others.slice(1, 3).map((name) => (
             <div className="fig-side-row device" key={name}>
               <ChevronRight />
               <span>{name}</span>
-              <em className="online">在线</em>
+              <em className="online">{t('nav:online')}</em>
             </div>
           ))}
           {others.length > 3 && (
             <div className="fig-side-row device">
-              <span className="fig-more">还有 {others.length - 3} 台</span>
+              <span className="fig-more">
+                {t('help:figures.devices.more', { count: others.length - 3 })}
+              </span>
             </div>
           )}
-          <p className="fig-side-tip">悬停项目点 +，会话就在那台电脑上执行</p>
+          <p className="fig-side-tip">{t('help:figures.devices.tip')}</p>
         </div>
       );
   }
@@ -239,11 +244,12 @@ function Approval({
   device: string;
   note: string;
 }) {
+  const t = useT();
   return (
     <div className="fig fig-approval" aria-hidden="true">
       <div className="fig-approval-title">
         <SquareTerminal />
-        等待审批 <code>{tool}</code>
+        {t('session:toolState.approval')} <code>{tool}</code>
         <span className="fig-device">
           <Laptop />
           {device}
@@ -252,18 +258,18 @@ function Approval({
       <div className="fig-approval-card">
         <div className="fig-approval-copy">
           <Copy />
-          复制工具输入
+          {t('session:tool.copyInput')}
         </div>
         <code className="fig-approval-command">{command}</code>
         <div className="fig-approval-foot">
           <small>{note}</small>
           <span className="fig-pill">
             <X />
-            拒绝
+            {t('session:approval.deny')}
           </span>
           <span className="fig-pill solid">
             <Check />
-            允许
+            {t('session:approval.allow')}
           </span>
         </div>
       </div>
@@ -272,17 +278,18 @@ function Approval({
 }
 
 function DeviceMap({ here, others }: { here: string | null; others: string[] }) {
+  const t = useT();
   const shown = others.slice(0, here ? 2 : 3);
   const more = others.length - shown.length;
   return (
     <div className="fig fig-map" aria-hidden="true">
       <div className="fig-map-server">
         <Server />
-        <strong>你的服务器</strong>
-        <small>Claude Code · 会话 · 记忆 · 账号</small>
+        <strong>{t('help:figures.map.server')}</strong>
+        <small>{t('help:figures.map.serverNote')}</small>
       </div>
       <div className="fig-map-wire">
-        <span>加密通道</span>
+        <span>{t('help:figures.map.channel')}</span>
       </div>
       <div className="fig-map-devices">
         {here && (
@@ -290,7 +297,7 @@ function DeviceMap({ here, others }: { here: string | null; others: string[] }) 
             <Monitor />
             <span>
               <strong>{here}</strong>
-              <small>这台电脑 · 项目和命令在这里</small>
+              <small>{t('help:figures.map.hereNote')}</small>
             </span>
           </div>
         )}
@@ -299,7 +306,7 @@ function DeviceMap({ here, others }: { here: string | null; others: string[] }) 
             <Laptop />
             <span>
               <strong>{name}</strong>
-              <small>在线</small>
+              <small>{t('nav:online')}</small>
             </span>
           </div>
         ))}
@@ -307,7 +314,7 @@ function DeviceMap({ here, others }: { here: string | null; others: string[] }) 
           <div className="fig-map-device more">
             <Laptop />
             <span>
-              <strong>还有 {more} 台在线</strong>
+              <strong>{t('help:figures.map.more', { count: more })}</strong>
             </span>
           </div>
         )}
@@ -315,16 +322,18 @@ function DeviceMap({ here, others }: { here: string | null; others: string[] }) 
           <div className="fig-map-device ghost">
             <Laptop />
             <span>
-              <strong>另一台电脑</strong>
-              <small>装客户端，登录同一个服务端</small>
+              <strong>{t('help:figures.anotherComputer')}</strong>
+              <small>{t('help:figures.map.otherNote')}</small>
             </span>
           </div>
         )}
         <div className={`fig-map-device${here ? '' : ' here'}`}>
           <Smartphone />
           <span>
-            <strong>{here ? '手机 · 浏览器' : '这个浏览器'}</strong>
-            <small>看进度、审批、追加指示</small>
+            <strong>
+              {here ? t('help:figures.map.phone') : t('help:figures.map.thisBrowser')}
+            </strong>
+            <small>{t('help:figures.map.phoneNote')}</small>
           </span>
         </div>
       </div>

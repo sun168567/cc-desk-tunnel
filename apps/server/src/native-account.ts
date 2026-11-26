@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
 import { spawn as spawnPty } from 'node-pty';
 import headless from '@xterm/headless';
+import { phrase, type Words } from '@cc-desk-tunnel/i18n';
 import type { AccountState } from '@cc-desk-tunnel/protocol';
+import { DomainError } from './errors.ts';
 import { definedEnvironment } from './native-terminal.ts';
 import type { TerminalSpawner } from './native-terminal.ts';
 import { readSettingsFile, settingsPath, writeSettingsFile } from './native-settings.ts';
@@ -46,8 +48,11 @@ export async function accountStatus(executable: string) {
 export async function accountLogout(executable: string) {
   const result = await run(executable, ['auth', 'logout']);
   if (result.code !== 0)
-    throw new Error(
-      result.error || result.stdout.trim() || `claude auth logout 退出码：${result.code}`,
+    throw new DomainError(
+      'logout_failed',
+      result.error ||
+        result.stdout.trim() ||
+        phrase('service:account.logoutExit', { code: String(result.code) }),
     );
   // Official logout clears stored sign-ins, but leaves tokens supplied through settings.env in effect.
   configureSetupToken(null);
@@ -69,7 +74,7 @@ export function configureSetupToken(token: string | null, path = settingsPath())
 export class NativeLogin {
   url: Promise<string>;
   readonly method: 'browser' | 'setup-token';
-  error?: string;
+  error?: Words;
   private process: ReturnType<TerminalSpawner>;
   private output = '';
   private timer: ReturnType<typeof setTimeout>;
@@ -124,7 +129,7 @@ export class NativeLogin {
     );
     this.timer = setTimeout(
       () => {
-        this.error = '等待官方授权超时，请重新获取链接。';
+        this.error = phrase('service:account.authTimeout');
         try {
           this.process.kill();
         } catch {}
@@ -197,16 +202,16 @@ export class NativeLogin {
         // Only redact secrets; preserve the CLI's explanation, including multiline network and policy errors.
         let output = this.output
           .replace(controlSequences, '')
-          .replace(/sk-ant-oat01-[A-Za-z0-9_-]+/g, '[令牌已省略]');
-        if (this.submitted?.code) output = output.replaceAll(this.submitted.code, '[授权码已省略]');
+          .replace(/sk-ant-oat01-[A-Za-z0-9_-]+/g, '[token]');
+        if (this.submitted?.code) output = output.replaceAll(this.submitted.code, '[code]');
         const errorAt = output.lastIndexOf('OAuth error:');
         if (errorAt >= 0) output = output.slice(errorAt).split('Press Enter to retry.')[0];
         this.error =
           exitCode === 0
-            ? '官方 setup-token 已成功退出，但未能从输出读取令牌，请核对 CLI 版本和输出格式。'
-            : output.trim() || `官方登录命令异常退出（退出码 ${exitCode}），未提供错误输出。`;
+            ? phrase('service:account.tokenUnread')
+            : output.trim() || phrase('service:account.loginExit', { code: String(exitCode) });
       }
-      failed(new Error(this.error ?? '官方登录命令在给出授权链接前已结束。'));
+      failed(new DomainError('login_failed', this.error ?? phrase('service:account.noLink')));
       this.output = '';
       screen?.dispose();
       exit(succeeded, token);
@@ -246,10 +251,13 @@ export class NativeLogin {
         .filter((line) => line && !/[█░▓▄]/.test(line))
         .slice(-4)
         .join(' ')
-        .replace(/https:\/\/\S+/g, '[链接]')
-        .replaceAll(code, '[授权码已省略]')
-        .replace(/sk-ant-oat01-[A-Za-z0-9_-]+/g, '[令牌已省略]');
-      this.error = `${Math.round(this.answerMs / 1000)} 秒未拿到令牌，请重新生成链接。${shown ? `（官方命令：${shown.slice(0, 300)}）` : ''}`;
+        .replace(/https:\/\/\S+/g, '[link]')
+        .replaceAll(code, '[code]')
+        .replace(/sk-ant-oat01-[A-Za-z0-9_-]+/g, '[token]');
+      const count = Math.round(this.answerMs / 1000);
+      this.error = shown
+        ? phrase('service:account.noTokenSaid', { count, said: shown.slice(0, 300) })
+        : phrase('service:account.noToken', { count });
       try {
         this.process.kill();
       } catch {}

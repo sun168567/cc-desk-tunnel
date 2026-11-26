@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir, userInfo } from 'node:os';
 import { randomBytes } from 'node:crypto';
+import { failure } from './failure.cjs';
 
 export const quotePosix = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -26,13 +27,12 @@ export async function resolvePosixShell(options = {}) {
     options.shellPath ??
     [process.env.SHELL, accountShell].find(supported) ??
     (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash');
-  if (!supported(path))
-    throw new Error('本机执行需要绝对路径的 zsh 或 bash，请检查登录 shell 设置。');
+  if (!supported(path)) throw failure('desktop:shell.unsupported');
   const resolved = await realpath(path).catch(() => {
-    throw new Error('找不到本机登录 shell，请检查 zsh 或 bash 的安装路径。');
+    throw failure('desktop:shell.missing');
   });
   await access(resolved, constants.X_OK).catch(() => {
-    throw new Error('无法执行本机登录 shell，请检查 zsh 或 bash 的文件权限。');
+    throw failure('desktop:shell.notExecutable');
   });
   if (options.signal?.aborted) throw new Error('Tunnel cancelled');
   // Shell invocation names select their startup and execution semantics. Keep
@@ -97,15 +97,12 @@ export async function captureShellEnvironment(
         error ? reject(error) : resolve(value);
       };
       const cancel = () => finish(new Error('Tunnel cancelled'));
-      const timer = setTimeout(
-        () => finish(new Error('登录 shell 初始化超时，请检查 shell 启动脚本中的等待或交互命令。')),
-        timeoutMs,
-      );
+      const timer = setTimeout(() => finish(failure('desktop:shell.timeout')), timeoutMs);
       signal?.addEventListener('abort', cancel, { once: true });
       receive = (socket) => {
         socket.on('data', (chunk) => {
           bytes += chunk.length;
-          if (bytes > maxBytes) return finish(new Error('登录 shell 的环境变量超过大小限制。'));
+          if (bytes > maxBytes) return finish(failure('desktop:shell.environmentTooLarge'));
           output.push(chunk);
         });
         socket.once('end', () => {
@@ -116,22 +113,22 @@ export async function captureShellEnvironment(
       for (const stream of [child.stdout, child.stderr])
         stream.on('data', (chunk) => {
           noise += chunk.length;
-          if (noise > maxBytes) finish(new Error('登录 shell 启动脚本的输出超过大小限制。'));
+          if (noise > maxBytes) finish(failure('desktop:shell.outputTooLarge'));
         });
       child.once('error', (error) =>
         finish(
-          new Error(
-            `无法启动本机登录 shell（${error.code ?? '未知错误'}），请检查路径和执行权限。`,
-          ),
+          error.code
+            ? failure('desktop:shell.cannotStart', { code: error.code })
+            : failure('desktop:shell.cannotStartUnknown'),
         ),
       );
       child.once('close', (code, signal) => {
         childClosed = true;
         if (code !== 0)
           return finish(
-            new Error(
-              `登录 shell 异常结束（${signal ? `信号 ${signal}` : `退出码 ${code}`}），没有返回有效环境，请检查 shell 文件和启动脚本。`,
-            ),
+            signal
+              ? failure('desktop:shell.signalled', { signal })
+              : failure('desktop:shell.exited', { code }),
           );
         complete();
       });
@@ -152,7 +149,7 @@ export async function captureShellEnvironment(
           delete environment.ENV;
           finish(undefined, environment);
         } catch {
-          finish(new Error('登录 shell 没有返回有效环境，请检查 zsh 或 bash 启动脚本。'));
+          finish(failure('desktop:shell.noEnvironment'));
         }
       }
     });

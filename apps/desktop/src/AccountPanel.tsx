@@ -17,6 +17,8 @@ import type {
   NativeCapabilities,
   UsageSummary,
 } from '@cc-desk-tunnel/protocol';
+import { wordsText } from '@cc-desk-tunnel/i18n';
+import { localeOf, type T, useT } from './i18n.ts';
 import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
@@ -26,12 +28,12 @@ import HelpLink from './HelpLink.tsx';
 
 // What the date a stored claude.ai sign-in ends means for the user. Renewing the access token does not move it; the
 // CLI starts warning ten days before it.
-function loginExpiry(expiresAt: string, now = Date.now()) {
+function loginExpiry(t: T, expiresAt: string, now = Date.now()) {
   const days = Math.ceil((Date.parse(expiresAt) - now) / 86_400_000);
-  if (days <= 0)
-    return <span className="error-text">可能已经到期；请求开始失败时，退出登录后重新登录</span>;
-  if (days <= 10) return <span className="error-text">约 {days} 天后到期，到期后需要重新登录</span>;
-  return `约 ${days} 天后到期，实际可能早几天`;
+  if (days <= 0) return <span className="error-text">{t('account:login.expired')}</span>;
+  if (days <= 10)
+    return <span className="error-text">{t('account:login.expiresSoon', { count: days })}</span>;
+  return t('account:login.expiresLater', { count: days });
 }
 
 export default function AccountPanel({
@@ -57,6 +59,7 @@ export default function AccountPanel({
   usageOnly?: boolean;
   quotaUnavailable?: string;
 }) {
+  const t = useT();
   const account = capabilities?.account;
   const { quotaReads } = usePrefs();
   const [working, setWorking] = useState(false);
@@ -71,6 +74,8 @@ export default function AccountPanel({
   const [copied, setCopied] = useState(false);
   const signedOut = state?.loggedIn === false;
   const usesToken = state?.authMethod === 'oauth_token';
+  // The plan's name as the service writes it (pro, max): shown capitalised, while the words around it stay as written.
+  const plan = state?.subscriptionType ?? account?.subscriptionType;
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [log, setLog] = useState<string | null>(null);
   useEffect(() => {
@@ -94,7 +99,7 @@ export default function AccountPanel({
       await client.request(command);
       return true;
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : '操作失败。');
+      setFailure(error instanceof Error ? error.message : t('account:failed'));
       return false;
     } finally {
       setWorking(false);
@@ -102,12 +107,12 @@ export default function AccountPanel({
   }
   return (
     <Page
-      title={usageOnly ? '订阅用量' : '账号与额度'}
-      label={usageOnly ? '订阅用量' : '账号信息'}
-      intro={!usageOnly && '云端 Claude Code 登录的账号，与官方读取的订阅额度。'}
+      title={usageOnly ? t('account:usageTitle') : t('account:title')}
+      label={usageOnly ? t('account:usageTitle') : t('account:infoTitle')}
+      intro={!usageOnly && t('account:intro')}
       actions={
         <IconButton
-          title={usageOnly ? '刷新订阅用量' : '刷新账号信息'}
+          title={usageOnly ? t('account:refreshUsage') : t('account:refreshInfo')}
           className={usageOnly ? 'quota-page-refresh' : undefined}
           disabled={disabled}
           onClick={refresh}
@@ -130,17 +135,21 @@ export default function AccountPanel({
             <div>
               <h2>
                 {signedOut
-                  ? '尚未登录'
+                  ? t('account:login.none')
                   : usesToken
-                    ? 'Setup token 已配置'
+                    ? t('account:login.tokenSet')
                     : (state?.email ?? account?.email ?? 'Claude Code')}
               </h2>
               <p>
-                {signedOut
-                  ? '云端 Claude Code 还没有登录账号'
-                  : usesToken
-                    ? '令牌是否有效，以实际请求结果为准'
-                    : (state?.subscriptionType ?? account?.subscriptionType ?? '账号信息尚未读取')}
+                {signedOut ? (
+                  t('account:login.noneDetail')
+                ) : usesToken ? (
+                  t('account:login.tokenDetail')
+                ) : plan ? (
+                  <span className="account-plan">{plan}</span>
+                ) : (
+                  t('account:login.notRead')
+                )}
               </p>
             </div>
             {signedOut && !state.login && !tokenOpen && (
@@ -154,7 +163,7 @@ export default function AccountPanel({
                   }}
                 >
                   <LogIn />
-                  {working ? '获取链接…' : '普通登录'}
+                  {working ? t('account:login.gettingLink') : t('account:login.browser')}
                 </button>
                 <button
                   type="button"
@@ -163,7 +172,7 @@ export default function AccountPanel({
                   onClick={() => setTokenOpen(true)}
                 >
                   <KeyRound />
-                  Setup token 登录
+                  {t('account:login.token')}
                 </button>
               </div>
             )}
@@ -175,26 +184,26 @@ export default function AccountPanel({
                 onClick={() => setConfirmLogout(true)}
               >
                 <LogOut />
-                退出登录
+                {t('account:login.signOut')}
               </button>
             )}
           </div>
           {(failure ?? state?.notice) && (
             <p className="error-text" role="alert">
-              {failure ?? state?.notice}
+              {failure ?? (state?.notice && wordsText(t, state.notice))}
             </p>
           )}
           {signedOut && !state.login && !tokenOpen && (
-            <p className="muted">
-              Setup token 可能不提供账号资料、完整订阅额度和到期信息；失效后需要重新生成或更换。
-            </p>
+            <p className="muted">{t('account:login.tokenLimits')}</p>
           )}
           {state?.loggedIn && confirmLogout && (
-            <div className="account-confirm" role="group" aria-label="确认退出登录">
+            <div
+              className="account-confirm"
+              role="group"
+              aria-label={t('account:login.confirmSignOut')}
+            >
               <p>
-                {usesToken
-                  ? '退出会移除服务端保存的 setup token，并清除原生登录凭据；会话记录保留。这不会撤销令牌在其他地方的使用。'
-                  : '退出后云端的登录凭据会被官方 CLI 清除，会话记录保留；再次使用需要重新登录。'}
+                {usesToken ? t('account:login.signOutToken') : t('account:login.signOutBrowser')}
               </p>
               <button
                 type="button"
@@ -202,7 +211,7 @@ export default function AccountPanel({
                 disabled={working}
                 onClick={() => setConfirmLogout(false)}
               >
-                取消
+                {t('common:cancel')}
               </button>
               <button
                 type="button"
@@ -213,14 +222,14 @@ export default function AccountPanel({
                 }}
               >
                 <LogOut />
-                退出登录
+                {t('account:login.signOut')}
               </button>
             </div>
           )}
           {signedOut && tokenOpen && !state.login && (
             <form
               className="account-login setup-token-login"
-              aria-label="使用 setup token"
+              aria-label={t('account:login.useToken')}
               onSubmit={(event) => {
                 event.preventDefault();
                 void act({ type: 'account.token', token: token.trim() }).then((saved) => {
@@ -231,7 +240,7 @@ export default function AccountPanel({
                 });
               }}
             >
-              <p>还没有令牌？由服务端运行官方 setup-token，完成浏览器授权后自动保存并使用。</p>
+              <p>{t('account:login.noToken')}</p>
               <button
                 type="button"
                 className="button secondary"
@@ -246,9 +255,9 @@ export default function AccountPanel({
                 }}
               >
                 <ExternalLink />
-                {working ? '获取链接…' : '生成 setup token'}
+                {working ? t('account:login.gettingLink') : t('account:login.generate')}
               </button>
-              <p>已有令牌？直接粘贴到下面保存。</p>
+              <p>{t('account:login.haveToken')}</p>
               <input
                 type="password"
                 aria-label="Setup token"
@@ -259,9 +268,7 @@ export default function AccountPanel({
                 maxLength={8192}
                 required
               />
-              <p className="muted">
-                令牌只保存在服务端。账号资料和完整订阅额度可能无法读取；令牌到期或撤销后，需要退出并重新配置。
-              </p>
+              <p className="muted">{t('account:login.tokenKept')}</p>
               <div className="account-login-actions">
                 <button
                   type="button"
@@ -273,11 +280,11 @@ export default function AccountPanel({
                     setFailure(null);
                   }}
                 >
-                  取消
+                  {t('common:cancel')}
                 </button>
                 <button className="button primary" disabled={working || !token.trim()}>
                   <Check />
-                  {working ? '保存中…' : '保存并使用'}
+                  {working ? t('account:login.saving') : t('account:login.saveUse')}
                 </button>
               </div>
             </form>
@@ -285,7 +292,7 @@ export default function AccountPanel({
           {signedOut && state.login && (
             <form
               className="account-login"
-              aria-label="登录 Claude 账号"
+              aria-label={t('account:login.title')}
               onSubmit={(event) => {
                 event.preventDefault();
                 void act({ type: 'account.code', code: code.trim() }).then((sent) => {
@@ -294,11 +301,10 @@ export default function AccountPanel({
                 });
               }}
             >
-              {state.login.method === 'setup-token' && (
-                <p>正在通过服务端生成 setup token；完成授权后自动保存，并显示一次供你复制。</p>
-              )}
+              {state.login.method === 'setup-token' && <p>{t('account:login.generating')}</p>}
               <p>
-                <strong>1</strong>在浏览器打开官方授权页并登录。
+                <strong>1</strong>
+                {t('account:login.openStep')}
               </p>
               <div className="account-login-actions">
                 <button
@@ -308,12 +314,12 @@ export default function AccountPanel({
                     if (window.desktop)
                       void window.desktop
                         .openExternal(state.login!.url)
-                        .catch(() => setFailure('无法打开浏览器，请复制链接。'));
+                        .catch(() => setFailure(t('account:login.openFailed')));
                     else window.open(state.login!.url, '_blank', 'noopener');
                   }}
                 >
                   <ExternalLink />
-                  打开授权页
+                  {t('account:login.open')}
                 </button>
                 <button
                   type="button"
@@ -324,19 +330,20 @@ export default function AccountPanel({
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       },
-                      () => setFailure('复制失败，请重试。'),
+                      () => setFailure(t('account:login.copyFailed')),
                     );
                   }}
                 >
                   {copied ? <Check /> : <Copy />}
-                  {copied ? '已复制' : '复制链接'}
+                  {copied ? t('common:copy.done') : t('account:login.copyLink')}
                 </button>
               </div>
               <p>
-                <strong>2</strong>把授权页最后显示的代码粘贴到这里。
+                <strong>2</strong>
+                {t('account:login.codeStep')}
               </p>
               <input
-                aria-label="授权码"
+                aria-label={t('account:login.code')}
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
                 spellCheck={false}
@@ -352,47 +359,49 @@ export default function AccountPanel({
                     void act({ type: 'account.cancel' });
                   }}
                 >
-                  取消
+                  {t('common:cancel')}
                 </button>
                 <button className="button primary" disabled={working || codeSent || !code.trim()}>
                   {codeSent ? <LoaderCircle className="spinning" /> : <Check />}
-                  {codeSent ? '确认中…' : '完成登录'}
+                  {codeSent ? t('account:login.confirming') : t('account:login.finish')}
                 </button>
               </div>
             </form>
           )}
-          <Row title="登录方式">
+          <Row title={t('account:info.method')}>
             <span className="setting-value">
               {signedOut
-                ? '未登录'
+                ? t('account:login.none')
                 : usesToken
                   ? 'Setup token'
                   : state?.authMethod === 'claude.ai'
-                    ? '浏览器授权'
-                    : (state?.authMethod ?? '未读取')}
+                    ? t('account:info.browser')
+                    : (state?.authMethod ?? t('account:info.notRead'))}
             </span>
           </Row>
-          <Row title="组织">
+          <Row title={t('account:info.organization')}>
             <span className="setting-value">
-              {usesToken ? '令牌未提供' : (account?.organization ?? '未提供')}
+              {usesToken
+                ? t('account:info.tokenNone')
+                : (account?.organization ?? t('account:info.none'))}
             </span>
           </Row>
-          <Row title="模型服务">
+          <Row title={t('account:info.provider')}>
             <span className="setting-value">
               {account?.apiProvider === 'firstParty'
                 ? 'Anthropic'
-                : (account?.apiProvider ?? '未读取')}
+                : (account?.apiProvider ?? t('account:info.notRead'))}
             </span>
           </Row>
-          <Row title="认证来源">
+          <Row title={t('account:info.source')}>
             <span className="setting-value">
               {usesToken
                 ? 'Setup token'
-                : (account?.tokenSource ?? account?.apiKeySource ?? '未提供')}
+                : (account?.tokenSource ?? account?.apiKeySource ?? t('account:info.none'))}
             </span>
           </Row>
           {state?.loggedIn && state.loginExpiresAt && (
-            <Row title="登录有效期" detail={loginExpiry(state.loginExpiresAt)}>
+            <Row title={t('account:info.expiry')} detail={loginExpiry(t, state.loginExpiresAt)}>
               <span className="setting-value">
                 {new Date(state.loginExpiresAt).toLocaleDateString('zh-CN')}
               </span>
@@ -403,12 +412,12 @@ export default function AccountPanel({
       {!usageOnly && (
         <div className="page-heading account-section-title">
           <h2>
-            订阅用量
-            <HelpLink article="quota" title="额度怎么算、怎么省" />
+            {t('account:usageTitle')}
+            <HelpLink article="quota" title={t('account:quota.help')} />
           </h2>
           <button type="button" className="button secondary" onClick={() => setLog('today')}>
             <ListOrdered />
-            调用日志
+            {t('account:usage.title')}
           </button>
         </div>
       )}
@@ -418,11 +427,14 @@ export default function AccountPanel({
             {quota.rateLimits.windows.map((window, index) => (
               <div className="quota-row" key={`${window.name}:${index}`}>
                 <div>
-                  <strong>{quotaName(window.name) ?? window.name}</strong>
+                  <strong>{quotaName(t, window.name) ?? window.name}</strong>
                   <span>
                     {window.utilization == null
-                      ? '使用量未提供'
-                      : `${window.utilization}% 已用 · ${Math.max(0, 100 - window.utilization)}% 剩余`}
+                      ? t('account:quota.noUtilization')
+                      : t('account:quota.utilization', {
+                          used: window.utilization,
+                          left: Math.max(0, 100 - window.utilization),
+                        })}
                   </span>
                 </div>
                 {window.utilization != null && (
@@ -430,31 +442,33 @@ export default function AccountPanel({
                 )}
                 <small>
                   {window.resetsAt
-                    ? `重置：${new Date(window.resetsAt).toLocaleString('zh-CN')}`
-                    : '重置时间未提供'}
+                    ? t('account:quota.resets', {
+                        time: new Date(window.resetsAt).toLocaleString(localeOf(t)),
+                      })
+                    : t('account:quota.noReset')}
                 </small>
                 {(() => {
                   const period = summary?.windows.find((item) => item.name === window.name);
                   if (!period) return null;
-                  const text = (
-                    <>
-                      本周期 {period.requests.toLocaleString('zh-CN')} 次请求 ·{' '}
-                      {tokens(
-                        period.inputTokens +
-                          period.outputTokens +
-                          period.cacheReadTokens +
-                          period.cacheCreationTokens,
-                      )}{' '}
-                      tokens · 等价 {dollars(period.costUsd)}
-                    </>
-                  );
+                  const text = t('account:quota.period', {
+                    count: period.requests,
+                    n: period.requests.toLocaleString(localeOf(t)),
+                    tokens: tokens(
+                      t,
+                      period.inputTokens +
+                        period.outputTokens +
+                        period.cacheReadTokens +
+                        period.cacheCreationTokens,
+                    ),
+                    cost: dollars(period.costUsd),
+                  });
                   return usageOnly ? (
                     <span className="quota-period">{text}</span>
                   ) : (
                     <button
                       type="button"
                       className="quota-period"
-                      title="查看本周期的调用日志"
+                      title={t('account:quota.periodLog')}
                       onClick={() => setLog(window.name)}
                     >
                       {text}
@@ -463,25 +477,26 @@ export default function AccountPanel({
                 })()}
               </div>
             ))}
-            {!quota.rateLimits.windows.length && <p className="muted">原生接口未返回额度窗口。</p>}
+            {!quota.rateLimits.windows.length && (
+              <p className="muted">{t('account:quota.noWindows')}</p>
+            )}
             <p className="account-updated">
               {quota.rateLimits.measuredAt &&
-                `更新于 ${new Date(quota.rateLimits.measuredAt).toLocaleTimeString('zh-CN')}`}
+                t('account:quota.measured', {
+                  time: new Date(quota.rateLimits.measuredAt).toLocaleTimeString(localeOf(t)),
+                })}
             </p>
           </div>
         ) : (
           <p className="muted">
-            {quota?.error ??
+            {(quota?.error && wordsText(t, quota.error)) ??
               quotaUnavailable ??
-              (quota?.rateLimits ? '当前账号未提供订阅额度' : '等待读取原生额度')}
+              (quota?.rateLimits ? t('account:quota.notProvided') : t('account:quota.waiting'))}
           </p>
         )}
-        <Row
-          title="运行中每分钟读取一次额度"
-          detail="各会话、各设备共用这一次读取；关闭后只记录回复里自带的额度，上方的刷新照常读取"
-        >
+        <Row title={t('account:quota.poll')} detail={t('account:quota.pollDetail')}>
           <Switch
-            label="运行中每分钟读取一次额度"
+            label={t('account:quota.poll')}
             checked={quotaReads}
             onChange={(value) => setPrefs((prefs) => ({ ...prefs, quotaReads: value }))}
           />

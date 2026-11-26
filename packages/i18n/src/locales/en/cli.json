@@ -1,0 +1,316 @@
+{
+  "help": {
+    "main": "ccdt: use the original Claude Code on a CC Desk Tunnel server from your own terminal, sharing sessions with the desktop client.\n\nUsage:\n  ccdt                   Continue this directory’s project’s latest session; start one if there is none\n  ccdt -r                Pick one of this project’s sessions to open (add --all to pick from every session)\n  ccdt new [title]       Start a session in this directory\n  ccdt sessions [--all]  List this project’s sessions; --all lists every session; --json prints JSON\n  ccdt online            Keep this computer online without a terminal, so Claude can run commands here;\n                         reconnects on its own, Ctrl+C ends it. Can run in the background on a headless server\n  ccdt usage             Subscription quota and usage figures\n  ccdt config            View and change settings: pick each with the arrow keys in the terminal\n  ccdt config name [val] View or change one setting, for scripts; the value default restores the default\n  ccdt server            Servers signed in to: pick the one to connect to by default, or sign in to another\n  ccdt login [wss URL]   Sign in to a server; without a URL, pick one saved by the desktop client. --fingerprint\n                         certificate fingerprint, --token-stdin reads the token from standard input, --no-save keeps nothing\n  ccdt logout            Sign out of a server (pick one when signed in to several); the others stay\n  ccdt open <session ID> Open by ID (the first few characters will do), for scripts\n  ccdt upgrade [--yes]   Upgrade the server (asks first; --yes doesn’t), then switch ccdt to the server’s version;\n                         says so when sessions are running, and you can choose to force it (--force doesn’t ask)\n  ccdt upgrade --check   Only check for a new version\n  ccdt --version         The version, which must match the server’s\n\nFor programs and other agents (written like claude -p; see ccdt help agents):\n  ccdt -p \"task\"         Start a session in this directory’s project, send the task, print Claude’s reply when the turn ends\n                         -c continues the latest session, -r <session> a given one, --bg returns once sent\n  ccdt status <session>  What it’s doing, what it’s waiting for\n  ccdt tell <session> \"…\"  Add an instruction: while running, it joins the turn under way\n  ccdt wait <session>    Wait until the turn ends, or Claude waits for an approval or an answer\n  ccdt approve|deny <session>  Approve or deny what Claude is waiting on, then wait until it stops again; ccdt answer <session> \"answer\" answers a question\n  ccdt logs <session>    Recent messages and tool calls\n  ccdt stop <session>    Stop the turn under way\n  ccdt acp               Run as an ACP (Agent Client Protocol) agent, for Zed, JetBrains, acpx and others\n\nOptions:\n  -s                     Pick the server first, then do the rest, as in ccdt -s -r\n  --server <name>        Name the server: a connection name from the desktop client, a host name or a URL; enough to tell it apart\nWithout either, ccdt connects to the server it connected to last.\n\nUse it like a local claude: it runs as long as the window is open and reconnects after a dropped network; quitting Claude Code or closing the window ends it.",
+    "agents": "ccdt for programs and other agents: hand a task to Claude Code on the server and follow it until it’s done.\nThe session is the same one the desktop client shows: its window shows what it’s doing, and you can step in and approve there too.\n\nDispatch (written like claude -p):\n  ccdt -p \"task\" [options]\n    By default starts a session in this directory’s project; -c continues this project’s latest session; -r <session> a given one\n    --bg                    Return the session ID once sent, without waiting for the result\n    --output-format text|json|stream-json   text by default: only Claude’s last reply;\n                            stream-json prints text, thinking, tool calls and results, and status, line by line\n    --permission-mode auto|default|plan|acceptEdits|bypassPermissions\n    --model <model>  --effort low|medium|high|xhigh|max  --title <title>\n    --timeout <seconds>     Wait at most this long; if still running then, return (exit code 6)\n  The task can come from standard input too: echo \"task\" | ccdt -p\n\nFollow up (<session> is the session ID; the first few characters will do):\n  ccdt status <session> [--json]     What it’s doing, what it’s waiting for\n  ccdt wait <session> [--timeout seconds] [--output-format …]   Wait until the turn ends or needs a person\n  ccdt tell <session> \"more\"          Add an instruction; while Claude is working it joins this turn, to correct course\n  ccdt approve <session> [--mode auto|acceptEdits|default]   Approve the request; --mode is for plans only\n  ccdt deny <session> [\"feedback\"]    Deny; for a plan, the feedback says how to change it\n  ccdt answer <session> \"answer 1\" [\"answer 2\" …]   Answer Claude’s questions in order; separate multiple choices with commas\n  ccdt logs <session> [--last N] [--json]   The last N (default 20) messages and tool calls\n  ccdt stop <session>                Stop this turn\n  ccdt sessions [--all] --json       List sessions\n\nACP: editors and agents that speak the Agent Client Protocol (Zed, JetBrains, acpx and others) set ccdt acp as the agent command;\nthe session goes in the project of the directory it’s started in.\n\nExit codes: 0 done (or sent with --bg); 2 waiting for an approval or an answer; 3 failed; 4 stopped; 5 can’t connect or not signed in;\n6 still running at --timeout; 1 any other error. The result goes to standard output; what happened and what to do next to standard error.\n\njson result: {\"session_id\",\"state\",\"result\",\"is_error\",\"approval\"?}. state is completed, background (the turn ended\nand background tasks are still running; Claude carries on when they finish), awaiting_approval, awaiting_answer, failed, cancelled\nor running. approval says what it’s waiting for: {\"kind\":\"tool\",\"tool\",\"input\",\"reason\"?}, {\"kind\":\"plan\",\"plan\"}\nor {\"kind\":\"question\",\"questions\":[{\"question\",\"options\",\"multiSelect\"}]}.\n\nApprovals: when Claude asks for approval or asks a question, ccdt -p and ccdt wait stop and leave it to the caller to approve, deny or answer.\nAfter replying, those three commands wait on like ccdt -p, print the result and exit with the same codes, providing this computer’s\nexecution channel while they wait; with --bg they only reply (later commands that run on this computer then need the desktop client or ccdt online open).\nThe desktop client can answer at the same time; whichever answers first counts. To be asked less, dispatch with --permission-mode.\n\nTips:\n- For a long task, run ccdt -p inside your own background task and you’ll know when it ends; or send it with --bg and ccdt wait later.\n- Which computer Claude runs commands on: the session’s, and a new session’s is the one running ccdt.\n  ccdt -p provides this computer’s execution channel while it waits; after --bg, keep the desktop client or ccdt online open."
+  },
+  "cancelled": "Cancelled.",
+  "unknownCommand": "No such command: {{command}}",
+  "connection": {
+    "closed": "The connection is closed.",
+    "channelNotReady": "This computer’s execution channel isn’t ready."
+  },
+  "session": {
+    "idNeeded": "Give a session ID (the first few characters will do): ccdt sessions --json lists this directory’s sessions.",
+    "ambiguous_one": "{{count}} session starts with {{ref}}; give a few more characters.",
+    "ambiguous_other": "{{count}} sessions start with {{ref}}; give a few more characters.",
+    "none": "No session {{ref}}: ccdt sessions --all --json lists every session.",
+    "readFailed": "Reading the session failed."
+  },
+  "online": {
+    "online": "Online: Claude can run commands on this computer ({{host}}).",
+    "reconnecting": "Disconnected, reconnecting…"
+  },
+  "picker": {
+    "hint": "↑↓ select · Enter open · Esc cancel",
+    "notTty": "Picking a session needs a terminal; you can also use ccdt open <session ID>."
+  },
+  "upgrade": {
+    "noPackage": "There’s no ccdt package for this system ({{system}}).",
+    "downloadFailed": "Downloading {{file}} failed: {{reason}}. If you need a proxy, set HTTPS_PROXY and NODE_USE_ENV_PROXY=1 and try again.",
+    "httpFailed": "Downloading {{file}} failed (HTTP {{status}}).",
+    "notListed": "The checksums of {{release}} don’t list {{name}}.",
+    "badHash": "The downloaded {{name}} failed its checksum and wasn’t installed.",
+    "installFailed": "The new version wasn’t installed: {{reason}}",
+    "withWindow": "This ccdt was installed with the desktop client and updates with it: open the desktop client and upgrade to {{version}} when it offers.",
+    "withWindowPage": "This ccdt was installed with the desktop client and updates with it: download desktop client {{version}} from {{page}} and reinstall.",
+    "checking": "The server is {{version}}; checking for a new version…",
+    "confirmFirst": "Upgrading the server needs a confirmation: run ccdt upgrade in a terminal, or add --yes.",
+    "question": "The server has a new version {{latest}} (now {{current}}). Upgrading restarts the server; running sessions have to end first.",
+    "yes": "Upgrade the server",
+    "no": "Don’t upgrade",
+    "installing": "The server is downloading and installing…",
+    "forceHint": "{{busy}} To force the upgrade: add --force.",
+    "force": "Force the upgrade (running sessions are interrupted)",
+    "declined": "The server wasn’t upgraded.",
+    "restarting": "The server was upgraded to {{version}} and is restarting; connect again in about a minute.",
+    "current": "The server is already on the latest release, {{version}}.",
+    "same": "ccdt is {{version}}, the same as the server.",
+    "tooOld": "ccdt can’t switch itself to a version before {{first}}: download ccdt {{version}} from {{page}} and run its install script.",
+    "fromSource": "ccdt run from source doesn’t update itself: the server is {{version}}; switch to that version’s source.",
+    "downloading": "Downloading ccdt {{version}}…",
+    "done": "ccdt is now {{version}}.",
+    "othersOld": "Other ccdt windows already open are still the old version; close and reopen them."
+  },
+  "check": {
+    "failed": "Checking for a new version failed: {{reason}}",
+    "unknown": "unknown reason",
+    "now": "The server and ccdt are {{version}} now. ",
+    "latest": "The server and ccdt are both {{version}}, the latest release."
+  },
+  "update": {
+    "available": "The server has a new version {{version}}: run ccdt upgrade to upgrade the server and ccdt.",
+    "manual": "The server has a new version {{version}}: run the install command on the server again to upgrade."
+  },
+  "when": {
+    "today": "Today {{clock}}"
+  },
+  "using": {
+    "window": "running in the desktop client",
+    "working": "terminal running",
+    "waiting": "terminal waiting for you",
+    "idle": "terminal open"
+  },
+  "server": {
+    "current": "(current)",
+    "noneLogin": "Not signed in to a server yet: run ccdt login first.",
+    "noneFirst": "Not signed in to a server yet; sign in to one first.",
+    "ambiguous": "Several servers match {{name}}: {{found, series}}; be more specific.",
+    "unknown": "Never signed in to {{name}}: run ccdt server to see the servers signed in to, or ccdt login to sign in.",
+    "pickNotTty": "Picking a server needs a terminal; you can also name one with --server.",
+    "pick": "Connect to which server:",
+    "pickHint": "↑↓ select · Enter connect · Esc cancel",
+    "noToken": "No token is saved for this server: run ccdt login to sign in again, or set CCDT_TOKEN.",
+    "connecting": "Connecting to {{name}}…",
+    "none": "Not signed in to a server yet.",
+    "list": "Servers signed in to:",
+    "loginNew": "Sign in to another server…",
+    "listHint": "↑↓ select · Enter make default · Esc quit",
+    "chosen": "From now on, {{name}} is connected to by default.",
+    "noneAtAll": "Not signed in to any server.",
+    "loggedOut": "Signed out of {{name}}."
+  },
+  "login": {
+    "pick": "Sign in to which server:",
+    "signedIn": "(signed in)",
+    "other": "Enter another address…",
+    "pickHint": "↑↓ select · Enter sign in · Esc cancel",
+    "usage": "Usage: ccdt login <wss URL> [--fingerprint certificate fingerprint]",
+    "fromWindow": "Server: {{name}} ({{url}}, from the desktop client)",
+    "address": "Service address (wss://…): ",
+    "token": "Service token (the one the desktop client uses; hidden as you type): ",
+    "done": "Signed in to {{url}}.",
+    "verifying": "Verifying…",
+    "doneVersion": "Signed in to {{url}} (server version {{version}}).",
+    "onlineTip": "To keep this computer online without a terminal: ccdt online",
+    "notSaved": "The token wasn’t saved; provide it later with the CCDT_TOKEN environment variable.",
+    "savedInFile": "The system has no key service available; the token is kept in {{path}}, readable by this account only."
+  },
+  "config": {
+    "notSignedIn": "Not signed in to a server yet",
+    "localOnly": "Can’t reach the server; only this computer’s settings can be changed: {{reason}}",
+    "unknown": "No such setting: {{name}}. Run ccdt config to see them all.",
+    "value": "{{title}}: {{value}}",
+    "title": "ccdt settings",
+    "hint": "↑↓ select · Enter change · Esc quit",
+    "choiceHint": "↑↓ select · Enter confirm · Esc back",
+    "type": "{{title}} (default restores the default, Esc goes back): ",
+    "notSaved": "Not saved: {{reason}}",
+    "options": "Options: {{options}}",
+    "option": "{{value}} ({{words}})",
+    "howTo": "To change one: ccdt config <name> <value>; the value default restores the default."
+  },
+  "settings": {
+    "on": "On",
+    "off": "Off",
+    "default": "Default",
+    "separator": ", ",
+    "here": "This computer",
+    "server": "Server",
+    "waitDetail": "{{detail}}. Default {{seconds}} s",
+    "notFound": "{{words}} (not found)",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "web": {
+      "title": "Browser access",
+      "address": "Address {{url}}",
+      "detail": "Use this server in a browser",
+      "access": "Browser access address, two-step verification and certificate",
+      "where": "Set them in the desktop client under “Settings → Browser access”."
+    },
+    "instructions": {
+      "title": "Global instructions (CLAUDE.md)",
+      "where": "Edit them in Claude Code with /memory, or in the desktop client under “Settings → Global instructions”."
+    },
+    "account": {
+      "title": "Claude account",
+      "where": "In Claude Code use /login and /logout, or in the desktop client go to “Settings → Account & quota”."
+    },
+    "pending": "Not available here yet",
+    "secondsDefault": "{{seconds}} s (default)",
+    "seconds": "{{seconds}} s",
+    "notHere": "{{title}} can’t be set in ccdt yet: {{where}}",
+    "onOff": "{{title}} can only be on or off.",
+    "onOffDefault": "{{title}} can only be on, off or default.",
+    "secondsRange": "{{title}} takes a whole number of seconds from {{min}} to {{max}}, or default.",
+    "options": "{{title}} can be: {{options}}.",
+    "connectFirst": "Changing the server’s settings needs a connection to it first.",
+    "language": {
+      "title": "ccdt language",
+      "detail": "The language ccdt writes in; following the system, the one LANG and the like set"
+    }
+  },
+  "sessions": {
+    "device": " ({{name}})",
+    "none": "No sessions yet.",
+    "noneHere": "No sessions in this directory yet: run ccdt to start one, or ccdt sessions --all to see them all.",
+    "ambiguous": "Several sessions start with that; give a few more characters.",
+    "unknown": "No such session.",
+    "noneToPick": "No sessions in this directory yet: run ccdt to start one, or ccdt -r --all to pick from them all.",
+    "pick": "Pick a session:",
+    "pickHere": "Pick a session of {{here}}:"
+  },
+  "usage": {
+    "window": {
+      "five_hour": "5 hours",
+      "seven_day": "7 days",
+      "seven_day_opus": "7 days Opus"
+    },
+    "line_one": "{{name}} {{used}} used · {{count}} request · about ${{cost}}",
+    "line_other": "{{name}} {{used}} used · {{count}} requests · about ${{cost}}",
+    "lineReset_one": "{{name}} {{used}} used, resets {{reset}} · {{count}} request · about ${{cost}}",
+    "lineReset_other": "{{name}} {{used}} used, resets {{reset}} · {{count}} requests · about ${{cost}}",
+    "none": "No subscription quota data: an API key or a third-party endpoint has no quota; see the usage page of the desktop client.",
+    "note": "Amounts are the equivalent at API prices, not your subscription bill. The full charts are on the usage page of the desktop client."
+  },
+  "open": {
+    "folder": "Folder",
+    "project": "Project",
+    "session": "Session",
+    "new": " (new)",
+    "busy": "This session is running in the desktop client; open it once this turn ends.",
+    "ended": "Quit. The conversation is kept in this session; run ccdt in this directory to carry on.",
+    "elsewhere": "This session was opened in another window, so it’s no longer shown here.",
+    "reconnectingTitle": "ccdt: disconnected, reconnecting",
+    "reconnecting": "Disconnected, reconnecting… Claude Code keeps running on the server."
+  },
+  "mismatch": {
+    "question": "This ccdt is {{version}} and the server is {{service}}; both need the same version to connect.",
+    "switch": "Switch ccdt to {{version}}",
+    "upgrade": "Upgrade the server, then switch ccdt to the same version",
+    "later": "Not now",
+    "again": "Run ccdt again to carry on.",
+    "howTo": "This ccdt is {{version}} and the server is {{service}}: run ccdt upgrade, or install the ccdt of the server’s version: {{page}}"
+  },
+  "next": {
+    "plan": "Claude has written a plan and is waiting for approval:\n{{plan}}",
+    "approval": "Claude asks for approval: {{tool}} {{input}}",
+    "approvalSafety": "Claude asks for approval (Claude Code safety check): {{tool}} {{input}}",
+    "reason": "Reason: {{reason}}",
+    "approvePlan": "Approve: ccdt approve {{id}} [--mode auto|acceptEdits|default]; to have it change the plan: ccdt deny {{id}} \"feedback\"",
+    "approveTool": "Approve: ccdt approve {{id}}; deny: ccdt deny {{id}}",
+    "afterReplyOrWindow": "After a reply, ccdt waits until it stops again. You can also handle it in the desktop client.",
+    "asking": "Claude asks:",
+    "options": " (options: {{options}})",
+    "optionsMulti": " (options: {{options}}; several allowed, separated by commas)",
+    "answer": "Answer: ccdt answer {{id}} \"answer to question 1\" [\"answer to question 2\" …]; to not answer: ccdt deny {{id}}",
+    "afterReply": "After a reply, ccdt waits until it stops again.",
+    "background": "This turn has ended; background tasks Claude started are still running, and it carries on when they finish: ccdt wait {{id}} waits until then.",
+    "running": "Still running: ccdt wait {{id}} waits on, ccdt status {{id}} shows progress, ccdt tell {{id}} \"more\" adds an instruction.",
+    "failedWith": "The run failed: {{errors}}",
+    "errorSeparator": "; ",
+    "failed": "The run failed.",
+    "cancelled": "The run was stopped."
+  },
+  "task": {
+    "uncarried": "Claude runs commands on this computer through its connection: keep the desktop client or ccdt online open.",
+    "reconnecting": "Disconnected, reconnecting… Claude keeps running on the server.",
+    "badFormat": "--output-format can only be text, json or stream-json.",
+    "badTimeout": "--timeout takes seconds, as in --timeout 600.",
+    "noText": "Give the task: ccdt -p \"task\", or pass it on standard input.",
+    "noSession": "No sessions in this directory yet: leave out -c to start one.",
+    "sent": "Sent. ccdt wait {{id}} waits for the result, ccdt status {{id}} shows progress.",
+    "noTell": "Give what to add: ccdt tell <session> \"text\".",
+    "added": "Added to the turn under way. ccdt wait {{id}} waits for the result.",
+    "told": "Sent. ccdt wait {{id}} waits for the result.",
+    "inTerminal": "This session is open in a ccdt terminal; carry on there.",
+    "notRunning": "This session isn’t running.",
+    "stopped": "Stopped.",
+    "nothingWaiting": "This session has no request waiting for approval or an answer: ccdt status shows what it’s doing.",
+    "replied": "Replied. ccdt wait {{id}} waits while it carries on.",
+    "askingNotApproval": "Claude is asking a question, not for approval: use ccdt answer {{id}} \"answer\".",
+    "badMode": "--mode can only be auto, acceptEdits or default.",
+    "approvalNotAsking": "Claude is asking for approval, not a question: use ccdt approve {{id}} or ccdt deny.",
+    "answerCount_one": "Claude asked {{count}} question; give {{count}} answer:",
+    "answerCount_other": "Claude asked {{count}} questions; give {{count}} answers, in order:"
+  },
+  "status": {
+    "line": "{{title}} ({{id}}): {{state}}",
+    "state": {
+      "idle": "idle",
+      "running": "running",
+      "background": "this turn has ended; background tasks are still running",
+      "awaiting_approval": "waiting for approval",
+      "awaiting_answer": "waiting for an answer",
+      "terminal": "open in a ccdt terminal"
+    },
+    "latest": "Latest: {{tool}} {{input}}",
+    "reply": "Claude’s last words: {{reply}}"
+  },
+  "logs": {
+    "status": " ({{status}})"
+  },
+  "acp": {
+    "mode": {
+      "title": "Approval mode",
+      "auto": {
+        "name": "Auto",
+        "detail": "Claude Code decides what needs asking"
+      },
+      "default": {
+        "name": "Ask every time",
+        "detail": "Edits and commands ask first"
+      },
+      "acceptEdits": {
+        "name": "Accept edits",
+        "detail": "Edits no longer ask; commands still do"
+      },
+      "plan": {
+        "name": "Plan",
+        "detail": "Write a plan first, act once it’s approved"
+      },
+      "bypassPermissions": {
+        "name": "Bypass permissions",
+        "detail": "Asks nothing (must be allowed in the client first)"
+      }
+    },
+    "default": "Default",
+    "model": "Model",
+    "effort": "Effort",
+    "level": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    },
+    "options": " ({{options}})",
+    "replyToAnswer": "(Reply to answer.)",
+    "plan": {
+      "auto": "Approve, run automatically",
+      "acceptEdits": "Approve, accept edits",
+      "default": "Approve, ask at each step",
+      "reject": "Keep planning"
+    },
+    "allow": "Allow",
+    "reject": "Deny",
+    "replyFailed": "Replying to the approval failed: {{reason}}",
+    "noSession": "No such session: {{id}}",
+    "mcpIgnored": "ccdt acp doesn’t connect MCP servers passed by the client yet ({{names, series}}).",
+    "noOption": "No such option: {{id}}",
+    "noValue": "{{option}} has no value {{value}}",
+    "noText": "The prompt has no text.",
+    "unsupported": "{{method}} isn’t supported",
+    "notJson": "Not JSON.",
+    "inputEnded": "Input ended."
+  }
+}

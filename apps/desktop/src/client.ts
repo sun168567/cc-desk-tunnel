@@ -6,6 +6,7 @@ import {
 } from '@cc-desk-tunnel/protocol';
 import type { EventPayload, HistoryPage } from '@cc-desk-tunnel/protocol';
 import { HistoryCache } from './historyCache.ts';
+import { say, t } from './i18n.ts';
 import type { Range } from './historyCache.ts';
 import type {
   AccountState,
@@ -99,19 +100,13 @@ export class RequestInterruptedError extends Error {
       'web.certificate.get',
       'service.update.check',
     ].includes(type);
-    super(
-      readOnly
-        ? '连接中断，上次读取未完成；连接恢复后可重试。'
-        : '连接中断；上次请求的确认未收到。任务可能仍在运行，请查看会话历史确认结果；不会自动重发。',
-    );
+    super(readOnly ? t('connection:interrupted.read') : t('connection:interrupted.request'));
     this.name = 'RequestInterruptedError';
     this.readOnly = readOnly;
   }
   describe(connected: boolean) {
     if (!connected) return this.message;
-    return this.readOnly
-      ? '连接已恢复；上次读取未完成，请重试。'
-      : '连接已恢复；上次请求的确认因断线未收到。任务可能仍在运行，请查看会话历史确认结果；不会自动重发。';
+    return this.readOnly ? t('connection:restored.read') : t('connection:restored.request');
   }
 }
 
@@ -130,6 +125,8 @@ export type ClientState = {
   // The computer this client signed in as; a session's commands run on the one it is on.
   device: Device | null;
   browser: Extract<ServerMessage, { type: 'ready' }>['browser'] | null;
+  // The service's own computer, which the window names itself (see `deviceName`).
+  serverDeviceId: string | null;
   // The service's files as the file panel reaches them, where it offers them (see FilePanel.tsx).
   files: NonNullable<Extract<ServerMessage, { type: 'ready' }>['files']> | null;
   // The user's computers connected to the service now, and whether commands reach each yet. Another
@@ -183,6 +180,7 @@ export class ProxyClient {
     connectionId: null,
     device: null,
     browser: null,
+    serverDeviceId: null,
     files: null,
     devices: [],
     sessions: [],
@@ -285,13 +283,13 @@ export class ProxyClient {
       address.search ||
       address.hash
     )
-      throw new Error('请输入不含凭据的 WebSocket 服务地址。');
+      throw new Error(t('connection:invalidUrl'));
     if (
       !['127.0.0.1', 'localhost', '[::1]'].includes(address.hostname) ||
       address.protocol !== 'ws:'
     )
-      throw new Error('当前离线原型仅连接本机环回服务。');
-    if (token.trim().length < 24) throw new Error('服务凭据至少 24 个字符。');
+      throw new Error(t('connection:loopbackOnly'));
+    if (token.trim().length < 24) throw new Error(t('connection:tokenTooShort'));
     this.disconnect();
     this.credentials = { url: address.toString(), token: token.trim(), device, reconnect, bridge };
     this.established = false;
@@ -332,7 +330,7 @@ export class ProxyClient {
       address.search ||
       address.hash
     )
-      throw new Error('浏览器只能连接当前服务。');
+      throw new Error(t('connection:browserSameService'));
     this.disconnect();
     this.credentials = {
       url: address.href,
@@ -381,7 +379,7 @@ export class ProxyClient {
             status: 'reconnecting',
             connectionId: null,
             devices: [],
-            error: '暂时无法连接服务，正在重试。',
+            error: t('connection:retrying'),
           });
           this.retryTimer = setTimeout(
             () => {
@@ -413,7 +411,7 @@ export class ProxyClient {
         this.update({
           status: 'disconnected',
           connectionId: null,
-          error: error instanceof Error ? error.message : '本机连接准备失败。',
+          error: error instanceof Error ? error.message : t('connection:localFailed'),
         });
       },
     );
@@ -443,7 +441,7 @@ export class ProxyClient {
       try {
         message = serverMessageSchema.parse(JSON.parse(data));
       } catch {
-        this.update({ error: '服务消息格式不兼容，已断开连接。' });
+        this.update({ error: t('connection:incompatibleMessage') });
         this.credentials = null;
         socket.close();
         return;
@@ -466,7 +464,7 @@ export class ProxyClient {
             serverMessageSchema.parse(value),
           );
         } catch {
-          this.update({ error: '历史消息格式不兼容，已断开连接。' });
+          this.update({ error: t('connection:incompatibleHistory') });
           this.credentials = null;
           socket.close();
           return;
@@ -512,6 +510,7 @@ export class ProxyClient {
           status: 'connected',
           connectionId: message.connectionId,
           browser: message.browser ?? null,
+          serverDeviceId: message.serverDeviceId,
           files: message.files ?? null,
           sessions: message.sessions,
           projects: message.projects,
@@ -537,10 +536,18 @@ export class ProxyClient {
         if (message.ok) request.resolve(message);
         else {
           this.results.delete(message.requestId);
-          request.reject(new Error(message.message ?? '请求失败。'));
+          request.reject(
+            new Error(
+              message.phrase
+                ? say(message.phrase, message.message)
+                : (message.message ?? t('connection:requestFailed')),
+            ),
+          );
         }
       } else if (message.type === 'connection.error') {
-        this.update({ error: message.message });
+        this.update({
+          error: message.phrase ? say(message.phrase, message.message) : message.message,
+        });
         if (message.code === 'unauthorized' && credentials.browser) credentials.browser();
         if (message.code === 'version_mismatch')
           this.update({
@@ -590,7 +597,7 @@ export class ProxyClient {
         const { type: _type, client, ...update } = message;
         this.update(
           update.state === 'restarting'
-            ? { update, error: `服务端已升级到 ${update.latest}，正在重启，稍候会自动重新连接。` }
+            ? { update, error: t('connection:serviceRestarting', { version: update.latest ?? '' }) }
             : { update, ...(client && { release: client.version }) },
         );
       } else if (message.type === 'account.token.created') {
@@ -714,7 +721,7 @@ export class ProxyClient {
         this.update({
           status: 'disconnected',
           connectionId: null,
-          error: this.state.error ?? (nativeClosed ? '原生连接已结束，请重新连接。' : null),
+          error: this.state.error ?? (nativeClosed ? t('connection:nativeEnded') : null),
           setupToken: null,
         });
         return;
@@ -1033,12 +1040,12 @@ export class ProxyClient {
     const response = await this.request(command);
     const result = this.results.get(response.requestId);
     this.results.delete(response.requestId);
-    if (!result) throw new Error('服务没有返回数据。');
+    if (!result) throw new Error(t('connection:noData'));
     return result as Extract<ServerMessage, { type: Replies[T] }>;
   }
   async request(command: NewCommand): Promise<Response> {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
-      throw new Error('服务未连接。');
+      throw new Error(t('connection:notConnected'));
     const requestId = crypto.randomUUID();
     const done = new Promise<Response>((resolve, reject) => {
       const history = command.type === 'session.subscribe' || command.type === 'session.history';
@@ -1047,13 +1054,7 @@ export class ProxyClient {
         this.results.delete(requestId);
         if (history)
           this.socket?.send(JSON.stringify({ type: 'session.history.cancel', requestId }));
-        reject(
-          new Error(
-            history
-              ? '历史读取连续 30 秒没有新内容，请重试。'
-              : '请求超时；请查看历史确认结果，未自动重发。',
-          ),
-        );
+        reject(new Error(history ? t('connection:historyStalled') : t('connection:timeout')));
       };
       const wait =
         history ||
@@ -1088,9 +1089,9 @@ export class ProxyClient {
         .filter((request) => request.sessionId === sessionId)
         .map((request) => request.done),
     );
-    if (this.state.selectedId !== sessionId) throw new Error('已切换会话，读取取消。');
+    if (this.state.selectedId !== sessionId) throw new Error(t('connection:switched'));
     if (this.state.history[sessionId]?.needsReload)
-      throw new Error('会话历史尚未完整加载，请重新打开会话后重试。');
+      throw new Error(t('connection:historyIncomplete'));
   }
   private cancelHistory(sessionId?: string) {
     for (const [requestId, request] of this.pending) {
@@ -1114,7 +1115,9 @@ export class ProxyClient {
             },
           },
         });
-      request.reject(Object.assign(new Error('历史读取已取消。'), { name: 'AbortError' }));
+      request.reject(
+        Object.assign(new Error(t('connection:historyCancelled')), { name: 'AbortError' }),
+      );
     }
   }
 }

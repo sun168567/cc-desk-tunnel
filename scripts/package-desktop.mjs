@@ -51,6 +51,8 @@ export const posixService = {
     'ssh-keys.mjs',
     'ssh-channel-output.mjs',
     'ssh2-hardening.mjs',
+    // What their failures say (they ship as written, as does this).
+    'failure.cjs',
   ],
   dependencies: ['ssh2'],
 };

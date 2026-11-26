@@ -1,5 +1,7 @@
 import { platformOf } from '@cc-desk-tunnel/protocol';
 import type { Device, Session } from '@cc-desk-tunnel/protocol';
+import { t as now } from './i18n.ts';
+import type { T } from './i18n.ts';
 import { pathKey } from './paths.ts';
 
 // Which of the user's computers this is to the service. The desktop keeps the identity with its settings; a
@@ -11,8 +13,14 @@ export async function thisDevice(): Promise<Device> {
   }
   const id = localStorage.getItem('proxy-device') ?? crypto.randomUUID();
   localStorage.setItem('proxy-device', id);
-  return { id, name: '浏览器' };
+  return { id, name: now('common:device.browser') };
 }
+// A computer as the window names it: the service's own by what it is, any other by the name it gave itself.
+export const deviceName = (
+  t: T,
+  device: { id: string; name: string },
+  serverDeviceId: string | null,
+) => (device.id === serverDeviceId ? t('common:device.server') : device.name);
 // A session is on this computer when its project directory is; one from before computers were told apart
 // is on whichever uses it first. Until then it is taken to be here, unless its folder was looked for on this
 // computer and not found: `absent` holds those folders by pathKey().
