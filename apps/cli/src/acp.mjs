@@ -456,8 +456,13 @@ export async function serveAcp(context, { input = process.stdin, output = proces
       const session = made.sessions.get(response.sessionId) ?? { id: response.sessionId };
       await kept(made, session);
       const entry = serve(session);
-      // The models are what Claude Code says it offers: read once, for the first session, as the desktop client
-      // reads them. A run gives them again; a service that cannot read them now leaves the model chosen alone.
+      // The models are what Claude Code says it offers. A new session holds them as Claude Code last gave them in
+      // any session; failing that they are read once, for the first session, as the desktop client reads them. A run
+      // gives them again; a service that cannot read them now leaves the model chosen alone.
+      if (!models.length)
+        await catchUp(made, entry.follow, (event, live) =>
+          translate(entry, event.payload, live),
+        ).catch(() => {});
       if (!models.length)
         await Promise.race([
           made.request({ type: 'session.status', sessionId: session.id }).catch(() => {}),

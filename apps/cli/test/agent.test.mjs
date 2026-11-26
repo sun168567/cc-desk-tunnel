@@ -76,7 +76,7 @@ async function fixture(t, stepMs = 2) {
     await service.request({ type: 'message.send', sessionId, text, scenario });
     return service;
   }
-  return { connect, run, send };
+  return { connect, run, send, server };
 }
 
 test('ccdt -p starts a session of this directory, waits for the turn and prints the reply', async (t) => {
@@ -456,6 +456,30 @@ test('ccdt acp: a loaded session replays the newest page of its history', async 
   client.end();
   loader.end();
   await Promise.all([client.served, loader.served]);
+});
+
+test('ccdt acp: a new session offers the models Claude Code last gave in any session, with no run of its own', async (t) => {
+  const f = await fixture(t);
+  const earlier = await f.connect();
+  const made = await earlier.request({ type: 'session.create', title: '先前', projectPath: here });
+  f.server.store.append(made.sessionId, randomUUID(), {
+    type: 'native.capabilities',
+    models: [
+      { value: 'default', displayName: 'Default', description: '', supportedEffortLevels: [] },
+      { value: 'haiku', displayName: 'Haiku', description: '', supportedEffortLevels: [] },
+    ],
+    commands: [],
+    account: {},
+  });
+  const client = acpClient(f, () => ({ outcome: 'cancelled' }));
+  await client.request('initialize', { protocolVersion: 1, clientCapabilities: {} });
+  const created = await client.request('session/new', { cwd: here, mcpServers: [] });
+  assert.deepEqual(
+    created.result.configOptions[0].options.map((option) => option.value),
+    ['default', 'haiku'],
+  );
+  client.end();
+  await client.served;
 });
 
 test('ccdt acp: the models Claude Code offers are chosen in the client, with how hard the one chosen reasons', async (t) => {

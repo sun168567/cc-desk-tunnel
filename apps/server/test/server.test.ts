@@ -872,6 +872,38 @@ test('session directory does not push history; switching subscribes to only the 
   );
 });
 
+test('a new session offers the models Claude Code last gave in any session, without counting as use', async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const first = await f.create(client);
+  const read = (sessionId: string) =>
+    f.server.store
+      .snapshot(sessionId)
+      .events.filter((event) => event.payload.type === 'native.capabilities')
+      .map((event) => event.payload);
+  // Nothing has been read yet: a new session holds no reading.
+  assert.deepEqual(read(first), []);
+  const capabilities = {
+    type: 'native.capabilities' as const,
+    models: [
+      {
+        value: 'default',
+        displayName: 'Default',
+        description: '推荐',
+        source: 'native' as const,
+        supportedEffortLevels: [],
+      },
+    ],
+    commands: [],
+    account: {},
+  };
+  f.server.store.append(first, randomUUID(), capabilities);
+  const second = await f.create(client);
+  assert.deepEqual(read(second), [capabilities]);
+  const { session } = f.server.store.get(second);
+  assert.equal(session.updatedAt, session.createdAt);
+});
+
 test('history is identical with negotiated compression and without compression', async (t) => {
   const f = await fixture(t);
   const owner = await f.connect();
