@@ -8,6 +8,7 @@ import {
   runWorking,
   commandSchema,
   eventSchema,
+  nativeSettingsSchema,
   serverMessageSchema,
   terminalControlSchema,
   tunnelCredentialsSchema,
@@ -289,4 +290,19 @@ test("an answer to Claude's plan carries a mode it may be carried out in, the pl
       payload: { type: 'native.mode', permissionMode: 'plan' },
     }).success,
   );
+});
+
+// A setting added within a protocol version is read as unset from a service that does not send it yet.
+test('settings from a service without the task list setting still parse, as unset', () => {
+  const values = Object.fromEntries(
+    Object.keys(nativeSettingsSchema.shape)
+      .filter((key) => key !== 'todoTools')
+      .map((key) => [key, null]),
+  );
+  const message = serverMessageSchema.parse({
+    type: 'settings.state',
+    requestId: randomUUID(),
+    values,
+  });
+  assert.equal(message.type === 'settings.state' && message.values.todoTools, null);
 });

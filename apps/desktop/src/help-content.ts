@@ -719,7 +719,7 @@ const shapes: ArticleShape[] = [
         kind: 'callout',
         key: 'tip2',
         tone: 'tip',
-        since: '0.3.21',
+        since: '0.3.22',
         news: true,
       },
       {
@@ -1166,7 +1166,7 @@ const shapes: ArticleShape[] = [
     id: 'plugins',
     group: 'settings',
     icon: Plug,
-    since: '0.3.21',
+    since: '0.3.22',
     blocks: [
       { kind: 'p', key: 'p1' },
       { kind: 'prompts', key: 'prompts1' },
@@ -1181,7 +1181,7 @@ const shapes: ArticleShape[] = [
     id: 'plugin-dev',
     group: 'settings',
     icon: SquareTerminal,
-    since: '0.3.21',
+    since: '0.3.22',
     blocks: [
       { kind: 'p', key: 'p1' },
       { kind: 'code', key: 'code1' },
