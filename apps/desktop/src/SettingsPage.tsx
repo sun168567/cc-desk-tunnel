@@ -34,7 +34,7 @@ import { waitFields } from './setting-fields.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
-import { isMac, selfUpdating } from './platform.ts';
+import { updatePolicy } from './client-update-policy.ts';
 import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 import PluginSettings from './PluginSettings.tsx';
@@ -803,16 +803,7 @@ function About({
       </div>
       <h2 className="page-heading">{t('settings:about.updates')}</h2>
       <div className="card">
-        <Row
-          title={t('settings:about.sameVersion')}
-          detail={
-            isMac
-              ? t('settings:about.updatesMac')
-              : selfUpdating
-                ? t('settings:about.updatesFromService')
-                : t('settings:about.updatesManual')
-          }
-        >
+        <Row title={t('settings:about.sameVersion')} detail={t(updatePolicy.description)}>
           <span className="setting-actions">
             {updates.map((item) => (
               <button
@@ -826,7 +817,7 @@ function About({
                 {item.label}
               </button>
             ))}
-            {!selfUpdating && project.url ? (
+            {updatePolicy.controls !== 'all' && project.url ? (
               <button
                 type="button"
                 className="button"

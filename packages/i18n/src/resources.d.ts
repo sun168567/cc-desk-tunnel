@@ -641,7 +641,7 @@ export type Resources = {
       verifying: '正在校验安装包…';
       closing: '正在关闭其他连接的窗口…';
       installing: '正在安装，完成后客户端会自动打开';
-      preparingMac: '正在准备安装 macOS 更新…';
+      preparing: '正在准备安装更新…';
     };
     web: {
       selfSigned: '当前服务使用自签名证书，请确认访问地址可信。建议在桌面端“设置 → 浏览器访问”导入正规证书，或由反向代理提供 HTTPS。';
@@ -682,7 +682,7 @@ export type Resources = {
       githubWorking_other: '从 GitHub 下载并升级到 {{version}}（{{count}} 个会话正在运行）';
       notes: '查看 {{version}} 的更新内容';
       clientAvailable: '客户端可升级到 {{version}}';
-      confirmMac: '安装 {{version}} 前会关闭这份应用的所有连接，正在运行的任务可能中断。安装后客户端会自动重启。请确认服务端已升级到同一版本。继续升级？';
+      confirmInstall: '安装 {{version}} 前会关闭这份应用的所有连接，正在运行的任务可能中断。安装后客户端会自动重启。请确认服务端已升级到同一版本。继续升级？';
     };
     reconnect: {
       body: '与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。';
@@ -911,15 +911,13 @@ export type Resources = {
       badHash: '安装包校验失败，已放弃升级。';
       cancelled: '已取消。';
       badVersion: '版本号不正确。';
-      noManifest: '读取不到 {{version}} 的发布信息（{{reason}}）。\n请检查这台电脑能否访问 github.com，或改从服务端获取安装包。';
+      noManifest: '读取不到 {{version}} 的发布信息（{{reason}}）。请检查这台电脑能否访问 GitHub，或前往发布页手动下载安装包。';
       notInManifest: '发布信息里没有这个版本的安装包。';
       otherFile: '发布页的安装包与服务端提供的不是同一个文件，已放弃升级。';
-      interrupted: '从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。\n请检查网络后重试，或改从服务端获取安装包。';
+      interrupted: '从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。请检查网络后重试，或前往发布页手动下载安装包。';
       nothing: '连接没有数据';
       httpFailed: '安装包下载失败（{{status}}）。';
       tooLarge: '安装包比发布信息里的大，已放弃升级。';
-      macNoManifest: '读取不到 {{version}} 的发布信息（{{reason}}）。请检查与 GitHub 的连接，或前往发布页手动下载 macOS 安装包。';
-      macInterrupted: '从 GitHub 下载 macOS 安装包中断（{{reason}}），已下载 {{received}} / {{size}}。请检查网络后重试，或前往发布页手动下载。';
     };
     service: {
       refused: '服务端拒绝了连接。';
@@ -3497,7 +3495,7 @@ export type Resources = {
       devTools: '开发者工具';
       devToolsDetail: '反馈界面问题时查看报错。里面能看到对话，别按他人要求在其中粘贴代码';
       openDevTools: '打开开发者工具';
-      updatesMac: '有新版本时，在工作台的“更新”菜单选择“升级客户端”。校验通过后会退出应用，安装并重新打开。客户端与服务端需要保持同一版本。';
+      updatesInMenu: '有新版本时，在工作台的“更新”菜单选择“升级客户端”。校验通过后会退出应用，安装并重新打开。客户端与服务端需要保持同一版本。';
     };
     section: {
       general: {
@@ -4408,7 +4406,7 @@ export type Messages = {
   'connection:clientUpgrade.verifying': Record<string, never>;
   'connection:clientUpgrade.closing': Record<string, never>;
   'connection:clientUpgrade.installing': Record<string, never>;
-  'connection:clientUpgrade.preparingMac': Record<string, never>;
+  'connection:clientUpgrade.preparing': Record<string, never>;
   'connection:web.selfSigned': Record<string, never>;
   'connection:web.stateFailed': Record<string, never>;
   'connection:web.ended': Record<string, never>;
@@ -4445,7 +4443,7 @@ export type Messages = {
   'connection:update.githubWorking': { count: number; version: Value };
   'connection:update.notes': { version: Value };
   'connection:update.clientAvailable': { version: Value };
-  'connection:update.confirmMac': { version: Value };
+  'connection:update.confirmInstall': { version: Value };
   'connection:reconnect.body': Record<string, never>;
   'connection:reconnect.bodyWithReason': { reason: Value };
   'connection:reconnect.button': Record<string, never>;
@@ -4619,8 +4617,6 @@ export type Messages = {
   'desktop:download.nothing': Record<string, never>;
   'desktop:download.httpFailed': { status: Value };
   'desktop:download.tooLarge': Record<string, never>;
-  'desktop:download.macNoManifest': { version: Value; reason: Value };
-  'desktop:download.macInterrupted': { reason: Value; received: Value; size: Value };
   'desktop:service.refused': Record<string, never>;
   'desktop:service.tooOld': { service: Value };
   'desktop:service.upgradeRefused': Record<string, never>;
@@ -6334,7 +6330,7 @@ export type Messages = {
   'settings:about.devTools': Record<string, never>;
   'settings:about.devToolsDetail': Record<string, never>;
   'settings:about.openDevTools': Record<string, never>;
-  'settings:about.updatesMac': Record<string, never>;
+  'settings:about.updatesInMenu': Record<string, never>;
   'settings:section.general.name': Record<string, never>;
   'settings:section.general.words': Record<string, never>;
   'settings:section.appearance.name': Record<string, never>;

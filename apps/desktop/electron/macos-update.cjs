@@ -1,5 +1,6 @@
 const { execFile, spawn } = require('node:child_process');
-const { constants } = require('node:fs');
+const { constants, lstatSync, readFileSync, realpathSync, writeFileSync } = require('node:fs');
+const connections = require('./connections.cjs');
 const {
   access,
   copyFile,
@@ -11,7 +12,7 @@ const {
   rmdir,
   stat,
 } = require('node:fs/promises');
-const { basename, dirname, isAbsolute, join } = require('node:path');
+const { basename, dirname, isAbsolute, join, resolve } = require('node:path');
 const { promisify } = require('node:util');
 const { failure } = require('./failure.cjs');
 
@@ -273,4 +274,116 @@ async function prepareMacUpdate({
     });
   }
 }
-module.exports = { prepareMacUpdate };
+async function applicationProcesses(application) {
+  const { stdout } = await execute('/usr/bin/osascript', [
+    '-l',
+    'JavaScript',
+    '-e',
+    `
+      ObjC.import('AppKit');
+      function run(paths) {
+        const running = $.NSRunningApplication.runningApplicationsWithBundleIdentifier('io.github.ccdesktunnel.desktop');
+        const pids = [];
+        for (let i = 0; i < running.count; i++) {
+          const app = running.objectAtIndex(i);
+          if (ObjC.unwrap(app.bundleURL.URLByResolvingSymlinksInPath.path) === paths[0])
+            pids.push(Number(app.processIdentifier));
+        }
+        return JSON.stringify(pids);
+      }`,
+    application,
+  ]);
+  return JSON.parse(stdout).filter((pid) => Number.isSafeInteger(pid) && pid !== process.pid);
+}
+
+// A receipt belongs only to a private update staging directory beside this exact application.
+function writeUpdateReceipt(application, receipt, version) {
+  if (!application || !receipt) return;
+  const directory = dirname(receipt);
+  const prefix = `.${basename(application)}.ccdt-update-`;
+  const suffix = basename(directory).slice(prefix.length);
+  if (
+    basename(receipt) !== 'ready' ||
+    dirname(directory) !== dirname(application) ||
+    !basename(directory).startsWith(prefix) ||
+    !/^[A-Za-z0-9]{6}$/.test(suffix)
+  )
+    return;
+  try {
+    const info = lstatSync(directory);
+    if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077) !== 0) return;
+    writeFileSync(receipt, version, { flag: 'wx', mode: 0o600 });
+  } catch {}
+}
+
+// Each app process, including a sign-in window, has a control socket keyed by its installation.
+// Older clients also have a socket for each signed-in connection.
+function macInstaller({ app, dialog, profile, otherConnections, programArguments, t }) {
+  const application = realpathSync(resolve(dirname(app.getPath('exe')), '..', '..'));
+  const failureFile = join(profile, 'macos-update-failure.txt');
+  const receiptArgument = process.argv.find((arg) => arg.startsWith('--ccdt-update-receipt='));
+  const receipt = receiptArgument?.slice('--ccdt-update-receipt='.length);
+  return {
+    releaseOptions(version, { connected }) {
+      if (!connected) throw failure('desktop:upgrade.connectFirst');
+      if (
+        typeof version !== 'string' ||
+        !/^\d+\.\d+\.\d+$/.test(version) ||
+        version.localeCompare(app.getVersion(), undefined, { numeric: true }) <= 0
+      )
+        throw failure('desktop:download.badVersion');
+      if (!['arm64', 'x64'].includes(process.arch)) throw failure('desktop:upgrade.unsupported');
+      return { name: `CC-Desk-Tunnel-${version}-mac-${process.arch}.dmg` };
+    },
+    instances: () => applicationProcesses(application),
+    async requestQuit(pid) {
+      if (await connections.tell(application, String(pid), 'quit')) return;
+      const entry = otherConnections().find(({ id }) => {
+        try {
+          return (
+            JSON.parse(
+              readFileSync(join(connections.directory(profile, id), 'instance.json'), 'utf8'),
+            ).pid === pid
+          );
+        } catch {
+          return false;
+        }
+      });
+      if (entry) await connections.tell(profile, entry.id, 'quit');
+    },
+    async prepare({ file, version, directory, signal, report }) {
+      report({ phase: 'preparing' });
+      const staged = await prepareMacUpdate({
+        installer: file,
+        application,
+        expectedVersion: version,
+        arch: process.arch,
+        directory,
+        signal,
+      });
+      return {
+        cancel: staged.cancel,
+        install: () => staged.launch({ args: programArguments(), failureFile }),
+      };
+    },
+    onAppReady() {
+      connections.listen(application, String(process.pid), { quit: () => app.quit() });
+    },
+    onRendererReady() {
+      writeUpdateReceipt(application, receipt, app.getVersion());
+    },
+    async onWindowReady(window) {
+      try {
+        const detail = readFileSync(failureFile, 'utf8').slice(0, 3000);
+        await rm(failureFile, { force: true });
+        await dialog.showMessageBox(window, {
+          type: 'error',
+          title: t('desktop:upgrade.title'),
+          message: t('desktop:upgrade.macRollback'),
+          detail,
+        });
+      } catch {}
+    },
+  };
+}
+module.exports = { prepareMacUpdate, macInstaller };

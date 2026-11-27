@@ -56,7 +56,7 @@ export function upgradeText(t: T, step: UpgradeStep, quiet = 0) {
     case 'verifying':
       return t('connection:clientUpgrade.verifying');
     case 'preparing':
-      return t('connection:clientUpgrade.preparingMac');
+      return t('connection:clientUpgrade.preparing');
     case 'closing':
       return t('connection:clientUpgrade.closing');
     case 'installing':

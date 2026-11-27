@@ -203,15 +203,13 @@
     "badHash": "The installer failed verification; the upgrade was abandoned.",
     "cancelled": "Cancelled.",
     "badVersion": "The version number is invalid.",
-    "noManifest": "Can’t read the release details of {{version}} ({{reason}}).\nCheck that this computer can reach github.com, or get the installer from the server instead.",
+    "noManifest": "Could not read the release details for {{version}} ({{reason}}). Check access to GitHub, or download the installer from the release page.",
     "notInManifest": "The release details have no installer for this version.",
     "otherFile": "The installer on the release page isn’t the file the server provides; the upgrade was abandoned.",
-    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or get the installer from the server instead.",
+    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}. Check your connection and retry, or download the installer from the release page.",
     "nothing": "the connection sent no data",
     "httpFailed": "Downloading the installer failed ({{status}}).",
-    "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned.",
-    "macNoManifest": "Couldn’t read the release details for {{version}} ({{reason}}). Check your connection to GitHub, or download the macOS installer from the release page.",
-    "macInterrupted": "Downloading the macOS installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}. Check your connection and try again, or download it from the release page."
+    "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned."
   },
   "service": {
     "refused": "The server refused the connection.",

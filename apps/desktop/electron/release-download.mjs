@@ -11,6 +11,9 @@ export const releasePage = 'https://github.com/sun168567/cc-desk-tunnel/releases
 // where it ended; one that delivers nothing for `stall` is given up at once, and after `attempts` connections
 // in a row that added nothing the download fails.
 const defaultPace = { stretch: 20_000, stall: 15_000, attempts: 5 };
+// The asset name is used as both a URL segment and a local filename on any supported filesystem.
+const assetName =
+  /^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$))[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*$/i;
 
 // What a download stopped by its caller rejects with.
 export const cancelled = () =>
@@ -18,8 +21,8 @@ export const cancelled = () =>
 const megabytes = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
 
 // Downloads the installer of `version` from the release page into `directory` and resolves to its path. It is
-// kept only if its hash is the one the release's manifest states. On Windows, the service's announcement of
-// the same version must also name the same file. `fetch` is the caller's, so that the system's proxy
+// kept only if its hash matches the manifest. The caller may also supply an announcement for this asset
+// to check against the manifest. `fetch` is the caller's, so that the system's proxy
 // settings apply. `progress` hears the bytes received; `report` hears the steps that bring none, so that a window
 // can tell a connection being tried again, or the file being checked, from one that hangs. `signal` stops it.
 export async function downloadRelease(
@@ -27,8 +30,7 @@ export async function downloadRelease(
   version,
   directory,
   {
-    platform = 'win32',
-    arch = process.arch,
+    name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`,
     announced,
     progress = () => {},
     report = () => {},
@@ -39,12 +41,8 @@ export async function downloadRelease(
 ) {
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))
     throw failure('desktop:download.badVersion');
-  const mac = platform === 'darwin';
-  if (platform !== 'win32' && !(mac && ['arm64', 'x64'].includes(arch)))
-    throw failure('desktop:upgrade.unsupported');
-  const name = mac
-    ? `CC-Desk-Tunnel-${version}-mac-${arch}.dmg`
-    : `CC-Desk-Tunnel-Setup-${version}-x64.exe`;
+  if (typeof name !== 'string' || name.length > 255 || !assetName.test(name))
+    throw failure('desktop:download.notInManifest');
   let manifest;
   try {
     const response = await fetch(`${page}/v${version}/release.json`, {
@@ -54,7 +52,7 @@ export async function downloadRelease(
     manifest = await response.json();
   } catch (error) {
     if (signal?.aborted) throw cancelled();
-    throw failure(mac ? 'desktop:download.macNoManifest' : 'desktop:download.noManifest', {
+    throw failure('desktop:download.noManifest', {
       version,
       reason:
         error.name === 'TimeoutError'
@@ -73,7 +71,7 @@ export async function downloadRelease(
     file.size <= 0
   )
     throw failure('desktop:download.notInManifest');
-  if (!mac && announced?.version === version && announced.sha256 !== file.sha256)
+  if (announced?.version === version && announced.sha256 !== file.sha256)
     throw failure('desktop:download.otherFile');
   const target = join(directory, name);
   const output = await open(target, 'w');
@@ -82,7 +80,7 @@ export async function downloadRelease(
     let last;
     for (let idle = 0; received < file.size;) {
       if (idle >= pace.attempts)
-        throw failure(mac ? 'desktop:download.macInterrupted' : 'desktop:download.interrupted', {
+        throw failure('desktop:download.interrupted', {
           reason: last ?? phrase('desktop:download.nothing'),
           received: megabytes(received),
           size: megabytes(file.size),

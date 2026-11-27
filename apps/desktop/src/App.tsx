@@ -64,7 +64,7 @@ import { say, useT } from './i18n.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { deviceName, isHere, thisDevice } from './device.ts';
-import { canDownloadRelease, isMac, selfUpdating } from './platform.ts';
+import { clientInstallers, updatePolicy } from './client-update-policy.ts';
 import { useClientUpgrade } from './client-upgrade.ts';
 import { useDrafts } from './drafts.ts';
 import { useDrawerSwipe } from './useDrawerSwipe.ts';
@@ -520,19 +520,8 @@ export function App({
   const quotaSession = selected ?? state.sessions[0];
   const actionError = error instanceof RequestInterruptedError ? error.describe(connected) : error;
   const currentError = actionError ?? state.error;
-  // Offered when the service holds a newer installer than the running client.
-  const upgrade =
-    selfUpdating && version && state.release && isNewer(state.release, version)
-      ? state.release
-      : null;
-  // A service newer than this client that holds no installer for it yet, as just after its own upgrade: the
-  // release page has it. The service tells when its own arrives.
-  const behind =
-    canDownloadRelease && version && state.service && isNewer(state.service, version) && !upgrade
-      ? state.service
-      : null;
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
-  const upgrading = useClientUpgrade(isMac ? setUpgradeError : setError);
+  const upgrading = useClientUpgrade(setUpgradeError);
   // A service of a newer version: what that version changed can be read here, whether or not this system's
   // client upgrades itself.
   const ahead =
@@ -1565,55 +1554,56 @@ export function App({
     : (state.account?.email ??
       capabilities?.account.email ??
       t(nativeMode ? 'nav:bar.accountUnnamed' : 'nav:bar.simulation'));
-  // A Mac can download the next release while the service is still on this version. If it has already
-  // upgraded, the matching release takes priority.
-  const macRelease =
-    isMac &&
-    !behind &&
-    version &&
-    update?.latest &&
-    ['available', 'manual'].includes(update.state) &&
-    isNewer(update.latest, version)
-      ? update.latest
-      : null;
-  // The client's upgrade, from the service or the release page; while one runs, how it goes and a way to stop it.
-  const upgradeItems: MenuItem[] = upgrading.step
-    ? [
-        { label: upgrading.text!, icon: <Download />, disabled: true, run: () => undefined },
-        ...(upgrading.cancellable
-          ? [{ label: t('connection:update.cancelClient'), icon: <X />, run: upgrading.cancel }]
-          : []),
-      ]
-    : [upgrade, behind, macRelease]
-        .filter((target): target is string => !!target)
-        .map((target) => ({
-          label: isMac
-            ? t('connection:update.client', { version: target })
-            : working.length
-              ? t(
-                  target === upgrade
-                    ? 'connection:update.clientWorking'
-                    : 'connection:update.githubWorking',
-                  { version: target, count: working.length },
-                )
-              : t(target === upgrade ? 'connection:update.client' : 'connection:update.github', {
-                  version: target,
-                }),
-          icon: <Download />,
-          disabled: busy || (!isMac && working.length > 0),
-          run: () => {
-            if (isMac && !window.confirm(t('connection:update.confirmMac', { version: target })))
-              return;
-            upgrading.start(target === upgrade ? undefined : target);
-          },
-        }));
-  // What an upgrade would bring is read where the upgrade is offered, before it is taken.
-  const newer =
-    upgrade ??
-    behind ??
-    ahead ??
-    (update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null);
-  const updates = [
+  const publishedVersion =
+    update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null;
+  const [installer] = clientInstallers(updatePolicy, version, {
+    cachedInstaller: state.release,
+    serverVersion: state.service,
+    publishedVersion,
+  });
+  // Where the usual source is the service, label the GitHub fallback explicitly.
+  const fallback =
+    installer?.source === 'github' && updatePolicy.sources.includes('cachedInstaller');
+  const waitForRuns = updatePolicy.beforeInstall === 'wait-for-idle' && working.length > 0;
+  const upgradeItems: MenuItem[] = [];
+  if (upgrading.step) {
+    upgradeItems.push({
+      label: upgrading.text!,
+      icon: <Download />,
+      disabled: true,
+      run: () => undefined,
+    });
+    if (upgrading.cancellable)
+      upgradeItems.push({
+        label: t('connection:update.cancelClient'),
+        icon: <X />,
+        run: upgrading.cancel,
+      });
+  } else if (installer) {
+    const target = installer.version;
+    upgradeItems.push({
+      label: waitForRuns
+        ? t(fallback ? 'connection:update.githubWorking' : 'connection:update.clientWorking', {
+            version: target,
+            count: working.length,
+          })
+        : t(fallback ? 'connection:update.github' : 'connection:update.client', {
+            version: target,
+          }),
+      icon: <Download />,
+      disabled: busy || waitForRuns,
+      run: () => {
+        if (
+          updatePolicy.beforeInstall === 'confirm' &&
+          !window.confirm(t('connection:update.confirmInstall', { version: target }))
+        )
+          return;
+        upgrading.start(installer.source === 'github' ? target : undefined);
+      },
+    });
+  }
+  const newer = installer?.version ?? ahead ?? publishedVersion;
+  const updateMenu = (includeClient: boolean): MenuItem[] => [
     ...(newer
       ? [
           {
@@ -1623,14 +1613,13 @@ export function App({
           },
         ]
       : []),
-    ...upgradeItems,
+    ...(includeClient ? upgradeItems : []),
     ...(serviceUpdate ? [serviceUpdate] : []),
   ];
-  // The rail shows its button only for an update that exists, not for the standing offer to look for one.
   const pendingUpdate =
     upgrading.text ??
-    (upgrade || behind || macRelease
-      ? t('connection:update.clientAvailable', { version: upgrade ?? behind ?? macRelease ?? '' })
+    (installer
+      ? t('connection:update.clientAvailable', { version: installer.version })
       : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
         ? (serviceUpdate?.label ?? null)
         : null);
@@ -1886,7 +1875,7 @@ export function App({
             : menu.kind === 'settings'
               ? { label: t('nav:page.settings'), items: settingsMenu }
               : menu.kind === 'update'
-                ? { label: t('nav:page.update'), items: updates }
+                ? { label: t('nav:page.update'), items: updateMenu(true) }
                 : {
                     label: menu.label,
                     items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
@@ -1990,11 +1979,7 @@ export function App({
           version={version}
           service={state.service}
           adapterName={adapterName}
-          updates={
-            host.serviceManagement
-              ? updates.filter((item) => !isMac || !upgradeItems.includes(item))
-              : []
-          }
+          updates={host.serviceManagement ? updateMenu(updatePolicy.controls === 'all') : []}
           showNotes={setNotes}
           account={
             <AccountPanel

@@ -95,7 +95,7 @@
     "verifying": "Verifying the installer…",
     "closing": "Closing the windows of other connections…",
     "installing": "Installing; the client opens again when done",
-    "preparingMac": "Preparing the macOS update…"
+    "preparing": "Preparing the update…"
   },
   "web": {
     "selfSigned": "This server uses a self-signed certificate; make sure the address can be trusted. Import a proper certificate in the desktop client under “Settings → Browser access”, or let a reverse proxy provide HTTPS.",
@@ -142,7 +142,7 @@
     "githubWorking_other": "Download from GitHub and upgrade to {{version}} ({{count}} sessions running)",
     "notes": "What’s new in {{version}}",
     "clientAvailable": "Client upgrade to {{version}} available",
-    "confirmMac": "Installing {{version}} closes all connections running from this app. Running tasks may be interrupted. The client restarts after installation. Check that the server has been updated to the same version. Continue?"
+    "confirmInstall": "Installing {{version}} closes all connections running from this app. Running tasks may be interrupted. The client restarts after installation. Check that the server has been updated to the same version. Continue?"
   },
   "reconnect": {
     "body": "The connection to the server dropped and is being restored. Tasks on the server go on, and what happened meanwhile fills in once connected.",

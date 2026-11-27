@@ -89,6 +89,9 @@ Electron 选择“远程代理”，输入可信 WSS 地址、代理 token；自
 | `electron/connections.cjs` | 程序目录的布局：各连接的目录、页面存储分区和登录记录、共用的值、旧版布局的迁移 |
 | `electron/main.cjs`、`preload.cjs` | 窗口、托盘、系统通知、IPC（选目录与文件、保存导出、普通会话目录、打开授权页、连接）和暴露给页面的 `window.desktop` |
 | `electron/ccdt.mjs` | 在 ccdt 中打开会话：找到本机的 ccdt，核对版本，用本窗口的连接登录它，再在系统的终端窗口里打开会话；macOS、Linux 上启动时把 `~/.local/bin/ccdt` 链接到自带的 ccdt（`linkCcdt`） |
+| `src/client-update-policy.ts`、`client-upgrade.ts` | 客户端更新的来源和入口策略、版本选择，以及两平台共用的进度、取消与错误状态 |
+| `electron/desktop-updater.cjs`、`release-download.mjs` | Windows 与 macOS 共用的更新流程，负责下载校验、互斥、取消、等待其他窗口退出和安装交接 |
+| `electron/windows-update.cjs`、`macos-update.cjs` | 平台安装适配。Windows 调用 NSIS，macOS 准备应用包并由 `macos-update.sh` 完成替换、启动检查与失败恢复 |
 | `electron/service-upgrade.mjs` | 让比客户端旧、因此拒绝它的服务端升级：以那一版的协议版本登录，发检查与安装更新，跟着进度直到它重启 |
 | `electron/connect-errors.mjs` | 连接失败时给用户的说明：按系统错误码、TLS 错误和组件的输出区分原因，第一行是原因，其后是该检查的地方 |
 | `electron/git-branch.cjs` | 从仓库文件读出项目当前所在的分支，不依赖本机安装 git |
