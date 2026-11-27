@@ -2,7 +2,7 @@ import { spawn as spawnPty } from 'node-pty';
 import type { IPty } from 'node-pty';
 import type { Session, TerminalActivity } from '@cc-desk-tunnel/protocol';
 import type { ClaudeOptions } from './claude.ts';
-import { sshPath } from './claude.ts';
+import { cliDefaults, sshPath } from './claude.ts';
 import { sessionPrompt } from './session-prompt.ts';
 import type { Execution } from './device-terms.ts';
 import type { SshConnection } from './tunnel.ts';
@@ -22,7 +22,7 @@ export function terminalEnvironment(
   inherited: NodeJS.ProcessEnv = process.env,
   ssh?: SshConnection,
 ): Record<string, string> {
-  const env = definedEnvironment(inherited);
+  const env = { ...cliDefaults, ...definedEnvironment(inherited) };
   // Reuse the private provider configuration as a normal CLI process environment.
   if (options.settingsPath) {
     const settings = JSON.parse(readFileSync(options.settingsPath, 'utf8'));

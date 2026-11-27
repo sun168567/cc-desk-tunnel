@@ -13,6 +13,7 @@ export function settingsPath(configDirectory = process.env.CLAUDE_CONFIG_DIR) {
 // Settings the CLI takes as environment variables, which the file holds under `env` as text.
 const variables: Partial<Record<keyof NativeSettings, string>> = {
   toolSearch: 'ENABLE_TOOL_SEARCH',
+  todoTools: 'CLAUDE_CODE_ENABLE_TODO_TOOLS',
 };
 // Settings the file holds under `permissions`.
 const permissionKeys = new Set<keyof NativeSettings>([

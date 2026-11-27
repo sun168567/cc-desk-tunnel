@@ -277,6 +277,14 @@ export const cliSettingGroups = (
         unset: t('settings:default.auto'),
       },
       {
+        key: 'todoTools',
+        kind: 'toggle',
+        title: t('settings:cli.todoTools.title'),
+        detail: t('settings:cli.todoTools.detail'),
+        help: 'conversation#tasks',
+        unset: t('settings:default.on'),
+      },
+      {
         key: 'enableArtifact',
         kind: 'toggle',
         title: t('settings:cli.enableArtifact.title'),

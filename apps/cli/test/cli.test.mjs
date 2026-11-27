@@ -481,6 +481,7 @@ test('ccdt’s settings: its own waits, the service’s and Claude Code’s with
       fastMode: null,
       fallbackModel: ['sonnet'],
       toolSearch: null,
+      todoTools: null,
     },
     web: { enabled: true, url: 'https://work.example.com/desk/' },
   };

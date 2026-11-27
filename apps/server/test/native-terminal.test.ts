@@ -237,7 +237,19 @@ test('a terminal never passes for an SDK process, whatever the service inherited
     { executable: 'claude', environment: { CLAUDE_AGENT_SDK_VERSION: '0.3.286' } },
     { CLAUDE_CODE_ENTRYPOINT: 'sdk-ts', CLAUDE_AGENT_SDK_CLIENT_APP: 'x', LANG: 'C.UTF-8' },
   );
-  assert.deepEqual(Object.keys(env).sort(), ['LANG', 'TERM']);
+  assert.deepEqual(Object.keys(env).sort(), ['CLAUDE_CODE_ENABLE_TODO_TOOLS', 'LANG', 'TERM']);
+});
+
+test("a terminal's CLI keeps its task list unless the service's own environment says otherwise", () => {
+  assert.equal(
+    terminalEnvironment({ executable: 'claude' }, {}).CLAUDE_CODE_ENABLE_TODO_TOOLS,
+    '1',
+  );
+  assert.equal(
+    terminalEnvironment({ executable: 'claude' }, { CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' })
+      .CLAUDE_CODE_ENABLE_TODO_TOOLS,
+    '0',
+  );
 });
 
 test("a terminal's CLI finds the session's ssh before the service's", () => {
