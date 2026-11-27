@@ -1,12 +1,19 @@
 import type { T } from '@cc-desk-tunnel/i18n';
-import { groupName, groups, helpArticles } from './help-content.ts';
+import { groupName, groups, helpArticles, newsOf } from './help-content.ts';
 import type { Article, Block, Target } from './help-content.ts';
+import { absoluteLinks, releaseSection } from './notes.ts';
+import { project } from './project-place.ts';
 
 // The help as Markdown files, for Claude to read on the server: the same articles the clients show, a file each, and
 // an index of them by group. scripts/help-markdown.mjs writes them where the service tells Claude to look (see
 // `ClaudeOptions.help`). What the window would do for a link is said in words: an article is a link to its file, a
 // settings page is named, a shortcut is named by its action, and the name of another computer is a stand-in.
-export function helpMarkdown(t: T): { name: string; text: string }[] {
+// Given the release it is built for, it also says what that version brought, and keeps the changelog: Claude asked
+// about "this version" has no other way to know.
+export function helpMarkdown(
+  t: T,
+  release?: { version: string; changelog: string },
+): { name: string; text: string }[] {
   const articles = helpArticles(t);
   const titles = new Map(articles.map((article) => [article.id, article.title]));
   const page = (section: string) =>
@@ -106,9 +113,33 @@ export function helpMarkdown(t: T): { name: string; text: string }[] {
     ];
     return parts.filter(Boolean).join('\n\n') + '\n';
   };
+  const news = release && newsOf(t, release.version, articles);
+  const section = release && releaseSection(release.changelog, release.version);
+  const linked = (text: string) => absoluteLinks(text, project.url, release!.version);
+  const whatsNew = release && [
+    `# ${t('help:page.newsTitle', { version: release.version })}`,
+    ...(section ? [linked(section)] : []),
+    ...(news!.length
+      ? [
+          `## ${t('help:model.newsCovered')}`,
+          news!
+            .map(
+              (item) =>
+                `- **${words(item.title)}**: [${titles.get(item.article)}](${item.article}.md)`,
+            )
+            .join('\n'),
+        ]
+      : []),
+    t('help:model.changelog'),
+  ];
   const index = [
     `# ${t('help:page.kicker')}`,
     t('help:model.intro'),
+    ...(release
+      ? [
+          `- [${t('help:page.newsTitle', { version: release.version })}](news.md)\n- ${t('help:model.changelog')}`,
+        ]
+      : []),
     ...groups.flatMap(({ id }) => {
       const listed = articles.filter((article) => article.group === id);
       return listed.length
@@ -124,5 +155,11 @@ export function helpMarkdown(t: T): { name: string; text: string }[] {
   return [
     { name: 'index.md', text: index.join('\n\n') + '\n' },
     ...articles.map((article) => ({ name: `${article.id}.md`, text: file(article) })),
+    ...(release
+      ? [
+          { name: 'news.md', text: whatsNew!.join('\n\n') + '\n' },
+          { name: 'changelog.md', text: linked(release.changelog.replace(/\r\n/g, '\n')) },
+        ]
+      : []),
   ];
 }
