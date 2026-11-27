@@ -1,9 +1,6 @@
-// Where the project lives, shown as a small link on the sign-in page and in the connection menu.
-// Nothing is shown while the address is empty.
-export const project = {
-  name: 'cc-desk-tunnel',
-  url: 'https://github.com/sun168567/cc-desk-tunnel',
-};
+import { project } from './project-place.ts';
+
+export { project };
 
 export const openProject = () =>
   window.desktop ? void window.desktop.openExternal(project.url) : void window.open(project.url);

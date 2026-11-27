@@ -2274,6 +2274,8 @@ export type Resources = {
       keys: '快捷键可在“设置 → 快捷键”里查看和修改；在输入框里输入 / 打开命令菜单。';
       desktopOnly: '只在桌面客户端里有，浏览器里没有。';
       related: '相关文章';
+      newsCovered: '帮助里讲到的地方';
+      changelog: '各版本的变化见[变更记录](changelog.md)。';
     };
   };
   nav: {
@@ -5376,6 +5378,8 @@ export type Messages = {
   'help:model.keys': Record<string, never>;
   'help:model.desktopOnly': Record<string, never>;
   'help:model.related': Record<string, never>;
+  'help:model.newsCovered': Record<string, never>;
+  'help:model.changelog': Record<string, never>;
   'nav:activity.background': Record<string, never>;
   'nav:activity.running': Record<string, never>;
   'nav:activity.question': Record<string, never>;

@@ -12,12 +12,23 @@ import { writeHelp } from '../../../scripts/help-markdown.mjs';
 test('the help for Claude has every article in each language, and its links lead to what is there', (t) => {
   const folder = writeHelp(mkdtempSync(join(tmpdir(), 'ccdt-help-')));
   t.after(() => rmSync(folder, { recursive: true, force: true }));
-  const names = ['index.md', ...helpShapes.map(({ id }) => `${id}.md`)].sort();
+  const names = [
+    'index.md',
+    'news.md',
+    'changelog.md',
+    ...helpShapes.map(({ id }) => `${id}.md`),
+  ].sort();
   for (const language of languages) {
     const directory = join(folder, language);
     assert.deepEqual(readdirSync(directory).sort(), names, language);
     const index = readFileSync(join(directory, 'index.md'), 'utf8');
     for (const { id } of helpShapes) assert.match(index, new RegExp(`\\]\\(${id}\\.md\\)`), id);
+    // What this version brought, from the changelog, and the changelog itself.
+    assert.match(index, /\]\(news\.md\)/);
+    const { version } = JSON.parse(readFileSync('apps/desktop/package.json', 'utf8'));
+    const news = readFileSync(join(directory, 'news.md'), 'utf8');
+    assert.match(news, new RegExp(version.replaceAll('.', '\\.')));
+    assert.match(readFileSync(join(directory, 'changelog.md'), 'utf8'), /^# /);
     for (const name of names) {
       const text = readFileSync(join(directory, name), 'utf8');
       // Nothing is left that only the window understands.
