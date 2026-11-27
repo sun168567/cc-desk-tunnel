@@ -446,7 +446,7 @@ test('the quota the CLI passes on in its stream becomes the windows of its own r
 test('an event for one window keeps the last reading of the others', () => {
   const first = observedQuota(unified, null, 0);
   const next = observedQuota(
-    rateLimitEvent({ status: 'allowed_warning', rateLimitType: 'seven_day', utilization: 0.81 }),
+    rateLimitEvent({ status: 'allowed_warning', rateLimitType: 'seven_day', utilization: 0.57 }),
     first,
     1000,
   );
@@ -454,7 +454,7 @@ test('an event for one window keeps the last reading of the others', () => {
     next?.windows.map(({ name, utilization }) => [name, utilization]),
     [
       ['five_hour', 2],
-      ['seven_day', 81],
+      ['seven_day', 57],
     ],
   );
   assert.equal(
