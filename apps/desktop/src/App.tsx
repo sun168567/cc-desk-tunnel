@@ -973,7 +973,18 @@ export function App({
     if (target.doing === 'addProject') void addProject();
     else if (target.doing === 'newSession') void newSession();
     else if (target.doing === 'files' && !prefs.filePanel.open) toggleFiles();
+    else if (target.doing === 'syncInstructions' && selectedSync) setSyncing(selectedSync);
+    else if (target.doing === 'exportSession' && selected) setExporting(selected);
   };
+  // They act on the session selected, which must allow them.
+  const helpUnable = (target: Target) =>
+    !('doing' in target)
+      ? undefined
+      : target.doing === 'syncInstructions' && !selectedSync
+        ? t('help:unable.sync')
+        : target.doing === 'exportSession' && !selected
+          ? t('help:unable.session')
+          : undefined;
   // A new session with words put in its input box, for the user to change and send.
   async function startWith(text: string) {
     const made = await newSession();
@@ -1995,6 +2006,7 @@ export function App({
             version={version || state.service || ''}
             go={showHelp}
             run={runHelp}
+            unable={helpUnable}
             tryPrompt={host.localProjects ? (text) => void startWith(text) : undefined}
           />
         </Suspense>

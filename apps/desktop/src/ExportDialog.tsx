@@ -36,7 +36,7 @@ export default function ExportDialog({
   const [count, setCount] = useState(options.turns ?? 20);
   const [reading, setReading] = useState(false);
   return (
-    <Modal title={t('session:exportDialog.title')} onClose={close}>
+    <Modal title={t('session:exportDialog.title')} onClose={close} help="sessions#export">
       <div className="dialog-form export-dialog">
         <p className="muted">{session.title}</p>
         <div className="export-field">
