@@ -125,6 +125,10 @@
       "title": "工具搜索",
       "detail": "工具说明用到时再查，接了 MCP 时省上下文"
     },
+    "todoTools": {
+      "title": "任务清单",
+      "detail": "多步工作时 Claude 列出步骤，显示在输入框上方"
+    },
     "enableArtifact": {
       "title": "Artifact 网页",
       "detail": "Claude 可以把文档、图表发布成 claude.ai 上的网页"

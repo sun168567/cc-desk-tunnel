@@ -1476,6 +1476,23 @@
   color: var(--faint);
   font-size: 12px;
 }
+.fig-tasks {
+  max-width: 420px;
+  margin: 0 auto;
+}
+.fig-tasks .task-checklist {
+  margin: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.fig-message-box {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+  color: var(--faint);
+}
 .fig-quota-note {
   margin: 10px 0 0;
   color: var(--faint);

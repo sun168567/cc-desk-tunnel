@@ -29,6 +29,7 @@ test('Claude Code settings load from the service and save each change at once', 
     includeGitInstructions: null,
     enableArtifact: null,
     toolSearch: null,
+    todoTools: null,
     denyInsteadOfPrompting: null,
     blockWritesOutsideWorkingDirectories: null,
   };

@@ -67,6 +67,12 @@ test('native settings edit only the listed keys of the CLI user settings file', 
   );
   updateNativeSettings({ toolSearch: null }, path);
   assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {});
+  // The task list is one of them: off there wins over the service's default for the runs it starts.
+  assert.equal(updateNativeSettings({ todoTools: false }, path).todoTools, false);
+  assert.deepEqual(JSON.parse(readFileSync(path, 'utf8')), {
+    env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: 'false' },
+  });
+  updateNativeSettings({ todoTools: null }, path);
   // Permission settings live under `permissions`, beside the rules there.
   writeFileSync(path, JSON.stringify({ permissions: { allow: ['Read'] } }));
   assert.equal(readNativeSettings(path).denyInsteadOfPrompting, null);

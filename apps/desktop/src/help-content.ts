@@ -91,7 +91,8 @@ export type Figure =
   | 'devices'
   | 'sync'
   | 'export'
-  | 'folders';
+  | 'folders'
+  | 'tasks';
 export type Article = {
   id: string;
   group: GroupId;
@@ -265,13 +266,42 @@ const shapes: ArticleShape[] = [
       {
         kind: 'list',
         key: 'list1',
-        since: '0.3.21',
-        news: true,
       },
       {
         kind: 'callout',
         key: 'note1',
         tone: 'note',
+      },
+      {
+        kind: 'heading',
+        id: 'tasks',
+        since: '0.3.22',
+      },
+      {
+        kind: 'p',
+        key: 'p2',
+        since: '0.3.22',
+        news: true,
+      },
+      {
+        kind: 'figure',
+        name: 'tasks',
+        since: '0.3.22',
+      },
+      {
+        kind: 'prompts',
+        key: 'prompts1',
+        since: '0.3.22',
+      },
+      {
+        kind: 'actions',
+        key: 'actions1',
+        since: '0.3.22',
+        targets: [
+          {
+            settings: 'claude',
+          },
+        ],
       },
       {
         kind: 'heading',

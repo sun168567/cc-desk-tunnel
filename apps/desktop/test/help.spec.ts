@@ -32,6 +32,8 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   // A link in the text goes to another article; back returns.
   await page.locator('.help-related-card', { hasText: '对话技巧' }).click();
   await expect(page.locator('.help-article-head h1')).toHaveText('对话技巧');
+  // The task list is pictured with the real checklist.
+  await expect(page.locator('.fig-tasks .task-checklist li')).toHaveCount(3);
   await page.getByRole('button', { name: '后退', exact: true }).click();
   await expect(page.locator('.help-article-head h1')).toHaveText('审批模式');
   await page.locator('.help-pager button.next').click();

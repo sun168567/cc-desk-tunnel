@@ -18,9 +18,30 @@ export function directories(env = process.env, platform = process.platform, home
   return { cli: env.CCDT_CONFIG_DIR ?? join(base, 'ccdt'), desktop: join(base, 'CC Desk Tunnel') };
 }
 
+// Several ccdt run at once, as agents start them, and each saves what it used. On Windows a file that another process
+// is replacing can be neither read nor replaced for a moment: that is tried again shortly, not taken for no settings
+// (which the next save would write over the servers signed in to) or for a failed command.
+const BUSY = new Set(['EPERM', 'EACCES', 'EBUSY']);
+function patiently(action) {
+  for (let tries = 1; ; tries++) {
+    try {
+      return action();
+    } catch (error) {
+      if (!BUSY.has(error?.code) || tries === 50) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10 + Math.random() * 20);
+    }
+  }
+}
+
 function readJson(path) {
+  let text;
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8'));
+    text = patiently(() => readFileSync(path, 'utf8'));
+  } catch {
+    return {};
+  }
+  try {
+    const value = JSON.parse(text);
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch {
     return {};
@@ -32,7 +53,7 @@ function writeJson(path, value) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  renameSync(temporary, path);
+  patiently(() => renameSync(temporary, path));
 }
 
 // Two addresses are one service when they name the same place: scheme and host in any case, the default port

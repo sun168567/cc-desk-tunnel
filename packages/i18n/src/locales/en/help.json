@@ -143,6 +143,12 @@
       "thisBrowser": "This browser",
       "phoneNote": "Check progress, approve, add instructions"
     },
+    "tasks": {
+      "read": "Read the code",
+      "change": "Add the monthly total",
+      "changing": "Adding the monthly total",
+      "check": "Run it to check"
+    },
     "sync": {
       "computer": "The project on your computer",
       "copy": "Sync",
@@ -266,17 +272,27 @@
           "**The command menu**: type `/` or `\\` for compacting the context, and for Claude Code’s commands and skills.",
           "**Give it files and screenshots**: click +, or drag them in or paste them. The message holds the file’s path on your computer, and Claude reads it there; nothing is uploaded.",
           "**A plan first for big changes**: switch to [Plan mode](#approval). It writes a plan, and once you have edited and approved it, it gets to work.",
-          "**Task list**: for longer work Claude lists its steps; while some are open they show above the input box, and fold away.",
           "**Model and effort**: switch them below the input box; they apply to this session only."
         ],
         "note1": {
           "title": "The status dot stops and says how long nothing has come",
           "text": "It only means no new messages arrived in that time, not that something went wrong; long commands often do this."
         },
+        "tasks": "Task list",
+        "p2": "For longer work Claude lists the steps first and ticks them off as it goes. While some are left, the list shows above the message box; click its title to fold it. `ccdt status` and ACP editors show the progress too. Newer models don’t keep a list on their own, so this server turns it on for them; turn off “Task list” in the CLI settings if you don’t want it.",
+        "prompts1": {
+          "title": "Try saying",
+          "items": [
+            {
+              "text": "Add a small feature to this project in steps: read the code, change it, then run it to check. Track the steps in a task list"
+            }
+          ]
+        },
+        "actions1": ["Open CLI settings"],
         "keys": "Keyboard shortcuts"
       },
       "news": {
-        "list1": "The task list shows above the message box"
+        "p2": "The task list shows above the message box"
       }
     },
     "approval": {
@@ -1277,7 +1293,9 @@
     "shortcut": "the shortcut for “{{action}}”",
     "keys": "Shortcuts can be seen and changed in Settings → Shortcuts; typing / in the input box opens the command menu.",
     "desktopOnly": "Only in the desktop client, not in a browser.",
-    "related": "Related"
+    "related": "Related",
+    "newsCovered": "Where the help covers it",
+    "changelog": "What each version changed is in the [changelog](changelog.md) (in Chinese)."
   },
   "unable": {
     "sync": "Select a session of a project on your computer first; desktop client only",

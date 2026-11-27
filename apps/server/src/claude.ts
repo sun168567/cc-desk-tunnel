@@ -24,6 +24,11 @@ import { questionTally } from './question.ts';
 
 // Whether the native session is on record once a run or a terminal let it go, for the clients to offer compacting it.
 // It is recorded last, so that the page of history a client opens the session with holds it.
+// What the service starts the CLI with unless its environment or the user's settings say otherwise (the settings'
+// `env` is applied by the CLI over its environment). Claude Code keeps a task list only on older models unless
+// asked to; the clients show that list, as the official guide says an application that renders progress should.
+export const cliDefaults: Record<string, string> = { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' };
+
 export function nativeContext(sessionId: string, info: SDKSessionInfo | undefined) {
   return {
     type: 'native.context',
@@ -272,7 +277,7 @@ export async function runClaude(
           ],
         },
         maxTurns: options.maxTurns,
-        env: { ...process.env, ...options.environment, ...sshPath(run.ssh) },
+        env: { ...cliDefaults, ...process.env, ...options.environment, ...sshPath(run.ssh) },
         stderr: (text) => {
           stderr = (stderr + text).slice(-8192);
         },
@@ -607,7 +612,7 @@ export async function readNativeStatus(
         abortController: controller,
         settings: options.settingsPath,
         settingSources: ['user', 'project', 'local'],
-        env: { ...globalThis.process.env, ...options.environment },
+        env: { ...cliDefaults, ...globalThis.process.env, ...options.environment },
       },
     });
     // Keep draining while control requests are in flight; no model prompt is submitted.

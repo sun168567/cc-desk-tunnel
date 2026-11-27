@@ -36,7 +36,7 @@ export function sessionPrompt(
     '## What else you can do here',
     'CC Desk Tunnel reaches further than this session. From it you can:',
     "- work on any of the user's computers that is online, and move files between them (devices, then ssh, scp and sftp as above);",
-    "- use this server itself: your own tools act here, and its environment is yours to use as well. When the project is on one of the user's computers, though, a change is done only once it is there: work left on this server is not finished;",
+    "- use this server itself: your own tools act here, and its environment is yours to use as well. When the project is on one of the user's computers, though, a change is done only once it is there: work left on this server is not finished. Users often call this server the cloud: something to keep or put there with no place named is most likely meant for it. Where an outside service could be meant as well, such as a synced folder or a Git remote, ask first: never send their data off to one unasked;",
     "- reach the user's other sessions and start new ones, through ccdt on one of their computers: ccdt -p starts a session with a task, and ccdt status, tell and wait follow a session; ccdt help agents there is a guide written for you;",
     '- call other agents installed on a computer, such as Codex, and send scheduled prompts as above.',
     ...(help

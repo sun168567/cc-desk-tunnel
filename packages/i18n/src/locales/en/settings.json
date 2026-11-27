@@ -126,6 +126,10 @@
       "title": "Tool search",
       "detail": "Looks up tool descriptions when needed; saves context with MCP servers"
     },
+    "todoTools": {
+      "title": "Task list",
+      "detail": "Claude lists the steps of multi-step work, shown above the message box"
+    },
     "enableArtifact": {
       "title": "Artifact pages",
       "detail": "Claude can publish documents and charts as pages on claude.ai"
