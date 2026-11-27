@@ -644,6 +644,9 @@ test('every session knows what else CC Desk Tunnel lets it do, and its help wher
       prompt,
       /a change is done only once it is there: work left on this server is not finished/,
     );
+    // "Back it up in the cloud" was once taken for the computer's OneDrive, and the data sent there unasked.
+    assert.match(prompt, /Users often call this server the cloud/);
+    assert.match(prompt, /never send their data off to one unasked/);
     assert.match(
       prompt,
       /seems out of reach, (look there|see whether these serve) before saying so/,
