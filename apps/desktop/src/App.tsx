@@ -1889,6 +1889,7 @@ export function App({
           go={(section) => open('settings', section)}
           native={nativeMode}
           here={state.devices.find((device) => device.id === state.device?.id)}
+          plugins={state.plugins}
           form={form}
           changeForm={changeForm}
           workspaceRoot={workspaceRoots[0] ?? ''}

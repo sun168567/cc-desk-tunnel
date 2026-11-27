@@ -1975,6 +1975,116 @@ export type Resources = {
           actions1: readonly ['打开 CLI 设置'];
         };
       };
+      plugins: {
+        title: '插件';
+        lead: '事件发生时，服务端运行插件的命令：把审批、提问、任务完成推送到手机，或接到你自己的系统。';
+        words: '插件 通知 推送 hooks 钩子 事件 ntfy Telegram 钉钉 飞书 企业微信 webhook';
+        blocks: {
+          p1: '插件是服务端数据目录里 `plugins` 文件夹下的一个文件夹，写法照 Claude Code 的插件。放进去片刻后生效，不用重启。';
+          prompts1: {
+            items: readonly [
+              {
+                text: '写个插件：等我审批、或一轮结束时，推送到我的 Telegram';
+                note: 'Claude 照“开发插件”写好放进服务端，你在设置里填上机器人 token 就能用。';
+              },
+              {
+                text: '看看插件的日志，最近的推送为什么没发出去';
+              },
+            ];
+          };
+          steps1: readonly [
+            {
+              title: '装上';
+              text: '让 Claude 写，或把做好的插件文件夹放进服务端数据目录的 `plugins`（Docker 部署在容器里是 `/data/state/plugins`）。';
+            },
+            {
+              title: '设置';
+              text: '在“设置 → 插件”里展开它，填好要填的项，比如推送地址或令牌。';
+              action: '插件设置';
+            },
+            {
+              title: '试跑';
+              text: '点它响应的事件，用示例事件运行一次，结果在下面的日志里。';
+            },
+          ];
+          events: '插件能响应的事件';
+          table1: {
+            head: readonly ['事件', '何时'];
+            rows: readonly [
+              readonly ['`ApprovalRequested`', '等待审批，包括批准计划'],
+              readonly ['`QuestionAsked`', 'Claude 提问，等你回答'],
+              readonly ['`TerminalWaiting`', '`ccdt` 终端里等你确认'],
+              readonly ['`WaitResolved`', '上面三种等待已有人处理，或运行已结束'],
+              readonly ['`BackgroundOnly`', '这一轮回答完了，只剩后台任务'],
+              readonly ['`RunError`', '运行出错'],
+              readonly ['`RunEnded`', '一轮结束：完成、失败或已停止'],
+              readonly ['`DeviceOnline` · `DeviceOffline`', '一台电脑上线、下线'],
+            ];
+          };
+          warn1: {
+            title: '只装信得过的插件';
+            text: '插件和服务端权限相同：能读服务端上的凭据，也能经在线的电脑执行命令。自己写的、让 Claude 写的、或来源可信的才装。';
+          };
+        };
+      };
+      'plugin-dev': {
+        title: '开发插件';
+        lead: '照 Claude Code 插件的写法：一个文件夹、一份 hooks.json，设置项写在 plugin.json 里。';
+        words: '开发插件 hooks.json plugin.json userConfig matcher CLAUDE_PLUGIN_ROOT CLAUDE_PLUGIN_DATA CLAUDE_PLUGIN_OPTION 环境变量 规范';
+        blocks: {
+          p1: '插件是服务端 `plugins` 文件夹下的一个文件夹，文件夹名就是它的 id（小写字母、数字、`.`、`_`、`-`）。改动片刻后生效。';
+          code1: {
+            label: '目录';
+            text: '<id>/\n├── .claude-plugin/plugin.json   名字、版本、设置项（可以没有）\n├── hooks/hooks.json             哪个事件运行哪个命令\n└── notify.mjs                   插件自己的程序';
+          };
+          hooks: 'hooks.json';
+          code2: {
+            label: '一轮完成或失败时运行自己的脚本';
+            text: '{\n  "hooks": {\n    "RunEnded": [\n      {\n        "matcher": "completed|failed",\n        "hooks": [\n          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/notify.mjs"], "timeout": 20 }\n        ]\n      }\n    ]\n  }\n}';
+          };
+          list1: readonly [
+            '`type` 只支持 `command`。有 `args` 时直接启动 `command`，没有时交给 shell。',
+            '`matcher` 写法同 Claude Code：省略或 `*` 匹配全部，`a|b` 是几个名字，其他是正则。对照的字段见下面的表。',
+            '`timeout` 是秒数，默认 60，最长 600，到时连同它启动的进程结束。同时最多运行 8 个命令。',
+            '事件是标准输入上的一个 JSON。环境变量 `CLAUDE_PLUGIN_ROOT` 是插件目录，`CLAUDE_PLUGIN_DATA` 是它存状态的目录，每个设置项是 `CLAUDE_PLUGIN_OPTION_<键名大写>`。`args` 里可以写 `${CLAUDE_PLUGIN_ROOT}`、`${user_config.键名}`。',
+            '命令的输出记进日志，原样出现的密钥换成 `***`。',
+          ];
+          settings: '设置项';
+          code3: {
+            label: '.claude-plugin/plugin.json';
+            text: '{\n  "name": "notify",\n  "displayName": "Telegram",\n  "version": "1.0.0",\n  "userConfig": {\n    "token": { "type": "string", "title": "Bot token", "sensitive": true, "required": true },\n    "done": { "type": "boolean", "title": "Turn ended", "default": true }\n  }\n}';
+          };
+          list2: readonly [
+            '`type` 是 `string`、`number` 或 `boolean`；`title` 必填，可有 `description`、`required`、`default`；文字可有 `options`（下拉选择），数字可有 `min`、`max`。',
+            '`sensitive` 的值存进去就读不回，只交给命令。必填项没有值时插件不运行。',
+            '设置页照这些声明画表单，插件的代码不参与画界面。',
+          ];
+          fields: '事件里有什么';
+          table1: {
+            head: readonly ['事件', '其他字段（括号里是 matcher 对照的）'];
+            rows: readonly [
+              readonly ['`ApprovalRequested`', '`wait_id`、`tool_name`（`tool_name`）'],
+              readonly ['`QuestionAsked`', '`wait_id`、`tool_name`'],
+              readonly ['`TerminalWaiting`', '`wait_id`'],
+              readonly [
+                '`WaitResolved`',
+                '`wait_id`、`waiting`、`tool_name`、`allowed`（`waiting`）',
+              ],
+              readonly ['`RunError`', '`code`、`message`（`code`）'],
+              readonly [
+                '`RunEnded`',
+                '`status`：`completed`、`failed`、`cancelled`；`reason`、`duration_ms`、`error`（`status`）',
+              ],
+              readonly ['`DeviceOnline` · `DeviceOffline`', '`device`'],
+            ];
+          };
+          list3: readonly [
+            '每个事件都有 `version`、`hook_event_name`、`timestamp`；会话的事件还有 `session_id`、`session_title`、`project_path`、`run_id`、`device`（`id`、`name`、`platform`）、`model`、`permission_mode`、`context`、`quota`。没有值的字段不出现。',
+            '事件里没有对话内容和工具的输入输出。`reason` 和 `message` 是给人看的文字，不要按它判断。',
+            '规范只增不改：以后加事件、加字段，已有的插件照常能用；不认识的事件和字段忽略。',
+          ];
+        };
+      };
       background: {
         title: '后台、通知与断线';
         lead: '关掉窗口不会断开；任务完成或要你处理时会通知你。';
@@ -2575,6 +2685,23 @@ export type Resources = {
       badLogin: '登录请求格式无效。';
       sessionLimit: '登录会话数量已达上限，请先撤销不用的会话。';
       loginUnavailable: '登录暂时不可用。';
+    };
+    plugins: {
+      unknown: '没有这个插件，可能刚被移走。';
+      broken: '{{file}} 有误：{{reason}}';
+      unset: '要先设置：{{titles, quoted}}';
+      noEvent: '没有这个事件。';
+      noCommands: '这个插件没有响应这个事件的命令。';
+      option: {
+        unknown: '这个插件没有设置项 {{key}}。';
+        string: '“{{title}}”应是文字。';
+        number: '“{{title}}”应是数字。';
+        boolean: '“{{title}}”应是开或关。';
+        choice: '“{{title}}”只能选列出的值。';
+        choiceOfString: '“{{title}}”不是文字，不能列出可选的值。';
+        min: '“{{title}}”不能小于 {{min, number}}。';
+        max: '“{{title}}”不能大于 {{max, number}}。';
+      };
     };
     certificate: {
       noDomain: '请先填写访问域名。';
@@ -3275,6 +3402,10 @@ export type Resources = {
         name: '浏览器访问';
         words: 'Web 网页 证书 域名 两步验证 反向代理 浏览器登录';
       };
+      plugins: {
+        name: '插件';
+        words: '插件 通知 推送 事件 hooks 钩子';
+      };
       account: {
         name: '账号与额度';
         words: '登录 退出 订阅 用量 调用日志 重置 读取额度';
@@ -3548,6 +3679,51 @@ export type Resources = {
       lastActive: '最近活动 {{time}}';
       revokeOf: '退出 {{name}}';
       forwardedBy: '最近一次带客户端 IP 的请求来自 {{address}}，它不在上面的列表中。确认这是你的反向代理后再填写，不认识的地址不要加入。';
+    };
+    plugins: {
+      intro: '插件在服务端运行：等待审批、一轮结束、电脑上下线等事件发生时，运行插件的命令，比如把通知推送到手机。';
+      empty: '还没有插件。把插件的文件夹放进服务端数据目录下的 plugins 文件夹，片刻后就出现在这里。';
+      enable: '启用 {{title}}';
+      version: '版本 {{version}}';
+      author: '作者 {{name}}';
+      failed: '最近一次运行没有成功（{{time}}），见下方日志。';
+      show: '展开';
+      hide: '收起';
+      settings: '设置';
+      secretSet: '已设置，留空不变';
+      unset: '未设置';
+      clearValue: '清除';
+      try: {
+        heading: '试跑';
+        intro: '用示例事件运行插件的命令，和事件真的发生时一样。';
+        running: '正在运行…';
+      };
+      log: {
+        heading: '日志';
+        empty: '还没有运行记录。';
+        refresh: '刷新';
+        clear: '清空';
+        trial: '试跑';
+        ms: '{{ms, number}} 毫秒';
+        result: {
+          ok: '成功';
+          failed: '失败';
+          failedCode: '失败，退出码 {{code}}';
+          timeout: '超时';
+          unstarted: '没有启动';
+        };
+      };
+      event: {
+        ApprovalRequested: '等待审批';
+        QuestionAsked: 'Claude 提问';
+        TerminalWaiting: '终端等待确认';
+        WaitResolved: '等待已解除';
+        BackgroundOnly: '只剩后台任务';
+        RunError: '运行出错';
+        RunEnded: '一轮结束';
+        DeviceOnline: '电脑上线';
+        DeviceOffline: '电脑下线';
+      };
     };
     proxy: {
       domainFirst: '请先填写访问域名，再生成反代配置。';
@@ -4946,6 +5122,81 @@ export type Messages = {
   'help:articles.permissions.blocks.note1.title': Record<string, never>;
   'help:articles.permissions.blocks.note1.text': Record<string, never>;
   'help:articles.permissions.blocks.actions1.0': Record<string, never>;
+  'help:articles.plugins.title': Record<string, never>;
+  'help:articles.plugins.lead': Record<string, never>;
+  'help:articles.plugins.words': Record<string, never>;
+  'help:articles.plugins.blocks.p1': Record<string, never>;
+  'help:articles.plugins.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.plugins.blocks.prompts1.items.0.note': Record<string, never>;
+  'help:articles.plugins.blocks.prompts1.items.1.text': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.0.title': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.0.text': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.1.title': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.1.text': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.1.action': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.2.title': Record<string, never>;
+  'help:articles.plugins.blocks.steps1.2.text': Record<string, never>;
+  'help:articles.plugins.blocks.events': Record<string, never>;
+  'help:articles.plugins.blocks.table1.head.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.head.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.4.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.4.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.5.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.5.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.6.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.6.1': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.7.0': Record<string, never>;
+  'help:articles.plugins.blocks.table1.rows.7.1': Record<string, never>;
+  'help:articles.plugins.blocks.warn1.title': Record<string, never>;
+  'help:articles.plugins.blocks.warn1.text': Record<string, never>;
+  'help:articles.plugin-dev.title': Record<string, never>;
+  'help:articles.plugin-dev.lead': Record<string, never>;
+  'help:articles.plugin-dev.words': Record<string, never>;
+  'help:articles.plugin-dev.blocks.p1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.code1.label': Record<string, never>;
+  'help:articles.plugin-dev.blocks.code1.text': Record<string, never>;
+  'help:articles.plugin-dev.blocks.hooks': Record<string, never>;
+  'help:articles.plugin-dev.blocks.code2.label': Record<string, never>;
+  'help:articles.plugin-dev.blocks.code2.text': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list1.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list1.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list1.2': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list1.3': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list1.4': Record<string, never>;
+  'help:articles.plugin-dev.blocks.settings': Record<string, never>;
+  'help:articles.plugin-dev.blocks.code3.label': Record<string, never>;
+  'help:articles.plugin-dev.blocks.code3.text': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list2.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list2.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list2.2': Record<string, never>;
+  'help:articles.plugin-dev.blocks.fields': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.head.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.head.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.0.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.0.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.1.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.1.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.2.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.2.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.3.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.3.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.4.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.4.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.5.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.5.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.6.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.table1.rows.6.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list3.0': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list3.1': Record<string, never>;
+  'help:articles.plugin-dev.blocks.list3.2': Record<string, never>;
   'help:articles.background.title': Record<string, never>;
   'help:articles.background.lead': Record<string, never>;
   'help:articles.background.words': Record<string, never>;
@@ -5372,6 +5623,19 @@ export type Messages = {
   'service:web.badLogin': Record<string, never>;
   'service:web.sessionLimit': Record<string, never>;
   'service:web.loginUnavailable': Record<string, never>;
+  'service:plugins.unknown': Record<string, never>;
+  'service:plugins.broken': { file: Value; reason: Value };
+  'service:plugins.unset': { titles: ListValue };
+  'service:plugins.noEvent': Record<string, never>;
+  'service:plugins.noCommands': Record<string, never>;
+  'service:plugins.option.unknown': { key: Value };
+  'service:plugins.option.string': { title: Value };
+  'service:plugins.option.number': { title: Value };
+  'service:plugins.option.boolean': { title: Value };
+  'service:plugins.option.choice': { title: Value };
+  'service:plugins.option.choiceOfString': { title: Value };
+  'service:plugins.option.min': { title: Value; min: Value };
+  'service:plugins.option.max': { title: Value; max: Value };
   'service:certificate.noDomain': Record<string, never>;
   'service:certificate.tooLong': Record<string, never>;
   'service:certificate.chainFormat': Record<string, never>;
@@ -5860,6 +6124,8 @@ export type Messages = {
   'settings:section.shell.words': Record<string, never>;
   'settings:section.web.name': Record<string, never>;
   'settings:section.web.words': Record<string, never>;
+  'settings:section.plugins.name': Record<string, never>;
+  'settings:section.plugins.words': Record<string, never>;
   'settings:section.account.name': Record<string, never>;
   'settings:section.account.words': Record<string, never>;
   'settings:section.claude.name': Record<string, never>;
@@ -6069,6 +6335,41 @@ export type Messages = {
   'settings:web.lastActive': { time: Value };
   'settings:web.revokeOf': { name: Value };
   'settings:web.forwardedBy': { address: Value };
+  'settings:plugins.intro': Record<string, never>;
+  'settings:plugins.empty': Record<string, never>;
+  'settings:plugins.enable': { title: Value };
+  'settings:plugins.version': { version: Value };
+  'settings:plugins.author': { name: Value };
+  'settings:plugins.failed': { time: Value };
+  'settings:plugins.show': Record<string, never>;
+  'settings:plugins.hide': Record<string, never>;
+  'settings:plugins.settings': Record<string, never>;
+  'settings:plugins.secretSet': Record<string, never>;
+  'settings:plugins.unset': Record<string, never>;
+  'settings:plugins.clearValue': Record<string, never>;
+  'settings:plugins.try.heading': Record<string, never>;
+  'settings:plugins.try.intro': Record<string, never>;
+  'settings:plugins.try.running': Record<string, never>;
+  'settings:plugins.log.heading': Record<string, never>;
+  'settings:plugins.log.empty': Record<string, never>;
+  'settings:plugins.log.refresh': Record<string, never>;
+  'settings:plugins.log.clear': Record<string, never>;
+  'settings:plugins.log.trial': Record<string, never>;
+  'settings:plugins.log.ms': { ms: Value };
+  'settings:plugins.log.result.ok': Record<string, never>;
+  'settings:plugins.log.result.failed': Record<string, never>;
+  'settings:plugins.log.result.failedCode': { code: Value };
+  'settings:plugins.log.result.timeout': Record<string, never>;
+  'settings:plugins.log.result.unstarted': Record<string, never>;
+  'settings:plugins.event.ApprovalRequested': Record<string, never>;
+  'settings:plugins.event.QuestionAsked': Record<string, never>;
+  'settings:plugins.event.TerminalWaiting': Record<string, never>;
+  'settings:plugins.event.WaitResolved': Record<string, never>;
+  'settings:plugins.event.BackgroundOnly': Record<string, never>;
+  'settings:plugins.event.RunError': Record<string, never>;
+  'settings:plugins.event.RunEnded': Record<string, never>;
+  'settings:plugins.event.DeviceOnline': Record<string, never>;
+  'settings:plugins.event.DeviceOffline': Record<string, never>;
   'settings:proxy.domainFirst': Record<string, never>;
   'settings:proxy.pathFirst': Record<string, never>;
   'settings:proxy.upstreamForm': Record<string, never>;
