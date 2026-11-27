@@ -1003,6 +1003,12 @@ export type Resources = {
     close: '关闭文件面板';
     current: '当前位置';
     up: '上一级';
+    folders: {
+      work: '会话在服务端的工作目录';
+      records: 'Claude 在服务端记下的：记忆、对话记录';
+      noRecords: 'Claude 还没为这个会话记下东西';
+      none: '这个文件夹不存在';
+    };
     landlock: {
       detail: '内核不支持 Landlock：登录凭据、setup token 等可被读取和修改';
       title: '敏感文件未受保护';
@@ -1343,6 +1349,7 @@ export type Resources = {
           list1: readonly ['给 Claude 文件不用经过面板：拖进输入框即可。'];
           list2: readonly [
             '服务端上以编号命名的文件夹是会话的工作目录，旁边标出它属于哪个项目或会话。',
+            '在服务端时，路径栏右端的两个按钮分别打开会话的工作目录，和 Claude 为它记下的记忆、对话记录。',
           ];
           prompts1: {
             title: '也可以直接让 Claude 搬';
@@ -4548,6 +4555,10 @@ export type Messages = {
   'files:close': Record<string, never>;
   'files:current': Record<string, never>;
   'files:up': Record<string, never>;
+  'files:folders.work': Record<string, never>;
+  'files:folders.records': Record<string, never>;
+  'files:folders.noRecords': Record<string, never>;
+  'files:folders.none': Record<string, never>;
   'files:landlock.detail': Record<string, never>;
   'files:landlock.title': Record<string, never>;
   'files:landlock.dismiss': Record<string, never>;
@@ -4760,6 +4771,7 @@ export type Messages = {
   'help:articles.files.blocks.steps1.2.text': Record<string, never>;
   'help:articles.files.blocks.list1.0': Record<string, never>;
   'help:articles.files.blocks.list2.0': Record<string, never>;
+  'help:articles.files.blocks.list2.1': Record<string, never>;
   'help:articles.files.blocks.prompts1.title': Record<string, never>;
   'help:articles.files.blocks.prompts1.items.0.text': Record<string, never>;
   'help:articles.files.news.list2': Record<string, never>;
