@@ -63,17 +63,14 @@ test('desktop login, chat, allow/deny, stop, errors and delete', async ({ page }
   await page.screenshot({ path: resolve(screenshots, 'desktop-approval.png') });
   await page.getByRole('button', { name: '允许', exact: true }).click();
   await settled(page);
-  await expandActivity(page);
+  await expandActivity(page, page.locator('.tool-output').first());
   await expect(page.locator('.tool-output').first()).toContainText('未执行真实命令');
   await send(page, '拒绝测试', 'tool');
   await expect(page.getByRole('button', { name: '拒绝', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '拒绝', exact: true }).click();
   await settled(page);
-  // The refused tool's row may arrive after the run has settled; expand again until it shows.
-  await expect(async () => {
-    await expandActivity(page);
-    await expect(page.locator('.tool-output').last()).toContainText('用户拒绝', { timeout: 1000 });
-  }).toPass();
+  // The refused tool's row may arrive after the run has settled.
+  await expandActivity(page, page.locator('.tool-output').filter({ hasText: '用户拒绝' }));
   await send(page, '停止测试');
   await page.getByRole('button', { name: '停止运行', exact: true }).click();
   await expect(page.getByText('用户停止', { exact: true })).toBeVisible();
@@ -114,8 +111,7 @@ test('narrow screen, safe Markdown, switching and cancellation while awaiting ap
   await send(page, '```html\n<script>window.untrusted = true</script>\n```');
   await settled(page);
   expect(await page.evaluate(() => 'untrusted' in window)).toBe(false);
-  await expandActivity(page);
-  await expect(page.locator('.message.assistant pre')).toBeVisible();
+  await expandActivity(page, page.locator('.message.assistant pre'));
   // Formulas in either notation are typeset, a dollar in code and the dollars of prices are left alone (they
   // would otherwise make a fourth formula), and a drawing is shown as an
   // image, which runs nothing.
@@ -124,8 +120,8 @@ test('narrow screen, safe Markdown, switching and cancellation while awaiting ap
     '行内 $a^2+b^2$ 与 \\(c^2\\)，价格 `$5 \\(x\\)`，这件 $5，苹果 $5，香蕉 $8：\n\n\\[\nE=mc^2\n\\]\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><script>window.untrusted = true</script><circle cx="20" cy="20" r="18"/></svg>\n```',
   );
   await settled(page);
-  await expandActivity(page);
   const typeset = page.locator('.transcript');
+  await expandActivity(page, typeset.getByRole('img', { name: 'SVG 图像' }));
   await expect(typeset.locator('.katex')).toHaveCount(3);
   await expect(typeset.locator('.katex-display')).toHaveCount(1);
   await expect(typeset.locator(':not(pre) > code')).toHaveText('$5 \\(x\\)');

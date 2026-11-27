@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import type { ElectronApplication, Page } from '@playwright/test';
+import type { ElectronApplication, Locator, Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -82,17 +82,26 @@ export async function signInWindow(application: ElectronApplication) {
   return page;
 }
 // Finished turns, runs of tool calls and each call are folded; open them all to inspect the details.
-export async function expandActivity(page: Page) {
-  for (const selector of ['.turn-process', '.work', '.tool']) {
-    const closed = page.locator(`${selector}:not([open]) > summary`);
-    // A row that arrives late draws its group again while it is being clicked, and the group may come back open:
-    // a click that finds nothing to click gives up soon, and the groups are counted again.
-    while (await closed.count())
-      await closed
-        .first()
-        .click({ timeout: 2000 })
-        .catch(() => {});
-  }
+export async function expandActivity(page: Page, shown?: Locator) {
+  const expand = async () => {
+    for (const selector of ['.turn-process', '.work', '.tool']) {
+      const closed = page.locator(`${selector}:not([open]) > summary`);
+      // A row that arrives late draws its group again while it is being clicked, and the group may come back open:
+      // a click that finds nothing to click gives up soon, and the groups are counted again.
+      while (await closed.count())
+        await closed
+          .first()
+          .click({ timeout: 2000 })
+          .catch(() => {});
+    }
+  };
+  if (!shown) return await expand();
+  // The session stops running a moment before the turn's end arrives, and only an ended turn is folded: expanded
+  // in that moment, the turn folds after it. Expanded again until what it is opened for is in view.
+  await expect(async () => {
+    await expand();
+    await expect(shown).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
 }
 export async function sessionAction(page: Page, action: string) {
   const sidebar = page.getByRole('button', { name: '展开会话列表' });
