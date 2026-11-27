@@ -1280,6 +1280,7 @@ export type Resources = {
         };
         news: {
           list2: '项目由服务端保存，各端看到同一份';
+          tip1: '导出 Markdown 可选内容和范围';
         };
       };
       conversation: {
@@ -1301,6 +1302,9 @@ export type Resources = {
             text: '只说明这段时间没有新消息传来，不代表出了问题；跑长命令时常这样。';
           };
           keys: '快捷键';
+        };
+        news: {
+          list1: '任务清单显示在输入框上方';
         };
       };
       approval: {
@@ -1360,7 +1364,7 @@ export type Resources = {
           };
         };
         news: {
-          list2: '文件面板标出服务端工作目录属于哪个会话';
+          list2: '一键打开服务端会话的工作目录和记录';
         };
       };
       schedules: {
@@ -1697,6 +1701,10 @@ export type Resources = {
             title: '找设置';
             text: '设置页左上角的搜索框按功能找，比如“托盘”“额度”“压缩”。难懂的设置旁有 ?，点开就是讲它的那一段。';
           };
+          tip2: {
+            title: '界面语言';
+            text: '默认跟随系统，可在[外观](settings:appearance)里改为中文或 English；`ccdt` 用 `ccdt config ccdt.language`。Claude 用什么语言回复，另在[记忆与说明](#memory#habits)里设。';
+          };
           scopes: '设置分三组';
           table2: {
             head: readonly ['分组', '改了影响谁'];
@@ -1724,6 +1732,9 @@ export type Resources = {
             ];
           };
           actions1: readonly ['打开 CLI 设置'];
+        };
+        news: {
+          tip2: '界面有了英文，默认跟随系统';
         };
       };
       context: {
@@ -1931,6 +1942,9 @@ export type Resources = {
             '**内置的提交与 PR 流程说明**：官方附带的提交、开 PR 的做法和仓库状态。有自己的规范时关掉它，把规范写进全局说明。',
           ];
           actions1: readonly ['打开全局说明', '打开 CLI 设置'];
+        };
+        news: {
+          p0: '把项目的说明与技能同步到服务端';
         };
       };
       execution: {
@@ -4798,6 +4812,7 @@ export type Messages = {
   'help:articles.sessions.blocks.tip1.title': Record<string, never>;
   'help:articles.sessions.blocks.tip1.text': Record<string, never>;
   'help:articles.sessions.news.list2': Record<string, never>;
+  'help:articles.sessions.news.tip1': Record<string, never>;
   'help:articles.conversation.title': Record<string, never>;
   'help:articles.conversation.lead': Record<string, never>;
   'help:articles.conversation.words': Record<string, never>;
@@ -4811,6 +4826,7 @@ export type Messages = {
   'help:articles.conversation.blocks.note1.title': Record<string, never>;
   'help:articles.conversation.blocks.note1.text': Record<string, never>;
   'help:articles.conversation.blocks.keys': Record<string, never>;
+  'help:articles.conversation.news.list1': Record<string, never>;
   'help:articles.approval.title': Record<string, never>;
   'help:articles.approval.lead': Record<string, never>;
   'help:articles.approval.words': Record<string, never>;
@@ -5016,6 +5032,8 @@ export type Messages = {
   'help:articles.settings.blocks.table1.rows.5.1': Record<string, never>;
   'help:articles.settings.blocks.tip1.title': Record<string, never>;
   'help:articles.settings.blocks.tip1.text': Record<string, never>;
+  'help:articles.settings.blocks.tip2.title': Record<string, never>;
+  'help:articles.settings.blocks.tip2.text': Record<string, never>;
   'help:articles.settings.blocks.scopes': Record<string, never>;
   'help:articles.settings.blocks.table2.head.0': Record<string, never>;
   'help:articles.settings.blocks.table2.head.1': Record<string, never>;
@@ -5038,6 +5056,7 @@ export type Messages = {
   'help:articles.settings.blocks.table3.rows.3.0': Record<string, never>;
   'help:articles.settings.blocks.table3.rows.3.1': Record<string, never>;
   'help:articles.settings.blocks.actions1.0': Record<string, never>;
+  'help:articles.settings.news.tip2': Record<string, never>;
   'help:articles.context.title': Record<string, never>;
   'help:articles.context.lead': Record<string, never>;
   'help:articles.context.words': Record<string, never>;
@@ -5168,6 +5187,7 @@ export type Messages = {
   'help:articles.memory.blocks.list2.2': Record<string, never>;
   'help:articles.memory.blocks.actions1.0': Record<string, never>;
   'help:articles.memory.blocks.actions1.1': Record<string, never>;
+  'help:articles.memory.news.p0': Record<string, never>;
   'help:articles.execution.title': Record<string, never>;
   'help:articles.execution.lead': Record<string, never>;
   'help:articles.execution.words': Record<string, never>;

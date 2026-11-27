@@ -217,6 +217,8 @@ const shapes: ArticleShape[] = [
         kind: 'callout',
         key: 'tip1',
         tone: 'tip',
+        since: '0.3.21',
+        news: true,
       },
     ],
     related: ['devices', 'conversation', 'ccdt'],
@@ -229,6 +231,8 @@ const shapes: ArticleShape[] = [
       {
         kind: 'list',
         key: 'list1',
+        since: '0.3.21',
+        news: true,
       },
       {
         kind: 'callout',
@@ -300,7 +304,7 @@ const shapes: ArticleShape[] = [
       {
         kind: 'list',
         key: 'list2',
-        since: '0.3.19',
+        since: '0.3.21',
         news: true,
       },
       {
@@ -643,6 +647,13 @@ const shapes: ArticleShape[] = [
         tone: 'tip',
       },
       {
+        kind: 'callout',
+        key: 'tip2',
+        tone: 'tip',
+        since: '0.3.21',
+        news: true,
+      },
+      {
         kind: 'heading',
         id: 'scopes',
       },
@@ -908,6 +919,8 @@ const shapes: ArticleShape[] = [
       {
         kind: 'p',
         key: 'p0',
+        since: '0.3.21',
+        news: true,
       },
       {
         kind: 'list',

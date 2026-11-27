@@ -238,7 +238,8 @@
         }
       },
       "news": {
-        "list2": "The server keeps the projects, and every client sees the same ones"
+        "list2": "The server keeps the projects, and every client sees the same ones",
+        "tip1": "Choose what and how much to export to Markdown"
       }
     },
     "conversation": {
@@ -260,6 +261,9 @@
           "text": "It only means no new messages arrived in that time, not that something went wrong; long commands often do this."
         },
         "keys": "Keyboard shortcuts"
+      },
+      "news": {
+        "list1": "The task list shows above the message box"
       }
     },
     "approval": {
@@ -319,7 +323,7 @@
         }
       },
       "news": {
-        "list2": "The file panel marks which session a working folder on the server belongs to"
+        "list2": "Open a server session’s working folder and records in one click"
       }
     },
     "schedules": {
@@ -671,6 +675,10 @@
           "title": "Finding a setting",
           "text": "The search box at the top left of the settings page finds settings by what they do, such as “tray”, “quota” or “compact”. A setting that is hard to follow has a ? beside it, which opens the passage about it."
         },
+        "tip2": {
+          "title": "Display language",
+          "text": "Follows the system by default; change it to Chinese or English under [Appearance](settings:appearance). For `ccdt`: `ccdt config ccdt.language`. The language Claude replies in is set apart, in [Memory and instructions](#memory#habits)."
+        },
         "scopes": "Settings come in three groups",
         "table2": {
           "head": ["Group", "A change affects"],
@@ -704,6 +712,9 @@
           ]
         },
         "actions1": ["Open CLI settings"]
+      },
+      "news": {
+        "tip2": "The interface comes in English too, following the system"
       }
     },
     "context": {
@@ -914,6 +925,9 @@
           "**Built-in commit and PR instructions**: the official ways of committing and opening PRs, and the state of the repository, that come with it. If you have conventions of your own, turn it off and write them into the global instructions."
         ],
         "actions1": ["Open Global instructions", "Open CLI settings"]
+      },
+      "news": {
+        "p0": "Sync a project’s instructions and skills to the server"
       }
     },
     "execution": {
