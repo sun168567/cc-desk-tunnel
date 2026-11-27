@@ -10,11 +10,14 @@ export default function HelpLink({
   title,
   subject,
   className = '',
+  onOpen,
 }: {
   article: string;
   title?: string;
   subject?: string;
   className?: string;
+  // Before the help opens: a dialog closes itself.
+  onOpen?: () => void;
 }) {
   const t = useT();
   title ??= subject ? t('common:helpFor', { subject }) : t('common:help');
@@ -26,6 +29,7 @@ export default function HelpLink({
       aria-label={title}
       onClick={(event) => {
         event.stopPropagation();
+        onOpen?.();
         openHelp(article);
       }}
     >

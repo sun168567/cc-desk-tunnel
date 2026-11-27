@@ -1,6 +1,9 @@
 import {
   ArrowRight,
   Bot,
+  Brain,
+  FileText,
+  FolderCode,
   Check,
   ChevronDown,
   ChevronRight,
@@ -224,7 +227,88 @@ export default function Figure({
           <p className="fig-side-tip">{t('help:figures.devices.tip')}</p>
         </div>
       );
+    case 'sync':
+      return (
+        <div className="fig fig-sync" aria-hidden="true">
+          <div className="fig-sync-side">
+            <p>
+              <Laptop /> {t('help:figures.sync.computer')}
+            </p>
+            <SyncedFiles />
+          </div>
+          <div className="fig-sync-arrow">
+            <ArrowRight />
+            <span>{t('help:figures.sync.copy')}</span>
+          </div>
+          <div className="fig-sync-side server">
+            <p>
+              <Server /> {t('help:figures.sync.server')}
+            </p>
+            <SyncedFiles />
+            <small>{t('help:figures.sync.reads')}</small>
+          </div>
+        </div>
+      );
+    case 'export':
+      return (
+        <div className="fig fig-export" aria-hidden="true">
+          <p className="fig-dialog-title">{t('session:exportDialog.title')}</p>
+          <p className="fig-label">{t('session:exportDialog.content')}</p>
+          {(['answers', 'said', 'all'] as const).map((key, index) => (
+            <div className={`fig-mode${index === 0 ? ' current' : ''}`} key={key}>
+              <span>
+                <strong>{t(`session:exportDialog.${key}.label`)}</strong>
+                <small>{t(`session:exportDialog.${key}.detail`)}</small>
+              </span>
+              {index === 0 && <Check className="fig-mode-check" />}
+            </div>
+          ))}
+          <p className="fig-label">{t('session:exportDialog.range')}</p>
+          <div className="fig-range">
+            <span>{t('session:exportDialog.every')}</span>
+            <span className="current">
+              {t('session:exportDialog.recent')} 5 {t('session:exportDialog.turnsUnit')}
+            </span>
+          </div>
+        </div>
+      );
+    case 'folders':
+      return (
+        <div className="fig fig-folders" aria-hidden="true">
+          <div className="fig-crumb">
+            <span>/data/state/native/3f2a…</span>
+            <i className="fig-pulse">
+              <FolderCode />
+            </i>
+            <i className="fig-pulse">
+              <Brain />
+            </i>
+          </div>
+          <div className="fig-folders-legend">
+            <span>
+              <FolderCode /> {t('help:figures.folders.work')}
+            </span>
+            <span>
+              <Brain /> {t('help:figures.folders.records')}
+            </span>
+          </div>
+        </div>
+      );
   }
+}
+
+// What the sync carries, as the project and the server both hold it.
+function SyncedFiles() {
+  return (
+    <ul className="fig-files">
+      {['CLAUDE.md', '.claude/skills/', '.claude/rules/'].map((name) => (
+        <li key={name}>
+          {name.endsWith('/') ? <FolderOpen /> : <FileText />}
+          <code>{name}</code>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const slug = (name: string) =>

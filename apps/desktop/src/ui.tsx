@@ -151,10 +151,13 @@ export function Switch({
 export function Modal({
   title,
   onClose,
+  help,
   children,
 }: {
   title: string;
   onClose: () => void;
+  // The help's article (or `article#heading`) on what the dialog does.
+  help?: string;
   children: ReactNode;
 }) {
   const t = useT();
@@ -172,7 +175,10 @@ export function Modal({
       }}
     >
       <div className="dialog-heading">
-        <h2>{title}</h2>
+        <h2>
+          {title}
+          {help && <HelpLink article={help} onOpen={onClose} />}
+        </h2>
         <IconButton title={t('common:close')} onClick={onClose}>
           <X />
         </IconButton>

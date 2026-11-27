@@ -73,7 +73,7 @@ export default function SyncDialog({
       ? t('session:sync.server', { path: side.root })
       : `${computerName} · ${side.root}`;
   return (
-    <Modal title={t('session:sync.title', { name })} onClose={close}>
+    <Modal title={t('session:sync.title', { name })} onClose={close} help="memory#project">
       <div className="dialog-form sync-dialog">
         <p className="muted">{t('session:sync.intro')}</p>
         <div className="segmented" role="group" aria-label={t('session:sync.direction')}>

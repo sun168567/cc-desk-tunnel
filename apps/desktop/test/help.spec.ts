@@ -58,6 +58,17 @@ test('help center: front page, articles, search, links and prompts', async ({ pa
   await page.getByRole('button', { name: '允许绕过权限：说明', exact: true }).click();
   await expect(page.locator('.help-article-head h1')).toHaveText('权限相关的开关');
   await expect(page.locator('#help-bypass')).toBeInViewport();
+  // A feature new to the window is pictured, with a button that does it, which says why when it cannot yet.
+  await rail.getByRole('button', { name: '帮助', exact: true }).click();
+  await contents.getByRole('button', { name: '记忆与说明' }).click();
+  await expect(page.locator('.fig-sync .fig-files').first()).toContainText('CLAUDE.md');
+  // Code inside bold words is code too.
+  await expect(page.locator('.help-article td strong code').first()).toHaveText('CLAUDE.md');
+  await contents.getByRole('button', { name: '项目与会话' }).click();
+  await expect(page.locator('.fig-export .fig-mode')).toHaveCount(3);
+  // No session is selected yet.
+  await expect(page.getByRole('button', { name: '导出当前会话' })).toBeDisabled();
+  await expect(page.locator('.help-target-why')).toHaveText('先选中一个会话');
   // The "?" beside the projects heading opens the article on them.
   await rail.getByRole('button', { name: '会话', exact: true }).click();
   await page.getByRole('button', { name: '项目和会话是什么', exact: true }).click();
