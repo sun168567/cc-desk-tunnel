@@ -3276,6 +3276,30 @@ button.quota-period:hover {
   font-size: 12px;
   color: var(--muted);
 }
+/* The choices of a Markdown export (ExportDialog.tsx). */
+.export-dialog .export-field {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.export-dialog .export-field > span {
+  font-weight: 600;
+}
+.export-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.export-range label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.export-range input {
+  width: 72px;
+}
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;
@@ -4694,4 +4718,125 @@ dialog:has(.ccdt-dialog) {
   background: var(--surface-2);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Settings → Plugins: a card for each plugin, which opens to its settings, trial and log. */
+.plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.plugin-head:last-child {
+  border-bottom: 0;
+}
+.plugin-open {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plugin-open > svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.plugin-open > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.setting-row small.plugin-trouble {
+  color: var(--warn-text);
+}
+.plugin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 16px;
+}
+.plugin-heading {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.plugin-note {
+  margin: 0;
+  font-size: 12.5px;
+}
+.plugin-body .settings-list label > span.plugin-input {
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.plugin-input-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.plugin-input input,
+.plugin-input select {
+  width: 240px;
+  max-width: 50vw;
+}
+.plugin-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.plugin-log-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.plugin-log-head .plugin-heading {
+  margin-right: auto;
+}
+.plugin-log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 12.5px;
+}
+.plugin-log li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.plugin-log li:last-child {
+  border-bottom: 0;
+}
+.plugin-log-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.plugin-log pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.plugin-ok {
+  color: var(--ok-text);
+}
+.plugin-bad {
+  color: var(--danger-text);
 }

@@ -486,6 +486,17 @@ export class SessionStore {
       )
       .get(sessionId);
   }
+  // What Claude Code last said the account offers, in whichever session it said it: the newest such event, found
+  // from the end.
+  latestCapabilities() {
+    const row = this.database
+      .prepare(
+        "SELECT data FROM events WHERE json_extract(data, '$.payload.type') = 'native.capabilities' ORDER BY rowid DESC LIMIT 1",
+      )
+      .get();
+    const payload = row ? (JSON.parse(String(row.data)) as SessionEvent).payload : undefined;
+    return payload?.type === 'native.capabilities' ? payload : null;
+  }
   // The session's last reading of its native state.
   lastMetrics(sessionId: string) {
     const row = this.database

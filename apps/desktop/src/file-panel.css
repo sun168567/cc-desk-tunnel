@@ -167,6 +167,14 @@
   width: 26px;
   height: 26px;
 }
+/* The session's two folders on the service, at the end of the path. */
+.file-crumb-folders {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 6px;
+}
 /* A long path is scrolled to its end (FilePanel.tsx), the last steps in view. */
 .file-crumb-list {
   display: flex;

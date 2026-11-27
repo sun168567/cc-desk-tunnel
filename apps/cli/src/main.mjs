@@ -29,6 +29,7 @@ import {
   wait,
 } from './tasks.mjs';
 import { UPDATE_TICK_MS, lookDue } from '../../desktop/src/update-check.ts';
+import { quotaName } from '../../desktop/src/quota.ts';
 
 const help = () => t('cli:help.main');
 
@@ -575,9 +576,8 @@ function listed(sessions) {
 }
 
 function usage(summary) {
-  const windows = ['five_hour', 'seven_day', 'seven_day_opus'];
   const lines = summary.windows.map((window) => {
-    const name = windows.includes(window.name) ? t(`cli:usage.window.${window.name}`) : window.name;
+    const name = quotaName(t, window.name) ?? window.name;
     return t(window.resetsAt ? 'cli:usage.lineReset' : 'cli:usage.line', {
       name: name.padEnd(8),
       used: window.utilization === null ? '—' : `${Math.round(window.utilization)}%`,

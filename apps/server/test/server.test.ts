@@ -107,6 +107,63 @@ async function fixture(t: TestContext, stepMs = 2, graceMs?: number) {
   return { directory, server, url, clients, connect, create };
 }
 
+test('a plugin added while the service runs hears of a wait, its end and the end of the run', async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const sessionId = await f.create(client);
+  const root = join(f.directory, 'plugins', 't.log');
+  mkdirSync(join(root, 'hooks'), { recursive: true });
+  writeFileSync(
+    join(root, 'log.mjs'),
+    "import { readFileSync, writeFileSync } from 'node:fs';\n" +
+      'const event = JSON.parse(readFileSync(0, "utf8"));\n' +
+      'writeFileSync(`${process.env.CLAUDE_PLUGIN_DATA}/${event.hook_event_name}`, JSON.stringify(event));\n',
+  );
+  const log = [
+    {
+      hooks: [
+        { type: 'command', command: process.execPath, args: ['${CLAUDE_PLUGIN_ROOT}/log.mjs'] },
+      ],
+    },
+  ];
+  writeFileSync(
+    join(root, 'hooks', 'hooks.json'),
+    JSON.stringify({ hooks: { ApprovalRequested: log, WaitResolved: log, RunEnded: log } }),
+  );
+  // The directory is read once its changes have settled.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const heard = async (name: string) => {
+    for (const deadline = Date.now() + 10_000; Date.now() < deadline;) {
+      try {
+        return JSON.parse(readFileSync(join(f.directory, 'plugin-data', 't.log', name), 'utf8'));
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+    throw new Error(`The plugin did not hear ${name}`);
+  };
+  await client.request({ type: 'message.send', sessionId, text: '试试', scenario: 'tool' });
+  const asked = await client.event('approval.requested');
+  assert.ok(asked.type === 'session.event' && asked.event.payload.type === 'approval.requested');
+  const { runId, payload } = asked.event;
+  const waiting = await heard('ApprovalRequested');
+  assert.equal(waiting.version, 1);
+  assert.equal(waiting.session_title, '中文会话');
+  assert.equal(waiting.device.name, device.name);
+  assert.equal(waiting.tool_name, 'PowerShell');
+  assert.equal(waiting.wait_id, payload.approvalId);
+  await client.request({
+    type: 'approval.reply',
+    sessionId,
+    runId,
+    approvalId: payload.approvalId,
+    allowed: false,
+  });
+  const resolved = await heard('WaitResolved');
+  assert.deepEqual([resolved.wait_id, resolved.allowed], [waiting.wait_id, false]);
+  assert.equal((await heard('RunEnded')).status, 'completed');
+});
+
 test('requires authentication, rejects wrong token/version/origin and accepts health', async (t) => {
   const f = await fixture(t);
   assert.deepEqual(await (await fetch(f.url + '/health')).json(), {
@@ -870,6 +927,38 @@ test('session directory does not push history; switching subscribes to only the 
       (message) => message.type === 'session.updated' && message.session.id === first,
     ),
   );
+});
+
+test('a new session offers the models Claude Code last gave in any session, without counting as use', async (t) => {
+  const f = await fixture(t);
+  const client = await f.connect();
+  const first = await f.create(client);
+  const read = (sessionId: string) =>
+    f.server.store
+      .snapshot(sessionId)
+      .events.filter((event) => event.payload.type === 'native.capabilities')
+      .map((event) => event.payload);
+  // Nothing has been read yet: a new session holds no reading.
+  assert.deepEqual(read(first), []);
+  const capabilities = {
+    type: 'native.capabilities' as const,
+    models: [
+      {
+        value: 'default',
+        displayName: 'Default',
+        description: '推荐',
+        source: 'native' as const,
+        supportedEffortLevels: [],
+      },
+    ],
+    commands: [],
+    account: {},
+  };
+  f.server.store.append(first, randomUUID(), capabilities);
+  const second = await f.create(client);
+  assert.deepEqual(read(second), [capabilities]);
+  const { session } = f.server.store.get(second);
+  assert.equal(session.updatedAt, session.createdAt);
 });
 
 test('history is identical with negotiated compression and without compression', async (t) => {

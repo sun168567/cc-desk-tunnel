@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { platformOf } from '@cc-desk-tunnel/protocol';
+import type { Plugin } from '@cc-desk-tunnel/protocol';
 import { languageChoices, languageNames } from '@cc-desk-tunnel/i18n';
 import {
   ArrowLeft,
@@ -13,6 +14,7 @@ import {
   Keyboard,
   LogOut,
   Palette,
+  Plug,
   Search,
   Settings,
   SlidersHorizontal,
@@ -35,6 +37,7 @@ import { GithubMark, openProject, project } from './project.tsx';
 import { selfUpdating } from './platform.ts';
 import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
+import PluginSettings from './PluginSettings.tsx';
 import SettingsPanel from './SettingsPanel.tsx';
 import { useShared } from './shared.ts';
 import type { Account } from './shared.ts';
@@ -53,6 +56,7 @@ export type Section =
   | 'context'
   | 'shell'
   | 'web'
+  | 'plugins'
   | 'account'
   | 'claude'
   | 'instructions'
@@ -71,6 +75,7 @@ export const sections: { id: Section; group: Group; icon: typeof Bell }[] = [
   { id: 'context', group: 'server', icon: Hourglass },
   { id: 'shell', group: 'server', icon: SquareTerminal },
   { id: 'web', group: 'server', icon: Globe },
+  { id: 'plugins', group: 'server', icon: Plug },
   { id: 'account', group: 'claude', icon: UserRound },
   { id: 'claude', group: 'claude', icon: SlidersHorizontal },
   { id: 'instructions', group: 'claude', icon: FileText },
@@ -899,9 +904,12 @@ export default function SettingsPage({
   browser = false,
   here,
   syncInstructions,
+  plugins = [],
 }: {
   // The selected session's project, whose instructions and skills can be synced with the service.
   syncInstructions?: { name: string; open: () => void };
+  // The service's plugins, once there is a connection to one.
+  plugins?: Plugin[];
   // This computer as the service lists it, with the shells it runs Claude's scripts in. A Windows one has a page for
   // the shell Claude should prefer.
   here?: ConnectedDevice;
@@ -1036,6 +1044,8 @@ export default function SettingsPage({
             <Page title={sectionName(t, 'web')} intro={t('settings:scope.everyDevice')}>
               <WebAccessSettings client={client} browser={browser} connectionUrl={form.url} />
             </Page>
+          ) : section === 'plugins' ? (
+            <PluginSettings client={client} plugins={plugins} />
           ) : section === 'install' && browser ? (
             <InstallAppSettings />
           ) : section === 'general' ? (

@@ -1064,6 +1064,42 @@ const shapes: ArticleShape[] = [
     related: ['approval', 'safety'],
   },
   // Upkeep and safety
+  // Plugins
+  {
+    id: 'plugins',
+    group: 'settings',
+    icon: Plug,
+    since: '0.3.21',
+    blocks: [
+      { kind: 'p', key: 'p1' },
+      { kind: 'prompts', key: 'prompts1' },
+      { kind: 'steps', key: 'steps1', targets: [null, { settings: 'plugins' }, null] },
+      { kind: 'heading', id: 'events' },
+      { kind: 'table', key: 'table1' },
+      { kind: 'callout', key: 'warn1', tone: 'warn' },
+    ],
+    related: ['plugin-dev', 'unattended', 'safety'],
+  },
+  {
+    id: 'plugin-dev',
+    group: 'settings',
+    icon: SquareTerminal,
+    since: '0.3.21',
+    blocks: [
+      { kind: 'p', key: 'p1' },
+      { kind: 'code', key: 'code1' },
+      { kind: 'heading', id: 'hooks' },
+      { kind: 'code', key: 'code2' },
+      { kind: 'list', key: 'list1' },
+      { kind: 'heading', id: 'settings' },
+      { kind: 'code', key: 'code3' },
+      { kind: 'list', key: 'list2' },
+      { kind: 'heading', id: 'fields' },
+      { kind: 'table', key: 'table1' },
+      { kind: 'list', key: 'list3' },
+    ],
+    related: ['plugins'],
+  },
   {
     id: 'background',
     group: 'care',

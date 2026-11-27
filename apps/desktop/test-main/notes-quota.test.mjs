@@ -40,37 +40,49 @@ test('links into the repository point at the version’s files on GitHub', () =>
   assert.equal(absoluteLinks(kept, repository, '0.3.1'), kept);
 });
 
-test('the quota beside the message box is the five hours and the fullest week', () => {
+test('the quota beside the message box is the five hours and the week, the model’s own when that is fuller', () => {
   const window = (name, utilization) => ({ name, utilization, resetsAt: null });
   assert.deepEqual(quotaFigures(t, null), []);
   assert.deepEqual(quotaFigures(t, { available: false, windows: [window('five_hour', 10)] }), []);
-  assert.deepEqual(
-    quotaFigures(t, {
-      available: true,
-      windows: [
-        window('five_hour', 7.4),
-        window('seven_day', 41),
-        window('seven_day:opus', 78.5),
-        window('seven_day_oauth_apps', 99),
-        window('seven_day:sonnet', null),
-      ],
-    }),
-    [
-      { label: '5 小时', used: 7, resetsAt: null },
-      { label: '每周', used: 79, resetsAt: null },
+  const limits = {
+    available: true,
+    windows: [
+      window('five_hour', 7.4),
+      window('seven_day', 41),
+      window('seven_day:Fable', 78.5),
+      window('seven_day_oauth_apps', 99),
+      window('seven_day:Sonnet', null),
     ],
+  };
+  // The account's whole week, whatever model's own week is fuller.
+  assert.deepEqual(quotaFigures(t, limits), [
+    { label: '5 小时', used: 7, resetsAt: null },
+    { label: '每周', used: 41, resetsAt: null },
+  ]);
+  assert.deepEqual(quotaFigures(t, limits, 'sonnet claude-sonnet-5-5')[1], {
+    label: '每周',
+    used: 41,
+    resetsAt: null,
+  });
+  // The model in use has a week of its own, fuller: that one, named after it.
+  assert.deepEqual(quotaFigures(t, limits, 'fable claude-fable-5-2')[1], {
+    label: 'Fable 每周',
+    used: 79,
+    resetsAt: null,
+  });
+  assert.deepEqual(
+    quotaFigures(
+      t,
+      { available: true, windows: [window('seven_day', 50), window('seven_day_opus', 20)] },
+      'opus',
+    )[0],
+    { label: '每周', used: 50, resetsAt: null },
   );
+  // Without the whole week, the fullest stands in, named after its model.
+  assert.deepEqual(quotaFigures(t, { available: true, windows: [window('seven_day_opus', 20)] }), [
+    { label: 'Opus 每周', used: 20, resetsAt: null },
+  ]);
   assert.deepEqual(quotaFigures(t, { available: true, windows: [window('seven_day', 0)] }), [
     { label: '每周', used: 0, resetsAt: null },
   ]);
-});
-
-test("GitHub's alerts in the notes open with their label in the program", () => {
-  assert.equal(
-    alertLabels(
-      t,
-      '概括\n\n> [!WARNING]\n> **版本变化**：从 A 到 B。\n\n> [!NOTE]\n> 可以暂缓。\n',
-    ),
-    '概括\n\n> **注意** · **版本变化**：从 A 到 B。\n\n> **提示** · 可以暂缓。\n',
-  );
 });

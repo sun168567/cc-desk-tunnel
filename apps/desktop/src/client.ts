@@ -17,6 +17,7 @@ import type {
   NativeCapabilities,
   AccountQuota,
   ServerMessage,
+  Plugin,
   Project,
   ServiceUpdate,
   Session,
@@ -49,7 +50,8 @@ type DataMessage = Extract<
       | 'instructions.state'
       | 'web.settings.state'
       | 'web.totp.setup'
-      | 'web.certificate.state';
+      | 'web.certificate.state'
+      | 'plugin.log';
   }
 >;
 // Commands answered with a data frame, and the frame each one gets.
@@ -72,6 +74,8 @@ type Replies = {
   'web.certificate.get': 'web.certificate.state';
   'web.certificate.set': 'web.certificate.state';
   'web.certificate.reset': 'web.certificate.state';
+  'plugin.try': 'plugin.log';
+  'plugin.log': 'plugin.log';
 };
 
 type NewCommand = Command extends infer C
@@ -99,6 +103,7 @@ export class RequestInterruptedError extends Error {
       'web.settings.get',
       'web.certificate.get',
       'service.update.check',
+      'plugin.log',
     ].includes(type);
     super(readOnly ? t('connection:interrupted.read') : t('connection:interrupted.request'));
     this.name = 'RequestInterruptedError';
@@ -132,6 +137,8 @@ export type ClientState = {
   // The user's computers connected to the service now, and whether commands reach each yet. Another
   // computer's sessions can be worked on from here while it is listed and ready.
   devices: ConnectedDevice[];
+  // The service's plugins (see PluginSettings.tsx).
+  plugins: Plugin[];
   sessions: Session[];
   // The projects of all the user's computers, as the service keeps them.
   projects: Project[];
@@ -183,6 +190,7 @@ export class ProxyClient {
     serverDeviceId: null,
     files: null,
     devices: [],
+    plugins: [],
     sessions: [],
     projects: [],
     events: {},
@@ -252,6 +260,8 @@ export class ProxyClient {
       following?: ServerMessage[];
       done?: Promise<Response>;
       command?: NewCommand;
+      // A page of history read for a reader that keeps it itself (see `earlierPages`).
+      collect?: (page: HistoryPage) => void;
     }
   >();
   // The history read before, kept on disk; and the sessions being shown from it while the service is asked.
@@ -300,6 +310,7 @@ export class ProxyClient {
       browser: null,
       files: null,
       devices: [],
+      plugins: [],
       error: null,
       release: null,
       service: null,
@@ -348,6 +359,7 @@ export class ProxyClient {
       browser: null,
       files: null,
       devices: [],
+      plugins: [],
       error: null,
       sessions: [],
       events: {},
@@ -379,6 +391,7 @@ export class ProxyClient {
             status: 'reconnecting',
             connectionId: null,
             devices: [],
+            plugins: [],
             error: t('connection:retrying'),
           });
           this.retryTimer = setTimeout(
@@ -586,7 +599,8 @@ export class ProxyClient {
         message.type === 'instructions.state' ||
         message.type === 'web.settings.state' ||
         message.type === 'web.totp.setup' ||
-        message.type === 'web.certificate.state'
+        message.type === 'web.certificate.state' ||
+        message.type === 'plugin.log'
       ) {
         if (this.pending.has(message.requestId)) this.results.set(message.requestId, message);
       } else if (message.type === 'compaction.state') {
@@ -612,6 +626,8 @@ export class ProxyClient {
         this.update({ quota });
       } else if (message.type === 'devices') {
         this.update({ devices: message.devices });
+      } else if (message.type === 'plugins') {
+        this.update({ plugins: message.plugins });
       } else if (message.type === 'projects') {
         this.update({ projects: message.projects });
       } else if (message.type === 'session.updated') {
@@ -635,6 +651,20 @@ export class ProxyClient {
       } else if (message.type === 'session.snapshot') {
         this.flushStream();
         const request = this.pending.get(message.requestId);
+        // A page read for a reader of its own goes on disk as any page does, and is shown nowhere.
+        if (request?.collect) {
+          this.disk.write(message.session.id, message.events, covered(message, request.command));
+          clearTimeout(request.timer);
+          this.pending.delete(message.requestId);
+          request.collect(message);
+          request.resolve({
+            type: 'response',
+            requestId: message.requestId,
+            ok: true,
+            sessionId: message.session.id,
+          });
+          return;
+        }
         if (
           !request ||
           !this.cacheOrder.includes(message.session.id) ||
@@ -951,6 +981,29 @@ export class ProxyClient {
       throw error;
     }
   }
+  // The pages of a session's history before `before`, newest first, for a reader that keeps what it reads itself,
+  // such as an export: the disk's where it holds them, the service's for the rest, which go on disk as any page does.
+  // None of it is shown, so a long history is read without the conversation being laid out again at every page.
+  async *earlierPages(sessionId: string, before: number): AsyncGenerator<SessionEvent[]> {
+    for (;;) {
+      const held = this.disk.ready ? await this.disk.earlier(sessionId, before) : null;
+      let page: { events: SessionEvent[]; hasEarlier: boolean } | undefined;
+      if (held && 'events' in held) page = held;
+      else {
+        const after = held?.after ?? 0;
+        await this.request(
+          { type: 'session.history', sessionId, beforeSequence: before, afterSequence: after },
+          (read) => {
+            page = { events: read.events, hasEarlier: read.hasEarlier || !!after };
+          },
+        );
+      }
+      if (!page?.events.length) return;
+      yield page.events;
+      if (!page.hasEarlier) return;
+      before = page.events[0]!.sequence;
+    }
+  }
   select(sessionId: string) {
     if (this.state.selectedId === sessionId && this.state.history[sessionId]?.loading) return;
     this.cancelHistory();
@@ -1043,7 +1096,7 @@ export class ProxyClient {
     if (!result) throw new Error(t('connection:noData'));
     return result as Extract<ServerMessage, { type: Replies[T] }>;
   }
-  async request(command: NewCommand): Promise<Response> {
+  async request(command: NewCommand, collect?: (page: HistoryPage) => void): Promise<Response> {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
       throw new Error(t('connection:notConnected'));
     const requestId = crypto.randomUUID();
@@ -1062,13 +1115,17 @@ export class ProxyClient {
         command.type.startsWith('account.') ||
         command.type.startsWith('service.')
           ? 30000
-          : 10000;
+          : // A trial waits for the plugin's commands, which it lets run for a minute.
+            command.type === 'plugin.try'
+            ? 70000
+            : 10000;
       const request = {
         resolve,
         reject,
         timer: setTimeout(expire, wait),
         type: command.type,
         command,
+        collect,
         sessionId: history ? command.sessionId : undefined,
         renew: () => {
           clearTimeout(request.timer);

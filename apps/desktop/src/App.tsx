@@ -69,11 +69,12 @@ import { outcomeText, taskMessage, useSchedules } from './schedules.ts';
 import type { Scenario } from './Composer.tsx';
 import Conversation from './Conversation.tsx';
 import FilePanel from './FilePanel.tsx';
-import { filePlaces, nativeLabels, sessionFolder, sftpPath } from './files.ts';
+import { filePlaces, nativeLabels, serverFolders, sessionFolder, sftpPath } from './files.ts';
 import type { FilePlace } from './files.ts';
 import type { ConnectionForm } from './LoginPage.tsx';
 import type { SignInReport } from './Launcher.tsx';
 import { exportSession } from './exportSession.ts';
+import ExportDialog from './ExportDialog.tsx';
 import { useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
 import SyncDialog from './SyncDialog.tsx';
@@ -168,6 +169,8 @@ export function App({
   const [clock] = useState(() => ({ now: client.serviceNow, activityAt: client.activityAt }));
   // The version whose notes are shown, over whichever page is up.
   const [notes, setNotes] = useState<string | null>(null);
+  // The session whose export is being chosen.
+  const [exporting, setExporting] = useState<Session | null>(null);
   const notesDialog = notes && (
     <Suspense fallback={null}>
       <ReleaseNotes version={notes} onClose={() => setNotes(null)} />
@@ -1280,9 +1283,7 @@ export function App({
         icon: <FileDown />,
         disabled: !connected,
         run: () => {
-          void act(async () => {
-            await exportSession(client, session);
-          });
+          setExporting(session);
         },
       },
       {
@@ -1660,9 +1661,7 @@ export function App({
           disabled: !selected || !connected,
           separated: true,
           run: () => {
-            void act(async () => {
-              await exportSession(client, selected!);
-            });
+            setExporting(selected!);
           },
         },
         {
@@ -1943,6 +1942,7 @@ export function App({
               ? { name: selectedSync.name, open: () => setSyncing(selectedSync) }
               : undefined
           }
+          plugins={state.plugins}
           form={form}
           changeForm={changeForm}
           workspaceRoot={workspaceRoots[0] ?? ''}
@@ -2337,6 +2337,7 @@ export function App({
                 project={selected && onThis(selected) ? selected.projectPath : null}
                 request={filesRequest}
                 aliasOf={nativeLabels(state.projects, state.sessions)}
+                sessionFolders={serverFolders(selectedForFiles ?? undefined, state.files)}
               />
             </aside>
           )}
@@ -2443,6 +2444,13 @@ export function App({
               setRenameSession(null);
             });
           }}
+        />
+      )}
+      {exporting && (
+        <ExportDialog
+          session={exporting}
+          save={(options) => act(() => exportSession(client, exporting, options).then(() => {}))}
+          close={() => setExporting(null)}
         />
       )}
       {ccdtNeeded && (

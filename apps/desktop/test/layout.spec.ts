@@ -88,14 +88,42 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
   await row.hover();
   await row.getByRole('button', { name: '会话操作', exact: true }).click();
   await shot(page, '03-会话菜单');
-  const download = page.waitForEvent('download');
   await page.getByRole('menuitem', { name: '导出 Markdown', exact: true }).click();
+  const choices = page.getByRole('dialog');
+  await expect(choices.getByRole('button', { name: '全部步骤', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await shot(page, '03b-导出选项');
+  const download = page.waitForEvent('download');
+  await choices.getByRole('button', { name: '导出', exact: true }).click();
   const file = await download;
   expect(file.suggestedFilename()).toBe(`${title}.md`);
   const text = readFileSync(await file.path(), 'utf8');
   expect(text).toContain(`# ${title}`);
   expect(text).toContain('梳理当前项目');
   expect(text).toContain('离线模拟回复');
+  // Only what was said, of the last turn; the choice is kept for the next export.
+  await row.hover();
+  await row.getByRole('button', { name: '会话操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '导出 Markdown', exact: true }).click();
+  await choices.getByRole('button', { name: '只有问答', exact: true }).click();
+  await choices.getByRole('button', { name: '最近', exact: true }).click();
+  await choices.getByRole('spinbutton', { name: '轮数' }).fill('1');
+  const brief = page.waitForEvent('download');
+  await choices.getByRole('button', { name: '导出', exact: true }).click();
+  const short = readFileSync(await (await brief).path(), 'utf8');
+  expect(short).toContain('离线模拟回复');
+  expect(short).not.toContain('<details>');
+  await row.hover();
+  await row.getByRole('button', { name: '会话操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '导出 Markdown', exact: true }).click();
+  await expect(choices.getByRole('button', { name: '只有问答', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(choices.getByRole('spinbutton', { name: '轮数' })).toHaveValue('1');
+  await choices.getByRole('button', { name: '取消', exact: true }).click();
 
   // The title bar: menus, and the way back and forward through the places visited.
   await page.getByRole('button', { name: '文件', exact: true }).click();
@@ -122,7 +150,12 @@ test('pages, side column, menus, pins, export, settings and the notice list', as
   await page.getByRole('menuitem', { name: '设置', exact: true }).click();
   const sections = page.getByRole('navigation', { name: '设置分类' });
   // Grouped by where they are kept; the service's own need a service that keeps them.
-  await expect(page.locator('.sidebar .list-heading')).toHaveText(['本机', 'Claude Code', '其他']);
+  await expect(page.locator('.sidebar .list-heading')).toHaveText([
+    '本机',
+    '服务端',
+    'Claude Code',
+    '其他',
+  ]);
   for (const [name, heading] of [
     ['常规', '常规'],
     ['外观', '外观'],
