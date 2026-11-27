@@ -33,7 +33,7 @@ export const PROTOCOL_HISTORY: Readonly<Record<string, number>> = {
   '0.3.16': 27,
   '0.3.17': 28,
   '0.3.18': 29,
-  '0.3.21': 30,
+  '0.3.22': 30,
 };
 export const MAX_FRAME_BYTES = 256 * 1024;
 // The longest global instructions edited here, in characters; it keeps a frame of them within MAX_FRAME_BYTES.
