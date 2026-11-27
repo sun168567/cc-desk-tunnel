@@ -285,7 +285,9 @@
     "continue": "Continue from the last turn",
     "send": "Send message",
     "contextUsed": "{{percent}}% used",
-    "tooLong": "The message is over {{limit}} characters; shorten it to send"
+    "tooLong": "The message is over {{limit}} characters; shorten it to send",
+    "sync": "Sync project instructions and skills",
+    "syncDetail": "So Claude Code on the server reads the project’s CLAUDE.md and skills"
   },
   "picture": {
     "title": "Image",
@@ -475,7 +477,37 @@
     "move": "Move to project…",
     "ccdt": "Open in ccdt",
     "refresh": "Refresh status",
-    "delete": "Delete"
+    "delete": "Delete",
+    "sync": "Sync project instructions and skills…"
   },
-  "closeError": "Dismiss error"
+  "closeError": "Dismiss error",
+  "sync": {
+    "title": "Sync the instructions and skills of “{{name}}”",
+    "intro": "Syncs CLAUDE.md, CLAUDE.local.md, and the rules, skills, commands and agents under .claude/. Claude Code on the server reads only the server’s copy, from the next message on. The project’s settings and MCP servers are not synced: they would run on the server.",
+    "direction": "Direction",
+    "up": "Computer → server",
+    "down": "Server → computer",
+    "server": "Server · {{path}}",
+    "comparing": "Comparing…",
+    "none": "The project has none of these files",
+    "added_one": "{{count}} new file",
+    "added_other": "{{count}} new files",
+    "differ_one": "{{count}} file differs",
+    "differ_other": "{{count}} files differ",
+    "same_one": "{{count}} file the same",
+    "same_other": "{{count}} files the same",
+    "more_one": "and {{count}} more",
+    "more_other": "and {{count}} more",
+    "replace_one": "Also replace the {{count}} that differs",
+    "replace_other": "Also replace the {{count}} that differ",
+    "merge": "Copy a prompt to merge",
+    "copied": "Copied. Paste it into a session of this project and send it: Claude compares both and merges them.",
+    "mergePrompt": "This project’s instructions and skills have one copy on the computer and one on the server, and these files differ between them:\n{{files}}\n\nOn the computer: {{computer}}\nOn the server: {{server}}\n\nCompare each file’s two versions, merge them into one, and write it back to both places. The server’s copy is the one Claude Code loads.",
+    "run_one": "Sync {{count}} file",
+    "run_other": "Sync {{count}} files",
+    "copying": "Syncing…",
+    "done_one": "{{count}} file synced; it takes effect from the next message.",
+    "done_other": "{{count}} files synced; they take effect from the next message.",
+    "separator": ", "
+  }
 }

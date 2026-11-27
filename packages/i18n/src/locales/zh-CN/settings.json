@@ -428,7 +428,12 @@
     "saved": "已保存，从下一次运行起生效",
     "intro": "云端 Claude Code 的用户级 CLAUDE.md，这个服务上的每个会话都会读取，下一次运行起生效。用户级不读 AGENTS.md；你电脑上项目里的 CLAUDE.md、AGENTS.md 也不会自动读取，需要时让 Claude 去读。",
     "placeholder": "例如：回复用中文；提交信息用中文。",
-    "reload": "重新载入"
+    "reload": "重新载入",
+    "project": {
+      "title": "项目的说明与技能",
+      "detail": "项目文件夹里的 CLAUDE.md、skills 等在你的电脑上，服务器上的 Claude Code 不会自动加载。同步到服务端后，下一条消息起生效。",
+      "run": "同步“{{name}}”…"
+    }
   },
   "web": {
     "credential": "服务凭据",

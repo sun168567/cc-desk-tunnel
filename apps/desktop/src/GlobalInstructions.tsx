@@ -7,7 +7,14 @@ import { Page } from './ui.tsx';
 // The instructions every session on this service starts with: the user CLAUDE.md of the official CLI on the cloud
 // host. A save goes through only over the version that was read, so a change made meanwhile in the terminal is not
 // lost; the text being edited stays for the user to compare after reloading.
-export default function GlobalInstructions({ client }: { client: ProxyClient }) {
+export default function GlobalInstructions({
+  client,
+  sync,
+}: {
+  client: ProxyClient;
+  // The selected session's project, whose own instructions can be synced to the service (see SyncDialog.tsx).
+  sync?: { name: string; open: () => void };
+}) {
   const t = useT();
   const [saved, setSaved] = useState<{ text: string; version: string } | null>(null);
   const [text, setText] = useState('');
@@ -87,6 +94,17 @@ export default function GlobalInstructions({ client }: { client: ProxyClient }) 
           </button>
         </div>
       </div>
+      {sync && (
+        <div className="card instructions-card">
+          <h3>{t('settings:instructions.project.title')}</h3>
+          <p className="muted">{t('settings:instructions.project.detail')}</p>
+          <div className="setting-actions">
+            <button type="button" className="button" onClick={sync.open}>
+              {t('settings:instructions.project.run', { name: sync.name })}
+            </button>
+          </div>
+        </div>
+      )}
     </Page>
   );
 }

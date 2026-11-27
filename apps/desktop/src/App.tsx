@@ -19,6 +19,7 @@ import {
   FolderMinus,
   FolderOpen,
   FolderSymlink,
+  FolderSync,
   GitFork,
   Laptop,
   LogOut,
@@ -37,6 +38,7 @@ import {
 } from 'lucide-react';
 import { GithubMark, openProject, project } from './project.tsx';
 import type {
+  Device,
   Effort,
   EventPayload,
   PermissionMode,
@@ -81,6 +83,8 @@ import { exportSession } from './exportSession.ts';
 import ExportDialog from './ExportDialog.tsx';
 import { useShared } from './shared.ts';
 import { useNotifications } from './notifications.ts';
+import SyncDialog from './SyncDialog.tsx';
+import { sidesOf } from './instructionsSync.ts';
 import { isInside, isNewer, pathKey, projectName } from './paths.ts';
 import { getPrefs, setPrefs, toggled, usePrefs } from './prefs.ts';
 import { UPDATE_TICK_MS, lookDue } from './update-check.ts';
@@ -137,6 +141,9 @@ const narrow = () => matchMedia('(max-width: 700px)').matches;
 // window how it goes until it has connected, and gives way to a sign-in window when the connection ends for good
 // (see Launcher.tsx). Run in a browser from the source tree, the page that signs in passes the same as `signIn`,
 // `report` and `leave` (see main.tsx). `browser`: the service's own page, signed in already.
+// A folder of a computer, the service's directory for it, and what to call it (see instructionsSync.ts).
+type SyncPlace = { device: Device; path: string; root: string; name: string };
+
 export function App({
   browser,
   signIn,
@@ -194,6 +201,8 @@ export function App({
   const [refreshing, setRefreshing] = useState(false);
   const statusPending = useRef(false);
   const [quotaError, setQuotaError] = useState<string | null>(null);
+  // The folder whose instructions and skills are being synced with the service.
+  const [syncing, setSyncing] = useState<SyncPlace | null>(null);
   const quotaPrimed = useRef<string | null>(null);
   const [findRequest, setFindRequest] = useState(0);
   const refreshed = useRef(new Set<string>());
@@ -1290,6 +1299,7 @@ export function App({
         disabled: !connected,
         run: () => client.resync(session.id),
       },
+      ...syncItem(placeOf(session)),
       // To a project here or of another connected computer; the browser keeps no projects.
       ...(!browser
         ? [
@@ -1344,6 +1354,42 @@ export function App({
   }
   // A project of this computer or of another of the user's, connected or not. Only this computer's are pinned,
   // opened or pointed at another folder here; a new session goes into another computer's while it is connected.
+  // A folder of a computer whose instructions and skills can be synced with the directory the service works in for
+  // it (see instructionsSync.ts): through the desktop client, which reaches both. A session the service owns works in
+  // its folder already.
+  const syncable = (place: SyncPlace) =>
+    window.desktop && place.device.id !== serverDevice ? place : null;
+  function placeOf(session: Session) {
+    const project = projectIn(session);
+    const device = project?.device ?? session.device ?? (onThis(session) ? state.device : null);
+    return device
+      ? syncable({
+          device,
+          path: session.projectPath,
+          root: project?.root ?? session.nativeRoot ?? session.id,
+          name: project ? projectName(project) : session.title,
+        })
+      : null;
+  }
+  // Offered where it can be done; while the computer is away or the service offers no files, not now.
+  const syncItem = (place: SyncPlace | null): MenuItem[] =>
+    place
+      ? [
+          {
+            label: t('session:action.sync'),
+            icon: <FolderSync />,
+            disabled: !connected || !sidesOf(place, state.device, state.devices, state.files),
+            run: () => setSyncing(place),
+          },
+        ]
+      : [];
+  const selectedSync =
+    selected &&
+    placeOf(selected) &&
+    sidesOf(placeOf(selected)!, state.device, state.devices, state.files)
+      ? placeOf(selected)
+      : null;
+  const syncSides = syncing && sidesOf(syncing, state.device, state.devices, state.files);
   function projectMenu(entry: Project): MenuItem[] {
     const { path } = entry;
     const here = entry.device.id === state.device?.id;
@@ -1372,6 +1418,9 @@ export function App({
             },
           ]
         : []),
+      ...syncItem(
+        syncable({ device: entry.device, path, root: entry.root, name: projectName(entry) }),
+      ),
       {
         label: t('session:project.rename'),
         icon: <Pencil />,
@@ -1895,6 +1944,11 @@ export function App({
           go={(section) => open('settings', section)}
           native={nativeMode}
           here={state.devices.find((device) => device.id === state.device?.id)}
+          syncInstructions={
+            selectedSync
+              ? { name: selectedSync.name, open: () => setSyncing(selectedSync) }
+              : undefined
+          }
           plugins={state.plugins}
           form={form}
           changeForm={changeForm}
@@ -2216,6 +2270,7 @@ export function App({
             {selected && (!away || remote) && (
               <Composer
                 openAccount={() => open('settings', 'account')}
+                syncInstructions={selectedSync ? () => setSyncing(selectedSync) : undefined}
                 session={selected}
                 projectName={projectIn(selected) ? projectName(projectIn(selected)!) : null}
                 chooseProject={
@@ -2414,6 +2469,14 @@ export function App({
         />
       )}
       {notesDialog}
+      {syncing && syncSides && (
+        <SyncDialog
+          name={syncing.name}
+          computerName={syncing.device.name}
+          sides={syncSides}
+          close={() => setSyncing(null)}
+        />
+      )}
       {state.setupToken && (
         <SetupTokenDialog
           result={state.setupToken}

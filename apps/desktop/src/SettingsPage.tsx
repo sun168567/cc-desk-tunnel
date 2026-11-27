@@ -903,8 +903,11 @@ export default function SettingsPage({
   disconnect,
   browser = false,
   here,
+  syncInstructions,
   plugins = [],
 }: {
+  // The selected session's project, whose instructions and skills can be synced with the service.
+  syncInstructions?: { name: string; open: () => void };
   // The service's plugins, once there is a connection to one.
   plugins?: Plugin[];
   // This computer as the service lists it, with the shells it runs Claude's scripts in. A Windows one has a page for
@@ -1022,7 +1025,7 @@ export default function SettingsPage({
             )
           ) : section === 'instructions' ? (
             native ? (
-              <GlobalInstructions client={client} />
+              <GlobalInstructions client={client} sync={syncInstructions} />
             ) : (
               <Page
                 title={sectionName(t, 'instructions')}

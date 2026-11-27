@@ -430,7 +430,12 @@
     "saved": "Saved; takes effect from the next run",
     "intro": "The user-level CLAUDE.md of Claude Code in the cloud, read by every session on this service from the next run. The user level doesn’t read AGENTS.md, and the CLAUDE.md and AGENTS.md in projects on your computer aren’t read automatically either; ask Claude to read them when needed.",
     "placeholder": "For example: reply in English; write commit messages in English.",
-    "reload": "Reload"
+    "reload": "Reload",
+    "project": {
+      "title": "The project’s instructions and skills",
+      "detail": "A project’s CLAUDE.md, skills and the like are on your computer, and Claude Code on the server doesn’t load them by itself. Synced to the server, they take effect from the next message.",
+      "run": "Sync “{{name}}”…"
+    }
   },
   "web": {
     "credential": "Service token",
