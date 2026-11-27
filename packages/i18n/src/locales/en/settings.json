@@ -235,6 +235,10 @@
       "name": "Browser access",
       "words": "web page certificate domain two-step verification reverse proxy browser sign-in"
     },
+    "plugins": {
+      "name": "Plugins",
+      "words": "plugins notifications push events hooks"
+    },
     "account": {
       "name": "Account and quota",
       "words": "sign in sign out subscription usage call log reset read quota"
@@ -509,6 +513,51 @@
     "lastActive": "Last active {{time}}",
     "revokeOf": "Sign out {{name}}",
     "forwardedBy": "The latest request with a client IP came from {{address}}, which isn’t in the list above. Add it only once you’re sure it is your reverse proxy; don’t add addresses you don’t recognize."
+  },
+  "plugins": {
+    "intro": "Plugins run on the server. When an event happens, such as an approval being needed, a turn ending or a computer going online or offline, the server runs the plugin’s commands, for example to push a notification to your phone.",
+    "empty": "No plugins yet. Put a plugin’s folder in the plugins folder of the server’s data directory, and it shows up here a moment later.",
+    "enable": "Enable {{title}}",
+    "version": "Version {{version}}",
+    "author": "By {{name}}",
+    "failed": "The last run didn’t succeed ({{time}}). See the log below.",
+    "show": "Show",
+    "hide": "Hide",
+    "settings": "Settings",
+    "secretSet": "Set. Leave empty to keep it",
+    "unset": "Not set",
+    "clearValue": "Clear",
+    "try": {
+      "heading": "Try",
+      "intro": "Run the plugin’s commands on an example event, just as when the event really happens.",
+      "running": "Running…"
+    },
+    "log": {
+      "heading": "Log",
+      "empty": "No runs yet.",
+      "refresh": "Refresh",
+      "clear": "Clear",
+      "trial": "Try",
+      "ms": "{{ms, number}} ms",
+      "result": {
+        "ok": "Succeeded",
+        "failed": "Failed",
+        "failedCode": "Failed, exit code {{code}}",
+        "timeout": "Timed out",
+        "unstarted": "Didn’t start"
+      }
+    },
+    "event": {
+      "ApprovalRequested": "Approval needed",
+      "QuestionAsked": "Claude asks a question",
+      "TerminalWaiting": "Terminal waiting",
+      "WaitResolved": "Wait resolved",
+      "BackgroundOnly": "Only background tasks left",
+      "RunError": "Run error",
+      "RunEnded": "Turn ended",
+      "DeviceOnline": "Computer online",
+      "DeviceOffline": "Computer offline"
+    }
   },
   "proxy": {
     "domainFirst": "Fill in the access domain before making the proxy configuration.",

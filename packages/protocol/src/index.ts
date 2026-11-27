@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { webCommandSchemas, webSettingsStateSchema, webTotpSetupSchema } from './web.ts';
 import { webCertificateStateSchema } from './web-certificate.ts';
+import { pluginCommandSchemas, pluginMessageSchemas } from './plugins.ts';
 import { phraseSchema, wordsSchema } from './phrase.ts';
 export * from './phrase.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
+export * from './plugins.ts';
 export * from './tasks.ts';
 
 export const PROTOCOL_VERSION = 30;
@@ -627,6 +629,7 @@ export type ServiceUpdate = z.infer<typeof serviceUpdateSchema>;
 const request = { requestId: id };
 export const commandSchema = z.discriminatedUnion('type', [
   ...webCommandSchemas,
+  ...pluginCommandSchemas,
   z
     .object({
       type: z.literal('server.session.create'),
@@ -983,6 +986,7 @@ export const historyControlSchema = z
   })
   .strict();
 export const serverMessageSchema = z.discriminatedUnion('type', [
+  ...pluginMessageSchemas,
   z.object({
     type: z.literal('session.history.part'),
     requestId: id,
@@ -1033,6 +1037,8 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
         dataDir: z.string(),
         home: z.string(),
         protected: z.boolean(),
+        // The CLI's configuration directory, which keeps each working directory's memory and session records.
+        claude: z.string().optional(),
       })
       .optional(),
     // The plan quota the service holds; every change to it follows as `quota`.

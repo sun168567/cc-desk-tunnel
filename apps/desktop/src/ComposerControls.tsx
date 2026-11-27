@@ -95,7 +95,17 @@ export default function ComposerControls({
     commitPending.current = false;
     dragging.current = false;
   }, [model]);
-  const quota = usePrefs().quota ? quotaFigures(t, account?.rateLimits) : [];
+  // The model in use, by every name it goes by, for a weekly quota of its own.
+  const using = [
+    model,
+    chosen?.value,
+    chosen?.displayName,
+    chosen?.resolvedModel,
+    nativeSession?.model,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const quota = usePrefs().quota ? quotaFigures(t, account?.rateLimits, using) : [];
   const fullest = Math.max(0, ...quota.map((figure) => figure.used));
   return (
     <div className="composer-controls" ref={container}>

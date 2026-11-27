@@ -193,6 +193,23 @@
     "sessionLimit": "登录会话数量已达上限，请先撤销不用的会话。",
     "loginUnavailable": "登录暂时不可用。"
   },
+  "plugins": {
+    "unknown": "没有这个插件，可能刚被移走。",
+    "broken": "{{file}} 有误：{{reason}}",
+    "unset": "要先设置：{{titles, quoted}}",
+    "noEvent": "没有这个事件。",
+    "noCommands": "这个插件没有响应这个事件的命令。",
+    "option": {
+      "unknown": "这个插件没有设置项 {{key}}。",
+      "string": "“{{title}}”应是文字。",
+      "number": "“{{title}}”应是数字。",
+      "boolean": "“{{title}}”应是开或关。",
+      "choice": "“{{title}}”只能选列出的值。",
+      "choiceOfString": "“{{title}}”不是文字，不能列出可选的值。",
+      "min": "“{{title}}”不能小于 {{min, number}}。",
+      "max": "“{{title}}”不能大于 {{max, number}}。"
+    }
+  },
   "certificate": {
     "noDomain": "请先填写访问域名。",
     "tooLong": "证书链或私钥过长。",

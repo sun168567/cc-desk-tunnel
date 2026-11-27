@@ -19,7 +19,8 @@ import type {
 } from '@cc-desk-tunnel/protocol';
 import { wordsText } from '@cc-desk-tunnel/i18n';
 import { localeOf, type T, useT } from './i18n.ts';
-import UsagePanel, { dollars, quotaName, tokens } from './UsagePanel.tsx';
+import UsagePanel, { dollars, tokens } from './UsagePanel.tsx';
+import { quotaName } from './quota.ts';
 import type { ProxyClient } from './client.ts';
 import { IconButton, Page, Row, Switch } from './ui.tsx';
 import { setPrefs, usePrefs } from './prefs.ts';

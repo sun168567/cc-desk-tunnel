@@ -5,6 +5,8 @@ import type { NodeRendererProps } from 'react-arborist';
 import {
   ArrowLeft,
   ArrowUp,
+  Brain,
+  FolderCode,
   ChevronDown,
   ChevronRight,
   ClipboardPaste,
@@ -121,6 +123,7 @@ export default function FilePanel({
   project,
   request,
   aliasOf,
+  sessionFolders,
 }: {
   places: FilePlace[];
   // Where the panel opens in a place for the selected session, or null for wherever the place starts.
@@ -139,6 +142,8 @@ export default function FilePanel({
   request?: { place: string; path: string; at: number } | null;
   // What a directory of the service's is for, where its name does not tell (see `nativeLabels`).
   aliasOf: (name: string) => string | undefined;
+  // On the service, the selected session's working directory and where Claude Code keeps its memory and records.
+  sessionFolders?: { work: string; records: string } | null;
 }) {
   const t = useT();
   const [placeId, setPlaceId] = useState(() => places.find((place) => start(place))?.id ?? 'local');
@@ -216,6 +221,16 @@ export default function FilePanel({
     },
     [place, start, load, info],
   );
+  // One of the session's folders on the service; Claude Code makes the one of its records only when it has some.
+  async function openFolder(path: string, missing: string) {
+    try {
+      await api().stat(place.id, path);
+    } catch {
+      setMessage(missing);
+      return;
+    }
+    await go(path);
+  }
   // A path asked for opens its folder, and the file itself; one in another place waits for that place.
   const pending = useRef<{ place: string; path: string } | null>(null);
   // Whether the panel has opened its first place, before which a request waits for it.
@@ -962,6 +977,24 @@ export default function FilePanel({
               </button>
             ))}
           </span>
+          {place.kind === 'server' && sessionFolders && (
+            <span className="file-crumb-folders">
+              <IconButton
+                title={t('files:folders.work')}
+                onClick={() => void openFolder(sessionFolders.work, t('files:folders.none'))}
+              >
+                <FolderCode />
+              </IconButton>
+              <IconButton
+                title={t('files:folders.records')}
+                onClick={() =>
+                  void openFolder(sessionFolders.records, t('files:folders.noRecords'))
+                }
+              >
+                <Brain />
+              </IconButton>
+            </span>
+          )}
         </nav>
       )}
       {unprotected && (

@@ -168,11 +168,6 @@
     "pickHere": "选择 {{here}} 的会话："
   },
   "usage": {
-    "window": {
-      "five_hour": "5 小时",
-      "seven_day": "7 天",
-      "seven_day_opus": "7 天 Opus"
-    },
     "line_other": "{{name}} 已用 {{used}} · {{count}} 次请求 · 约 ${{cost}}",
     "lineReset_other": "{{name}} 已用 {{used}}，{{reset}} 重置 · {{count}} 次请求 · 约 ${{cost}}",
     "none": "没有订阅额度数据：使用 API Key 或第三方接口时没有额度，用量见图形客户端的统计页。",

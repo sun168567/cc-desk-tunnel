@@ -359,6 +359,29 @@
     "you": "You",
     "untitled": "Session"
   },
+  "exportDialog": {
+    "title": "Export Markdown",
+    "content": "Content",
+    "answers": {
+      "label": "Questions and answers",
+      "detail": "Your questions and Claude’s final answers"
+    },
+    "said": {
+      "label": "With what you added",
+      "detail": "Also what you said while Claude was working"
+    },
+    "all": {
+      "label": "Every step",
+      "detail": "Also thinking, and tool calls with their input and output"
+    },
+    "range": "Range",
+    "every": "All",
+    "recent": "Last",
+    "turns": "Turns",
+    "turnsUnit": "turns",
+    "save": "Export",
+    "reading": "Reading…"
+  },
   "simulation": {
     "scenario": "Scenario",
     "label": "Simulation scenario",

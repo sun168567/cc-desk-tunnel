@@ -202,6 +202,23 @@
     "sessionLimit": "There are too many signed-in browsers. Sign some out first.",
     "loginUnavailable": "Signing in is unavailable for now."
   },
+  "plugins": {
+    "unknown": "There’s no such plugin. It may have just been removed.",
+    "broken": "{{file}} has a problem: {{reason}}",
+    "unset": "Set these first: {{titles, quoted}}",
+    "noEvent": "There’s no such event.",
+    "noCommands": "This plugin has no commands for this event.",
+    "option": {
+      "unknown": "This plugin has no setting {{key}}.",
+      "string": "“{{title}}” must be text.",
+      "number": "“{{title}}” must be a number.",
+      "boolean": "“{{title}}” must be on or off.",
+      "choice": "“{{title}}” must be one of the listed values.",
+      "choiceOfString": "“{{title}}” isn’t text, so it can’t list values to choose from.",
+      "min": "“{{title}}” can’t be less than {{min, number}}.",
+      "max": "“{{title}}” can’t be more than {{max, number}}."
+    }
+  },
   "certificate": {
     "noDomain": "Enter the access domain first.",
     "tooLong": "The certificate chain or private key is too long.",

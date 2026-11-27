@@ -234,7 +234,7 @@
         ],
         "tip1": {
           "title": "Right-click a session",
-          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯)."
+          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯). An export can hold only the questions and answers, or only the last few turns, which is much quicker for a long session."
         }
       },
       "news": {
@@ -306,7 +306,8 @@
         ],
         "list1": ["Giving Claude a file needs no panel: drag it into the input box."],
         "list2": [
-          "The numbered folders on the server are the sessions’ working folders; each is marked with the project or session it belongs to."
+          "The numbered folders on the server are the sessions’ working folders; each is marked with the project or session it belongs to.",
+          "On the server, the two buttons at the end of the path open the session’s working folder, and the memory and conversation records Claude keeps for it."
         ],
         "prompts1": {
           "title": "Or just have Claude move them",
@@ -610,7 +611,7 @@
       "blocks": {
         "list1": [
           "**Use `ccdt` when the 5-hour quota is tight**: the desktop client runs through the official Agent SDK. Community measurements put the share of the same use counted against the 5-hour quota at about twice that of the interactive CLI; the weekly quota is not affected. See [how ccdt is best used](#ccdt).",
-          "**Quota beside the input box**: turn it on in [Appearance](settings:appearance).",
+          "**Quota beside the input box**: turn it on in [Appearance](settings:appearance). It shows the 5-hour and the whole account’s weekly use; when the model in use has a weekly limit of its own that is further used (such as Fable on Max), that one is shown instead, named after the model.",
           "**Fast mode doesn’t use the plan’s quota**: on a subscription it is charged straight to extra usage; see [Fast mode](#model-settings#fast).",
           "**The call log**: each request’s model, tokens and equivalent cost; the amounts are estimated at API prices, not a bill.",
           "**The quota is empty**: it comes from a run of Claude Code; send a message, or refresh on the account page."
@@ -962,6 +963,113 @@
           "text": "For “Deny instead of asking”, see [Letting tasks finish on their own](#unattended#deny). Claude Code’s safety checks ask in every mode; see [Approval modes](#approval)."
         },
         "actions1": ["Open CLI settings"]
+      }
+    },
+    "plugins": {
+      "title": "Plugins",
+      "lead": "When something happens, the server runs a plugin’s command: push approvals, questions and finished tasks to your phone, or into a system of your own.",
+      "words": "plugins notifications push hooks events ntfy Telegram DingTalk Feishu WeCom webhook",
+      "blocks": {
+        "p1": "A plugin is a folder in the `plugins` folder of the server’s data directory, written as a Claude Code plugin is. It works a moment after it is put there, with no restart.",
+        "prompts1": {
+          "items": [
+            {
+              "text": "Write a plugin that pushes to my Telegram when you wait for my approval or finish a turn",
+              "note": "Claude writes it as “Developing plugins” says and puts it on the server; fill in the bot token in the settings and it works."
+            },
+            {
+              "text": "Look at the plugin log and tell me why the last push didn’t go out"
+            }
+          ]
+        },
+        "steps1": [
+          {
+            "title": "Install",
+            "text": "Have Claude write it, or put a plugin’s folder in `plugins` in the server’s data directory (`/data/state/plugins` in the container of a Docker deployment)."
+          },
+          {
+            "title": "Set up",
+            "text": "Open it in Settings → Plugins and fill in what it asks for, such as where to push or a token.",
+            "action": "Plugin settings"
+          },
+          {
+            "title": "Try",
+            "text": "Click an event it handles to run it once on an example; the result is in the log below."
+          }
+        ],
+        "events": "Events plugins can handle",
+        "table1": {
+          "head": ["Event", "When"],
+          "rows": [
+            ["`ApprovalRequested`", "Waiting for approval, including of a plan"],
+            ["`QuestionAsked`", "Claude asks a question and waits for your answer"],
+            ["`TerminalWaiting`", "A `ccdt` terminal waits for you to confirm"],
+            ["`WaitResolved`", "One of the waits above was answered, or the run ended"],
+            ["`BackgroundOnly`", "The turn is answered; only background tasks are left"],
+            ["`RunError`", "A run hit an error"],
+            ["`RunEnded`", "A turn ended: completed, failed or stopped"],
+            ["`DeviceOnline` · `DeviceOffline`", "A computer went online or offline"]
+          ]
+        },
+        "warn1": {
+          "title": "Install only plugins you trust",
+          "text": "A plugin can do what the server can: read the server’s credentials and run commands on your computers that are online. Install only ones you wrote, Claude wrote for you, or that come from a source you trust."
+        }
+      }
+    },
+    "plugin-dev": {
+      "title": "Developing plugins",
+      "lead": "Written as a Claude Code plugin is: a folder and a hooks.json, with its settings declared in plugin.json.",
+      "words": "developing plugins hooks.json plugin.json userConfig matcher CLAUDE_PLUGIN_ROOT CLAUDE_PLUGIN_DATA CLAUDE_PLUGIN_OPTION environment variables spec",
+      "blocks": {
+        "p1": "A plugin is a folder in the server’s `plugins` folder, and the folder’s name is its id (lowercase letters, digits, `.`, `_`, `-`). Changes take effect a moment later.",
+        "code1": {
+          "label": "Layout",
+          "text": "<id>/\n├── .claude-plugin/plugin.json   name, version, settings (optional)\n├── hooks/hooks.json             which command each event runs\n└── notify.mjs                   the plugin’s own program"
+        },
+        "hooks": "hooks.json",
+        "code2": {
+          "label": "Run your own script when a turn completes or fails",
+          "text": "{\n  \"hooks\": {\n    \"RunEnded\": [\n      {\n        \"matcher\": \"completed|failed\",\n        \"hooks\": [\n          { \"type\": \"command\", \"command\": \"node\", \"args\": [\"${CLAUDE_PLUGIN_ROOT}/notify.mjs\"], \"timeout\": 20 }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        "list1": [
+          "`type` is `command` only. With `args`, `command` is started directly; without, it is given to the shell.",
+          "`matcher` is written as in Claude Code: none or `*` matches all, `a|b` lists names, anything else is a regular expression. The field it is held against is in the table below.",
+          "`timeout` is in seconds, 60 by default and 600 at most; on it, the command ends with what it started. At most 8 commands run at once.",
+          "The event is one JSON object on standard input. `CLAUDE_PLUGIN_ROOT` is the plugin’s folder, `CLAUDE_PLUGIN_DATA` a folder for its state, and each setting is `CLAUDE_PLUGIN_OPTION_<KEY>`, the key in capitals. `args` may hold `${CLAUDE_PLUGIN_ROOT}` and `${user_config.KEY}`.",
+          "What a command prints goes to the log, with secrets that appear as they are replaced by `***`."
+        ],
+        "settings": "Settings",
+        "code3": {
+          "label": ".claude-plugin/plugin.json",
+          "text": "{\n  \"name\": \"notify\",\n  \"displayName\": \"Telegram\",\n  \"version\": \"1.0.0\",\n  \"userConfig\": {\n    \"token\": { \"type\": \"string\", \"title\": \"Bot token\", \"sensitive\": true, \"required\": true },\n    \"done\": { \"type\": \"boolean\", \"title\": \"Turn ended\", \"default\": true }\n  }\n}"
+        },
+        "list2": [
+          "`type` is `string`, `number` or `boolean`; `title` is required, and `description`, `required` and `default` are optional. Text may have `options` (a list to pick from), a number `min` and `max`.",
+          "A `sensitive` value can’t be read back once saved; only the commands get it. While a required setting has no value, the plugin doesn’t run.",
+          "The settings page draws its form from these declarations; the plugin’s code takes no part in drawing it."
+        ],
+        "fields": "What an event holds",
+        "table1": {
+          "head": ["Event", "More fields (what matcher is held against in brackets)"],
+          "rows": [
+            ["`ApprovalRequested`", "`wait_id`, `tool_name` (`tool_name`)"],
+            ["`QuestionAsked`", "`wait_id`, `tool_name`"],
+            ["`TerminalWaiting`", "`wait_id`"],
+            ["`WaitResolved`", "`wait_id`, `waiting`, `tool_name`, `allowed` (`waiting`)"],
+            ["`RunError`", "`code`, `message` (`code`)"],
+            [
+              "`RunEnded`",
+              "`status`: `completed`, `failed`, `cancelled`; `reason`, `duration_ms`, `error` (`status`)"
+            ],
+            ["`DeviceOnline` · `DeviceOffline`", "`device`"]
+          ]
+        },
+        "list3": [
+          "Every event has `version`, `hook_event_name` and `timestamp`; a session’s event also has `session_id`, `session_title`, `project_path`, `run_id`, `device` (`id`, `name`, `platform`), `model`, `permission_mode`, `context` and `quota`. A field with no value is left out.",
+          "Events hold nothing of the conversation, nor tools’ input and output. `reason` and `message` are words for people: don’t act on their text.",
+          "The spec only grows: events and fields added later leave existing plugins working, and unknown events and fields are ignored."
+        ]
       }
     },
     "background": {

@@ -46,6 +46,12 @@
   "close": "关闭文件面板",
   "current": "当前位置",
   "up": "上一级",
+  "folders": {
+    "work": "会话在服务端的工作目录",
+    "records": "Claude 在服务端记下的：记忆、对话记录",
+    "noRecords": "Claude 还没为这个会话记下东西",
+    "none": "这个文件夹不存在"
+  },
   "landlock": {
     "detail": "内核不支持 Landlock：登录凭据、setup token 等可被读取和修改",
     "title": "敏感文件未受保护",

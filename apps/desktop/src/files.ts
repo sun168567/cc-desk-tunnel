@@ -23,7 +23,13 @@ export type FilePlace = {
   style: 'windows' | 'posix';
 };
 // What the service offers the file panel; `server` is false where its image has no SFTP server.
-export type FilesInfo = { server: boolean; dataDir: string; home: string; protected: boolean };
+export type FilesInfo = {
+  server: boolean;
+  dataDir: string;
+  home: string;
+  protected: boolean;
+  claude?: string;
+};
 
 export const isDirectory = (entry: FileEntry) =>
   entry.kind === 'directory' || (entry.kind === 'link' && entry.target === 'directory');
@@ -135,6 +141,15 @@ export function sessionFolder(
   if (place.kind === 'local') return onThis ? session.projectPath : null;
   if (session.device?.id !== place.id) return null;
   return sftpPath(session.projectPath, platformOf(session.device));
+}
+
+// On the service, the two folders of a session: the directory Claude Code works in for it, and the one where the
+// CLI keeps what it knows of that directory, its memory and the sessions' own records, under its configuration
+// directory by the path with every other character a dash. None before the service says where they are.
+export function serverFolders(session: Session | undefined, files: FilesInfo | null) {
+  if (!session || !files?.server || !files.claude) return null;
+  const work = `${files.dataDir}/native/${session.nativeRoot ?? session.id}`;
+  return { work, records: `${files.claude}/projects/${work.replace(/[^a-zA-Z0-9]/g, '-')}` };
 }
 
 // The service names a directory Claude Code works in by an ID, `native/<root>`, and the CLI keeps what it knows of

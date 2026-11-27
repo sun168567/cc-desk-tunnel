@@ -2,7 +2,7 @@ import type { Session, SessionEvent } from '@cc-desk-tunnel/protocol';
 import type { ProxyClient } from './client.ts';
 import { localeOf, t } from './i18n.ts';
 import { conversation, planOf } from './transcript.ts';
-import type { Step } from './transcript.ts';
+import type { Step, Turn } from './transcript.ts';
 import { pictureNote, toolPictures } from './pictures.ts';
 
 // A fence longer than any run of backticks inside, so the content cannot close it early.
@@ -22,9 +22,25 @@ function toolOutput(output: string) {
     : output;
 }
 
-// The whole session as one Markdown document: questions, answers, and under each answer what was done to
-// reach it — thinking, tool calls with their input and output — folded into <details>.
-export function markdown(session: Session, events: SessionEvent[]) {
+// What an export holds: every step (`all`), or only the questions and the answers, with what the user said while a
+// turn went on (`said`) or without it (`answers`); of every turn, or of the last `turns`.
+export type ExportOptions = { content: 'all' | 'said' | 'answers'; turns?: number };
+
+// The turns an export covers. A turn of something said while the one before still went on is a question of its own;
+// a count of turns counts the others.
+function covered(turns: Turn[], options: ExportOptions) {
+  if (!options.turns) return turns;
+  const asked = turns.flatMap((turn, index) => (turn.joined ? [] : [index]));
+  return asked.length > options.turns ? turns.slice(asked.at(-options.turns)) : turns;
+}
+
+// The session as one Markdown document: questions, answers, and, for `all`, under each answer what was done to reach
+// it — thinking, tool calls with their input and output — folded into <details>.
+export function markdown(
+  session: Session,
+  events: SessionEvent[],
+  options: ExportOptions = { content: 'all' },
+) {
   const parts = [
     `# ${session.title}`,
     t('session:export.header', {
@@ -56,28 +72,41 @@ export function markdown(session: Session, events: SessionEvent[]) {
         : `<details>\n<summary>${t('session:tool.thinking')}</summary>\n\n${work.text}\n</details>`,
     );
   };
-  for (const turn of conversation(events, t)) {
-    if (turn.question && !turn.question.continued)
+  for (const turn of covered(conversation(events, t), options)) {
+    const question = turn.question?.continued ? undefined : turn.question;
+    if (question && (options.content !== 'answers' || !turn.joined))
       parts.push(
-        `## ${t('session:export.you')} · ${new Date(turn.question.at).toLocaleString(localeOf(t))}`,
-        turn.question.text,
+        `## ${t('session:export.you')} · ${new Date(question.at).toLocaleString(localeOf(t))}`,
+        question.text,
       );
-    const body = [...turn.steps.flatMap(step), ...(turn.answer ? [turn.answer.text] : [])];
+    const body = [
+      ...(options.content === 'all' ? turn.steps.flatMap(step) : []),
+      ...(turn.answer ? [turn.answer.text] : []),
+    ];
     if (body.length) parts.push('## Claude Code', ...body);
-    for (const notice of turn.notices) parts.push(`> ${notice.text}`);
+    if (options.content === 'all')
+      for (const notice of turn.notices) parts.push(`> ${notice.text}`);
   }
   return `${parts.join('\n\n')}\n`;
 }
 
-// Only part of a long session is in memory; the rest is fetched page by page before writing.
-export async function exportSession(client: ProxyClient, session: Session) {
+// Only part of a long session is in memory. The rest is read page by page, from the disk where it is kept and from
+// the service otherwise, without being shown; for the last turns, only as far back as they go.
+export async function exportSession(client: ProxyClient, session: Session, options: ExportOptions) {
   if (client.state.selectedId !== session.id) client.select(session.id);
   await client.waitForHistory(session.id);
-  while (client.state.history[session.id]?.hasEarlier) {
-    await client.loadEarlier(session.id);
-    await client.waitForHistory(session.id);
-  }
-  const text = markdown(session, client.shown(session.id));
+  let events = client.shown(session.id);
+  const history = client.state.history[session.id];
+  // One turn more than asked for: the oldest of what is read may have begun on a page before.
+  const enough = () =>
+    !!options.turns &&
+    conversation(events, t).filter((turn) => !turn.joined).length > options.turns;
+  if (history?.hasEarlier && !enough())
+    for await (const page of client.earlierPages(session.id, history.firstSequence)) {
+      events = [...page, ...events];
+      if (enough()) break;
+    }
+  const text = markdown(session, events, options);
   const name = `${session.title.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || t('session:export.untitled')}.md`;
   if (window.desktop) return window.desktop.saveFile(name, text);
   const link = document.createElement('a');
