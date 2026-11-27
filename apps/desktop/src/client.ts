@@ -260,6 +260,8 @@ export class ProxyClient {
       following?: ServerMessage[];
       done?: Promise<Response>;
       command?: NewCommand;
+      // A page of history read for a reader that keeps it itself (see `earlierPages`).
+      collect?: (page: HistoryPage) => void;
     }
   >();
   // The history read before, kept on disk; and the sessions being shown from it while the service is asked.
@@ -649,6 +651,20 @@ export class ProxyClient {
       } else if (message.type === 'session.snapshot') {
         this.flushStream();
         const request = this.pending.get(message.requestId);
+        // A page read for a reader of its own goes on disk as any page does, and is shown nowhere.
+        if (request?.collect) {
+          this.disk.write(message.session.id, message.events, covered(message, request.command));
+          clearTimeout(request.timer);
+          this.pending.delete(message.requestId);
+          request.collect(message);
+          request.resolve({
+            type: 'response',
+            requestId: message.requestId,
+            ok: true,
+            sessionId: message.session.id,
+          });
+          return;
+        }
         if (
           !request ||
           !this.cacheOrder.includes(message.session.id) ||
@@ -965,6 +981,29 @@ export class ProxyClient {
       throw error;
     }
   }
+  // The pages of a session's history before `before`, newest first, for a reader that keeps what it reads itself,
+  // such as an export: the disk's where it holds them, the service's for the rest, which go on disk as any page does.
+  // None of it is shown, so a long history is read without the conversation being laid out again at every page.
+  async *earlierPages(sessionId: string, before: number): AsyncGenerator<SessionEvent[]> {
+    for (;;) {
+      const held = this.disk.ready ? await this.disk.earlier(sessionId, before) : null;
+      let page: { events: SessionEvent[]; hasEarlier: boolean } | undefined;
+      if (held && 'events' in held) page = held;
+      else {
+        const after = held?.after ?? 0;
+        await this.request(
+          { type: 'session.history', sessionId, beforeSequence: before, afterSequence: after },
+          (read) => {
+            page = { events: read.events, hasEarlier: read.hasEarlier || !!after };
+          },
+        );
+      }
+      if (!page?.events.length) return;
+      yield page.events;
+      if (!page.hasEarlier) return;
+      before = page.events[0]!.sequence;
+    }
+  }
   select(sessionId: string) {
     if (this.state.selectedId === sessionId && this.state.history[sessionId]?.loading) return;
     this.cancelHistory();
@@ -1057,7 +1096,7 @@ export class ProxyClient {
     if (!result) throw new Error(t('connection:noData'));
     return result as Extract<ServerMessage, { type: Replies[T] }>;
   }
-  async request(command: NewCommand): Promise<Response> {
+  async request(command: NewCommand, collect?: (page: HistoryPage) => void): Promise<Response> {
     if (this.state.status !== 'connected' || this.socket?.readyState !== WebSocket.OPEN)
       throw new Error(t('connection:notConnected'));
     const requestId = crypto.randomUUID();
@@ -1086,6 +1125,7 @@ export class ProxyClient {
         timer: setTimeout(expire, wait),
         type: command.type,
         command,
+        collect,
         sessionId: history ? command.sessionId : undefined,
         renew: () => {
           clearTimeout(request.timer);
