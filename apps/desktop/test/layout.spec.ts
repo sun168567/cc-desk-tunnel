@@ -359,7 +359,7 @@ test('a question is answered with its choices, and a session or a whole project 
   await send(page, '检查目录', 'tool');
   await page.getByRole('button', { name: '允许', exact: true }).click();
   await settled(page);
-  await expandActivity(page);
+  await expandActivity(page, page.locator('.tool-output').last());
   await expect(page.locator('.tool-output').last()).toContainText(other);
 
   // Pointing the project at another folder takes its sessions along.
