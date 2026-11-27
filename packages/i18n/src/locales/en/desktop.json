@@ -35,7 +35,12 @@
     "connectFirst": "Connect to the server first.",
     "othersOpen": "Windows of other connections didn’t quit; quit them first, then upgrade.",
     "title": "Upgrading CC Desk Tunnel",
-    "body": "It opens again once installed."
+    "body": "It opens again once installed.",
+    "macPrepareFailed": "Could not prepare the macOS update ({{reason}}). The current app is still available. Please retry.",
+    "macInstallLocation": "This app location cannot be updated automatically. Install the app in an Applications folder you can write to, then retry.",
+    "macUpdateBusy": "Another window is already updating this app. Please try again later.",
+    "macInvalidBundle": "The downloaded app failed version, architecture or signature verification. The update was stopped.",
+    "macRollback": "The update could not finish. Review the reason below before retrying."
   },
   "menu": {
     "undo": "Undo",
@@ -204,7 +209,9 @@
     "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or get the installer from the server instead.",
     "nothing": "the connection sent no data",
     "httpFailed": "Downloading the installer failed ({{status}}).",
-    "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned."
+    "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned.",
+    "macNoManifest": "Couldn’t read the release details for {{version}} ({{reason}}). Check your connection to GitHub, or download the macOS installer from the release page.",
+    "macInterrupted": "Downloading the macOS installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}. Check your connection and try again, or download it from the release page."
   },
   "service": {
     "refused": "The server refused the connection.",

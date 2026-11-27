@@ -22,7 +22,7 @@ async function page(
   const ranges = [];
   const server = createServer((request, response) => {
     if (request.url === '/v9.8.7/release.json') response.end(JSON.stringify(manifest));
-    else if (request.url === `/v9.8.7/${name}`) {
+    else if (manifest.files.some((file) => request.url === `/v9.8.7/${file.name}`)) {
       ranges.push(request.headers.range);
       serve(request, response, ranges.length);
     } else response.writeHead(404).end();
@@ -42,6 +42,62 @@ async function page(
   return { directory, ranges, options };
 }
 const start = (request) => Number(/^bytes=(\d+)-$/.exec(request.headers.range ?? '')?.[1] ?? 0);
+
+test('macOS downloads the DMG for its architecture even when the service announces the Windows installer', async (t) => {
+  const files = [{ name, size: installer.length, sha256 }];
+  const images = new Map();
+  for (const arch of ['arm64', 'x64']) {
+    const filename = `CC-Desk-Tunnel-9.8.7-mac-${arch}.dmg`;
+    const bytes = Buffer.from(`disk image for ${arch}`);
+    files.push({
+      name: filename,
+      size: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    });
+    images.set(`/v9.8.7/${filename}`, bytes);
+  }
+  const f = await page(
+    t,
+    (request, response) => response.end(images.get(request.url) ?? installer),
+    {
+      version: '9.8.7',
+      files,
+    },
+  );
+  for (const arch of ['arm64', 'x64']) {
+    const path = await downloadRelease(
+      fetch,
+      '9.8.7',
+      f.directory,
+      f.options({
+        platform: 'darwin',
+        arch,
+        announced: { version: '9.8.7', sha256 },
+      }),
+    );
+    assert.equal(path, join(f.directory, `CC-Desk-Tunnel-9.8.7-mac-${arch}.dmg`));
+    assert.equal(readFileSync(path, 'utf8'), `disk image for ${arch}`);
+  }
+});
+
+test('macOS rejects a missing architecture or a DMG whose content fails verification', async (t) => {
+  const arm = { name: 'CC-Desk-Tunnel-9.8.7-mac-arm64.dmg', size: installer.length, sha256 };
+  const f = await page(t, (_request, response) => response.end(Buffer.alloc(installer.length)), {
+    version: '9.8.7',
+    files: [arm, { name, size: installer.length, sha256 }],
+  });
+  await assert.rejects(
+    downloadRelease(fetch, '9.8.7', f.directory, f.options({ platform: 'darwin', arch: 'x64' })),
+    told(/没有这个版本/),
+  );
+  assert.equal(f.ranges.length, 0);
+  await assert.rejects(
+    downloadRelease(fetch, '9.8.7', f.directory, f.options({ platform: 'darwin', arch: 'arm64' })),
+    told(/校验失败/),
+  );
+  assert.equal(f.ranges.length, 1);
+  assert.deepEqual(readdirSync(f.directory), []);
+});
 
 test('the installer is taken from the release page, across connections that go quiet, and checked against the manifest', async (t) => {
   // Every connection sends 6,000 bytes and then goes quiet without closing; the second sends nothing.

@@ -64,7 +64,7 @@ import { say, useT } from './i18n.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { deviceName, isHere, thisDevice } from './device.ts';
-import { selfUpdating } from './platform.ts';
+import { canDownloadRelease, isMac, selfUpdating } from './platform.ts';
 import { useClientUpgrade } from './client-upgrade.ts';
 import { useDrafts } from './drafts.ts';
 import { useDrawerSwipe } from './useDrawerSwipe.ts';
@@ -110,7 +110,7 @@ import type { BarMenu } from './TitleBar.tsx';
 import IdleReminder from './IdleReminder.tsx';
 import { CcdtDialog } from './CcdtDialog.tsx';
 import { SetupTokenDialog } from './SetupTokenDialog.tsx';
-import { IconButton, Menu } from './ui.tsx';
+import { IconButton, Menu, Modal } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 
 // The notes of every version so far are read only when asked for, and stay out of what the window starts with.
@@ -528,10 +528,11 @@ export function App({
   // A service newer than this client that holds no installer for it yet, as just after its own upgrade: the
   // release page has it. The service tells when its own arrives.
   const behind =
-    selfUpdating && version && state.service && isNewer(state.service, version) && !upgrade
+    canDownloadRelease && version && state.service && isNewer(state.service, version) && !upgrade
       ? state.service
       : null;
-  const upgrading = useClientUpgrade(setError);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const upgrading = useClientUpgrade(isMac ? setUpgradeError : setError);
   // A service of a newer version: what that version changed can be read here, whether or not this system's
   // client upgrades itself.
   const ahead =
@@ -1564,6 +1565,17 @@ export function App({
     : (state.account?.email ??
       capabilities?.account.email ??
       t(nativeMode ? 'nav:bar.accountUnnamed' : 'nav:bar.simulation'));
+  // A Mac can download the next release while the service is still on this version. If it has already
+  // upgraded, the matching release takes priority.
+  const macRelease =
+    isMac &&
+    !behind &&
+    version &&
+    update?.latest &&
+    ['available', 'manual'].includes(update.state) &&
+    isNewer(update.latest, version)
+      ? update.latest
+      : null;
   // The client's upgrade, from the service or the release page; while one runs, how it goes and a way to stop it.
   const upgradeItems: MenuItem[] = upgrading.step
     ? [
@@ -1572,22 +1584,28 @@ export function App({
           ? [{ label: t('connection:update.cancelClient'), icon: <X />, run: upgrading.cancel }]
           : []),
       ]
-    : [upgrade, behind]
+    : [upgrade, behind, macRelease]
         .filter((target): target is string => !!target)
         .map((target) => ({
-          label: working.length
-            ? t(
-                target === upgrade
-                  ? 'connection:update.clientWorking'
-                  : 'connection:update.githubWorking',
-                { version: target, count: working.length },
-              )
-            : t(target === upgrade ? 'connection:update.client' : 'connection:update.github', {
-                version: target,
-              }),
+          label: isMac
+            ? t('connection:update.client', { version: target })
+            : working.length
+              ? t(
+                  target === upgrade
+                    ? 'connection:update.clientWorking'
+                    : 'connection:update.githubWorking',
+                  { version: target, count: working.length },
+                )
+              : t(target === upgrade ? 'connection:update.client' : 'connection:update.github', {
+                  version: target,
+                }),
           icon: <Download />,
-          disabled: busy || working.length > 0,
-          run: () => upgrading.start(target === upgrade ? undefined : target),
+          disabled: busy || (!isMac && working.length > 0),
+          run: () => {
+            if (isMac && !window.confirm(t('connection:update.confirmMac', { version: target })))
+              return;
+            upgrading.start(target === upgrade ? undefined : target);
+          },
         }));
   // What an upgrade would bring is read where the upgrade is offered, before it is taken.
   const newer =
@@ -1611,8 +1629,8 @@ export function App({
   // The rail shows its button only for an update that exists, not for the standing offer to look for one.
   const pendingUpdate =
     upgrading.text ??
-    (upgrade || behind
-      ? t('connection:update.clientAvailable', { version: upgrade ?? behind ?? '' })
+    (upgrade || behind || macRelease
+      ? t('connection:update.clientAvailable', { version: upgrade ?? behind ?? macRelease ?? '' })
       : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
         ? (serviceUpdate?.label ?? null)
         : null);
@@ -1972,7 +1990,11 @@ export function App({
           version={version}
           service={state.service}
           adapterName={adapterName}
-          updates={host.serviceManagement ? updates : []}
+          updates={
+            host.serviceManagement
+              ? updates.filter((item) => !isMac || !upgradeItems.includes(item))
+              : []
+          }
           showNotes={setNotes}
           account={
             <AccountPanel
@@ -2481,6 +2503,13 @@ export function App({
         />
       )}
       {notesDialog}
+      {upgradeError && (
+        <Modal title={t('connection:clientUpgrade.failed')} onClose={() => setUpgradeError(null)}>
+          <p className="error-text" role="alert">
+            {upgradeError}
+          </p>
+        </Modal>
+      )}
       {syncing && syncSides && (
         <SyncDialog
           name={syncing.name}

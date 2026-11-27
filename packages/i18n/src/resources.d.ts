@@ -619,6 +619,7 @@ export type Resources = {
       refetching: '服务端还没有这一版的安装包，正在重新下载；也可以直接从 GitHub 发布页下载。';
     };
     clientUpgrade: {
+      failed: '客户端升级失败';
       connecting: {
         service: '正在连接服务端…';
         github: '正在连接 GitHub…';
@@ -640,6 +641,7 @@ export type Resources = {
       verifying: '正在校验安装包…';
       closing: '正在关闭其他连接的窗口…';
       installing: '正在安装，完成后客户端会自动打开';
+      preparingMac: '正在准备安装 macOS 更新…';
     };
     web: {
       selfSigned: '当前服务使用自签名证书，请确认访问地址可信。建议在桌面端“设置 → 浏览器访问”导入正规证书，或由反向代理提供 HTTPS。';
@@ -680,6 +682,7 @@ export type Resources = {
       githubWorking_other: '从 GitHub 下载并升级到 {{version}}（{{count}} 个会话正在运行）';
       notes: '查看 {{version}} 的更新内容';
       clientAvailable: '客户端可升级到 {{version}}';
+      confirmMac: '安装 {{version}} 前会关闭这份应用的所有连接，正在运行的任务可能中断。安装后客户端会自动重启。请确认服务端已升级到同一版本。继续升级？';
     };
     reconnect: {
       body: '与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。';
@@ -741,6 +744,11 @@ export type Resources = {
       othersOpen: '其他连接的窗口没有退出，请先退出它们再升级。';
       title: '正在升级 CC Desk Tunnel';
       body: '安装完成后会自动重新打开。';
+      macPrepareFailed: '准备 macOS 更新失败（{{reason}}）。当前应用仍可使用，请重试。';
+      macInstallLocation: '应用所在位置无法自动更新。请将应用安装到你有写入权限的“应用程序”目录后重试。';
+      macUpdateBusy: '这份应用已有另一个窗口正在更新，请稍后重试。';
+      macInvalidBundle: '下载的应用版本、芯片架构或签名校验不符，已放弃更新。';
+      macRollback: '升级未完成。请查看下方原因后重试。';
     };
     menu: {
       undo: '撤销';
@@ -910,6 +918,8 @@ export type Resources = {
       nothing: '连接没有数据';
       httpFailed: '安装包下载失败（{{status}}）。';
       tooLarge: '安装包比发布信息里的大，已放弃升级。';
+      macNoManifest: '读取不到 {{version}} 的发布信息（{{reason}}）。请检查与 GitHub 的连接，或前往发布页手动下载 macOS 安装包。';
+      macInterrupted: '从 GitHub 下载 macOS 安装包中断（{{reason}}），已下载 {{received}} / {{size}}。请检查网络后重试，或前往发布页手动下载。';
     };
     service: {
       refused: '服务端拒绝了连接。';
@@ -2173,7 +2183,7 @@ export type Resources = {
             },
             {
               title: '再升级客户端';
-              text: 'Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载；macOS、Linux 重新下载安装。';
+              text: 'Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载。macOS 在工作台的“更新”菜单选择“升级客户端”，客户端会自动安装并重启。Linux 需要手动下载并安装新版。';
             },
           ];
           list1: readonly ['自带的 `ccdt` 随图形客户端升级；单独安装的运行 `ccdt upgrade`。'];
@@ -3487,6 +3497,7 @@ export type Resources = {
       devTools: '开发者工具';
       devToolsDetail: '反馈界面问题时查看报错。里面能看到对话，别按他人要求在其中粘贴代码';
       openDevTools: '打开开发者工具';
+      updatesMac: '有新版本时，在工作台的“更新”菜单选择“升级客户端”。校验通过后会退出应用，安装并重新打开。客户端与服务端需要保持同一版本。';
     };
     section: {
       general: {
@@ -4383,6 +4394,7 @@ export type Messages = {
   'connection:upgrade.manualClient': Record<string, never>;
   'connection:upgrade.preparing': { percent: Value };
   'connection:upgrade.refetching': Record<string, never>;
+  'connection:clientUpgrade.failed': Record<string, never>;
   'connection:clientUpgrade.connecting.service': Record<string, never>;
   'connection:clientUpgrade.connecting.github': Record<string, never>;
   'connection:clientUpgrade.connectingWaited.service': { count: number };
@@ -4396,6 +4408,7 @@ export type Messages = {
   'connection:clientUpgrade.verifying': Record<string, never>;
   'connection:clientUpgrade.closing': Record<string, never>;
   'connection:clientUpgrade.installing': Record<string, never>;
+  'connection:clientUpgrade.preparingMac': Record<string, never>;
   'connection:web.selfSigned': Record<string, never>;
   'connection:web.stateFailed': Record<string, never>;
   'connection:web.ended': Record<string, never>;
@@ -4432,6 +4445,7 @@ export type Messages = {
   'connection:update.githubWorking': { count: number; version: Value };
   'connection:update.notes': { version: Value };
   'connection:update.clientAvailable': { version: Value };
+  'connection:update.confirmMac': { version: Value };
   'connection:reconnect.body': Record<string, never>;
   'connection:reconnect.bodyWithReason': { reason: Value };
   'connection:reconnect.button': Record<string, never>;
@@ -4477,6 +4491,11 @@ export type Messages = {
   'desktop:upgrade.othersOpen': Record<string, never>;
   'desktop:upgrade.title': Record<string, never>;
   'desktop:upgrade.body': Record<string, never>;
+  'desktop:upgrade.macPrepareFailed': { reason: Value };
+  'desktop:upgrade.macInstallLocation': Record<string, never>;
+  'desktop:upgrade.macUpdateBusy': Record<string, never>;
+  'desktop:upgrade.macInvalidBundle': Record<string, never>;
+  'desktop:upgrade.macRollback': Record<string, never>;
   'desktop:menu.undo': Record<string, never>;
   'desktop:menu.redo': Record<string, never>;
   'desktop:menu.cut': Record<string, never>;
@@ -4600,6 +4619,8 @@ export type Messages = {
   'desktop:download.nothing': Record<string, never>;
   'desktop:download.httpFailed': { status: Value };
   'desktop:download.tooLarge': Record<string, never>;
+  'desktop:download.macNoManifest': { version: Value; reason: Value };
+  'desktop:download.macInterrupted': { reason: Value; received: Value; size: Value };
   'desktop:service.refused': Record<string, never>;
   'desktop:service.tooOld': { service: Value };
   'desktop:service.upgradeRefused': Record<string, never>;
@@ -6313,6 +6334,7 @@ export type Messages = {
   'settings:about.devTools': Record<string, never>;
   'settings:about.devToolsDetail': Record<string, never>;
   'settings:about.openDevTools': Record<string, never>;
+  'settings:about.updatesMac': Record<string, never>;
   'settings:section.general.name': Record<string, never>;
   'settings:section.general.words': Record<string, never>;
   'settings:section.appearance.name': Record<string, never>;

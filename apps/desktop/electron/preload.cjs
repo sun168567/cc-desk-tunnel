@@ -129,3 +129,17 @@ contextBridge.exposeInMainWorld('desktop', {
     return () => ipcRenderer.removeListener('proxy:closed', listener);
   },
 });
+
+// The update helper receives a receipt only after React has rendered the first application screen.
+window.addEventListener('DOMContentLoaded', () => {
+  const root = document.getElementById('root');
+  if (!root) return;
+  const announce = () => {
+    if (!root.firstElementChild) return;
+    observer.disconnect();
+    ipcRenderer.send('update:ready');
+  };
+  const observer = new MutationObserver(announce);
+  observer.observe(root, { childList: true });
+  announce();
+});

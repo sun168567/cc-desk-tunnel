@@ -204,7 +204,8 @@
     "openLog": "Open the log folder",
     "devTools": "Developer tools",
     "devToolsDetail": "For errors when reporting a window problem. Conversations can be seen there; don’t paste code into it because someone asks you to",
-    "openDevTools": "Open developer tools"
+    "openDevTools": "Open developer tools",
+    "updatesMac": "When an update is available, choose Upgrade client from the workbench Update menu. After verification, the app exits, installs the update and reopens. Keep the client and server on the same version."
   },
   "section": {
     "general": {

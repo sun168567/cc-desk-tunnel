@@ -5,3 +5,4 @@ export const isMac = typeof window !== 'undefined' && window.desktop?.platform =
 // Only the Windows installer can be run over an installation; elsewhere a new package is installed by hand.
 export const selfUpdating =
   typeof window === 'undefined' || !window.desktop || window.desktop.platform === 'win32';
+export const canDownloadRelease = selfUpdating || isMac;

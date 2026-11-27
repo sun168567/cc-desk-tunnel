@@ -15,8 +15,8 @@ import { usageDescriptions, usageResources } from './macos-usage.mjs';
 
 // Builds the macOS package: a disk image to install from and a ZIP of the same application. It is not signed
 // with a Developer ID and not notarized, so macOS asks the user to allow it on first start (see docs/macos.md),
-// and it cannot upgrade itself. It carries no OpenSSH or shell of its own: the SSH service runs inside the
-// program, with the user's shell and the system's sftp-server. It carries ccdt, as its own package has it, which the
+// while its own helper installs application updates. It carries no OpenSSH or shell of its own: the SSH
+// service runs inside the program, with the user's shell and the system's sftp-server. It carries ccdt, as its own package has it, which the
 // client links into ~/.local/bin when it starts from the Applications folder (apps/desktop/electron/ccdt.mjs).
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
@@ -38,6 +38,7 @@ const bundle = join(output, architecture === 'arm64' ? 'mac-arm64' : 'mac', 'CC 
 await stageDesktop(root, app, {
   description: 'macOS client for a native remote Claude Code session',
   ...posixService,
+  files: [...posixService.files, 'macos-update.sh'],
 });
 const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
 const ccdt = join(root, `.local/macos-package/${architecture}/ccdt`);
@@ -93,6 +94,7 @@ const results = await electronBuild({
       hardenedRuntime: false,
       notarize: false,
       extendInfo: {
+        CCDTUpdateReceipt: true,
         // The page talks to the bridge of its own main process over a loopback WebSocket.
         NSAppTransportSecurity: { NSAllowsLocalNetworking: true },
         // What the system shows when a command first reaches into one of these places (macos-usage.mjs).

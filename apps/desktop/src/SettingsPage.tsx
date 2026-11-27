@@ -34,7 +34,7 @@ import { waitFields } from './setting-fields.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
-import { selfUpdating } from './platform.ts';
+import { isMac, selfUpdating } from './platform.ts';
 import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 import PluginSettings from './PluginSettings.tsx';
@@ -806,9 +806,11 @@ function About({
         <Row
           title={t('settings:about.sameVersion')}
           detail={
-            selfUpdating
-              ? t('settings:about.updatesFromService')
-              : t('settings:about.updatesManual')
+            isMac
+              ? t('settings:about.updatesMac')
+              : selfUpdating
+                ? t('settings:about.updatesFromService')
+                : t('settings:about.updatesManual')
           }
         >
           <span className="setting-actions">

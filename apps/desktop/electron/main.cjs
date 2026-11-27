@@ -21,8 +21,10 @@ const {
   closeSync,
   existsSync,
   fsyncSync,
+  lstatSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
@@ -54,6 +56,36 @@ protocol.registerSchemesAsPrivileged([
 // while the sign-in window tells how it goes, and is shown once it is connected. A process is one connection's at
 // most: signing in to another one, or signing out, goes on in a new process.
 const base = app.getPath('userData');
+const macApplication =
+  app.isPackaged && process.platform === 'darwin'
+    ? realpathSync(path.resolve(process.resourcesPath, '..', '..'))
+    : null;
+const macUpdateFailureFile = path.join(base, 'macos-update-failure.txt');
+const receiptArgument = process.argv.find((arg) => arg.startsWith('--ccdt-update-receipt='));
+const macUpdateReceipt = receiptArgument?.slice('--ccdt-update-receipt='.length);
+// A receipt belongs only to a private update staging directory beside this exact application.
+function writeUpdateReceipt() {
+  if (!macApplication || !macUpdateReceipt) return;
+  const directory = path.dirname(macUpdateReceipt);
+  const prefix = `.${path.basename(macApplication)}.ccdt-update-`;
+  const suffix = path.basename(directory).slice(prefix.length);
+  if (
+    path.basename(macUpdateReceipt) !== 'ready' ||
+    path.dirname(directory) !== path.dirname(macApplication) ||
+    !path.basename(directory).startsWith(prefix) ||
+    !/^[A-Za-z0-9]{6}$/.test(suffix)
+  )
+    return;
+  try {
+    const info = lstatSync(directory);
+    if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077) !== 0) return;
+    writeFileSync(macUpdateReceipt, app.getVersion(), { flag: 'wx', mode: 0o600 });
+  } catch {}
+}
+ipcMain.on('update:ready', (event) => {
+  if (BrowserWindow.fromWebContents(event.sender)) writeUpdateReceipt();
+});
+
 // `--quit-connection` asks a connection's process to go the way the user's own "退出" does, through its control
 // pipe (see `listen` in connections.cjs). `--export-token`: see `savedToken`.
 const leaving = process.argv.includes('--quit-connection');
@@ -1204,20 +1236,82 @@ handle('notify:show', (event, notice) => {
     window.once('focus', () => window.flashFrame(false));
   }
 });
-// Upgrades in place: the installer runs silently over the current install and starts the new version. It
-// comes from the connected service, or, when the user chooses so, straight from the release page: `version`
-// is then the one to fetch, which the service's refusal of this client named. One upgrade runs at a time; the
-// window hears each step on `update:progress`, bytes as they come and the steps between them, and can stop the
-// download with `update:cancel`.
+async function macUpdateDirectory() {
+  const root = path.join(tmpdir(), 'cc-desk-tunnel-disk-images');
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  const oldest = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^download-[a-zA-Z0-9]{6}$/.test(entry.name)) continue;
+    const previous = path.join(root, entry.name);
+    const info = await stat(previous).catch(() => null);
+    if (info && info.mtimeMs < oldest)
+      await rm(previous, { recursive: true, force: true }).catch(() => {});
+  }
+  return mkdtemp(path.join(root, 'download-'));
+}
+
+async function macApplicationProcesses() {
+  const { stdout } = await promisify(execFile)('/usr/bin/osascript', [
+    '-l',
+    'JavaScript',
+    '-e',
+    `
+      ObjC.import('AppKit');
+      function run(paths) {
+        const running = $.NSRunningApplication.runningApplicationsWithBundleIdentifier('io.github.ccdesktunnel.desktop');
+        const pids = [];
+        for (let i = 0; i < running.count; i++) {
+          const app = running.objectAtIndex(i);
+          if (ObjC.unwrap(app.bundleURL.URLByResolvingSymlinksInPath.path) === paths[0])
+            pids.push(Number(app.processIdentifier));
+        }
+        return JSON.stringify(pids);
+      }`,
+    macApplication,
+  ]);
+  return JSON.parse(stdout).filter((pid) => Number.isSafeInteger(pid) && pid !== process.pid);
+}
+
+// All new instances, including sign-in windows, have a control socket. Existing connections from an
+// earlier release can also be asked to quit through their own socket.
+async function closeMacApplications(tell) {
+  tell({ phase: 'closing' });
+  for (const pid of await macApplicationProcesses()) {
+    if (await connections.tell(macApplication, String(pid), 'quit')) continue;
+    const entry = others().find(
+      (other) =>
+        readSettings(path.join(connections.directory(base, other.id), 'instance.json')).pid === pid,
+    );
+    if (entry) await connections.tell(base, entry.id, 'quit');
+  }
+  for (let waited = 0; waited < 15000; waited += 250) {
+    if ((await macApplicationProcesses()).length === 0) return;
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  throw new Error(t('desktop:upgrade.othersOpen'));
+}
+
+// macOS stages a verified release and starts an independent installer before exiting. Windows runs
+// the installer from the service or the release page over the current install and starts the new version. The window hears each step on
+// `update:progress` and can stop the download with `update:cancel`.
 let upgrading = null;
 handle('update:cancel', () => upgrading?.abort());
 handle('update:install', async (event, version) => {
   if (!app.isPackaged) throw new Error(t('desktop:upgrade.fromSource'));
-  // Only the Windows installer can be run over an installation. Elsewhere the user installs a new package.
-  if (process.platform !== 'win32') throw new Error(t('desktop:upgrade.unsupported'));
+  const mac = process.platform === 'darwin';
+  if (mac && (!entered || event.sender !== mainWindow?.webContents))
+    throw new Error(t('desktop:upgrade.connectFirst'));
+  if (
+    mac &&
+    (typeof version !== 'string' ||
+      !/^\d+\.\d+\.\d+$/.test(version) ||
+      version.localeCompare(app.getVersion(), undefined, { numeric: true }) <= 0)
+  )
+    throw new Error(t('desktop:download.badVersion'));
+
+  if (!mac && process.platform !== 'win32') throw new Error(t('desktop:upgrade.unsupported'));
   if (upgrading) throw new Error(t('desktop:upgrade.already'));
   if (version === undefined && !lastBridge) throw new Error(t('desktop:upgrade.connectFirst'));
-  const directory = await mkdtemp(path.join(tmpdir(), 'cc-desk-tunnel-update-'));
   const controller = (upgrading = new AbortController());
   const source = version === undefined ? 'service' : 'github';
   let told = 0;
@@ -1231,7 +1325,12 @@ handle('update:install', async (event, version) => {
     if (!event.sender.isDestroyed()) event.sender.send('update:progress', { source, ...step });
   };
   const progress = (received, size) => tell({ phase: 'downloading', received, size });
+  let directory;
+  let preparedMac;
   try {
+    directory = mac
+      ? await macUpdateDirectory()
+      : await mkdtemp(path.join(tmpdir(), 'cc-desk-tunnel-update-'));
     tell({ phase: 'connecting' });
     let installer;
     if (version === undefined)
@@ -1240,37 +1339,63 @@ handle('update:install', async (event, version) => {
         signal: controller.signal,
       });
     else {
-      const { downloadRelease } = await import(
+      const { cancelled, downloadRelease } = await import(
         pathToFileURL(path.join(__dirname, 'release-download.mjs')).href
       );
-      // Chromium's network stack: the Windows proxy settings apply, as they do to the connection itself.
+      // Chromium's network stack applies the system proxy settings here as it does to the connection.
       installer = await downloadRelease((url, init) => net.fetch(url, init), version, directory, {
-        announced: lastBridge?.release(),
+        platform: process.platform,
+        arch: process.arch,
+        announced: mac ? undefined : lastBridge?.release(),
         progress,
         report: tell,
         signal: controller.signal,
       });
+      if (mac) {
+        if (controller.signal.aborted) throw cancelled();
+        tell({ phase: 'preparing' });
+        const { prepareMacUpdate } = require('./macos-update.cjs');
+        preparedMac = await prepareMacUpdate({
+          installer,
+          application: macApplication,
+          expectedVersion: version,
+          arch: process.arch,
+          directory,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) throw cancelled();
+        await closeMacApplications(tell);
+        tell({ phase: 'installing' });
+        await preparedMac.launch({
+          parentPid: process.pid,
+          args: programArguments(),
+          failureFile: macUpdateFailureFile,
+        });
+      }
     }
     // The installer replaces the program under every connection's window, so the others go first.
-    if (others().some((entry) => connections.running(base, entry.id))) {
-      tell({ phase: 'closing' });
-      dismissOthers();
+    if (!mac) {
+      if (others().some((entry) => connections.running(base, entry.id))) {
+        tell({ phase: 'closing' });
+        dismissOthers();
+      }
+      for (
+        let waited = 0;
+        others().some((entry) => connections.running(base, entry.id));
+        waited += 250
+      ) {
+        if (waited >= 15000) throw new Error(t('desktop:upgrade.othersOpen'));
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      tell({ phase: 'installing' });
+      // The window shows that step for a moment; the installer then starts and this client quits at once, as the
+      // installer expects of the program it replaces.
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
     }
-    for (
-      let waited = 0;
-      others().some((entry) => connections.running(base, entry.id));
-      waited += 250
-    ) {
-      if (waited >= 15000) throw new Error(t('desktop:upgrade.othersOpen'));
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    tell({ phase: 'installing' });
-    // The window shows that step for a moment; the installer then starts and this client quits at once, as the
-    // installer expects of the program it replaces.
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
   } catch (error) {
-    await rm(directory, { recursive: true, force: true }).catch(() => {});
+    await preparedMac?.cancel().catch(() => {});
+    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
     if (error?.cancelled) return { cancelled: true };
     throw error;
   } finally {
@@ -1469,6 +1594,8 @@ function attend(window) {
 app.whenReady().then(async () => {
   if (exporting !== undefined) return exportSaved();
   if (leaving) return;
+  if (macApplication)
+    connections.listen(macApplication, String(process.pid), { quit: () => app.quit() });
   // Started for a connection whose window is open, the program shows that window and goes.
   if (
     requested.id !== null &&
@@ -1504,6 +1631,18 @@ app.whenReady().then(async () => {
   // A sign-in window is the size of its form; one that takes over from another is where that one was.
   const window = createWindow('launcher', { width: 460, height: 680, shown: true });
   launcherWindow = window;
+  if (macApplication && existsSync(macUpdateFailureFile)) {
+    try {
+      const detail = readFileSync(macUpdateFailureFile, 'utf8').slice(0, 3000);
+      await rm(macUpdateFailureFile, { force: true });
+      await dialog.showMessageBox(window, {
+        type: 'error',
+        title: t('desktop:upgrade.title'),
+        message: t('desktop:upgrade.macRollback'),
+        detail,
+      });
+    } catch {}
+  }
   const bounds = asked?.bounds;
   if (bounds && ['x', 'y', 'width', 'height'].every((key) => Number.isInteger(bounds[key])))
     window.setBounds(bounds);

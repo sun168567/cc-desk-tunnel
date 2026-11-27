@@ -14,11 +14,16 @@ declare global {
   }
 }
 
-// The sign-in window of a Windows client 0.3.19, signing in at once to a service of 9.9.9 that refuses it: `refusal`
+// The sign-in window of a client 0.3.19, signing in at once to a service of 9.9.9 that refuses it: `refusal`
 // is the installer the service holds and how far it has fetched it, `probe` what it says when asked again.
-async function refusedBy(page: Page, refusal: Refusal, probe: unknown = { status: 'unreachable' }) {
+async function refusedBy(
+  page: Page,
+  refusal: Refusal,
+  probe: unknown = { status: 'unreachable' },
+  platform: 'win32' | 'darwin' = 'win32',
+) {
   await page.addInitScript(
-    ([refusal, probe]) => {
+    ([refusal, probe, platform]) => {
       const calls: unknown[][] = [];
       let signIn = (_report: unknown) => {};
       let progress = (_step: Step) => {};
@@ -31,7 +36,7 @@ async function refusedBy(page: Page, refusal: Refusal, probe: unknown = { status
       };
       Object.assign(window, {
         desktop: {
-          platform: 'win32',
+          platform,
           boot: { launcher: true },
           version: async () => '0.3.19',
           device: async () => ({ id: 'device', name: '这台电脑' }),
@@ -89,7 +94,7 @@ async function refusedBy(page: Page, refusal: Refusal, probe: unknown = { status
         },
       });
     },
-    [refusal, probe] as const,
+    [refusal, probe, platform] as const,
   );
   await page.goto('/');
   await expect(page.getByRole('alert')).toContainText('版本不一致');
@@ -170,4 +175,14 @@ test('a service still fetching the installer is asked again until it holds it, a
   await expect(page.getByRole('button', { name: '升级客户端到 9.9.9' })).toBeVisible();
   await expect(page.getByRole('alert')).not.toContainText('正在下载');
   expect((await calls(page)).filter(([call]) => call === 'probe')).toHaveLength(1);
+});
+
+test('macOS sign-in keeps the manual update notice and offers no installer download', async ({
+  page,
+}) => {
+  await refusedBy(page, { release: '9.9.9', preparing: null }, undefined, 'darwin');
+  await expect(page.getByRole('alert')).toContainText('手动升级');
+  await expect(page.getByRole('button', { name: /下载|升级客户端/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '查看 9.9.9 的更新内容' })).toBeVisible();
+  expect(await calls(page)).toEqual([]);
 });

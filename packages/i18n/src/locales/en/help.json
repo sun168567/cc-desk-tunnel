@@ -1153,7 +1153,7 @@
           },
           {
             "title": "Then the client",
-            "text": "On Windows it downloads and installs in the client, or from GitHub while the server has no installer ready yet; on macOS and Linux, download and install it again."
+            "text": "On Windows, update in the client. If the server hasn’t downloaded the installer yet, choose the GitHub download. On macOS, choose Upgrade client in the workbench’s Update menu. The client installs the update and restarts. On Linux, download and install the new package manually."
           }
         ],
         "list1": [
