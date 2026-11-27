@@ -146,8 +146,9 @@ export const nativeSettingsSchema = z.object({
   toolSearch: toggle,
   // Not a key of its own either: CLAUDE_CODE_ENABLE_TODO_TOOLS under `env`. Claude Code gives its task list tools
   // (TaskCreate, TaskUpdate…) only to older models unless this is on; the service turns it on for the runs it starts,
-  // since the clients show the list, and off here takes them away again.
-  todoTools: toggle,
+  // since the clients show the list, and off here takes them away again. A service before 0.3.22 does not send it:
+  // unset, so that a client of the same protocol still reads its settings.
+  todoTools: toggle.default(null),
   // Under `permissions` in the file: the first from CLI 2.1.319, the second from 2.1.314.
   denyInsteadOfPrompting: toggle,
   blockWritesOutsideWorkingDirectories: toggle,
