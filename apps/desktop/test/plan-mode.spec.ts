@@ -44,6 +44,17 @@ test("Claude's plan is read as a document and carried out in a mode chosen, as w
   await card.getByRole('button', { name: '开始执行', exact: true }).click();
   await settled(page);
   await expect(page.locator('.message.assistant').last()).toContainText('按批准的计划开始执行');
+  // Approved, Claude lists the plan's steps: the task list stands above the message box while some are open, and
+  // folded keeps the step under way in view.
+  const checklist = page.getByRole('region', { name: '任务清单' });
+  await expect(checklist).toContainText('任务 0/3');
+  await expect(checklist.locator('li')).toHaveText(['正在读现有结构', '按计划修改', '补测试']);
+  await expect(checklist.locator('li.in_progress')).toHaveText('正在读现有结构');
+  await shot(page, '3-任务清单');
+  await checklist.getByRole('button', { name: /任务 0\/3/ }).click();
+  await expect(checklist.locator('li')).toHaveCount(0);
+  await expect(checklist.locator('.task-current')).toHaveText('正在读现有结构');
+  await checklist.getByRole('button', { name: /任务 0\/3/ }).click();
   const first = page.getByRole('region', { name: 'Claude 的计划' }).first();
   await expect(first.locator('.plan-outcome')).toHaveText('已批准 · 接受编辑');
   // What Claude Code changed is told among the steps, folded away with them.

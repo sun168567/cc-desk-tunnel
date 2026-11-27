@@ -193,8 +193,8 @@ export type Resources = {
   };
   cli: {
     help: {
-      main: 'ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的原版 Claude Code，与图形客户端共用会话。\n\n用法：\n  ccdt                   接着当前目录这个项目最近的会话；没有就新建\n  ccdt -r                从当前项目的会话里选一个打开（加 --all 从全部会话里选）\n  ccdt new [标题]        在当前目录新建会话\n  ccdt sessions [--all]  列出当前项目的会话；--all 列出全部；--json 输出 JSON\n  ccdt online            不开终端，让这台电脑保持在线，Claude 可以在这里执行命令；\n                         断线自动重连，Ctrl+C 结束。无图形界面的服务器上可放到后台运行\n  ccdt usage             订阅额度与调用统计\n  ccdt config            查看和修改设置：在终端里用方向键逐项选择\n  ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认\n  ccdt server            已登录的服务端：选一个作为默认连接的，或登录新的\n  ccdt login [wss 地址]  登录服务端；不写地址时从图形客户端保存的里选。--fingerprint 证书指纹，\n                         --token-stdin 从标准输入读凭据，--no-save 不保存\n  ccdt logout            退出一个服务端（登录了几个时先选），其他的不受影响\n  ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用\n  ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本；\n                         有会话正在运行时会说明，可以选择强行升级（--force 不问）\n  ccdt upgrade --check   只检查有没有新版本\n  ccdt --version         版本，须与服务端相同\n\n供程序和其他 agent 使用（写法同 claude -p；详见 ccdt help agents）：\n  ccdt -p "任务"         在当前目录的项目里新建会话、发出任务，这一轮结束后输出 Claude 的回复\n                         -c 接最近的会话，-r <会话> 接指定的会话，--bg 发出后立即返回\n  ccdt status <会话>     在做什么、在等什么\n  ccdt tell <会话> "…"   追加指示：运行中就加进正在进行的这一轮\n  ccdt wait <会话>       等到这一轮结束，或 Claude 等人批准、回答\n  ccdt approve|deny <会话>  批准或拒绝 Claude 等待的请求，再等到它下次停下；ccdt answer <会话> "答案" 回答提问\n  ccdt logs <会话>       最近的对话和工具调用\n  ccdt stop <会话>       停止正在进行的这一轮\n  ccdt acp               作为 ACP（Agent Client Protocol）agent 运行，供 Zed、JetBrains、acpx 等接入\n\n选项：\n  -s                     先选服务端，再做后面的事，如 ccdt -s -r\n  --server <名称>        直接指定服务端：图形客户端里的连接名、主机名或地址，写出能区分的一段即可\n不指定时连接上一次连接的服务端。\n\n用法和本地的 claude 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。';
-      agents: 'ccdt 供程序和其他 agent 使用：把任务交给服务端上的 Claude Code，跟进到它完成。\n会话和图形客户端里的是同一个：窗口里能看到它在做什么，也能插话、批准。\n\n派发（写法同 claude -p）：\n  ccdt -p "任务" [选项]\n    默认在当前目录的项目里新建会话；-c 接这个项目最近的会话；-r <会话> 接指定会话\n    --bg                    发出后立即返回会话 ID，不等结果\n    --output-format text|json|stream-json   默认 text：只输出 Claude 最后的回复；\n                            stream-json 逐行输出文字、思考、工具调用与结果、状态\n    --permission-mode auto|default|plan|acceptEdits|bypassPermissions\n    --model <模型>  --effort low|medium|high|xhigh|max  --title <标题>\n    --timeout <秒>          最多等这么久；到时仍在运行就返回（退出码 6）\n  任务也可以从标准输入传入：echo "任务" | ccdt -p\n\n跟进（<会话> 写会话 ID，可只写开头几位）：\n  ccdt status <会话> [--json]     在做什么、在等什么\n  ccdt wait <会话> [--timeout 秒] [--output-format …]   等到这一轮结束或需要人处理\n  ccdt tell <会话> "补充"          追加指示；Claude 正在做时加进这一轮，用来中途纠偏\n  ccdt approve <会话> [--mode auto|acceptEdits|default]   批准请求；--mode 只用于计划\n  ccdt deny <会话> ["意见"]        拒绝；对计划，意见是让它怎么改\n  ccdt answer <会话> "答案1" ["答案2" …]   按顺序回答 Claude 的提问；多选用逗号隔开\n  ccdt logs <会话> [--last N] [--json]   最近 N 条（默认 20）对话和工具调用\n  ccdt stop <会话>                停止这一轮\n  ccdt sessions [--all] --json    列出会话\n\nACP：会说 Agent Client Protocol 的编辑器和 agent（Zed、JetBrains、acpx 等）把 ccdt acp 配成 agent 命令即可，\n会话就在启动它的目录对应的项目里。\n\n退出码：0 完成（或 --bg 已发出）；2 在等批准或回答；3 失败；4 已停止；5 连不上或未登录；\n6 到 --timeout 时仍在运行；1 其他错误。结果在标准输出，说明和下一步该怎么做在标准错误。\n\njson 结果：{"session_id","state","result","is_error","approval"?}。state 为 completed、background（这一轮\n结束，后台任务还在运行，完成后 Claude 会自动接着做）、awaiting_approval、awaiting_answer、failed、cancelled\n或 running。approval 说明在等什么：{"kind":"tool","tool","input","reason"?}、{"kind":"plan","plan"}\n或 {"kind":"question","questions":[{"question","options","multiSelect"}]}。\n\n审批：Claude 请求批准或提问时，ccdt -p 和 ccdt wait 停下来，交给调用方用 approve、deny、answer 处理。\n这三个命令回复后像 ccdt -p 一样接着等、输出结果、退出码相同，等待期间提供这台电脑的执行通道；\n加 --bg 只回复不等（之后命令要在这台电脑上运行时，需图形客户端或 ccdt online 开着）。\n图形客户端里同时也能处理，谁先回答算谁的。要少被问，派发时带 --permission-mode。\n\n用法提示：\n- 任务长时，把 ccdt -p 放进你自己的后台任务里跑，它结束时你就会得知；或用 --bg 发出，之后 ccdt wait。\n- Claude 在哪台电脑上执行命令：会话所在的那台，新建的会话就是运行 ccdt 的这台。\n  ccdt -p 等待期间自己提供这台电脑的执行通道；用 --bg 发出后，要有图形客户端或 ccdt online 开着。';
+      main: 'ccdt：在自己的终端里使用 CC Desk Tunnel 服务端上的原版 Claude Code，与图形客户端共用会话。\n\n用法：\n  ccdt                   接着当前目录这个项目最近的会话；没有就新建\n  ccdt -r                从当前项目的会话里选一个打开（加 --all 从全部会话里选）\n  ccdt new [标题]        在当前目录新建会话\n  ccdt sessions [--all]  列出当前项目的会话；--all 列出全部；--json 输出 JSON\n  ccdt online            不开终端，让这台电脑保持在线，Claude 可以在这里执行命令；\n                         断线自动重连，Ctrl+C 结束。无图形界面的服务器上可放到后台运行\n  ccdt usage             订阅额度与调用统计\n  ccdt config            查看和修改设置：在终端里用方向键逐项选择\n  ccdt config 名称 [值]  查看或修改一项，供脚本使用；值写 default 恢复默认\n  ccdt server            已登录的服务端：选一个作为默认连接的，或登录新的\n  ccdt login [wss 地址]  登录服务端；不写地址时从图形客户端保存的里选。--fingerprint 证书指纹，\n                         --token-stdin 从标准输入读凭据，--no-save 不保存\n  ccdt logout            退出一个服务端（登录了几个时先选），其他的不受影响\n  ccdt open <会话 ID>    按 ID 打开（ID 可只写开头几位），供脚本使用\n  ccdt upgrade [--yes]   升级服务端（升级前会问；--yes 不问），再把 ccdt 换成与服务端相同的版本；\n                         有会话正在运行时会说明，可以选择强行升级（--force 不问）\n  ccdt upgrade --check   只检查有没有新版本\n  ccdt --version         版本，须与服务端相同\n\n供程序和其他 agent 使用（写法同 claude -p；详见 ccdt help agents）：\n  ccdt -p "任务"         在当前目录的项目里新建会话、发出任务，这一轮结束后输出 Claude 的回复\n                         -c 接最近的会话，-r <会话> 接指定的会话，--bg 发出后立即返回\n  ccdt status <会话>     在做什么、在等什么、任务清单做到哪\n  ccdt tell <会话> "…"   追加指示：运行中就加进正在进行的这一轮\n  ccdt wait <会话>       等到这一轮结束，或 Claude 等人批准、回答\n  ccdt approve|deny <会话>  批准或拒绝 Claude 等待的请求，再等到它下次停下；ccdt answer <会话> "答案" 回答提问\n  ccdt logs <会话>       最近的对话和工具调用\n  ccdt stop <会话>       停止正在进行的这一轮\n  ccdt acp               作为 ACP（Agent Client Protocol）agent 运行，供 Zed、JetBrains、acpx 等接入\n\n选项：\n  -s                     先选服务端，再做后面的事，如 ccdt -s -r\n  --server <名称>        直接指定服务端：图形客户端里的连接名、主机名或地址，写出能区分的一段即可\n不指定时连接上一次连接的服务端。\n\n用法和本地的 claude 一样：窗口开着它就一直运行，断网会自动接回；退出 Claude Code 或关掉窗口就结束。';
+      agents: 'ccdt 供程序和其他 agent 使用：把任务交给服务端上的 Claude Code，跟进到它完成。\n会话和图形客户端里的是同一个：窗口里能看到它在做什么，也能插话、批准。\n\n派发（写法同 claude -p）：\n  ccdt -p "任务" [选项]\n    默认在当前目录的项目里新建会话；-c 接这个项目最近的会话；-r <会话> 接指定会话\n    --bg                    发出后立即返回会话 ID，不等结果\n    --output-format text|json|stream-json   默认 text：只输出 Claude 最后的回复；\n                            stream-json 逐行输出文字、思考、工具调用与结果、状态\n    --permission-mode auto|default|plan|acceptEdits|bypassPermissions\n    --model <模型>  --effort low|medium|high|xhigh|max  --title <标题>\n    --timeout <秒>          最多等这么久；到时仍在运行就返回（退出码 6）\n  任务也可以从标准输入传入：echo "任务" | ccdt -p\n\n跟进（<会话> 写会话 ID，可只写开头几位）：\n  ccdt status <会话> [--json]     在做什么、在等什么、任务清单做到哪\n  ccdt wait <会话> [--timeout 秒] [--output-format …]   等到这一轮结束或需要人处理\n  ccdt tell <会话> "补充"          追加指示；Claude 正在做时加进这一轮，用来中途纠偏\n  ccdt approve <会话> [--mode auto|acceptEdits|default]   批准请求；--mode 只用于计划\n  ccdt deny <会话> ["意见"]        拒绝；对计划，意见是让它怎么改\n  ccdt answer <会话> "答案1" ["答案2" …]   按顺序回答 Claude 的提问；多选用逗号隔开\n  ccdt logs <会话> [--last N] [--json]   最近 N 条（默认 20）对话和工具调用\n  ccdt stop <会话>                停止这一轮\n  ccdt sessions [--all] --json    列出会话\n\nACP：会说 Agent Client Protocol 的编辑器和 agent（Zed、JetBrains、acpx 等）把 ccdt acp 配成 agent 命令即可，\n会话就在启动它的目录对应的项目里。\n\n退出码：0 完成（或 --bg 已发出）；2 在等批准或回答；3 失败；4 已停止；5 连不上或未登录；\n6 到 --timeout 时仍在运行；1 其他错误。结果在标准输出，说明和下一步该怎么做在标准错误。\n\njson 结果：{"session_id","state","result","is_error","approval"?}。state 为 completed、background（这一轮\n结束，后台任务还在运行，完成后 Claude 会自动接着做）、awaiting_approval、awaiting_answer、failed、cancelled\n或 running。approval 说明在等什么：{"kind":"tool","tool","input","reason"?}、{"kind":"plan","plan"}\n或 {"kind":"question","questions":[{"question","options","multiSelect"}]}。\n\n审批：Claude 请求批准或提问时，ccdt -p 和 ccdt wait 停下来，交给调用方用 approve、deny、answer 处理。\n这三个命令回复后像 ccdt -p 一样接着等、输出结果、退出码相同，等待期间提供这台电脑的执行通道；\n加 --bg 只回复不等（之后命令要在这台电脑上运行时，需图形客户端或 ccdt online 开着）。\n图形客户端里同时也能处理，谁先回答算谁的。要少被问，派发时带 --permission-mode。\n\n用法提示：\n- 任务长时，把 ccdt -p 放进你自己的后台任务里跑，它结束时你就会得知；或用 --bg 发出，之后 ccdt wait。\n- Claude 在哪台电脑上执行命令：会话所在的那台，新建的会话就是运行 ccdt 的这台。\n  ccdt -p 等待期间自己提供这台电脑的执行通道；用 --bg 发出后，要有图形客户端或 ccdt online 开着。';
     };
     cancelled: '已取消。';
     unknownCommand: '没有这个命令：{{command}}';
@@ -438,6 +438,8 @@ export type Resources = {
       };
       latest: '最近：{{tool}} {{input}}';
       reply: 'Claude 最后说：{{reply}}';
+      tasks: '任务清单：完成 {{done}}/{{count}}';
+      tasksNow: '任务清单：完成 {{done}}/{{count}}，正在做：{{now}}';
     };
     logs: {
       status: '（{{status}}）';
@@ -1291,6 +1293,7 @@ export type Resources = {
             '**命令菜单**：输入 `/` 或 `\\`：压缩上下文，以及 Claude Code 的命令和 skills。',
             '**给它文件和截图**：点 +，或拖入、粘贴。消息里放的是文件在你电脑上的路径，Claude 去那里读，不上传。',
             '**大改动先出计划**：切到[计划模式](#approval)，它写出计划，你改好、批准后再动手。',
+            '**任务清单**：较长的工作 Claude 会列出步骤，没做完时显示在输入框上方，可以折叠。',
             '**模型与推理强度**：在输入框下方切换，只影响这个会话。',
           ];
           note1: {
@@ -1598,7 +1601,7 @@ export type Resources = {
           table1: {
             head: readonly ['跟进', '作用'];
             rows: readonly [
-              readonly ['`ccdt status <会话>`', '在做什么、在等什么'],
+              readonly ['`ccdt status <会话>`', '在做什么、在等什么、任务清单做到哪'],
               readonly ['`ccdt tell <会话> "…"`', '中途追加指示'],
               readonly ['`ccdt wait <会话>`', '等到这一轮结束'],
               readonly ['`ccdt approve` · `deny`', 'Claude 要批准时（退出码 2），由调用方回答'],
@@ -1626,6 +1629,7 @@ export type Resources = {
           list1: readonly [
             '会话建在编辑器打开的文件夹对应的项目里，这里同样看得到。',
             '审批变成编辑器里的权限请求；模型、推理强度和审批模式在编辑器里直接选。',
+            'Claude 的任务清单作为 ACP 的计划（plan）交给编辑器，编辑器支持就会显示。',
             'ACP 没有“提问”：Claude 的问题作为回复显示，下一条消息就是回答。',
             '不能往进行中的一轮追加内容，要纠偏就取消后重发。',
           ];
@@ -2982,6 +2986,10 @@ export type Resources = {
     };
     toEnd: '回到底部';
     textMenu: '对话文字操作';
+    tasks: {
+      label: '任务清单';
+      progress: '任务 {{done}}/{{count}}';
+    };
     composer: {
       message: '消息';
       remove: '移除';
@@ -4150,6 +4158,8 @@ export type Messages = {
   'cli:status.state.terminal': Record<string, never>;
   'cli:status.latest': { tool: Value; input: Value };
   'cli:status.reply': { reply: Value };
+  'cli:status.tasks': { done: Value; count: Value };
+  'cli:status.tasksNow': { done: Value; count: Value; now: Value };
   'cli:logs.status': { status: Value };
   'cli:acp.mode.title': Record<string, never>;
   'cli:acp.mode.auto.name': Record<string, never>;
@@ -4761,6 +4771,7 @@ export type Messages = {
   'help:articles.conversation.blocks.list1.3': Record<string, never>;
   'help:articles.conversation.blocks.list1.4': Record<string, never>;
   'help:articles.conversation.blocks.list1.5': Record<string, never>;
+  'help:articles.conversation.blocks.list1.6': Record<string, never>;
   'help:articles.conversation.blocks.note1.title': Record<string, never>;
   'help:articles.conversation.blocks.note1.text': Record<string, never>;
   'help:articles.conversation.blocks.keys': Record<string, never>;
@@ -4929,6 +4940,7 @@ export type Messages = {
   'help:articles.acp.blocks.list1.1': Record<string, never>;
   'help:articles.acp.blocks.list1.2': Record<string, never>;
   'help:articles.acp.blocks.list1.3': Record<string, never>;
+  'help:articles.acp.blocks.list1.4': Record<string, never>;
   'help:articles.acp.blocks.note1.title': Record<string, never>;
   'help:articles.acp.blocks.note1.text': Record<string, never>;
   'help:articles.quota.title': Record<string, never>;
@@ -5871,6 +5883,8 @@ export type Messages = {
   'session:empty.more': Record<string, never>;
   'session:toEnd': Record<string, never>;
   'session:textMenu': Record<string, never>;
+  'session:tasks.label': Record<string, never>;
+  'session:tasks.progress': { done: Value; count: Value };
   'session:composer.message': Record<string, never>;
   'session:composer.remove': Record<string, never>;
   'session:composer.compact': Record<string, never>;

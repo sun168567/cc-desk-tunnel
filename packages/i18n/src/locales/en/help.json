@@ -252,6 +252,7 @@
           "**The command menu**: type `/` or `\\` for compacting the context, and for Claude Code’s commands and skills.",
           "**Give it files and screenshots**: click +, or drag them in or paste them. The message holds the file’s path on your computer, and Claude reads it there; nothing is uploaded.",
           "**A plan first for big changes**: switch to [Plan mode](#approval). It writes a plan, and once you have edited and approved it, it gets to work.",
+          "**Task list**: for longer work Claude lists its steps; while some are open they show above the input box, and fold away.",
           "**Model and effort**: switch them below the input box; they apply to this session only."
         ],
         "note1": {
@@ -559,7 +560,10 @@
         "table1": {
           "head": ["Follow up", "What it does"],
           "rows": [
-            ["`ccdt status <session>`", "What it’s doing, what it’s waiting for"],
+            [
+              "`ccdt status <session>`",
+              "What it’s doing, what it’s waiting for, how far its task list is"
+            ],
             ["`ccdt tell <session> \"…\"`", "Add an instruction on the way"],
             ["`ccdt wait <session>`", "Wait until the turn ends"],
             [
@@ -590,6 +594,7 @@
         "list1": [
           "Sessions go to the project of the folder the editor has open, and show here too.",
           "Approvals become the editor’s permission requests; the model, effort and approval mode are picked in the editor.",
+          "Claude’s task list goes to the editor as ACP’s plan, shown where the editor supports it.",
           "ACP has no questions: Claude’s question shows as its reply, and your next message is the answer.",
           "Nothing can be added to a turn under way; to steer, cancel and send again."
         ],

@@ -44,7 +44,13 @@ import type {
   Session,
   SessionEvent,
 } from '@cc-desk-tunnel/protocol';
-import { FORCED_UPGRADE_SINCE, platformOf, projectOf, runWorking } from '@cc-desk-tunnel/protocol';
+import {
+  FORCED_UPGRADE_SINCE,
+  platformOf,
+  projectOf,
+  runWorking,
+  tasksOf,
+} from '@cc-desk-tunnel/protocol';
 import { browserSession, browserSocket, watchActivity } from './browser-api.ts';
 import { CertificateWarning } from './WebGate.tsx';
 import { hostCapabilities } from './host-capabilities.ts';
@@ -467,6 +473,7 @@ export function App({
     [events],
   );
   const capabilities = latest(events, 'native.capabilities') ?? state.capabilities;
+  const tasks = useMemo(() => tasksOf(events.map((event) => event.payload)), [events]);
   const metrics = latest(events, 'native.metrics');
   const canCompact = !!latest(events, 'native.context')?.persisted;
   // A chat run holds the CLI's state while it goes; a terminal holds only its own session.
@@ -2235,6 +2242,7 @@ export function App({
                 nativeSession={nativeSession}
                 metrics={metrics}
                 quota={quota}
+                tasks={tasks}
                 send={(text) => {
                   void send(text);
                 }}

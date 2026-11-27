@@ -7,6 +7,7 @@ export * from './phrase.ts';
 export * from './web.ts';
 export * from './web-certificate.ts';
 export * from './plugins.ts';
+export * from './tasks.ts';
 
 export const PROTOCOL_VERSION = 30;
 // The release each protocol version began with, from 0.2.4 on: a client newer than its service signs in with

@@ -1,4 +1,5 @@
 import { basename } from 'node:path';
+import { tasksOf } from '@cc-desk-tunnel/protocol';
 import { EXIT, Follow, exitOf, findSession, follow, said, subscribe } from './agent.mjs';
 import { t } from './i18n.mjs';
 
@@ -255,6 +256,10 @@ export async function status(context, values, ref) {
     latest?.type === 'tool.requested'
       ? { ...latest, input: followed.tools.get(latest.toolId)?.input ?? latest.input }
       : latest;
+  // The steps Claude Code listed for the work (TaskCreate, TodoWrite), as they stand.
+  const tasks = tasksOf((snapshot?.events ?? []).map((event) => event.payload)).map(
+    ({ content, status }) => ({ content, status }),
+  );
   const result = {
     session_id: current.id,
     title: current.title,
@@ -270,6 +275,7 @@ export async function status(context, values, ref) {
               : { [last.type === 'message.user' ? 'user' : 'text']: clip(last.text) },
         }
       : {}),
+    ...(tasks.length ? { tasks } : {}),
     reply: followed.reply(),
     updated_at: current.updatedAt,
   };
@@ -294,6 +300,7 @@ export async function status(context, values, ref) {
         }),
         last?.type === 'tool.requested' &&
           t('cli:status.latest', { tool: last.name, input: clip(last.input, 120) }),
+        tasks.length && taskLine(tasks),
         result.reply && t('cli:status.reply', { reply: clip(result.reply, 300) }),
       ]
         .filter(Boolean)
@@ -302,6 +309,14 @@ export async function status(context, values, ref) {
     if (stop?.approval) context.err(next(followed.result(stop)));
   }
   return stop ? exitOf(stop.state) : EXIT.done;
+}
+
+function taskLine(tasks) {
+  const done = tasks.filter((task) => task.status === 'completed').length;
+  const now = tasks.find((task) => task.status === 'in_progress');
+  return now
+    ? t('cli:status.tasksNow', { done, count: tasks.length, now: clip(now.content, 80) })
+    : t('cli:status.tasks', { done, count: tasks.length });
 }
 
 // `ccdt tell <ID> "…"`: a message to the session. While Claude works it joins the turn under way, which is how

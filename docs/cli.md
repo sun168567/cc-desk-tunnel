@@ -171,7 +171,7 @@ ccdt -p "…" --permission-mode acceptEdits --model sonnet --effort high
 
 | 命令 | 作用 |
 | --- | --- |
-| `ccdt status <会话>` | 在做什么、在等什么 |
+| `ccdt status <会话>` | 在做什么、在等什么、任务清单做到哪 |
 | `ccdt wait <会话> [--timeout 秒]` | 等到这一轮结束，或 Claude 等人批准、回答 |
 | `ccdt tell <会话> "补充"` | 追加指示：Claude 正在做时加进这一轮，用来中途纠偏 |
 | `ccdt approve <会话>` · `ccdt deny <会话> ["意见"]` | 批准或拒绝 Claude 等待的请求，再等到它下次停下；计划被拒时，意见是让它怎么改 |
