@@ -84,6 +84,7 @@ export type Resources = {
       short: {
         hour: '5 小时';
         week: '每周';
+        modelWeek: '{{model}} 每周';
       };
       none: '暂未获取额度';
       openUsage: '查看订阅用量';
@@ -360,11 +361,6 @@ export type Resources = {
       pickHere: '选择 {{here}} 的会话：';
     };
     usage: {
-      window: {
-        five_hour: '5 小时';
-        seven_day: '7 天';
-        seven_day_opus: '7 天 Opus';
-      };
       line_other: '{{name}} 已用 {{used}} · {{count}} 次请求 · 约 ${{cost}}';
       lineReset_other: '{{name}} 已用 {{used}}，{{reset}} 重置 · {{count}} 次请求 · 约 ${{cost}}';
       none: '没有订阅额度数据：使用 API Key 或第三方接口时没有额度，用量见图形客户端的统计页。';
@@ -1646,7 +1642,7 @@ export type Resources = {
         blocks: {
           list1: readonly [
             '**5 小时额度紧张时用 `ccdt`**：图形客户端经官方 Agent SDK 运行。据社区实测，同样的用量，计入 5 小时额度的比例约为交互式 CLI 的两倍；每周额度不受影响。见 [ccdt 的推荐用法](#ccdt)。',
-            '**输入框旁显示额度**：在[外观](settings:appearance)里打开。',
+            '**输入框旁显示额度**：在[外观](settings:appearance)里打开。显示 5 小时和整个账号的每周用量；当前模型另有每周限额且用得更多时（如 Max 的 Fable），改显示那一项并标出模型。',
             '**快速模式不走套餐额度**：订阅账号开了它，直接从额外用量扣费，见[快速模式](#model-settings#fast)。',
             '**调用日志**：每次请求的模型、Token 和等价费用；金额按 API 价格估算，不是账单。',
             '**额度是空的**：它来自 Claude Code 的一次运行，发一条消息，或在账号页里刷新。',
@@ -3840,6 +3836,7 @@ export type Messages = {
   'account:quota.window.model': { model: Value };
   'account:quota.short.hour': Record<string, never>;
   'account:quota.short.week': Record<string, never>;
+  'account:quota.short.modelWeek': { model: Value };
   'account:quota.none': Record<string, never>;
   'account:quota.openUsage': Record<string, never>;
   'account:quota.used': Record<string, never>;
@@ -4065,9 +4062,6 @@ export type Messages = {
   'cli:sessions.noneToPick': Record<string, never>;
   'cli:sessions.pick': Record<string, never>;
   'cli:sessions.pickHere': { here: Value };
-  'cli:usage.window.five_hour': Record<string, never>;
-  'cli:usage.window.seven_day': Record<string, never>;
-  'cli:usage.window.seven_day_opus': Record<string, never>;
   'cli:usage.line': { count: number; name: Value; used: Value; cost: Value };
   'cli:usage.lineReset': { count: number; name: Value; used: Value; reset: Value; cost: Value };
   'cli:usage.none': Record<string, never>;

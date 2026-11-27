@@ -79,7 +79,8 @@
     },
     "short": {
       "hour": "5 小时",
-      "week": "每周"
+      "week": "每周",
+      "modelWeek": "{{model}} 每周"
     },
     "none": "暂未获取额度",
     "openUsage": "查看订阅用量",

@@ -606,7 +606,7 @@
       "blocks": {
         "list1": [
           "**Use `ccdt` when the 5-hour quota is tight**: the desktop client runs through the official Agent SDK. Community measurements put the share of the same use counted against the 5-hour quota at about twice that of the interactive CLI; the weekly quota is not affected. See [how ccdt is best used](#ccdt).",
-          "**Quota beside the input box**: turn it on in [Appearance](settings:appearance).",
+          "**Quota beside the input box**: turn it on in [Appearance](settings:appearance). It shows the 5-hour and the whole account’s weekly use; when the model in use has a weekly limit of its own that is further used (such as Fable on Max), that one is shown instead, named after the model.",
           "**Fast mode doesn’t use the plan’s quota**: on a subscription it is charged straight to extra usage; see [Fast mode](#model-settings#fast).",
           "**The call log**: each request’s model, tokens and equivalent cost; the amounts are estimated at API prices, not a bill.",
           "**The quota is empty**: it comes from a run of Claude Code; send a message, or refresh on the account page."
