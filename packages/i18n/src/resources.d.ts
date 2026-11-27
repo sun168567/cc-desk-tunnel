@@ -1184,6 +1184,12 @@ export type Resources = {
         thisBrowser: '这个浏览器';
         phoneNote: '看进度、审批、追加指示';
       };
+      tasks: {
+        read: '读现有代码';
+        change: '加上按月汇总';
+        changing: '正在加上按月汇总';
+        check: '跑一遍验证';
+      };
     };
     articles: {
       'how-it-works': {
@@ -1294,17 +1300,27 @@ export type Resources = {
             '**命令菜单**：输入 `/` 或 `\\`：压缩上下文，以及 Claude Code 的命令和 skills。',
             '**给它文件和截图**：点 +，或拖入、粘贴。消息里放的是文件在你电脑上的路径，Claude 去那里读，不上传。',
             '**大改动先出计划**：切到[计划模式](#approval)，它写出计划，你改好、批准后再动手。',
-            '**任务清单**：较长的工作 Claude 会列出步骤，没做完时显示在输入框上方，可以折叠。',
             '**模型与推理强度**：在输入框下方切换，只影响这个会话。',
           ];
           note1: {
             title: '状态点停下、写着多久没有输出';
             text: '只说明这段时间没有新消息传来，不代表出了问题；跑长命令时常这样。';
           };
+          tasks: '任务清单';
+          p2: '较长的工作，Claude 会先列出步骤，做完一步勾一步。没做完时清单显示在输入框上方，点标题可以折叠；`ccdt status` 和 ACP 编辑器里也看得到进度。较新的模型本来不列清单，本服务替它打开了；不需要时在 CLI 设置里关掉“任务清单”。';
+          prompts1: {
+            title: '试试这样说';
+            items: readonly [
+              {
+                text: '分几步给这个项目加一个小功能：先读代码，再改，最后跑一遍验证，用任务清单记着进度';
+              },
+            ];
+          };
+          actions1: readonly ['打开 CLI 设置'];
           keys: '快捷键';
         };
         news: {
-          list1: '任务清单显示在输入框上方';
+          p2: '任务清单显示在输入框上方';
         };
       };
       approval: {
@@ -3373,6 +3389,10 @@ export type Resources = {
         title: '工具搜索';
         detail: '工具说明用到时再查，接了 MCP 时省上下文';
       };
+      todoTools: {
+        title: '任务清单';
+        detail: '多步工作时 Claude 列出步骤，显示在输入框上方';
+      };
       enableArtifact: {
         title: 'Artifact 网页';
         detail: 'Claude 可以把文档、图表发布成 claude.ai 上的网页';
@@ -4768,6 +4788,10 @@ export type Messages = {
   'help:figures.map.phone': Record<string, never>;
   'help:figures.map.thisBrowser': Record<string, never>;
   'help:figures.map.phoneNote': Record<string, never>;
+  'help:figures.tasks.read': Record<string, never>;
+  'help:figures.tasks.change': Record<string, never>;
+  'help:figures.tasks.changing': Record<string, never>;
+  'help:figures.tasks.check': Record<string, never>;
   'help:articles.how-it-works.title': Record<string, never>;
   'help:articles.how-it-works.lead': Record<string, never>;
   'help:articles.how-it-works.words': Record<string, never>;
@@ -4822,11 +4846,15 @@ export type Messages = {
   'help:articles.conversation.blocks.list1.3': Record<string, never>;
   'help:articles.conversation.blocks.list1.4': Record<string, never>;
   'help:articles.conversation.blocks.list1.5': Record<string, never>;
-  'help:articles.conversation.blocks.list1.6': Record<string, never>;
   'help:articles.conversation.blocks.note1.title': Record<string, never>;
   'help:articles.conversation.blocks.note1.text': Record<string, never>;
+  'help:articles.conversation.blocks.tasks': Record<string, never>;
+  'help:articles.conversation.blocks.p2': Record<string, never>;
+  'help:articles.conversation.blocks.prompts1.title': Record<string, never>;
+  'help:articles.conversation.blocks.prompts1.items.0.text': Record<string, never>;
+  'help:articles.conversation.blocks.actions1.0': Record<string, never>;
   'help:articles.conversation.blocks.keys': Record<string, never>;
-  'help:articles.conversation.news.list1': Record<string, never>;
+  'help:articles.conversation.news.p2': Record<string, never>;
   'help:articles.approval.title': Record<string, never>;
   'help:articles.approval.lead': Record<string, never>;
   'help:articles.approval.words': Record<string, never>;
@@ -6195,6 +6223,8 @@ export type Messages = {
   'settings:cli.bashOutputMaxChars.chars': { n: Value };
   'settings:cli.toolSearch.title': Record<string, never>;
   'settings:cli.toolSearch.detail': Record<string, never>;
+  'settings:cli.todoTools.title': Record<string, never>;
+  'settings:cli.todoTools.detail': Record<string, never>;
   'settings:cli.enableArtifact.title': Record<string, never>;
   'settings:cli.enableArtifact.detail': Record<string, never>;
   'settings:cli.denyInsteadOfPrompting.title': Record<string, never>;

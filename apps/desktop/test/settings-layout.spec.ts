@@ -113,6 +113,7 @@ async function serve(page: Page, url: string, shells?: string[], chosen: unknown
             includeGitInstructions: null,
             enableArtifact: null,
             toolSearch: null,
+            todoTools: null,
             denyInsteadOfPrompting: null,
             blockWritesOutsideWorkingDirectories: null,
           },

@@ -19,6 +19,7 @@ import { useT } from './i18n.ts';
 import type { Figure as Name } from './help-content.ts';
 import { modes } from './PermissionMenu.tsx';
 import { modeDetail, modeName } from './modes.ts';
+import TaskChecklist from './TaskChecklist.tsx';
 
 // Pictures for the help, drawn with the window's own colours and shapes so that they look like what the user will
 // meet: the computers around the service, an approval card, the mode menu, a terminal. Names are the user's own
@@ -222,6 +223,25 @@ export default function Figure({
             </div>
           )}
           <p className="fig-side-tip">{t('help:figures.devices.tip')}</p>
+        </div>
+      );
+    case 'tasks':
+      return (
+        <div className="fig fig-tasks" aria-hidden="true" inert>
+          <TaskChecklist
+            working
+            tasks={[
+              { id: '1', content: t('help:figures.tasks.read'), status: 'completed' },
+              {
+                id: '2',
+                content: t('help:figures.tasks.change'),
+                activeForm: t('help:figures.tasks.changing'),
+                status: 'in_progress',
+              },
+              { id: '3', content: t('help:figures.tasks.check'), status: 'pending' },
+            ]}
+          />
+          <div className="fig-message-box">{t('session:composer.placeholder')}</div>
         </div>
       );
   }
