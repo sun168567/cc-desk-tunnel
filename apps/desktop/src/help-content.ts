@@ -49,7 +49,14 @@ import type { Section } from './SettingsPage.tsx';
 // `Sources` above an article names the pages of https://code.claude.com/docs/en/ its facts come from. Those facts
 // change with Claude Code, not with this program: check them again when its behaviour changes.
 
-export type Doing = 'addProject' | 'newSession' | 'schedules' | 'files' | 'chat';
+export type Doing =
+  | 'addProject'
+  | 'newSession'
+  | 'schedules'
+  | 'files'
+  | 'chat'
+  | 'syncInstructions'
+  | 'exportSession';
 export type Target = { article: string } | { settings: Section } | { doing: Doing };
 export type Prompt = { text: string; note?: string };
 type Fresh = { since?: string; news?: string };
@@ -82,6 +89,9 @@ export type Figure =
   | 'cache'
   | 'quota'
   | 'devices'
+  | 'sync'
+  | 'export'
+  | 'folders'
   | 'tasks';
 export type Article = {
   id: string;
@@ -218,8 +228,32 @@ const shapes: ArticleShape[] = [
         kind: 'callout',
         key: 'tip1',
         tone: 'tip',
-        since: '0.3.21',
+      },
+      {
+        kind: 'heading',
+        id: 'export',
+        since: '0.3.22',
+      },
+      {
+        kind: 'p',
+        key: 'p1',
+        since: '0.3.22',
         news: true,
+      },
+      {
+        kind: 'figure',
+        name: 'export',
+        since: '0.3.22',
+      },
+      {
+        kind: 'actions',
+        key: 'actions1',
+        since: '0.3.22',
+        targets: [
+          {
+            doing: 'exportSession',
+          },
+        ],
       },
     ],
     related: ['devices', 'conversation', 'ccdt'],
@@ -334,8 +368,13 @@ const shapes: ArticleShape[] = [
       {
         kind: 'list',
         key: 'list2',
-        since: '0.3.21',
+        since: '0.3.22',
         news: true,
+      },
+      {
+        kind: 'figure',
+        name: 'folders',
+        since: '0.3.22',
       },
       {
         kind: 'prompts',
@@ -949,12 +988,27 @@ const shapes: ArticleShape[] = [
       {
         kind: 'p',
         key: 'p0',
-        since: '0.3.21',
+        since: '0.3.22',
         news: true,
+      },
+      {
+        kind: 'figure',
+        name: 'sync',
+        since: '0.3.22',
       },
       {
         kind: 'list',
         key: 'list0',
+      },
+      {
+        kind: 'actions',
+        key: 'actions0',
+        since: '0.3.22',
+        targets: [
+          {
+            doing: 'syncInstructions',
+          },
+        ],
       },
       {
         kind: 'p',

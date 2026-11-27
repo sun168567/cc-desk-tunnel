@@ -36,6 +36,8 @@ type Context = {
   version: string;
   go: (article?: string) => void;
   run: (target: Target) => void;
+  // Why a button cannot do its thing now, if it cannot.
+  unable?: (target: Target) => string | undefined;
   tryPrompt?: (text: string) => void;
 };
 const NEWS = 'whats-new';
@@ -51,6 +53,7 @@ export default function HelpCenter({
   version,
   go,
   run,
+  unable,
   tryPrompt,
 }: {
   article?: string;
@@ -60,6 +63,7 @@ export default function HelpCenter({
   version: string;
   go: (article?: string) => void;
   run: (target: Target) => void;
+  unable?: (target: Target) => string | undefined;
   tryPrompt?: (text: string) => void;
 }) {
   const t = useT();
@@ -73,7 +77,7 @@ export default function HelpCenter({
   const news = useMemo(() => newsOf(t, version, shown), [t, version, shown]);
   const current = shown.find((item) => item.id === id);
   const stand = t('help:anotherComputer');
-  const context: Context = { here, others, stand, browser, version, go, run, tryPrompt };
+  const context: Context = { here, others, stand, browser, version, go, run, unable, tryPrompt };
   const found = useMemo(() => search(shown, query, context), [shown, query, here, others, stand]);
   const page = useRef<HTMLElement>(null);
   // An article opens at its top, or at the heading asked for, which is flashed to be found.
@@ -658,15 +662,20 @@ function TargetButton({
   context: Context;
   children: ReactNode;
 }) {
+  const why = context.unable?.(target);
   return (
-    <button
-      type="button"
-      className="button help-target"
-      onClick={() => ('article' in target ? context.go(target.article) : context.run(target))}
-    >
-      {children}
-      <ArrowRight />
-    </button>
+    <span className="help-target-wrap">
+      <button
+        type="button"
+        className="button help-target"
+        disabled={!!why}
+        onClick={() => ('article' in target ? context.go(target.article) : context.run(target))}
+      >
+        {children}
+        <ArrowRight />
+      </button>
+      {why && <small className="help-target-why">{why}</small>}
+    </span>
   );
 }
 
@@ -850,7 +859,13 @@ function Inline({ text, context }: { text: string; context: Context }) {
       {parts.map((part, index) => {
         if (!part) return null;
         if (part.startsWith('`')) return <code key={index}>{part.slice(1, -1)}</code>;
-        if (part.startsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+        // Bold words may hold code or a link of their own.
+        if (part.startsWith('**'))
+          return (
+            <strong key={index}>
+              <Inline text={part.slice(2, -2)} context={context} />
+            </strong>
+          );
         if (part.startsWith('[[')) {
           const combo = keyFor(prefs, part.slice(2, -2) as Action);
           return combo ? (

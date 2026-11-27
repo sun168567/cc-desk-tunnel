@@ -148,6 +148,16 @@
       "change": "Add the monthly total",
       "changing": "Adding the monthly total",
       "check": "Run it to check"
+    },
+    "sync": {
+      "computer": "The project on your computer",
+      "copy": "Sync",
+      "server": "Server",
+      "reads": "Claude Code reads this copy"
+    },
+    "folders": {
+      "work": "Working folder",
+      "records": "Memory and transcripts"
     }
   },
   "articles": {
@@ -240,12 +250,15 @@
         ],
         "tip1": {
           "title": "Right-click a session",
-          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯). An export can hold only the questions and answers, or only the last few turns, which is much quicker for a long session."
-        }
+          "text": "Pin, rename, export to Markdown and open in `ccdt` are in the session’s context menu (or ⋯)."
+        },
+        "export": "Export as Markdown",
+        "p1": "Right-click a session (or ⋯) → “Export Markdown”. Keep only the questions and answers, add what you said mid-turn, or every step (thinking and tool calls); and all turns or only the last few. Older history beyond what is loaded is read apart, without loading it into the conversation.",
+        "actions1": ["Export this session"]
       },
       "news": {
         "list2": "The server keeps the projects, and every client sees the same ones",
-        "tip1": "Choose what and how much to export to Markdown"
+        "p1": "Choose what and how much to export to Markdown"
       }
     },
     "conversation": {
@@ -918,6 +931,7 @@
           "It syncs `CLAUDE.md`, `CLAUDE.local.md`, and the rules, skills, commands and agents under `.claude/`. The project’s settings and MCP servers are not synced: they would run on the server.",
           "Both sides are compared first: new files are copied; ones that differ can be replaced, or handed to Claude with a prompt to compare and merge them. It works from the server back to the computer too."
         ],
+        "actions0": ["Sync this session’s project"],
         "p1": "The other is to have each session read them, with a line in the global instructions:",
         "code1": {
           "label": "Put in the global instructions",
@@ -1282,5 +1296,9 @@
     "related": "Related",
     "newsCovered": "Where the help covers it",
     "changelog": "What each version changed is in the [changelog](changelog.md) (in Chinese)."
+  },
+  "unable": {
+    "sync": "Select a session of a project on your computer first; desktop client only",
+    "session": "Select a session first"
   }
 }

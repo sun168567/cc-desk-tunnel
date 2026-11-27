@@ -1339,6 +1339,143 @@
   font-weight: 600;
   text-align: right;
 }
+.fig-sync {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+  align-items: center;
+  background: var(--surface);
+}
+.fig-sync-side {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.fig-sync-side p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.fig-sync-side.server {
+  border-color: var(--accent);
+}
+.fig-sync-side small {
+  display: block;
+  margin-top: 8px;
+  color: var(--accent-strong);
+  font-size: 12px;
+}
+.fig-files {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fig-files li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.fig-files code {
+  font-size: 12px;
+}
+.fig-sync-arrow {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.fig-sync-arrow svg {
+  width: 22px;
+  height: 22px;
+}
+.fig-export {
+  max-width: 380px;
+  margin: 0 auto;
+  background: var(--surface);
+}
+.fig-dialog-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.fig-label {
+  margin: 10px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.fig-range {
+  display: flex;
+  gap: 6px;
+}
+.fig-range span {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.fig-range span.current {
+  border-color: var(--accent);
+  background: var(--selected);
+}
+.fig-folders {
+  max-width: 420px;
+  margin: 0 auto;
+  background: var(--surface);
+}
+.fig-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+.fig-crumb span {
+  flex: 1;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fig-crumb i {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-s);
+  background: var(--selected);
+  color: var(--accent-strong);
+}
+.fig-folders-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.fig-folders-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.help-target-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.help-target-why {
+  color: var(--faint);
+  font-size: 12px;
+}
 .fig-tasks {
   max-width: 420px;
   margin: 0 auto;

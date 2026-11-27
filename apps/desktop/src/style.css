@@ -3849,6 +3849,9 @@ dialog::backdrop {
   margin-bottom: 23px;
 }
 .dialog-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
 }
 .dialog-form {

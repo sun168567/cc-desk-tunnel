@@ -1190,6 +1190,16 @@ export type Resources = {
         changing: '正在加上按月汇总';
         check: '跑一遍验证';
       };
+      sync: {
+        computer: '你电脑上的项目';
+        copy: '同步';
+        server: '服务端';
+        reads: 'Claude Code 读这一份';
+      };
+      folders: {
+        work: '工作目录';
+        records: '记忆与对话记录';
+      };
     };
     articles: {
       'how-it-works': {
@@ -1281,12 +1291,15 @@ export type Resources = {
           ];
           tip1: {
             title: '右键会话';
-            text: '置顶、重命名、导出 Markdown、用 `ccdt` 打开，都在会话的右键菜单（或 ⋯）里。导出时可以只要问答，或只要最近几轮，长会话会快很多。';
+            text: '置顶、重命名、导出 Markdown、用 `ccdt` 打开，都在会话的右键菜单（或 ⋯）里。';
           };
+          export: '导出 Markdown';
+          p1: '会话右键（或 ⋯）→“导出 Markdown”。可以只要问答，或加上中途插话、全部步骤（思考与工具调用）；也可以只要最近几轮。超出已加载的部分时另外读取更早的历史，不会加载进对话。';
+          actions1: readonly ['导出当前会话'];
         };
         news: {
           list2: '项目由服务端保存，各端看到同一份';
-          tip1: '导出 Markdown 可选内容和范围';
+          p1: '导出 Markdown 可选内容和范围';
         };
       };
       conversation: {
@@ -1935,6 +1948,7 @@ export type Resources = {
             '同步 `CLAUDE.md`、`CLAUDE.local.md` 和 `.claude/` 下的 rules、skills、commands、agents。项目设置和 MCP 不同步，它们会在服务器上运行。',
             '先对比两边：新文件直接复制；内容不同的可以覆盖，或复制一段提示词让 Claude 对比后合并。也能从服务端同步回电脑。',
           ];
+          actions0: readonly ['同步当前会话的项目'];
           p1: '二是让每个会话自己去读，在全局说明里写一句：';
           code1: {
             label: '写进全局说明';
@@ -2292,6 +2306,10 @@ export type Resources = {
       related: '相关文章';
       newsCovered: '帮助里讲到的地方';
       changelog: '各版本的变化见[变更记录](changelog.md)。';
+    };
+    unable: {
+      sync: '先选中你电脑上某个项目里的会话；只在桌面客户端里能用';
+      session: '先选中一个会话';
     };
   };
   nav: {
@@ -4794,6 +4812,12 @@ export type Messages = {
   'help:figures.tasks.change': Record<string, never>;
   'help:figures.tasks.changing': Record<string, never>;
   'help:figures.tasks.check': Record<string, never>;
+  'help:figures.sync.computer': Record<string, never>;
+  'help:figures.sync.copy': Record<string, never>;
+  'help:figures.sync.server': Record<string, never>;
+  'help:figures.sync.reads': Record<string, never>;
+  'help:figures.folders.work': Record<string, never>;
+  'help:figures.folders.records': Record<string, never>;
   'help:articles.how-it-works.title': Record<string, never>;
   'help:articles.how-it-works.lead': Record<string, never>;
   'help:articles.how-it-works.words': Record<string, never>;
@@ -4837,8 +4861,11 @@ export type Messages = {
   'help:articles.sessions.blocks.list3.1': Record<string, never>;
   'help:articles.sessions.blocks.tip1.title': Record<string, never>;
   'help:articles.sessions.blocks.tip1.text': Record<string, never>;
+  'help:articles.sessions.blocks.export': Record<string, never>;
+  'help:articles.sessions.blocks.p1': Record<string, never>;
+  'help:articles.sessions.blocks.actions1.0': Record<string, never>;
   'help:articles.sessions.news.list2': Record<string, never>;
-  'help:articles.sessions.news.tip1': Record<string, never>;
+  'help:articles.sessions.news.p1': Record<string, never>;
   'help:articles.conversation.title': Record<string, never>;
   'help:articles.conversation.lead': Record<string, never>;
   'help:articles.conversation.words': Record<string, never>;
@@ -5201,6 +5228,7 @@ export type Messages = {
   'help:articles.memory.blocks.list0.0': Record<string, never>;
   'help:articles.memory.blocks.list0.1': Record<string, never>;
   'help:articles.memory.blocks.list0.2': Record<string, never>;
+  'help:articles.memory.blocks.actions0.0': Record<string, never>;
   'help:articles.memory.blocks.p1': Record<string, never>;
   'help:articles.memory.blocks.code1.label': Record<string, never>;
   'help:articles.memory.blocks.code1.text': Record<string, never>;
@@ -5408,6 +5436,8 @@ export type Messages = {
   'help:model.related': Record<string, never>;
   'help:model.newsCovered': Record<string, never>;
   'help:model.changelog': Record<string, never>;
+  'help:unable.sync': Record<string, never>;
+  'help:unable.session': Record<string, never>;
   'nav:activity.background': Record<string, never>;
   'nav:activity.running': Record<string, never>;
   'nav:activity.question': Record<string, never>;
