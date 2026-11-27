@@ -1867,6 +1867,11 @@ export function createProxyServer(options: ServerOptions) {
         peer.subscriptions.clear();
         peer.subscriptions.add(session.id);
         broadcast({ type: 'session.updated', session });
+        // A new session offers the account's models from the start, as Claude Code last gave them in any session;
+        // its first run reads them again. Without them a client that has seen no other session, such as ccdt serving
+        // ACP, could offer only the default.
+        const known = store.latestCapabilities();
+        if (known) record(session.id, command.requestId, known);
         announceProjects();
         return session.id;
       }
