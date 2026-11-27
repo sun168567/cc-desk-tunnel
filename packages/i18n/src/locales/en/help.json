@@ -444,7 +444,7 @@
         ],
         "code1": {
           "label": "Install on Linux and macOS",
-          "text": "curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh"
+          "text": "curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.sh | sh"
         },
         "code2": {
           "label": "Run it in the background",

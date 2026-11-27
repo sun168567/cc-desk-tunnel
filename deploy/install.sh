@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs or upgrades the CC Desk Tunnel service on this machine. It can be run on its own,
-#   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install.sh)"
+#   sudo bash -c "$(curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install.sh)"
 # in which case it fetches the newest release from GitHub (CC_DESK_TUNNEL_VERSION=X.Y.Z picks another), or from an
 # unpacked server archive, which it then uses. The service runs the prebuilt image of that version where there is
 # one, and builds it here where there is not (see manage.sh).

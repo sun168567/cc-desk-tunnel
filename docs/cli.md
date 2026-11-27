@@ -12,12 +12,12 @@
 
 ```powershell
 # Windows，在 PowerShell 里运行：装到 %LOCALAPPDATA%\Programs\ccdt，并加入当前用户的 PATH
-irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+irm https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.ps1 | iex
 ```
 
 ```bash
 # macOS、Linux：装到 ~/.local/share/ccdt，命令为 ~/.local/bin/ccdt
-curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | sh
+curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.sh | sh
 ```
 
 脚本从发布页下载这个系统的包，按发布页的 `SHA256SUMS` 校验后，运行包里的安装脚本。Windows 上运行命令的窗口装完就能用 `ccdt`；macOS、Linux 上 `~/.local/bin` 不在 PATH 里时，安装脚本把它写进 shell 的配置文件（zsh 为 `~/.zshrc`，bash 为 `~/.bashrc`，macOS 的 bash 为 `~/.bash_profile`，其他为 `~/.profile`），新开的终端窗口就能用。
@@ -25,11 +25,11 @@ curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deplo
 `ccdt` 要与服务端**同一版本**。脚本默认装最新的正式版；服务端是别的版本时，先指定版本再运行，例如：
 
 ```powershell
-$env:CCDT_VERSION = '0.3.9'; irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+$env:CCDT_VERSION = '0.3.9'; irm https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.sh | CCDT_VERSION=0.3.9 sh
+curl -fsSL https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.sh | CCDT_VERSION=0.3.9 sh
 ```
 
 装错了版本也不要紧：连接时 `ccdt` 会提示版本不一致，并问你是否换成服务端的版本。设置 `CCDT_DOWNLOAD_ONLY=1` 时，脚本只把校验过的包解压到当前目录，不安装。

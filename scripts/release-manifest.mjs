@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 // Describes the files of a release, which the `package` workflow has gathered in one directory: release.json
 // is what programs read, SHA256SUMS the same hashes for `sha256sum -c`. A release has exactly these files: the
-// desktop packages, the server bundle and the ccdt packages; one missing or one too many stops it.
+// desktop packages, the server bundle, the ccdt packages and the scripts that install the server and ccdt (the
+// README's one-line installs fetch them from the newest release, so that a script always matches the release it
+// installs); one missing or one too many stops it.
 const root = fileURLToPath(new URL('..', import.meta.url));
 const directory = resolve(process.argv[2] ?? 'artifacts/release');
 const version = JSON.parse(readFileSync(join(root, 'apps/desktop/package.json'), 'utf8')).version;
@@ -21,6 +23,9 @@ export const releaseFiles = (version) => [
   `ccdt-${version}-linux-arm64.tar.gz`,
   `ccdt-${version}-mac-arm64.tar.gz`,
   `ccdt-${version}-mac-x64.tar.gz`,
+  'install.sh',
+  'install-ccdt.sh',
+  'install-ccdt.ps1',
 ];
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

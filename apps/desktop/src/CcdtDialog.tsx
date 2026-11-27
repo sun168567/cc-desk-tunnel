@@ -4,7 +4,7 @@ import { CopyButton } from './copy.tsx';
 import { project } from './project.tsx';
 import { Modal } from './ui.tsx';
 
-const script = `https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt`;
+const script = `https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt`;
 
 // The one line that installs ccdt of `version`, the service's, on this system; see docs/cli.md.
 export function installCommand(platform: string, version: string) {

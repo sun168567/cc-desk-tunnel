@@ -1,6 +1,6 @@
 # Installs ccdt, the terminal client of CC Desk Tunnel, for the current user, in Windows PowerShell or PowerShell 7:
 #
-#   irm https://raw.githubusercontent.com/sun168567/cc-desk-tunnel/main/deploy/install-ccdt.ps1 | iex
+#   irm https://github.com/sun168567/cc-desk-tunnel/releases/latest/download/install-ccdt.ps1 | iex
 #
 # It downloads the Windows package of the newest release, checks it against the release's SHA256SUMS and puts it in
 # place with the install script the package carries, which adds ccdt to the user's PATH; this window can use it at
