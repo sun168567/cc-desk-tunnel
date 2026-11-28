@@ -547,15 +547,23 @@ test('a session on another computer is listed apart, read, and taken over with a
   await expect(row).toHaveCount(1);
   // The first computer's project is named and removed from here, and that computer shows it, as the service keeps
   // the projects for every computer.
-  const heading = async () =>
-    other.locator('.elsewhere-project').nth(
-      await row.evaluate((element) => {
-        let above = element.previousElementSibling!;
-        while (!above.classList.contains('elsewhere-project'))
-          above = above.previousElementSibling!;
-        return [...document.querySelectorAll('.elsewhere-project')].indexOf(above);
-      }),
-    );
+  // The heading above the row, once this window shows one: a project removed or added in the first window
+  // reaches this one a moment later.
+  const heading = async () => {
+    let index = -1;
+    await expect
+      .poll(
+        async () =>
+          (index = await row.evaluate((element) => {
+            let above = element.previousElementSibling;
+            while (above && !above.classList.contains('elsewhere-project'))
+              above = above.previousElementSibling;
+            return above ? [...document.querySelectorAll('.elsewhere-project')].indexOf(above) : -1;
+          })),
+      )
+      .toBeGreaterThanOrEqual(0);
+    return other.locator('.elsewhere-project').nth(index);
+  };
   await (await heading()).click({ button: 'right' });
   await other.getByRole('menuitem', { name: '修改显示名称', exact: true }).click();
   await other.getByRole('dialog').getByLabel('显示名称').fill('远处改的名字');

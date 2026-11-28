@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +25,12 @@ const uiPort = await availablePort(Number(process.env.UI_PORT ?? 5173));
 const token = process.env.PROXY_TOKEN ?? randomBytes(32).toString('base64url');
 const local = process.env.PROXY_RUNTIME_DIR ?? join(root, '.local');
 mkdirSync(local, { recursive: true });
+const dataDir = process.env.PROXY_DATA_DIR ?? join(local, 'sessions');
+// `--fresh` starts from an empty service, as the UI tests do: what earlier runs left would only pile up.
+if (process.argv.includes('--fresh')) rmSync(dataDir, { recursive: true, force: true });
 const server = createProxyServer({
   token,
-  dataDir: process.env.PROXY_DATA_DIR ?? join(local, 'sessions'),
+  dataDir,
   allowedOrigins: [`http://127.0.0.1:${uiPort}`, `http://localhost:${uiPort}`, 'file://', 'null'],
 });
 const serverUrl = await server.listen(apiPort);
