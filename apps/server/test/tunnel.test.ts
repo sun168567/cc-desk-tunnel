@@ -172,7 +172,7 @@ test('a Windows device with Git Bash has a host for it, which Claude picks by th
   assert.match(files.config, /^Host device device-pwsh device-bash$/m);
   assert.match(
     files.config,
-    /^Host device-bash\n  RemoteCommand chcp\.com 65001 >nul & "%%CC_DESK_TUNNEL_BASH%%" -s\n  RequestTTY no$/m,
+    /^Host device-bash\n  RemoteCommand chcp\.com 65001 >nul & "%%CC_DESK_TUNNEL_PWSH%%" .*CC_DESK_TUNNEL_BASH.*\n  RequestTTY no$/m,
   );
   const prompt = sessionPrompt("D:\\中文 空格\\it's", 'session', gitBash);
   assert.match(
@@ -207,10 +207,12 @@ test('a device says which shells it has; those its system cannot have are passed
 });
 test('the fixed script command survives the double quotes of cmd.exe', () => {
   // What follows -Command is wrapped in double quotes and holds neither kind of quote itself.
-  const command = shellCommand('win32', 'pwsh');
-  const body = command.slice(command.indexOf('-Command "') + 10, -1);
-  assert.doesNotMatch(body, /["']/);
-  assert.match(body, /ReadToEnd\(\)/);
+  for (const shell of ['pwsh', 'bash'] as const) {
+    const command = shellCommand('win32', shell);
+    const body = command.slice(command.indexOf('-Command "') + 10, -1);
+    assert.doesNotMatch(body, /["']/);
+    assert.match(body, shell === 'pwsh' ? /ReadToEnd\(\)/ : /OpenStandardInput\(\)\.CopyTo/);
+  }
 });
 test('a session reaches its device by ssh, scp and sftp of its own, and every other host as plain ssh does', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'claude-session-ssh-'));
