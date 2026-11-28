@@ -28,15 +28,15 @@ const {
   writeFileSync,
   writeSync,
 } = require('node:fs');
-const { copyFile, mkdtemp, readFile, stat, writeFile } = require('node:fs/promises');
+const { copyFile, readFile, stat, writeFile } = require('node:fs/promises');
 const { gitBranch } = require('./git-branch.cjs');
 const fileLinks = require('./file-links.cjs');
 const { asOnDisk } = require('./disk-path.cjs');
 const { openLog } = require('./client-log.cjs');
-const { hostname, tmpdir } = require('node:os');
+const { hostname } = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { execFile, spawn } = require('node:child_process');
-const { mkdir, readdir, rm, rmdir, unlink } = require('node:fs/promises');
+const { mkdir, readdir, rmdir, unlink } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 const { promisify } = require('node:util');
 let bridge;
@@ -967,19 +967,15 @@ const listed = () =>
     current: entry.id === connectionId,
     open: entry.id === connectionId || connections.running(base, entry.id),
   }));
-// Shows a connection's window, or starts a process that signs in to it with its remembered token; without an ID,
-// a process with a sign-in window. A connection that is open already is told to show its window, or with
-// `--quit-connection` to quit, through its control pipe (see `listen` in connections.cjs); one that does not answer
-// is signed in to again.
-function launch(id, flags = []) {
-  const quit = flags.includes('--quit-connection');
+// Shows a running connection or opens a fresh sign-in for it.
+function launch(id) {
   if (id !== null && connections.running(base, id)) {
     void connections
-      .tell(base, id, quit ? 'quit' : 'show')
-      .then((told) => told || quit || startProcess([`--connection=${id}`, '--sign-in']));
+      .tell(base, id, 'show')
+      .then((told) => told || startProcess([`--connection=${id}`, '--sign-in']));
     return;
   }
-  if (!quit) startProcess(id === null ? [] : [`--connection=${id}`, '--sign-in']);
+  startProcess(id === null ? [] : [`--connection=${id}`, '--sign-in']);
 }
 // `start`: see `asked`.
 function startProcess(flags = [], start = null) {
@@ -988,10 +984,6 @@ function startProcess(flags = [], start = null) {
     stdio: 'ignore',
     env: start ? { ...process.env, CC_DESK_TUNNEL_START: JSON.stringify(start) } : process.env,
   }).unref();
-}
-function dismissOthers() {
-  for (const entry of others())
-    if (connections.running(base, entry.id)) launch(entry.id, ['--quit-connection']);
 }
 // The page's choices that are the computer's (see prefs.ts) and the list of connections, as last read. Every
 // connection's window looks at the files every two seconds and takes what another one wrote.
@@ -1204,87 +1196,29 @@ handle('notify:show', (event, notice) => {
     window.once('focus', () => window.flashFrame(false));
   }
 });
-// Upgrades in place: the installer runs silently over the current install and starts the new version. It
-// comes from the connected service, or, when the user chooses so, straight from the release page: `version`
-// is then the one to fetch, which the service's refusal of this client named. One upgrade runs at a time; the
-// window hears each step on `update:progress`, bytes as they come and the steps between them, and can stop the
-// download with `update:cancel`.
-let upgrading = null;
-handle('update:cancel', () => upgrading?.abort());
-handle('update:install', async (event, version) => {
-  if (!app.isPackaged) throw new Error(t('desktop:upgrade.fromSource'));
-  // Only the Windows installer can be run over an installation. Elsewhere the user installs a new package.
-  if (process.platform !== 'win32') throw new Error(t('desktop:upgrade.unsupported'));
-  if (upgrading) throw new Error(t('desktop:upgrade.already'));
-  if (version === undefined && !lastBridge) throw new Error(t('desktop:upgrade.connectFirst'));
-  const directory = await mkdtemp(path.join(tmpdir(), 'cc-desk-tunnel-update-'));
-  const controller = (upgrading = new AbortController());
-  const source = version === undefined ? 'service' : 'github';
-  let told = 0;
-  const tell = (step) => {
-    if (step.phase === 'downloading') {
-      if (Date.now() - told < 400 && step.received < step.size) return;
-      told = Date.now();
-    }
-    // Why a connection is tried again may be a phrase, which is said here.
-    if (step.reason !== undefined) step = { ...step, reason: words.say(step.reason) };
-    if (!event.sender.isDestroyed()) event.sender.send('update:progress', { source, ...step });
-  };
-  const progress = (received, size) => tell({ phase: 'downloading', received, size });
-  try {
-    tell({ phase: 'connecting' });
-    let installer;
-    if (version === undefined)
-      installer = await lastBridge.downloadInstaller(directory, {
-        progress,
-        signal: controller.signal,
-      });
-    else {
-      const { downloadRelease } = await import(
-        pathToFileURL(path.join(__dirname, 'release-download.mjs')).href
-      );
-      // Chromium's network stack: the Windows proxy settings apply, as they do to the connection itself.
-      installer = await downloadRelease((url, init) => net.fetch(url, init), version, directory, {
-        announced: lastBridge?.release(),
-        progress,
-        report: tell,
-        signal: controller.signal,
-      });
-    }
-    // The installer replaces the program under every connection's window, so the others go first.
-    if (others().some((entry) => connections.running(base, entry.id))) {
-      tell({ phase: 'closing' });
-      dismissOthers();
-    }
-    for (
-      let waited = 0;
-      others().some((entry) => connections.running(base, entry.id));
-      waited += 250
-    ) {
-      if (waited >= 15000) throw new Error(t('desktop:upgrade.othersOpen'));
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    tell({ phase: 'installing' });
-    // The window shows that step for a moment; the installer then starts and this client quits at once, as the
-    // installer expects of the program it replaces.
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
-  } catch (error) {
-    await rm(directory, { recursive: true, force: true }).catch(() => {});
-    if (error?.cancelled) return { cancelled: true };
-    throw error;
-  } finally {
-    upgrading = null;
-  }
-  // The installer works for a while with no window of its own: the system's notification says what goes on.
-  if (Notification.isSupported())
-    new Notification({
-      title: t('desktop:upgrade.title'),
-      body: t('desktop:upgrade.body'),
-      icon: path.join(__dirname, 'icon.png'),
-    }).show();
-  app.quit();
-  return {};
+const updater = require('./desktop-updater.cjs').applicationUpdater({
+  app,
+  net,
+  Notification,
+  dialog,
+  profile: base,
+  otherConnections: others,
+  programArguments,
+  t,
+});
+handle('update:cancel', () => updater.cancel());
+handle('update:install', (event, version) =>
+  updater.install(version, {
+    bridge: lastBridge,
+    report(step) {
+      if (event.sender.isDestroyed()) return;
+      if (step.reason !== undefined) step = { ...step, reason: words.say(step.reason) };
+      event.sender.send('update:progress', step);
+    },
+  }),
+);
+ipcMain.on('update:ready', (event) => {
+  if (BrowserWindow.fromWebContents(event.sender)) updater.onRendererReady?.();
 });
 // The sign-in window asks a service that refused this client what it says now (see probeService), with the token
 // its sign-in used.
@@ -1469,6 +1403,7 @@ function attend(window) {
 app.whenReady().then(async () => {
   if (exporting !== undefined) return exportSaved();
   if (leaving) return;
+  updater.onAppReady?.();
   // Started for a connection whose window is open, the program shows that window and goes.
   if (
     requested.id !== null &&
@@ -1504,6 +1439,8 @@ app.whenReady().then(async () => {
   // A sign-in window is the size of its form; one that takes over from another is where that one was.
   const window = createWindow('launcher', { width: 460, height: 680, shown: true });
   launcherWindow = window;
+  // Says why an update that did not finish was rolled back; the window goes on meanwhile.
+  void updater.onWindowReady?.();
   const bounds = asked?.bounds;
   if (bounds && ['x', 'y', 'width', 'height'].every((key) => Number.isInteger(bounds[key])))
     window.setBounds(bounds);

@@ -35,7 +35,12 @@
     "connectFirst": "请先连接服务。",
     "othersOpen": "其他连接的窗口没有退出，请先退出它们再升级。",
     "title": "正在升级 CC Desk Tunnel",
-    "body": "安装完成后会自动重新打开。"
+    "body": "安装完成后会自动重新打开。",
+    "macPrepareFailed": "准备 macOS 更新失败（{{reason}}）。当前应用仍可使用，请重试。",
+    "macInstallLocation": "应用所在位置无法自动更新。请将应用安装到你有写入权限的“应用程序”目录后重试。",
+    "macUpdateBusy": "这份应用已有另一个窗口正在更新，请稍后重试。",
+    "macInvalidBundle": "下载的应用版本、芯片架构或签名校验不符，已放弃更新。",
+    "macRollback": "升级未完成。请查看下方原因后重试。"
   },
   "menu": {
     "undo": "撤销",
@@ -199,9 +204,11 @@
     "cancelled": "已取消。",
     "badVersion": "版本号不正确。",
     "noManifest": "读取不到 {{version}} 的发布信息（{{reason}}）。\n请检查这台电脑能否访问 github.com，或改从服务端获取安装包。",
+    "noManifestMac": "读取不到 {{version}} 的发布信息（{{reason}}）。\n请检查这台电脑能否访问 github.com，或到发布页手动下载安装包。",
     "notInManifest": "发布信息里没有这个版本的安装包。",
     "otherFile": "发布页的安装包与服务端提供的不是同一个文件，已放弃升级。",
     "interrupted": "从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。\n请检查网络后重试，或改从服务端获取安装包。",
+    "interruptedMac": "从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。\n请检查网络后重试，或到发布页手动下载安装包。",
     "nothing": "连接没有数据",
     "httpFailed": "安装包下载失败（{{status}}）。",
     "tooLarge": "安装包比发布信息里的大，已放弃升级。"

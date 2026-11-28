@@ -164,7 +164,7 @@ Install either client or both. Each must be the **same version** as the service.
 The Windows installer bundles PowerShell 7, OpenSSH and `ccdt`; nothing else is needed. Start it, enter the three values from step 1 and connect.
 
 > [!NOTE]
-> The Windows installers are not code-signed. When Windows shows "Windows protected your PC" on first run, choose "More info → Run anyway"; if security software blocks a bundled component, verify before allowing it, see [Antivirus and SmartScreen](docs/troubleshooting.en.md#antivirus-and-smartscreen). The macOS app has an ad hoc signature and has not been notarized by Apple. On macOS and Linux, upgrade by downloading and installing the new package.
+> The Windows installers are not code-signed. When Windows shows "Windows protected your PC" on first run, choose "More info → Run anyway"; if security software blocks a bundled component, verify before allowing it, see [Antivirus and SmartScreen](docs/troubleshooting.en.md#antivirus-and-smartscreen). The macOS app has an ad hoc signature and has not been notarized by Apple. On macOS, update from the app to download, install and restart. On Linux, download and install the new package.
 
 To install `ccdt` on its own (for the current user, no administrator rights needed; then run `ccdt login`):
 

@@ -65,10 +65,12 @@
     "notRestarted": "服务端还没有重启好，请稍后点“连接”。",
     "clientNewer": "此客户端较新，请先升级服务端。",
     "manualClient": "这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。",
+    "githubClient": "可以从 GitHub 发布页下载与服务端同一版本的客户端，校验后自动安装并重新打开。",
     "preparing": "服务端正在下载这一版的安装包（{{percent}}%），好了这里会出现升级按钮；也可以直接从 GitHub 发布页下载。",
     "refetching": "服务端还没有这一版的安装包，正在重新下载；也可以直接从 GitHub 发布页下载。"
   },
   "clientUpgrade": {
+    "failed": "客户端升级失败",
     "connecting": {
       "service": "正在连接服务端…",
       "github": "正在连接 GitHub…"
@@ -89,7 +91,8 @@
     "resuming": "连接中断，正在续传…",
     "verifying": "正在校验安装包…",
     "closing": "正在关闭其他连接的窗口…",
-    "installing": "正在安装，完成后客户端会自动打开"
+    "installing": "正在安装，完成后客户端会自动打开",
+    "preparing": "正在准备安装更新…"
   },
   "web": {
     "selfSigned": "当前服务使用自签名证书，请确认访问地址可信。建议在桌面端“设置 → 浏览器访问”导入正规证书，或由反向代理提供 HTTPS。",
@@ -129,7 +132,8 @@
     "github": "从 GitHub 下载并升级到 {{version}}",
     "githubWorking_other": "从 GitHub 下载并升级到 {{version}}（{{count}} 个会话正在运行）",
     "notes": "查看 {{version}} 的更新内容",
-    "clientAvailable": "客户端可升级到 {{version}}"
+    "clientAvailable": "客户端可升级到 {{version}}",
+    "confirmInstall": "安装 {{version}} 会退出这份应用的所有连接，其他连接上正在运行的任务可能中断；终端里打开的 ccdt 也请先退出。安装后客户端会自动重启。继续升级？"
   },
   "reconnect": {
     "body": "与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。",

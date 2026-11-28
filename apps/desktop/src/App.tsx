@@ -64,7 +64,7 @@ import { say, useT } from './i18n.ts';
 import Composer from './Composer.tsx';
 import SessionBar from './SessionBar.tsx';
 import { deviceName, isHere, thisDevice } from './device.ts';
-import { selfUpdating } from './platform.ts';
+import { clientInstallers, updatePolicy } from './client-update-policy.ts';
 import { useClientUpgrade } from './client-upgrade.ts';
 import { useDrafts } from './drafts.ts';
 import { useDrawerSwipe } from './useDrawerSwipe.ts';
@@ -110,7 +110,7 @@ import type { BarMenu } from './TitleBar.tsx';
 import IdleReminder from './IdleReminder.tsx';
 import { CcdtDialog } from './CcdtDialog.tsx';
 import { SetupTokenDialog } from './SetupTokenDialog.tsx';
-import { IconButton, Menu } from './ui.tsx';
+import { IconButton, Menu, Modal } from './ui.tsx';
 import type { MenuItem, MenuPosition } from './ui.tsx';
 
 // The notes of every version so far are read only when asked for, and stay out of what the window starts with.
@@ -520,18 +520,8 @@ export function App({
   const quotaSession = selected ?? state.sessions[0];
   const actionError = error instanceof RequestInterruptedError ? error.describe(connected) : error;
   const currentError = actionError ?? state.error;
-  // Offered when the service holds a newer installer than the running client.
-  const upgrade =
-    selfUpdating && version && state.release && isNewer(state.release, version)
-      ? state.release
-      : null;
-  // A service newer than this client that holds no installer for it yet, as just after its own upgrade: the
-  // release page has it. The service tells when its own arrives.
-  const behind =
-    selfUpdating && version && state.service && isNewer(state.service, version) && !upgrade
-      ? state.service
-      : null;
-  const upgrading = useClientUpgrade(setError);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const upgrading = useClientUpgrade(setUpgradeError);
   // A service of a newer version: what that version changed can be read here, whether or not this system's
   // client upgrades itself.
   const ahead =
@@ -1564,38 +1554,57 @@ export function App({
     : (state.account?.email ??
       capabilities?.account.email ??
       t(nativeMode ? 'nav:bar.accountUnnamed' : 'nav:bar.simulation'));
-  // The client's upgrade, from the service or the release page; while one runs, how it goes and a way to stop it.
-  const upgradeItems: MenuItem[] = upgrading.step
-    ? [
-        { label: upgrading.text!, icon: <Download />, disabled: true, run: () => undefined },
-        ...(upgrading.cancellable
-          ? [{ label: t('connection:update.cancelClient'), icon: <X />, run: upgrading.cancel }]
-          : []),
-      ]
-    : [upgrade, behind]
-        .filter((target): target is string => !!target)
-        .map((target) => ({
-          label: working.length
-            ? t(
-                target === upgrade
-                  ? 'connection:update.clientWorking'
-                  : 'connection:update.githubWorking',
-                { version: target, count: working.length },
-              )
-            : t(target === upgrade ? 'connection:update.client' : 'connection:update.github', {
-                version: target,
-              }),
-          icon: <Download />,
-          disabled: busy || working.length > 0,
-          run: () => upgrading.start(target === upgrade ? undefined : target),
-        }));
+  const publishedVersion =
+    update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null;
+  // The client's upgrade, to the service's version (see client-update-policy.ts); while one runs, how it goes
+  // and a way to stop it.
+  const [installer] = clientInstallers(updatePolicy, version, {
+    cachedInstaller: state.release,
+    serverVersion: state.service,
+  });
+  // Where the usual source is the service, label the GitHub fallback explicitly.
+  const fallback =
+    installer?.source === 'github' && updatePolicy.sources.includes('cachedInstaller');
+  const upgradeItems: MenuItem[] = [];
+  if (upgrading.step) {
+    upgradeItems.push({
+      label: upgrading.text!,
+      icon: <Download />,
+      disabled: true,
+      run: () => undefined,
+    });
+    if (upgrading.cancellable)
+      upgradeItems.push({
+        label: t('connection:update.cancelClient'),
+        icon: <X />,
+        run: upgrading.cancel,
+      });
+  } else if (installer) {
+    const target = installer.version;
+    upgradeItems.push({
+      label: working.length
+        ? t(fallback ? 'connection:update.githubWorking' : 'connection:update.clientWorking', {
+            version: target,
+            count: working.length,
+          })
+        : t(fallback ? 'connection:update.github' : 'connection:update.client', {
+            version: target,
+          }),
+      icon: <Download />,
+      disabled: busy || working.length > 0,
+      run: () => {
+        if (
+          updatePolicy.confirm &&
+          !window.confirm(t('connection:update.confirmInstall', { version: target }))
+        )
+          return;
+        upgrading.start(installer.source === 'github' ? target : undefined);
+      },
+    });
+  }
   // What an upgrade would bring is read where the upgrade is offered, before it is taken.
-  const newer =
-    upgrade ??
-    behind ??
-    ahead ??
-    (update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null);
-  const updates = [
+  const newer = installer?.version ?? ahead ?? publishedVersion;
+  const updates: MenuItem[] = [
     ...(newer
       ? [
           {
@@ -1611,8 +1620,8 @@ export function App({
   // The rail shows its button only for an update that exists, not for the standing offer to look for one.
   const pendingUpdate =
     upgrading.text ??
-    (upgrade || behind
-      ? t('connection:update.clientAvailable', { version: upgrade ?? behind ?? '' })
+    (installer
+      ? t('connection:update.clientAvailable', { version: installer.version })
       : update && ['available', 'manual', 'installing', 'restarting'].includes(update.state)
         ? (serviceUpdate?.label ?? null)
         : null);
@@ -2481,6 +2490,13 @@ export function App({
         />
       )}
       {notesDialog}
+      {upgradeError && (
+        <Modal title={t('connection:clientUpgrade.failed')} onClose={() => setUpgradeError(null)}>
+          <p className="error-text" role="alert">
+            {upgradeError}
+          </p>
+        </Modal>
+      )}
       {syncing && syncSides && (
         <SyncDialog
           name={syncing.name}

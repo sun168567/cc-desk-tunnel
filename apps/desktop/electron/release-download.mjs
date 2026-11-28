@@ -4,14 +4,18 @@ import { open, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { failure, phrase } from './failure.cjs';
 
-// Where this client's releases are published. The service normally hands out the installer; this is the other
-// way to get it, for when the service has not fetched it or cannot.
+// Where the desktop releases are published. The service also distributes the Windows installer.
 export const releasePage = 'https://github.com/sun168567/cc-desk-tunnel/releases/download';
 // A connection to the release host can start fast and then slow to a crawl, or stop without closing. The file
 // is fetched in stretches: each connection is used for `stretch` milliseconds at most and the next continues
 // where it ended; one that delivers nothing for `stall` is given up at once, and after `attempts` connections
 // in a row that added nothing the download fails.
 const defaultPace = { stretch: 20_000, stall: 15_000, attempts: 5 };
+// Where the service holds this system's installer, a failure here says to take it from there instead.
+const serviceHolds = process.platform === 'win32';
+// The asset name is used as both a URL segment and a local filename on any supported filesystem.
+const assetName =
+  /^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$))[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*$/i;
 
 // What a download stopped by its caller rejects with.
 export const cancelled = () =>
@@ -19,8 +23,8 @@ export const cancelled = () =>
 const megabytes = (bytes) => `${(bytes / 1048576).toFixed(1)} MB`;
 
 // Downloads the installer of `version` from the release page into `directory` and resolves to its path. It is
-// kept only if its hash is the one the release's manifest states, and, when the service announced an installer
-// of that version too, only if both name the same file. `fetch` is the caller's, so that the system's proxy
+// kept only if its hash matches the manifest. The caller may also supply an announcement for this asset
+// to check against the manifest. `fetch` is the caller's, so that the system's proxy
 // settings apply. `progress` hears the bytes received; `report` hears the steps that bring none, so that a window
 // can tell a connection being tried again, or the file being checked, from one that hangs. `signal` stops it.
 export async function downloadRelease(
@@ -28,6 +32,7 @@ export async function downloadRelease(
   version,
   directory,
   {
+    name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`,
     announced,
     progress = () => {},
     report = () => {},
@@ -36,8 +41,10 @@ export async function downloadRelease(
     page = releasePage,
   } = {},
 ) {
-  if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw failure('desktop:download.badVersion');
-  const name = `CC-Desk-Tunnel-Setup-${version}-x64.exe`;
+  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))
+    throw failure('desktop:download.badVersion');
+  if (typeof name !== 'string' || name.length > 255 || !assetName.test(name))
+    throw failure('desktop:download.notInManifest');
   let manifest;
   try {
     const response = await fetch(`${page}/v${version}/release.json`, {
@@ -47,7 +54,7 @@ export async function downloadRelease(
     manifest = await response.json();
   } catch (error) {
     if (signal?.aborted) throw cancelled();
-    throw failure('desktop:download.noManifest', {
+    throw failure(serviceHolds ? 'desktop:download.noManifest' : 'desktop:download.noManifestMac', {
       version,
       reason:
         error.name === 'TimeoutError'
@@ -55,12 +62,15 @@ export async function downloadRelease(
           : error.message,
     });
   }
-  const file = manifest?.files?.find?.((item) => item?.name === name);
+  const file = Array.isArray(manifest?.files)
+    ? manifest.files.find((item) => item?.name === name)
+    : null;
   if (
     manifest?.version !== version ||
     !file ||
     !/^[0-9a-f]{64}$/.test(file.sha256) ||
-    !(file.size > 0)
+    !Number.isSafeInteger(file.size) ||
+    file.size <= 0
   )
     throw failure('desktop:download.notInManifest');
   if (announced?.version === version && announced.sha256 !== file.sha256)
@@ -72,11 +82,14 @@ export async function downloadRelease(
     let last;
     for (let idle = 0; received < file.size;) {
       if (idle >= pace.attempts)
-        throw failure('desktop:download.interrupted', {
-          reason: last ?? phrase('desktop:download.nothing'),
-          received: megabytes(received),
-          size: megabytes(file.size),
-        });
+        throw failure(
+          serviceHolds ? 'desktop:download.interrupted' : 'desktop:download.interruptedMac',
+          {
+            reason: last ?? phrase('desktop:download.nothing'),
+            received: megabytes(received),
+            size: megabytes(file.size),
+          },
+        );
       if (signal?.aborted) throw cancelled();
       const before = received;
       const controller = new AbortController();
@@ -139,12 +152,12 @@ export async function downloadRelease(
     await output.close();
     report({ phase: 'verifying' });
     const hash = createHash('sha256');
-    for await (const chunk of createReadStream(target)) hash.update(chunk);
+    for await (const chunk of createReadStream(target, { signal })) hash.update(chunk);
     if (hash.digest('hex') !== file.sha256) throw failure('desktop:download.badHash');
     return target;
   } catch (error) {
     await output.close().catch(() => {});
     await rm(target, { force: true });
-    throw error;
+    throw signal?.aborted ? cancelled() : error;
   }
 }

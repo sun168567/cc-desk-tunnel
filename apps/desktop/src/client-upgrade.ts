@@ -7,7 +7,14 @@ import type { T } from './i18n.ts';
 // connections' windows closing, and the installer started.
 export type UpgradeStep = {
   source: 'service' | 'github';
-  phase: 'connecting' | 'downloading' | 'retrying' | 'verifying' | 'closing' | 'installing';
+  phase:
+    | 'connecting'
+    | 'downloading'
+    | 'retrying'
+    | 'verifying'
+    | 'preparing'
+    | 'closing'
+    | 'installing';
   received?: number;
   size?: number;
   // When retrying: the connections in a row that brought nothing, of how many are tried, and why the last ended.
@@ -48,6 +55,8 @@ export function upgradeText(t: T, step: UpgradeStep, quiet = 0) {
         : t('connection:clientUpgrade.resuming');
     case 'verifying':
       return t('connection:clientUpgrade.verifying');
+    case 'preparing':
+      return t('connection:clientUpgrade.preparing');
     case 'closing':
       return t('connection:clientUpgrade.closing');
     case 'installing':

@@ -65,10 +65,12 @@
     "notRestarted": "The server hasn’t finished restarting. Click “Connect” in a moment.",
     "clientNewer": "This client is newer. Upgrade the server first.",
     "manualClient": "On this system the client is upgraded by hand: download the installer of the server’s version from GitHub releases.",
+    "githubClient": "You can download the client of the server’s version from GitHub releases; it’s checked, installed and reopened for you.",
     "preparing": "The server is downloading the installer of this version ({{percent}}%). An upgrade button appears here once it’s ready; you can also download it from GitHub releases.",
     "refetching": "The server doesn’t have this version’s installer yet and is downloading it again; you can also download it from GitHub releases."
   },
   "clientUpgrade": {
+    "failed": "Client upgrade failed",
     "connecting": {
       "service": "Connecting to the server…",
       "github": "Connecting to GitHub…"
@@ -93,7 +95,8 @@
     "resuming": "Connection broke, resuming…",
     "verifying": "Verifying the installer…",
     "closing": "Closing the windows of other connections…",
-    "installing": "Installing; the client opens again when done"
+    "installing": "Installing; the client opens again when done",
+    "preparing": "Preparing the update…"
   },
   "web": {
     "selfSigned": "This server uses a self-signed certificate; make sure the address can be trusted. Import a proper certificate in the desktop client under “Settings → Browser access”, or let a reverse proxy provide HTTPS.",
@@ -139,7 +142,8 @@
     "githubWorking_one": "Download from GitHub and upgrade to {{version}} ({{count}} session running)",
     "githubWorking_other": "Download from GitHub and upgrade to {{version}} ({{count}} sessions running)",
     "notes": "What’s new in {{version}}",
-    "clientAvailable": "Client upgrade to {{version}} available"
+    "clientAvailable": "Client upgrade to {{version}} available",
+    "confirmInstall": "Installing {{version}} quits every connection of this app; tasks running on the other connections may be interrupted. Quit ccdt in your terminals first, too. The client restarts once it’s installed. Continue?"
   },
   "reconnect": {
     "body": "The connection to the server dropped and is being restored. Tasks on the server go on, and what happened meanwhile fills in once connected.",

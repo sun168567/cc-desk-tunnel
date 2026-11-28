@@ -1113,7 +1113,7 @@
           },
           {
             "title": "再升级客户端",
-            "text": "Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载；macOS、Linux 重新下载安装。"
+            "text": "Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载；macOS 在“更新”菜单或登录页从 GitHub 下载同一版本，装好后自动重新打开；Linux 重新下载安装。"
           }
         ],
         "list1": ["自带的 `ccdt` 随图形客户端升级；单独安装的运行 `ccdt upgrade`。"]

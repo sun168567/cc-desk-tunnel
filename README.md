@@ -166,7 +166,7 @@ Windows 安装包自带 PowerShell 7、OpenSSH 和 `ccdt`，不用另装任何�
 <a id="杀毒软件与-smartscreen"></a>
 
 > [!NOTE]
-> Windows 安装包没有代码签名。首次运行出现“Windows 已保护你的电脑”时，点“更多信息 → 仍要运行”；内置组件被安全软件拦截时先核对再放行，见[杀毒软件与 SmartScreen](docs/troubleshooting.md#杀毒软件与-smartscreen)。macOS 客户端使用临时签名，未经过 Apple 公证。macOS 与 Linux 用户升级时需要重新下载安装包。
+> Windows 安装包没有代码签名。首次运行出现“Windows 已保护你的电脑”时，点“更多信息 → 仍要运行”；内置组件被安全软件拦截时先核对再放行，见[杀毒软件与 SmartScreen](docs/troubleshooting.md#杀毒软件与-smartscreen)。macOS 客户端使用临时签名，未经过 Apple 公证。macOS 客户端可在应用内下载、安装更新并重新打开。Linux 用户升级时需下载并安装新版。
 
 单独安装 `ccdt`（只为当前用户安装，不需要管理员权限，装好后运行 `ccdt login`）：
 

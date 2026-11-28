@@ -1153,7 +1153,7 @@
           },
           {
             "title": "Then the client",
-            "text": "On Windows it downloads and installs in the client, or from GitHub while the server has no installer ready yet; on macOS and Linux, download and install it again."
+            "text": "On Windows it downloads and installs in the client, or from GitHub while the server has no installer ready yet; on macOS it downloads the same version from GitHub, from the Update menu or the sign-in page, and opens again; on Linux, download and install it again."
           }
         ],
         "list1": [

@@ -22,7 +22,7 @@ async function page(
   const ranges = [];
   const server = createServer((request, response) => {
     if (request.url === '/v9.8.7/release.json') response.end(JSON.stringify(manifest));
-    else if (request.url === `/v9.8.7/${name}`) {
+    else if (manifest.files.some((file) => request.url === `/v9.8.7/${file.name}`)) {
       ranges.push(request.headers.range);
       serve(request, response, ranges.length);
     } else response.writeHead(404).end();
@@ -42,6 +42,97 @@ async function page(
   return { directory, ranges, options };
 }
 const start = (request) => Number(/^bytes=(\d+)-$/.exec(request.headers.range ?? '')?.[1] ?? 0);
+
+test('the caller can select either disk image by its exact asset name', async (t) => {
+  const files = [{ name, size: installer.length, sha256 }];
+  const images = new Map();
+  for (const arch of ['arm64', 'x64']) {
+    const filename = `CC-Desk-Tunnel-9.8.7-mac-${arch}.dmg`;
+    const bytes = Buffer.from(`disk image for ${arch}`);
+    files.push({
+      name: filename,
+      size: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    });
+    images.set(`/v9.8.7/${filename}`, bytes);
+  }
+  const f = await page(
+    t,
+    (request, response) => response.end(images.get(request.url) ?? installer),
+    {
+      version: '9.8.7',
+      files,
+    },
+  );
+  for (const arch of ['arm64', 'x64']) {
+    const name = `CC-Desk-Tunnel-9.8.7-mac-${arch}.dmg`;
+    const path = await downloadRelease(fetch, '9.8.7', f.directory, f.options({ name }));
+    assert.equal(path, join(f.directory, name));
+    assert.equal(readFileSync(path, 'utf8'), `disk image for ${arch}`);
+  }
+});
+
+test('a selected disk image must exist and match both its manifest hash and any supplied announcement', async (t) => {
+  const arm = { name: 'CC-Desk-Tunnel-9.8.7-mac-arm64.dmg', size: installer.length, sha256 };
+  const f = await page(t, (_request, response) => response.end(Buffer.alloc(installer.length)), {
+    version: '9.8.7',
+    files: [arm, { name, size: installer.length, sha256 }],
+  });
+  await assert.rejects(
+    downloadRelease(
+      fetch,
+      '9.8.7',
+      f.directory,
+      f.options({ name: 'CC-Desk-Tunnel-9.8.7-mac-x64.dmg' }),
+    ),
+    told(/没有这个版本/),
+  );
+  await assert.rejects(
+    downloadRelease(
+      fetch,
+      '9.8.7',
+      f.directory,
+      f.options({
+        name: arm.name,
+        announced: { version: '9.8.7', sha256: '0'.repeat(64) },
+      }),
+    ),
+    told(/不是同一个文件/),
+  );
+  assert.equal(f.ranges.length, 0);
+  await assert.rejects(
+    downloadRelease(fetch, '9.8.7', f.directory, f.options({ name: arm.name })),
+    told(/校验失败/),
+  );
+  assert.equal(f.ranges.length, 1);
+  assert.deepEqual(readdirSync(f.directory), []);
+});
+
+test('an asset name must be a single portable filename before contacting the release host', async () => {
+  let requests = 0;
+  const unexpectedFetch = () => {
+    requests++;
+    throw new Error('unexpected network request');
+  };
+  for (const name of [
+    '',
+    '../bad.dmg',
+    '..\\bad.exe',
+    '/bad',
+    'x:y',
+    '%2e%2e%2fbad',
+    'a?b',
+    'NUL.exe',
+    'a.',
+    'a'.repeat(256),
+  ]) {
+    await assert.rejects(
+      downloadRelease(unexpectedFetch, '9.8.7', tmpdir(), { name }),
+      told(/没有这个版本/),
+    );
+  }
+  assert.equal(requests, 0);
+});
 
 test('the installer is taken from the release page, across connections that go quiet, and checked against the manifest', async (t) => {
   // Every connection sends 6,000 bytes and then goes quiet without closing; the second sends nothing.
@@ -163,7 +254,7 @@ test('nothing is kept of a file that is not the announced one, of a download tha
   const silent = await page(t, (_request, response) => response.flushHeaders());
   await assert.rejects(
     downloadRelease(fetch, '9.8.7', silent.directory, silent.options()),
-    told(/下载安装包中断（0 秒没有收到数据），已下载 0\.0 MB \/ 0\.0 MB。\n请检查网络/),
+    told(/下载安装包中断（0 秒没有收到数据），已下载 0\.0 MB \/ 0\.0 MB。/),
   );
   assert.equal(silent.ranges.length, 3);
   assert.equal(existsSync(join(silent.directory, name)), false);

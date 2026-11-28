@@ -9,7 +9,7 @@ import { ProxyClient } from './client.ts';
 import { messageOf, useClientUpgrade } from './client-upgrade.ts';
 import { thisDevice } from './device.ts';
 import { isNewer } from './paths.ts';
-import { selfUpdating } from './platform.ts';
+import { clientInstallers, selfUpdating, updatePolicy } from './client-update-policy.ts';
 
 const ReleaseNotes = lazy(() => import('./ReleaseNotes.tsx'));
 
@@ -134,19 +134,23 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
   > | null>(null);
   useEffect(() => setSince(null), [report]);
   const refused = ended?.mismatch ? { ...ended, ...since } : null;
+  const loginOffers =
+    window.desktop && selfUpdating
+      ? clientInstallers(updatePolicy, version, {
+          cachedInstaller: refused?.release,
+          serverVersion: refused?.service,
+        })
+      : [];
+  const upgrade = loginOffers.find((offer) => offer.source === 'service')?.version ?? null;
+  const direct = loginOffers.find((offer) => offer.source === 'github')?.version ?? null;
+  // The service holds the installer for this system's client (Windows only).
+  const fromService = updatePolicy.sources.includes('cachedInstaller');
   // A service newer than this client that does not hold its installer yet fetches it: it is asked again until it
   // does, more often while the download is under way, so that the window follows it and offers the upgrade once
   // it can. A service that went on to take this client, upgraded by other means meanwhile, is signed in to.
   const [asked, setAsked] = useState(0);
   const waitingForInstaller =
-    !!window.desktop &&
-    selfUpdating &&
-    !!version &&
-    !!refused?.service &&
-    isNewer(refused.service, version) &&
-    refused.release !== refused.service &&
-    !upgrading.step &&
-    !connecting;
+    fromService && !!direct && upgrade !== direct && !upgrading.step && !connecting;
   useEffect(() => {
     if (!waitingForInstaller) return;
     const timer = setTimeout(
@@ -204,17 +208,8 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
       })
       .catch(() => null);
   }
-  const upgrade =
-    window.desktop &&
-    selfUpdating &&
-    version &&
-    refused?.release &&
-    isNewer(refused.release, version)
-      ? refused.release
-      : null;
   const ahead =
     version && refused?.service && isNewer(refused.service, version) ? refused.service : null;
-  const direct = window.desktop && selfUpdating ? ahead : null;
   const older =
     form.mode === 'remote' && version && refused?.service && isNewer(version, refused.service)
       ? refused.service
@@ -227,11 +222,13 @@ export default function Launcher({ signIns }: { signIns: SignIns }) {
             ? t('connection:upgrade.clientNewer')
             : !selfUpdating
               ? t('connection:upgrade.manualClient')
-              : refused.preparing !== null
-                ? t('connection:upgrade.preparing', {
-                    percent: Math.floor(refused.preparing * 100),
-                  })
-                : t('connection:upgrade.refetching')
+              : !fromService
+                ? t('connection:upgrade.githubClient')
+                : refused.preparing !== null
+                  ? t('connection:upgrade.preparing', {
+                      percent: Math.floor(refused.preparing * 100),
+                    })
+                  : t('connection:upgrade.refetching')
         }`
       : failure;
   const notesDialog = notes && (
