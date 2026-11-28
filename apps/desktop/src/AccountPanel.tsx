@@ -433,8 +433,8 @@ export default function AccountPanel({
                     {window.utilization == null
                       ? t('account:quota.noUtilization')
                       : t('account:quota.utilization', {
-                          used: window.utilization,
-                          left: Math.max(0, 100 - window.utilization),
+                          used: Math.round(window.utilization),
+                          left: Math.max(0, 100 - Math.round(window.utilization)),
                         })}
                   </span>
                 </div>

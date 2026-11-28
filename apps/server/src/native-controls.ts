@@ -42,7 +42,8 @@ export function loginOf(account: AccountInfo) {
 // The CLI passes on the quota its own model requests were answered with as `rate_limit_event`. A login with
 // CLAUDE_CODE_OAUTH_TOKEN may not read the plan quota through `/usage`, but its requests carry it all the same.
 // `unifiedWindows` names every window of the response; it is not in the SDK's published type. Without it the event
-// speaks for one window. Utilization comes as a fraction and the reset as Unix seconds.
+// speaks for one window. Utilization comes as a fraction and the reset as Unix seconds. The percent keeps one
+// decimal, as the CLI gives its status line: a bare `* 100` turns 0.07 into 7.000000000000001.
 export function observedQuota(
   event: SDKRateLimitEvent,
   previous: ObservedQuota | null,
@@ -61,7 +62,7 @@ export function observedQuota(
       ? [
           {
             name,
-            utilization: Math.max(0, window.utilization! * 100),
+            utilization: Math.max(0, Math.round(window.utilization! * 1000) / 10),
             resetsAt: window.resetsAt ? new Date(window.resetsAt * 1000).toISOString() : null,
           },
         ]
