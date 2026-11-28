@@ -18,7 +18,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'node scripts/dev.mjs',
+    command: 'node scripts/dev.mjs --fresh',
     url: 'http://127.0.0.1:15173',
     reuseExistingServer: false,
     timeout: 30000,
