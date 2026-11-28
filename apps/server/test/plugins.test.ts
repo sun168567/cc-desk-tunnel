@@ -298,7 +298,15 @@ test('a plugin put in place while the service runs is read a moment later', asyn
   plugins.start();
   assert.deepEqual(plugins.list(), []);
   const before = told();
-  plugin(data, 'late', { hooks: { RunEnded: node('x.mjs') } });
-  await until(() => (plugins.list().length ? true : undefined), 'the plugin read');
+  const late = () => plugin(data, 'late', { hooks: { RunEnded: node('x.mjs') } });
+  late();
+  // On macOS the watch starts a moment after it is asked for, and a change made in that moment goes unheard: the
+  // plugin is written again until it is read. Nothing but the watch reads it after the start.
+  const again = setInterval(late, 1000);
+  try {
+    await until(() => (plugins.list().length ? true : undefined), 'the plugin read');
+  } finally {
+    clearInterval(again);
+  }
   assert.ok(told() > before);
 });
