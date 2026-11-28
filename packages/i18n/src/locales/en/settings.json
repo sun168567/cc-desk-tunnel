@@ -196,6 +196,7 @@
     "sameVersion": "Client and server need the same version",
     "updatesFromService": "The server follows the release page; the client’s installer comes from the server it connects to, or from the GitHub release page if chosen on the sign-in page, checked before upgrading in place",
     "updatesManual": "The server follows the release page; on this system the client is upgraded by hand: download the installer of the server’s version and install it over the old one",
+    "updatesFromGithub": "The server follows the release page; the client downloads the server’s version from GitHub releases, checks it, replaces the app and reopens, from the workbench’s Update menu or the sign-in page",
     "releases": "Open the release page",
     "noUpdates": "No update actions available",
     "troubleshoot": "Troubleshooting",
@@ -204,8 +205,7 @@
     "openLog": "Open the log folder",
     "devTools": "Developer tools",
     "devToolsDetail": "For errors when reporting a window problem. Conversations can be seen there; don’t paste code into it because someone asks you to",
-    "openDevTools": "Open developer tools",
-    "updatesInMenu": "When an update is available, choose Upgrade client from the workbench Update menu. After verification, the app exits, installs the update and reopens. Keep the client and server on the same version."
+    "openDevTools": "Open developer tools"
   },
   "section": {
     "general": {

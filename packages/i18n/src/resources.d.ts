@@ -615,6 +615,7 @@ export type Resources = {
       notRestarted: '服务端还没有重启好，请稍后点“连接”。';
       clientNewer: '此客户端较新，请先升级服务端。';
       manualClient: '这个系统上的客户端需要手动升级：请到 GitHub 发布页下载与服务端同一版本的安装包。';
+      githubClient: '可以从 GitHub 发布页下载与服务端同一版本的客户端，校验后自动安装并重新打开。';
       preparing: '服务端正在下载这一版的安装包（{{percent}}%），好了这里会出现升级按钮；也可以直接从 GitHub 发布页下载。';
       refetching: '服务端还没有这一版的安装包，正在重新下载；也可以直接从 GitHub 发布页下载。';
     };
@@ -682,7 +683,7 @@ export type Resources = {
       githubWorking_other: '从 GitHub 下载并升级到 {{version}}（{{count}} 个会话正在运行）';
       notes: '查看 {{version}} 的更新内容';
       clientAvailable: '客户端可升级到 {{version}}';
-      confirmInstall: '安装 {{version}} 前会关闭这份应用的所有连接，正在运行的任务可能中断。安装后客户端会自动重启。请确认服务端已升级到同一版本。继续升级？';
+      confirmInstall: '安装 {{version}} 会退出这份应用的所有连接，其他连接上正在运行的任务可能中断；终端里打开的 ccdt 也请先退出。安装后客户端会自动重启。继续升级？';
     };
     reconnect: {
       body: '与服务端的连接断开了，正在重新连接。服务端上的任务照常运行，连上后补上期间的内容。';
@@ -911,10 +912,12 @@ export type Resources = {
       badHash: '安装包校验失败，已放弃升级。';
       cancelled: '已取消。';
       badVersion: '版本号不正确。';
-      noManifest: '读取不到 {{version}} 的发布信息（{{reason}}）。请检查这台电脑能否访问 GitHub，或前往发布页手动下载安装包。';
+      noManifest: '读取不到 {{version}} 的发布信息（{{reason}}）。\n请检查这台电脑能否访问 github.com，或改从服务端获取安装包。';
+      noManifestMac: '读取不到 {{version}} 的发布信息（{{reason}}）。\n请检查这台电脑能否访问 github.com，或到发布页手动下载安装包。';
       notInManifest: '发布信息里没有这个版本的安装包。';
       otherFile: '发布页的安装包与服务端提供的不是同一个文件，已放弃升级。';
-      interrupted: '从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。请检查网络后重试，或前往发布页手动下载安装包。';
+      interrupted: '从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。\n请检查网络后重试，或改从服务端获取安装包。';
+      interruptedMac: '从 GitHub 下载安装包中断（{{reason}}），已下载 {{received}} / {{size}}。\n请检查网络后重试，或到发布页手动下载安装包。';
       nothing: '连接没有数据';
       httpFailed: '安装包下载失败（{{status}}）。';
       tooLarge: '安装包比发布信息里的大，已放弃升级。';
@@ -2181,7 +2184,7 @@ export type Resources = {
             },
             {
               title: '再升级客户端';
-              text: 'Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载。macOS 在工作台的“更新”菜单选择“升级客户端”，客户端会自动安装并重启。Linux 需要手动下载并安装新版。';
+              text: 'Windows 在客户端里下载安装，服务端还没备好安装包时可改从 GitHub 下载；macOS 在“更新”菜单或登录页从 GitHub 下载同一版本，装好后自动重新打开；Linux 重新下载安装。';
             },
           ];
           list1: readonly ['自带的 `ccdt` 随图形客户端升级；单独安装的运行 `ccdt upgrade`。'];
@@ -3486,6 +3489,7 @@ export type Resources = {
       sameVersion: '客户端与服务端需要同一版本';
       updatesFromService: '服务端跟随发布页；客户端的安装包由所连接的服务端提供，也可以在登录页改从 GitHub 发布页下载，校验后覆盖升级';
       updatesManual: '服务端跟随发布页；这个系统上的客户端要手动升级：下载与服务端同一版本的安装包，装好替换旧版';
+      updatesFromGithub: '服务端跟随发布页；客户端从 GitHub 发布页下载与服务端同一版本的安装包，校验后替换应用并重新打开，在工作台的“更新”菜单和登录页都可以发起';
       releases: '打开发布页';
       noUpdates: '没有可用的更新操作';
       troubleshoot: '排查';
@@ -3495,7 +3499,6 @@ export type Resources = {
       devTools: '开发者工具';
       devToolsDetail: '反馈界面问题时查看报错。里面能看到对话，别按他人要求在其中粘贴代码';
       openDevTools: '打开开发者工具';
-      updatesInMenu: '有新版本时，在工作台的“更新”菜单选择“升级客户端”。校验通过后会退出应用，安装并重新打开。客户端与服务端需要保持同一版本。';
     };
     section: {
       general: {
@@ -4390,6 +4393,7 @@ export type Messages = {
   'connection:upgrade.notRestarted': Record<string, never>;
   'connection:upgrade.clientNewer': Record<string, never>;
   'connection:upgrade.manualClient': Record<string, never>;
+  'connection:upgrade.githubClient': Record<string, never>;
   'connection:upgrade.preparing': { percent: Value };
   'connection:upgrade.refetching': Record<string, never>;
   'connection:clientUpgrade.failed': Record<string, never>;
@@ -4611,9 +4615,11 @@ export type Messages = {
   'desktop:download.cancelled': Record<string, never>;
   'desktop:download.badVersion': Record<string, never>;
   'desktop:download.noManifest': { version: Value; reason: Value };
+  'desktop:download.noManifestMac': { version: Value; reason: Value };
   'desktop:download.notInManifest': Record<string, never>;
   'desktop:download.otherFile': Record<string, never>;
   'desktop:download.interrupted': { reason: Value; received: Value; size: Value };
+  'desktop:download.interruptedMac': { reason: Value; received: Value; size: Value };
   'desktop:download.nothing': Record<string, never>;
   'desktop:download.httpFailed': { status: Value };
   'desktop:download.tooLarge': Record<string, never>;
@@ -6321,6 +6327,7 @@ export type Messages = {
   'settings:about.sameVersion': Record<string, never>;
   'settings:about.updatesFromService': Record<string, never>;
   'settings:about.updatesManual': Record<string, never>;
+  'settings:about.updatesFromGithub': Record<string, never>;
   'settings:about.releases': Record<string, never>;
   'settings:about.noUpdates': Record<string, never>;
   'settings:about.troubleshoot': Record<string, never>;
@@ -6330,7 +6337,6 @@ export type Messages = {
   'settings:about.devTools': Record<string, never>;
   'settings:about.devToolsDetail': Record<string, never>;
   'settings:about.openDevTools': Record<string, never>;
-  'settings:about.updatesInMenu': Record<string, never>;
   'settings:section.general.name': Record<string, never>;
   'settings:section.general.words': Record<string, never>;
   'settings:section.appearance.name': Record<string, never>;

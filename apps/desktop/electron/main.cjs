@@ -1209,7 +1209,6 @@ const updater = require('./desktop-updater.cjs').applicationUpdater({
 handle('update:cancel', () => updater.cancel());
 handle('update:install', (event, version) =>
   updater.install(version, {
-    connected: entered && event.sender === mainWindow?.webContents,
     bridge: lastBridge,
     report(step) {
       if (event.sender.isDestroyed()) return;
@@ -1440,7 +1439,8 @@ app.whenReady().then(async () => {
   // A sign-in window is the size of its form; one that takes over from another is where that one was.
   const window = createWindow('launcher', { width: 460, height: 680, shown: true });
   launcherWindow = window;
-  await updater.onWindowReady?.(window);
+  // Says why an update that did not finish was rolled back; the window goes on meanwhile.
+  void updater.onWindowReady?.();
   const bounds = asked?.bounds;
   if (bounds && ['x', 'y', 'width', 'height'].every((key) => Number.isInteger(bounds[key])))
     window.setBounds(bounds);

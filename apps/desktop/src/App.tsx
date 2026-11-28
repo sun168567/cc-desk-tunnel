@@ -1556,15 +1556,15 @@ export function App({
       t(nativeMode ? 'nav:bar.accountUnnamed' : 'nav:bar.simulation'));
   const publishedVersion =
     update && ['available', 'manual'].includes(update.state) ? (update.latest ?? null) : null;
+  // The client's upgrade, to the service's version (see client-update-policy.ts); while one runs, how it goes
+  // and a way to stop it.
   const [installer] = clientInstallers(updatePolicy, version, {
     cachedInstaller: state.release,
     serverVersion: state.service,
-    publishedVersion,
   });
   // Where the usual source is the service, label the GitHub fallback explicitly.
   const fallback =
     installer?.source === 'github' && updatePolicy.sources.includes('cachedInstaller');
-  const waitForRuns = updatePolicy.beforeInstall === 'wait-for-idle' && working.length > 0;
   const upgradeItems: MenuItem[] = [];
   if (upgrading.step) {
     upgradeItems.push({
@@ -1582,7 +1582,7 @@ export function App({
   } else if (installer) {
     const target = installer.version;
     upgradeItems.push({
-      label: waitForRuns
+      label: working.length
         ? t(fallback ? 'connection:update.githubWorking' : 'connection:update.clientWorking', {
             version: target,
             count: working.length,
@@ -1591,10 +1591,10 @@ export function App({
             version: target,
           }),
       icon: <Download />,
-      disabled: busy || waitForRuns,
+      disabled: busy || working.length > 0,
       run: () => {
         if (
-          updatePolicy.beforeInstall === 'confirm' &&
+          updatePolicy.confirm &&
           !window.confirm(t('connection:update.confirmInstall', { version: target }))
         )
           return;
@@ -1602,8 +1602,9 @@ export function App({
       },
     });
   }
+  // What an upgrade would bring is read where the upgrade is offered, before it is taken.
   const newer = installer?.version ?? ahead ?? publishedVersion;
-  const updateMenu = (includeClient: boolean): MenuItem[] => [
+  const updates: MenuItem[] = [
     ...(newer
       ? [
           {
@@ -1613,9 +1614,10 @@ export function App({
           },
         ]
       : []),
-    ...(includeClient ? upgradeItems : []),
+    ...upgradeItems,
     ...(serviceUpdate ? [serviceUpdate] : []),
   ];
+  // The rail shows its button only for an update that exists, not for the standing offer to look for one.
   const pendingUpdate =
     upgrading.text ??
     (installer
@@ -1875,7 +1877,7 @@ export function App({
             : menu.kind === 'settings'
               ? { label: t('nav:page.settings'), items: settingsMenu }
               : menu.kind === 'update'
-                ? { label: t('nav:page.update'), items: updateMenu(true) }
+                ? { label: t('nav:page.update'), items: updates }
                 : {
                     label: menu.label,
                     items: barMenus.find((item) => item.label === menu.label)?.items ?? [],
@@ -1979,7 +1981,7 @@ export function App({
           version={version}
           service={state.service}
           adapterName={adapterName}
-          updates={host.serviceManagement ? updateMenu(updatePolicy.controls === 'all') : []}
+          updates={host.serviceManagement ? updates : []}
           showNotes={setNotes}
           account={
             <AccountPanel

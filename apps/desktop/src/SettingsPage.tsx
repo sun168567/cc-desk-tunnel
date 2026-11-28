@@ -34,7 +34,7 @@ import { waitFields } from './setting-fields.ts';
 import { inSummary, sampleStats, statFields, summaryText } from './turnStats.ts';
 import { barText, inBar, sampleSession, sessionFields } from './sessionStats.ts';
 import { GithubMark, openProject, project } from './project.tsx';
-import { updatePolicy } from './client-update-policy.ts';
+import { selfUpdating, updatePolicy } from './client-update-policy.ts';
 import GlobalInstructions from './GlobalInstructions.tsx';
 import IdleCompactionSettings from './IdleCompactionSettings.tsx';
 import PluginSettings from './PluginSettings.tsx';
@@ -817,7 +817,7 @@ function About({
                 {item.label}
               </button>
             ))}
-            {updatePolicy.controls !== 'all' && project.url ? (
+            {!selfUpdating && project.url ? (
               <button
                 type="button"
                 className="button"

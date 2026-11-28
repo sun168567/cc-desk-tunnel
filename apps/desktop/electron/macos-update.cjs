@@ -324,8 +324,8 @@ function macInstaller({ app, dialog, profile, otherConnections, programArguments
   const receiptArgument = process.argv.find((arg) => arg.startsWith('--ccdt-update-receipt='));
   const receipt = receiptArgument?.slice('--ccdt-update-receipt='.length);
   return {
-    releaseOptions(version, { connected }) {
-      if (!connected) throw failure('desktop:upgrade.connectFirst');
+    // The workbench and the sign-in window of a refused client both ask for the service's version.
+    releaseOptions(version) {
       if (
         typeof version !== 'string' ||
         !/^\d+\.\d+\.\d+$/.test(version) ||
@@ -372,11 +372,12 @@ function macInstaller({ app, dialog, profile, otherConnections, programArguments
     onRendererReady() {
       writeUpdateReceipt(application, receipt, app.getVersion());
     },
-    async onWindowReady(window) {
+    // A box of its own, not a sheet of the sign-in window: that one closes once it has signed in again.
+    async onWindowReady() {
       try {
         const detail = readFileSync(failureFile, 'utf8').slice(0, 3000);
         await rm(failureFile, { force: true });
-        await dialog.showMessageBox(window, {
+        await dialog.showMessageBox({
           type: 'error',
           title: t('desktop:upgrade.title'),
           message: t('desktop:upgrade.macRollback'),

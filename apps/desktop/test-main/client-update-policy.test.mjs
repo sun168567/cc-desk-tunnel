@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { clientInstallers, policies } from '../src/client-update-policy.ts';
 
-const versions = { cachedInstaller: '1.1.0', serverVersion: '1.2.0', publishedVersion: '1.3.0' };
+const versions = { cachedInstaller: '1.1.0', serverVersion: '1.2.0' };
 
 test('Windows prefers the cached installer and offers GitHub for the server version', () => {
   assert.deepEqual(clientInstallers(policies.win32, '1.0.0', versions), [
@@ -23,15 +23,11 @@ test('Windows prefers the cached installer and offers GitHub for the server vers
   assert.deepEqual(clientInstallers(policies.win32, '1.2.0', versions), []);
 });
 
-test('macOS prefers the matching server release, then a newer published release', () => {
+test('macOS takes the server version from GitHub, and never a release ahead of the server', () => {
   assert.deepEqual(clientInstallers(policies.darwin, '1.0.0', versions), [
     { version: '1.2.0', source: 'github' },
-    { version: '1.3.0', source: 'github' },
   ]);
-  assert.deepEqual(clientInstallers(policies.darwin, '1.2.0', versions), [
-    { version: '1.3.0', source: 'github' },
-  ]);
-  assert.deepEqual(clientInstallers(policies.darwin, '1.3.0', versions), []);
+  assert.deepEqual(clientInstallers(policies.darwin, '1.2.0', versions), []);
   assert.deepEqual(clientInstallers(policies.darwin, '1.0.0', { cachedInstaller: '1.1.0' }), []);
 });
 

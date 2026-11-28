@@ -116,13 +116,9 @@ test('a service that cannot be forced says what to end first', async ({ page }) 
   ).toBeDisabled();
 });
 
-test('a Mac confirms and retries client installation from the workbench update menu', async ({
-  page,
-}) => {
-  // The connection and its update announcement use the workbench's normal WebSocket flow.
-  // The desktop bridge stands in for downloading, preparing and handing off to the installer.
-  const version = '0.3.22';
-  const serviceInstalls = await offerUpdate(page, version, []);
+// A Mac client of `version` whose bridge stands in for downloading, preparing and handing off to the installer:
+// the first install waits until cancelled, the second fails, the third hands off.
+async function asMac(page: Page, version: string) {
   await page.addInitScript((version) => {
     const downloads: string[] = [];
     let cancel = () => {};
@@ -139,6 +135,7 @@ test('a Mac confirms and retries client installation from the workbench update m
       }),
       connectProxy: async () => ({ url: 'ws://127.0.0.1:18898/ws' }),
       workspaceRoots: async () => [],
+      foldersExist: async (folders: string[]) => folders.map(() => false),
       legacyProjects: async () => null,
       loadDrafts: async () => ({}),
       saveDrafts: async () => {},
@@ -167,6 +164,14 @@ test('a Mac confirms and retries client installation from the workbench update m
     };
     Object.assign(window, { desktop, macDownloads: downloads });
   }, version);
+}
+
+test('a Mac confirms and retries client installation from the workbench update menu', async ({
+  page,
+}) => {
+  // The service is newer than the client; it announces no installer, which a Mac would not take anyway.
+  const serviceInstalls = await offerUpdate(page, '9.9.9', []);
+  await asMac(page, '0.3.22');
   await page.goto('/');
   const connected = page.locator('.connection-status');
   await expect(connected).toContainText('已连接');
@@ -202,7 +207,10 @@ test('a Mac confirms and retries client installation from the workbench update m
   await page.getByRole('menuitem', { name: '检查更新' }).click();
   const about = page.getByRole('region', { name: '关于与更新' });
   await expect(about).toBeVisible();
-  await expect(about.getByRole('button', { name: /下载|macOS.*安装包|升级客户端/ })).toHaveCount(0);
+  await expect(
+    about.getByRole('button', { name: '升级客户端到 9.9.9', exact: true }),
+  ).toBeVisible();
+  await expect(about.getByRole('button', { name: /GitHub|macOS.*安装包/ })).toHaveCount(0);
   await chooseUpgrade(true);
   const failure = page.getByRole('dialog').filter({ hasText: '客户端升级失败' });
   await expect(failure.getByRole('alert')).toContainText('安装包校验失败');
@@ -218,4 +226,27 @@ test('a Mac confirms and retries client installation from the workbench update m
   await expect(page.getByRole('menuitem', { name: '取消客户端升级' })).toHaveCount(0);
   expect(await downloads()).toEqual(['9.9.9', '9.9.9', '9.9.9']);
   expect(serviceInstalls).toEqual([]);
+});
+
+test('a Mac waits for sessions at work before it installs, and offers nothing ahead of its server', async ({
+  page,
+}) => {
+  await offerUpdate(page, '9.9.9', [session('Busy', run)]);
+  await asMac(page, '0.3.22');
+  await page.goto('/');
+  await page.getByRole('button', { name: '更新', exact: true }).click();
+  await expect(
+    page.getByRole('menuitem', { name: '升级客户端到 9.9.9（1 个会话正在运行）' }),
+  ).toBeDisabled();
+});
+
+test('a Mac on its server version is not offered the newer release the server found', async ({
+  page,
+}) => {
+  await offerUpdate(page, '0.3.22', []);
+  await asMac(page, '0.3.22');
+  await page.goto('/');
+  await page.getByRole('button', { name: '更新', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: '升级服务端到 9.9.9' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /升级客户端/ })).toHaveCount(0);
 });

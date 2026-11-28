@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test } from 'node:test';
@@ -39,13 +39,10 @@ test('Windows and Mac select their own release assets and share the same verifie
     name: 'CC-Desk-Tunnel-Setup-9.8.7-x64.exe',
     announced: winOffer,
   });
-  assert.throws(() => mac.releaseOptions(version, { connected: false }), {
-    message: 'desktop:upgrade.connectFirst',
-  });
-  assert.throws(() => mac.releaseOptions('9.8.6', { connected: true }), {
+  assert.throws(() => mac.releaseOptions('9.8.6', {}), {
     message: 'desktop:download.badVersion',
   });
-  assert.throws(() => mac.releaseOptions(undefined, { connected: true }), {
+  assert.throws(() => mac.releaseOptions(undefined, {}), {
     message: 'desktop:download.badVersion',
   });
 
@@ -55,7 +52,7 @@ test('Windows and Mac select their own release assets and share the same verifie
   ]) {
     const steps = [];
     let otherOpen = true;
-    const selected = platform.releaseOptions(version, { connected: true, bridge });
+    const selected = platform.releaseOptions(version, { bridge });
     assert.equal(selected.name, name);
     if (platform === mac) assert.equal(selected.announced, undefined);
     const installer = {
@@ -92,7 +89,6 @@ test('Windows and Mac select their own release assets and share the same verifie
     assert.deepEqual(
       await updater.install(version, {
         bridge,
-        connected: true,
         report(step) {
           assert.equal(step.source, 'github');
           steps.push(step.phase);
@@ -207,4 +203,43 @@ test('cancelling while other instances are being enumerated leaves them running'
   assert.deepEqual(await installing, { cancelled: true });
   assert.equal(rolledBack, true);
   assert.equal(existsSync(directory), false);
+});
+
+test('downloads a week old are cleared, those of earlier clients included, and nothing else', async (t) => {
+  const temporaryDirectory = await rootFor(t);
+  const root = join(temporaryDirectory, 'cc-desk-tunnel-updates');
+  const weekAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  const old = [
+    join(root, 'download-aaaaaa'),
+    join(temporaryDirectory, 'cc-desk-tunnel-update-bbbbbb'),
+  ];
+  const kept = [
+    join(root, 'download-cccccc'),
+    join(temporaryDirectory, 'cc-desk-tunnel-update-dddddd'),
+    join(temporaryDirectory, 'something-else'),
+  ];
+  for (const directory of [...old, ...kept]) await mkdir(directory, { recursive: true });
+  for (const directory of [...old, kept[2]]) await utimes(directory, weekAgo, weekAgo);
+  let used;
+  const updater = updaterModule.createDesktopUpdater({
+    packaged: true,
+    temporaryDirectory,
+    installer: {
+      releaseOptions: () => null,
+      instances: () => [],
+      prepare: () => ({ install() {} }),
+    },
+    finish() {},
+  });
+  await updater.install(undefined, {
+    bridge: {
+      downloadInstaller(where) {
+        used = where;
+        return join(where, 'installer');
+      },
+    },
+    report() {},
+  });
+  for (const directory of old) assert.equal(existsSync(directory), false, directory);
+  for (const directory of [...kept, used]) assert.equal(existsSync(directory), true, directory);
 });

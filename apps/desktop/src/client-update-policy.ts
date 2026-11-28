@@ -1,34 +1,34 @@
 import { isNewer } from './paths.ts';
 
-type VersionSource = 'cachedInstaller' | 'serverVersion' | 'publishedVersion';
+type VersionSource = 'cachedInstaller' | 'serverVersion';
 
+// The client follows its service: it is offered the service's own version, never one ahead of it, whose
+// service might not be able to follow (a release that needs the server's image updated). `confirm` asks
+// before an install that quits and reopens the app; every platform waits for sessions at work first.
 type ClientUpdatePolicy = {
   sources: readonly VersionSource[];
-  controls: 'all' | 'workbench-menu' | 'manual';
-  beforeInstall: 'wait-for-idle' | 'confirm';
+  confirm: boolean;
   description:
     | 'settings:about.updatesFromService'
-    | 'settings:about.updatesInMenu'
+    | 'settings:about.updatesFromGithub'
     | 'settings:about.updatesManual';
 };
 
 export const policies: Record<'win32' | 'darwin' | 'linux', ClientUpdatePolicy> = {
   win32: {
     sources: ['cachedInstaller', 'serverVersion'],
-    controls: 'all',
-    beforeInstall: 'wait-for-idle',
+    confirm: false,
     description: 'settings:about.updatesFromService',
   },
+  // The service holds the Windows installer only: a Mac takes the service's version from the release page.
   darwin: {
-    sources: ['serverVersion', 'publishedVersion'],
-    controls: 'workbench-menu',
-    beforeInstall: 'confirm',
-    description: 'settings:about.updatesInMenu',
+    sources: ['serverVersion'],
+    confirm: true,
+    description: 'settings:about.updatesFromGithub',
   },
   linux: {
     sources: [],
-    controls: 'manual',
-    beforeInstall: 'wait-for-idle',
+    confirm: false,
     description: 'settings:about.updatesManual',
   },
 };
@@ -37,6 +37,8 @@ export const policies: Record<'win32' | 'darwin' | 'linux', ClientUpdatePolicy> 
 const platform =
   typeof window === 'undefined' || !window.desktop ? 'win32' : window.desktop.platform;
 export const updatePolicy = policies[platform] ?? policies.linux;
+// Whether this system's client installs its upgrades itself.
+export const selfUpdating = updatePolicy.sources.length > 0;
 
 type Installer = { version: string; source: 'service' | 'github' };
 

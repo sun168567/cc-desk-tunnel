@@ -5,18 +5,23 @@ const { setTimeout: delay } = require('node:timers/promises');
 const { failure } = require('./failure.cjs');
 
 // Both installers keep using their download after this process exits. A later attempt clears week-old
-// private directories, including partial downloads left by a crash.
-async function downloadDirectory(temporaryDirectory) {
-  const root = join(temporaryDirectory, 'cc-desk-tunnel-updates');
-  await mkdir(root, { recursive: true, mode: 0o700 });
-  const oldest = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !/^download-[a-zA-Z0-9]{6}$/.test(entry.name)) continue;
-    const previous = join(root, entry.name);
+// private directories, including partial downloads left by a crash, and the ones earlier clients made for
+// each download directly in the system's temporary directory.
+async function clearOld(directory, pattern, oldest) {
+  for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isDirectory() || !pattern.test(entry.name)) continue;
+    const previous = join(directory, entry.name);
     const info = await stat(previous).catch(() => null);
     if (info && info.mtimeMs < oldest)
       await rm(previous, { recursive: true, force: true }).catch(() => {});
   }
+}
+async function downloadDirectory(temporaryDirectory) {
+  const root = join(temporaryDirectory, 'cc-desk-tunnel-updates');
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  const oldest = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  await clearOld(root, /^download-[a-zA-Z0-9]{6}$/, oldest);
+  await clearOld(temporaryDirectory, /^cc-desk-tunnel-update-[a-zA-Z0-9]{6}$/, oldest);
   return mkdtemp(join(root, 'download-'));
 }
 
@@ -45,11 +50,11 @@ function createDesktopUpdater({
 }) {
   let active = null;
 
-  async function install(version, { connected, bridge, report }) {
+  async function install(version, { bridge, report }) {
     if (!packaged) throw failure('desktop:upgrade.fromSource');
     if (!installer) throw failure('desktop:upgrade.unsupported');
     if (active) throw failure('desktop:upgrade.already');
-    const release = installer.releaseOptions(version, { connected, bridge });
+    const release = installer.releaseOptions(version, { bridge });
     if (!release && !bridge) throw failure('desktop:upgrade.connectFirst');
     const source = release ? 'github' : 'service';
     const controller = (active = new AbortController());

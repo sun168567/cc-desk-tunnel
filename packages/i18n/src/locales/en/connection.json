@@ -65,6 +65,7 @@
     "notRestarted": "The server hasn’t finished restarting. Click “Connect” in a moment.",
     "clientNewer": "This client is newer. Upgrade the server first.",
     "manualClient": "On this system the client is upgraded by hand: download the installer of the server’s version from GitHub releases.",
+    "githubClient": "You can download the client of the server’s version from GitHub releases; it’s checked, installed and reopened for you.",
     "preparing": "The server is downloading the installer of this version ({{percent}}%). An upgrade button appears here once it’s ready; you can also download it from GitHub releases.",
     "refetching": "The server doesn’t have this version’s installer yet and is downloading it again; you can also download it from GitHub releases."
   },
@@ -142,7 +143,7 @@
     "githubWorking_other": "Download from GitHub and upgrade to {{version}} ({{count}} sessions running)",
     "notes": "What’s new in {{version}}",
     "clientAvailable": "Client upgrade to {{version}} available",
-    "confirmInstall": "Installing {{version}} closes all connections running from this app. Running tasks may be interrupted. The client restarts after installation. Check that the server has been updated to the same version. Continue?"
+    "confirmInstall": "Installing {{version}} quits every connection of this app; tasks running on the other connections may be interrupted. Quit ccdt in your terminals first, too. The client restarts once it’s installed. Continue?"
   },
   "reconnect": {
     "body": "The connection to the server dropped and is being restored. Tasks on the server go on, and what happened meanwhile fills in once connected.",

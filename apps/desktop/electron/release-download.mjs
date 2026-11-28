@@ -11,6 +11,8 @@ export const releasePage = 'https://github.com/sun168567/cc-desk-tunnel/releases
 // where it ended; one that delivers nothing for `stall` is given up at once, and after `attempts` connections
 // in a row that added nothing the download fails.
 const defaultPace = { stretch: 20_000, stall: 15_000, attempts: 5 };
+// Where the service holds this system's installer, a failure here says to take it from there instead.
+const serviceHolds = process.platform === 'win32';
 // The asset name is used as both a URL segment and a local filename on any supported filesystem.
 const assetName =
   /^(?!(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$))[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*$/i;
@@ -52,7 +54,7 @@ export async function downloadRelease(
     manifest = await response.json();
   } catch (error) {
     if (signal?.aborted) throw cancelled();
-    throw failure('desktop:download.noManifest', {
+    throw failure(serviceHolds ? 'desktop:download.noManifest' : 'desktop:download.noManifestMac', {
       version,
       reason:
         error.name === 'TimeoutError'
@@ -80,11 +82,14 @@ export async function downloadRelease(
     let last;
     for (let idle = 0; received < file.size;) {
       if (idle >= pace.attempts)
-        throw failure('desktop:download.interrupted', {
-          reason: last ?? phrase('desktop:download.nothing'),
-          received: megabytes(received),
-          size: megabytes(file.size),
-        });
+        throw failure(
+          serviceHolds ? 'desktop:download.interrupted' : 'desktop:download.interruptedMac',
+          {
+            reason: last ?? phrase('desktop:download.nothing'),
+            received: megabytes(received),
+            size: megabytes(file.size),
+          },
+        );
       if (signal?.aborted) throw cancelled();
       const before = received;
       const controller = new AbortController();

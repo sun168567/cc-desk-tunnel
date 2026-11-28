@@ -36,11 +36,11 @@
     "othersOpen": "Windows of other connections didn’t quit; quit them first, then upgrade.",
     "title": "Upgrading CC Desk Tunnel",
     "body": "It opens again once installed.",
-    "macPrepareFailed": "Could not prepare the macOS update ({{reason}}). The current app is still available. Please retry.",
-    "macInstallLocation": "This app location cannot be updated automatically. Install the app in an Applications folder you can write to, then retry.",
-    "macUpdateBusy": "Another window is already updating this app. Please try again later.",
-    "macInvalidBundle": "The downloaded app failed version, architecture or signature verification. The update was stopped.",
-    "macRollback": "The update could not finish. Review the reason below before retrying."
+    "macPrepareFailed": "Couldn’t prepare the macOS update ({{reason}}). This version keeps working; try again.",
+    "macInstallLocation": "The app can’t update itself where it is. Move it to an Applications folder you can write to, then try again.",
+    "macUpdateBusy": "Another window of this app is already updating it. Try again later.",
+    "macInvalidBundle": "The downloaded app doesn’t match the expected version, chip or signature, so the update was stopped.",
+    "macRollback": "The update didn’t finish. The reason is below."
   },
   "menu": {
     "undo": "Undo",
@@ -203,10 +203,12 @@
     "badHash": "The installer failed verification; the upgrade was abandoned.",
     "cancelled": "Cancelled.",
     "badVersion": "The version number is invalid.",
-    "noManifest": "Could not read the release details for {{version}} ({{reason}}). Check access to GitHub, or download the installer from the release page.",
+    "noManifest": "Can’t read the release details of {{version}} ({{reason}}).\nCheck that this computer can reach github.com, or get the installer from the server instead.",
+    "noManifestMac": "Can’t read the release details of {{version}} ({{reason}}).\nCheck that this computer can reach github.com, or download the package from GitHub releases yourself.",
     "notInManifest": "The release details have no installer for this version.",
     "otherFile": "The installer on the release page isn’t the file the server provides; the upgrade was abandoned.",
-    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}. Check your connection and retry, or download the installer from the release page.",
+    "interrupted": "Downloading the installer from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or get the installer from the server instead.",
+    "interruptedMac": "Downloading the package from GitHub was interrupted ({{reason}}) after {{received}} / {{size}}.\nCheck the network and try again, or download the package from GitHub releases yourself.",
     "nothing": "the connection sent no data",
     "httpFailed": "Downloading the installer failed ({{status}}).",
     "tooLarge": "The installer is larger than the release details say; the upgrade was abandoned."
